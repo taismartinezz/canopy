@@ -750,6 +750,44 @@ export const NOTIFICATIONS: Notification[] = [
   },
 ];
 
+// ── Stored data helpers ───────────────────────────────────────────────────────
+
+function nameToInitials(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+export function getStoredProject(): Project {
+  if (typeof window === "undefined") return PROJECT;
+  try {
+    const stored = localStorage.getItem("canopy_project");
+    return stored ? ({ ...PROJECT, ...JSON.parse(stored) } as Project) : PROJECT;
+  } catch {
+    return PROJECT;
+  }
+}
+
+export function getStoredUser(): User {
+  const fallback = USERS.find((u) => u.id === CURRENT_USER_ID)!;
+  if (typeof window === "undefined") return fallback;
+  try {
+    const stored = localStorage.getItem("canopy_user");
+    if (!stored) return fallback;
+    const data = JSON.parse(stored);
+    const name: string = data.name || fallback.name;
+    return {
+      ...fallback,
+      name,
+      role: (data.role as import("@/types").UserRole) || fallback.role,
+      institution: data.institution ?? fallback.institution,
+      avatarInitials: nameToInitials(name),
+    };
+  } catch {
+    return fallback;
+  }
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 export function formatRelativeTime(isoString: string): string {

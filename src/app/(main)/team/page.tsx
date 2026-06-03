@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { TEAM_MEMBERS, CURRENT_USER_ID, formatRelativeTime } from "@/lib/mock-data";
+import { TEAM_MEMBERS, CURRENT_USER_ID, formatRelativeTime, getStoredUser, getStoredProject } from "@/lib/mock-data";
 import type { TeamMember, TaskStatus } from "@/types";
 import Avatar from "@/components/ui/Avatar";
 import { Video, Calendar, X, Edit3, Check, Minus } from "lucide-react";
@@ -309,6 +309,13 @@ export default function TeamPage() {
   const [weeklyUpdate, setWeeklyUpdate] = useState(
     TEAM_MEMBERS.find((m) => m.id === CURRENT_USER_ID)?.weeklyUpdate
   );
+  const [isPi, setIsPi] = useState(false);
+  const [storedProjectName, setStoredProjectName] = useState("");
+
+  useEffect(() => {
+    setIsPi(getStoredUser().role === "pi");
+    setStoredProjectName(getStoredProject().name);
+  }, []);
 
   return (
     <div className="flex flex-col h-full overflow-auto" style={{ fontFamily: "var(--font-roboto)" }}>
@@ -319,7 +326,7 @@ export default function TeamPage() {
           <div>
             <h1 style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 26, color: "var(--color-navy)", margin: 0, lineHeight: 1.2 }}>Team</h1>
             <p style={{ fontSize: 13, color: "var(--color-secondary)", marginTop: 4 }}>
-              {TEAM_MEMBERS.length} members · Moral Injury &amp; Resilience Study
+              {TEAM_MEMBERS.length} members{storedProjectName ? ` · ${storedProjectName}` : ""}
             </p>
           </div>
           <button
@@ -333,14 +340,16 @@ export default function TeamPage() {
 
         <WeeklyUpdateBar current={weeklyUpdate} onSave={setWeeklyUpdate} />
 
-        {/* PI aggregate signal */}
-        <div className="flex items-center gap-3 px-5 py-3 mb-6 rounded-lg" style={{ backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 8 }}>
-          <Minus size={16} color="#64748B" />
-          <div>
-            <p style={{ fontSize: 13, fontWeight: 600, color: "var(--color-body)" }}>Team well-being trend this week: stable</p>
-            <p style={{ fontSize: 11, color: "var(--color-secondary)", marginTop: 2 }}>Aggregate trend from team check-ins · Visible to PI only</p>
+        {/* PI aggregate signal — only shown to PI */}
+        {isPi && (
+          <div className="flex items-center gap-3 px-5 py-3 mb-6 rounded-lg" style={{ backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 8 }}>
+            <Minus size={16} color="#64748B" />
+            <div>
+              <p style={{ fontSize: 13, fontWeight: 600, color: "var(--color-body)" }}>Team well-being trend this week: stable</p>
+              <p style={{ fontSize: 11, color: "var(--color-secondary)", marginTop: 2 }}>Aggregate trend from team check-ins · Visible to PI only</p>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Team grid */}
         <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 280px), 1fr))" }}>

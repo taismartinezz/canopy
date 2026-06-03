@@ -8,7 +8,7 @@ import {
 } from "@dnd-kit/core";
 import {
   EVENTS, ACTIVITY, TASKS, DASHBOARD_POSTS, USERS, PROJECT,
-  formatRelativeTime, formatDate, getUser, CURRENT_USER_ID,
+  formatRelativeTime, formatDate, getUser, CURRENT_USER_ID, getStoredProject,
 } from "@/lib/mock-data";
 import type { Task, ActivityEvent, CalendarEvent, DashboardPost, TaskStatus } from "@/types";
 import Avatar from "@/components/ui/Avatar";
@@ -474,9 +474,28 @@ function PostsCard({ title, posts: initialPosts, type }: { title: string; posts:
 // ── Dashboard page ────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
-  const [tasks, setTasks]             = useState<Task[]>(TASKS);
+  const [tasks, setTasks]             = useState<Task[]>([]);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [modalStatus, setModalStatus] = useState<TaskStatus | null>(null);
+  const [projectName, setProjectName] = useState("");
+  const [dashEvents, setDashEvents]   = useState<CalendarEvent[]>([]);
+  const [dashActivity, setDashActivity] = useState<ActivityEvent[]>([]);
+  const [dashPosts, setDashPosts]     = useState<DashboardPost[]>([]);
+
+  useEffect(() => {
+    const sp = getStoredProject();
+    console.log("[Canopy] getStoredProject():", sp);
+    console.log("[Canopy] raw localStorage canopy_project:", localStorage.getItem("canopy_project"));
+    setProjectName(sp.name);
+
+    // Only pre-populate with demo data when no real project has been stored
+    if (!localStorage.getItem("canopy_project")) {
+      setTasks(TASKS);
+      setDashEvents(EVENTS);
+      setDashActivity(ACTIVITY);
+      setDashPosts(DASHBOARD_POSTS);
+    }
+  }, []);
 
   const today = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
 
@@ -495,15 +514,15 @@ export default function DashboardPage() {
       {/* Header */}
       <div className="mb-5 md:mb-6">
         <h1 style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 26, color: "var(--color-navy)", margin: 0, lineHeight: 1.2 }}>
-          {PROJECT.name}
+          {projectName}
         </h1>
         <p style={{ fontSize: 13, color: "var(--color-secondary)", marginTop: 4 }}>{today}</p>
       </div>
 
       {/* Row 1 */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5 mb-4 md:mb-5">
-        <UpcomingWidget events={EVENTS} />
-        <TeamActivityWidget events={ACTIVITY} />
+        <UpcomingWidget events={dashEvents} />
+        <TeamActivityWidget events={dashActivity} />
       </div>
 
       {/* Row 2: Kanban preview */}
@@ -518,8 +537,8 @@ export default function DashboardPage() {
 
       {/* Row 3: Opportunities + Lab Wins */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
-        <PostsCard title="Opportunities" posts={DASHBOARD_POSTS} type="opportunity" />
-        <PostsCard title="Lab Wins" posts={DASHBOARD_POSTS} type="lab_win" />
+        <PostsCard title="Opportunities" posts={dashPosts} type="opportunity" />
+        <PostsCard title="Lab Wins" posts={dashPosts} type="lab_win" />
       </div>
 
       {/* Task detail panel */}

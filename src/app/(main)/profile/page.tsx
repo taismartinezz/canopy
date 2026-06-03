@@ -27,6 +27,7 @@ function TwitterIcon() {
 import {
   CURRENT_USER_ID, getUser, PROJECT, TASKS, LITERATURE_ITEMS,
   JOURNAL_ENTRIES, JOURNAL_PROMPTS, ACTIVE_PROMPT_IDS,
+  getStoredUser, getStoredProject,
 } from "@/lib/mock-data";
 import { showToast } from "@/components/ui/Toast";
 import type { TaskStatus, PromptCategory } from "@/types";
@@ -347,7 +348,9 @@ type TabId = "about" | "links" | "activity" | "lab_settings";
 export default function ProfilePage() {
   const router = useRouter();
   const currentUser = getUser(CURRENT_USER_ID)!;
-  const isPi = currentUser.role === "pi";
+  const [isPi, setIsPi] = useState(false);
+  const [avatarInitials, setAvatarInitials] = useState(currentUser.avatarInitials);
+  const [projectCreatedAt, setProjectCreatedAt] = useState(PROJECT.createdAt);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -355,6 +358,7 @@ export default function ProfilePage() {
   const [photo, setPhoto] = useState<string | null>(null);
   const [name, setName] = useState(currentUser.name);
   const [institution, setInstitution] = useState(PROJECT.institution);
+  // isPi and name/institution defaults are overridden from canopy_user in useEffect
   const [bio, setBio] = useState("");
   const [interests, setInterests] = useState<string[]>([]);
   const [department, setDepartment] = useState("");
@@ -379,7 +383,7 @@ export default function ProfilePage() {
   const [promptModalOpen, setPromptModalOpen] = useState(false);
   const [archiveModalOpen, setArchiveModalOpen] = useState(false);
 
-  // ── PI / Lab Settings state ──────────────────────────────────────────────
+  // ── PI / Lab Settings state (defaults overridden by getStoredProject in useEffect)
   const [projectName, setProjectName] = useState(PROJECT.name);
   const [projectInstitution, setProjectInstitution] = useState(PROJECT.institution);
   const [researchType, setResearchType] = useState<string>(PROJECT.researchType);
@@ -388,6 +392,17 @@ export default function ProfilePage() {
 
   // ── Load from localStorage on mount ─────────────────────────────────────
   useEffect(() => {
+    // Onboarding data as baseline
+    const onboardUser = getStoredUser();
+    const onboardProject = getStoredProject();
+    setIsPi(onboardUser.role === "pi");
+    setAvatarInitials(onboardUser.avatarInitials);
+    setProjectCreatedAt(onboardProject.createdAt);
+    setName(onboardUser.name);
+    if (onboardUser.institution) setInstitution(onboardUser.institution);
+    else setInstitution(onboardProject.institution);
+
+    // Profile-specific edits override onboarding defaults
     const storedPhoto = localStorage.getItem("canopy_profile_photo");
     if (storedPhoto) setPhoto(storedPhoto);
 
@@ -422,6 +437,12 @@ export default function ProfilePage() {
       if (storedPrompts) setActivePromptIds(JSON.parse(storedPrompts));
     } catch { /* ignore */ }
 
+    // Onboarding project as baseline for lab settings
+    setProjectName(onboardProject.name);
+    setProjectInstitution(onboardProject.institution);
+    if (onboardProject.researchType) setResearchType(onboardProject.researchType);
+
+    // Profile-specific lab setting edits override onboarding
     if (localStorage.getItem("canopy_project_name")) setProjectName(localStorage.getItem("canopy_project_name")!);
     if (localStorage.getItem("canopy_project_institution")) setProjectInstitution(localStorage.getItem("canopy_project_institution")!);
     if (localStorage.getItem("canopy_project_research_type")) setResearchType(localStorage.getItem("canopy_project_research_type")!);
@@ -585,10 +606,10 @@ export default function ProfilePage() {
   ];
 
   // ── Render ────────────────────────────────────────────────────────────────
-  const memberSinceDate = new Date(PROJECT.createdAt).toLocaleDateString("en-US", {
+  const memberSinceDate = new Date(projectCreatedAt).toLocaleDateString("en-US", {
     month: "long", day: "numeric", year: "numeric",
   });
-  const roleBadgeLabel = currentUser.role === "pi" ? "Principal Investigator" : "Researcher";
+  const roleBadgeLabel = isPi ? "Principal Investigator" : "Researcher";
 
   return (
     <div style={{ padding: "40px 24px", backgroundColor: "var(--color-canvas)", minHeight: "100%" }}>
@@ -634,7 +655,7 @@ export default function ProfilePage() {
                 fontFamily: "var(--font-roboto)", fontWeight: 600, fontSize: 28, color: "#3a3a3a",
                 userSelect: "none",
               }}>
-                {currentUser.avatarInitials}
+                {avatarInitials}
               </div>
             )}
 
