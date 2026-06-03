@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { TEAM_MEMBERS, CURRENT_USER_ID, formatRelativeTime, getStoredUser, getStoredProject } from "@/lib/mock-data";
+import { CURRENT_USER_ID, formatRelativeTime, getStoredUser, getStoredProject } from "@/lib/mock-data";
+import { supabase } from "@/lib/supabase";
 import type { TeamMember, TaskStatus } from "@/types";
 import Avatar from "@/components/ui/Avatar";
 import { Video, Calendar, X, Edit3, Check, Minus } from "lucide-react";
@@ -306,15 +307,52 @@ function MeetingScheduler() {
 export default function TeamPage() {
   const [selectedMember, setSelectedMember] = useState<TeamMember | null>(null);
   const [meetingModalOpen, setMeetingModalOpen] = useState(false);
-  const [weeklyUpdate, setWeeklyUpdate] = useState(
-    TEAM_MEMBERS.find((m) => m.id === CURRENT_USER_ID)?.weeklyUpdate
-  );
+  const [weeklyUpdate, setWeeklyUpdate] = useState<string | undefined>(undefined);
   const [isPi, setIsPi] = useState(false);
   const [storedProjectName, setStoredProjectName] = useState("");
+  const [team, setTeam] = useState<TeamMember[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [currentUserId, setCurrentUserId] = useState(CURRENT_USER_ID);
 
   useEffect(() => {
-    setIsPi(getStoredUser().role === "pi");
-    setStoredProjectName(getStoredProject().name);
+    const su = getStoredUser();
+    const sp = getStoredProject();
+    setIsPi(su.role === "pi");
+    setStoredProjectName(sp.name);
+
+    const projectId = sp.id;
+    if (!projectId || projectId === "p1") { setLoading(false); return; }
+
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) setCurrentUserId(user.id);
+    });
+
+    supabase
+      .from("team_members")
+      .select("user_id, role, user_profiles(name, avatar_color, avatar_initials, institution)")
+      .eq("project_id", projectId)
+      .then(({ data }) => {
+        if (data) {
+          const members: TeamMember[] = data.map((row) => {
+            const profiles = row.user_profiles as unknown as Record<string, string>[] | null;
+            const profile = Array.isArray(profiles) ? profiles[0] : null;
+            return {
+              id: row.user_id as string,
+              name: profile?.name ?? "Unknown",
+              email: "",
+              role: row.role as TeamMember["role"],
+              avatarColor: profile?.avatar_color ?? "#B4D4E3",
+              avatarInitials: profile?.avatar_initials ?? "??",
+              institution: profile?.institution,
+              taskCounts: { todo: 0, in_progress: 0, in_review: 0, done: 0 },
+              weeklyUpdate: undefined,
+              weeklyUpdatedAt: undefined,
+            };
+          });
+          setTeam(members);
+        }
+        setLoading(false);
+      });
   }, []);
 
   return (
@@ -326,7 +364,7 @@ export default function TeamPage() {
           <div>
             <h1 style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 26, color: "var(--color-navy)", margin: 0, lineHeight: 1.2 }}>Team</h1>
             <p style={{ fontSize: 13, color: "var(--color-secondary)", marginTop: 4 }}>
-              {TEAM_MEMBERS.length} members{storedProjectName ? ` · ${storedProjectName}` : ""}
+              {team.length} member{team.length !== 1 ? "s" : ""}{storedProjectName ? ` · ${storedProjectName}` : ""}
             </p>
           </div>
           <button
@@ -352,13 +390,19 @@ export default function TeamPage() {
         )}
 
         {/* Team grid */}
+        {loading && <p style={{ fontSize: 13, color: "var(--color-secondary)", marginBottom: 16 }}>Loading team…</p>}
+        {!loading && team.length === 0 && (
+          <p style={{ fontSize: 13, color: "var(--color-secondary)", marginBottom: 16 }}>
+            Your team will appear here once collaborators join.
+          </p>
+        )}
         <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 280px), 1fr))" }}>
-          {TEAM_MEMBERS.map((member) => (
+          {team.map((member) => (
             <MemberCard
               key={member.id}
               member={member}
               onClick={() => setSelectedMember(member)}
-              isCurrentUser={member.id === CURRENT_USER_ID}
+              isCurrentUser={member.id === currentUserId}
             />
           ))}
         </div>

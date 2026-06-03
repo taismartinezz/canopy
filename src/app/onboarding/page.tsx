@@ -338,10 +338,11 @@ function ProjectForm({
 
 async function syncOnboardingToSupabase({
   projectName, institution, researchType,
-  userName, userRole, inviteCode,
+  userName, userRole, inviteCode, bio, department,
 }: {
   projectName: string; institution: string; researchType: string;
   userName: string; userRole: "pi" | "researcher"; inviteCode?: string;
+  bio?: string; department?: string;
 }) {
   try {
     const { data: { user } } = await supabase.auth.getUser();
@@ -364,6 +365,8 @@ async function syncOnboardingToSupabase({
       id: user.id, name: userName, role: userRole,
       institution: institution || null, avatar_initials: avatarInitials,
       project_id: project.id,
+      bio: bio || null,
+      department: department || null,
     });
 
     await supabase.from("team_members").insert({
@@ -541,6 +544,8 @@ export default function OnboardingPage() {
         projectName, institution, researchType,
         userName, userRole,
         inviteCode: role === "pi" ? generatedCode : undefined,
+        bio: role === "researcher" ? profileBio : undefined,
+        department: role === "researcher" ? profileDept : undefined,
       });
     }
 

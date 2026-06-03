@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import {
   DndContext, DragEndEvent, DragOverlay, DragStartEvent,
   PointerSensor, useSensor, useSensors, closestCorners,
@@ -10,7 +10,8 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { LayoutGrid, List, Search, Plus, MoreHorizontal } from "lucide-react";
-import { TASKS, formatDate } from "@/lib/mock-data";
+import { formatDate, getStoredProject } from "@/lib/mock-data";
+import { supabase } from "@/lib/supabase";
 import type { Task, TaskStatus } from "@/types";
 import Avatar from "@/components/ui/Avatar";
 import Toast from "@/components/ui/Toast";
@@ -203,6 +204,11 @@ function KanbanColumn({
 
       <SortableContext items={tasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
         <div className="flex flex-col gap-2 flex-1">
+          {tasks.length === 0 && (
+            <p style={{ fontSize: 12, color: "var(--color-secondary)", padding: "8px 4px" }}>
+              No tasks yet. Add your first one.
+            </p>
+          )}
           {tasks.map((task) => (
             <TaskCard
               key={task.id}
@@ -304,11 +310,40 @@ function TaskRow({
 
 export default function TasksPage() {
   const [view, setView] = useState<"board" | "list">("board");
-  const [tasks, setTasks] = useState<Task[]>(TASKS);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [loading, setLoading] = useState(true);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [search, setSearch] = useState("");
   const [activeId, setActiveId] = useState<string | null>(null);
   const [modalState, setModalState] = useState<ModalState>(null);
+
+  useEffect(() => {
+    const projectId = getStoredProject().id;
+    if (!projectId || projectId === "p1") { setLoading(false); return; }
+    supabase
+      .from("tasks")
+      .select("*")
+      .eq("project_id", projectId)
+      .order("created_at", { ascending: false })
+      .then(({ data, error }) => {
+        if (!error && data) setTasks(data.map((row) => ({
+          id: row.id as string,
+          projectId: row.project_id as string,
+          title: row.title as string,
+          description: row.description as string,
+          status: row.status as TaskStatus,
+          priority: row.priority as Task["priority"],
+          assigneeIds: (row.assignee_ids as string[]) ?? [],
+          dueDate: row.due_date as string | undefined,
+          createdAt: row.created_at as string,
+          updatedAt: row.updated_at as string,
+          comments: (row.comments as Task["comments"]) ?? [],
+          files: (row.files as Task["files"]) ?? [],
+          links: (row.links as Task["links"]) ?? [],
+        })));
+        setLoading(false);
+      });
+  }, []);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
@@ -406,7 +441,10 @@ export default function TasksPage() {
 
       {/* Content */}
       <div className="flex-1 overflow-auto p-4 md:p-6">
-        {view === "board" ? (
+        {loading && (
+          <p style={{ fontSize: 13, color: "var(--color-secondary)", padding: 8 }}>Loading tasks…</p>
+        )}
+        {!loading && view === "board" ? (
           <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
             <div className="overflow-x-auto" style={{ WebkitOverflowScrolling: "touch" }}>
               <div className="grid gap-4 md:gap-5" style={{ gridTemplateColumns: "repeat(4, minmax(240px, 1fr))", alignItems: "start", minWidth: "min(100%, 960px)" }}>
@@ -439,7 +477,7 @@ export default function TasksPage() {
               )}
             </DragOverlay>
           </DndContext>
-        ) : (
+        ) : !loading ? (
           <div style={{ backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 10, overflow: "auto" }}>
             <table className="border-collapse" style={{ width: "100%", minWidth: 600 }}>
               <thead>
@@ -464,7 +502,7 @@ export default function TasksPage() {
               </tbody>
             </table>
           </div>
-        )}
+        ) : null}
       </div>
 
       {/* Task detail panel */}

@@ -7,7 +7,7 @@ import {
   useDraggable, useDroppable,
 } from "@dnd-kit/core";
 import {
-  EVENTS, ACTIVITY, TASKS, DASHBOARD_POSTS, USERS, PROJECT,
+  EVENTS, ACTIVITY, TASKS, DASHBOARD_POSTS, USERS,
   formatRelativeTime, formatDate, getUser, CURRENT_USER_ID, getStoredProject,
 } from "@/lib/mock-data";
 import type { Task, ActivityEvent, CalendarEvent, DashboardPost, TaskStatus } from "@/types";
@@ -73,7 +73,7 @@ function UpcomingWidget({ events: initialEvents }: { events: CalendarEvent[] }) 
       title: title.trim(),
       date,
       time: time || undefined,
-      projectId: PROJECT.id,
+      projectId: getStoredProject().id,
     };
     setEvents((prev) => [newEvent, ...prev]);
     setTitle(""); setDate(""); setTime("");

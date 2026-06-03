@@ -106,3 +106,127 @@ create policy "pi can insert invite code" on invite_codes
 
 create policy "user can claim unused code" on invite_codes
   for update using (used_by is null) with check (auth.uid() = used_by);
+
+-- ── Tasks ─────────────────────────────────────────────────────────────────────
+
+create table if not exists tasks (
+  id            uuid primary key default gen_random_uuid(),
+  project_id    uuid not null references projects(id) on delete cascade,
+  title         text not null,
+  description   text not null default '',
+  status        text not null check (status in ('todo','in_progress','in_review','done')) default 'todo',
+  priority      text not null check (priority in ('high','medium','low')) default 'medium',
+  assignee_ids  uuid[] not null default '{}',
+  due_date      date,
+  comments      jsonb not null default '[]',
+  files         jsonb not null default '[]',
+  links         jsonb not null default '[]',
+  created_by    uuid not null references auth.users(id),
+  created_at    timestamptz not null default now(),
+  updated_at    timestamptz not null default now()
+);
+
+alter table tasks enable row level security;
+
+create policy "project members can read tasks" on tasks
+  for select using (
+    exists (select 1 from team_members tm where tm.project_id = tasks.project_id and tm.user_id = auth.uid())
+  );
+
+create policy "project members can insert tasks" on tasks
+  for insert with check (
+    auth.uid() = created_by and
+    exists (select 1 from team_members tm where tm.project_id = tasks.project_id and tm.user_id = auth.uid())
+  );
+
+create policy "project members can update tasks" on tasks
+  for update using (
+    exists (select 1 from team_members tm where tm.project_id = tasks.project_id and tm.user_id = auth.uid())
+  );
+
+create policy "project members can delete tasks" on tasks
+  for delete using (
+    exists (select 1 from team_members tm where tm.project_id = tasks.project_id and tm.user_id = auth.uid())
+  );
+
+-- ── Journal Entries ───────────────────────────────────────────────────────────
+
+create table if not exists journal_entries (
+  id          uuid primary key default gen_random_uuid(),
+  user_id     uuid not null references auth.users(id) on delete cascade,
+  project_id  uuid references projects(id) on delete cascade,
+  date        date not null,
+  prompts     jsonb not null default '[]',
+  checkin     jsonb not null default '[]',
+  is_draft    boolean not null default false,
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now()
+);
+
+alter table journal_entries enable row level security;
+
+create policy "user owns journal entries" on journal_entries
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- ── Literature Collections ────────────────────────────────────────────────────
+
+create table if not exists literature_collections (
+  id          uuid primary key default gen_random_uuid(),
+  project_id  uuid not null references projects(id) on delete cascade,
+  name        text not null,
+  icon_name   text not null default 'Library',
+  created_at  timestamptz not null default now()
+);
+
+alter table literature_collections enable row level security;
+
+create policy "project members can read collections" on literature_collections
+  for select using (
+    exists (select 1 from team_members tm where tm.project_id = literature_collections.project_id and tm.user_id = auth.uid())
+  );
+
+create policy "project members can manage collections" on literature_collections
+  for all using (
+    exists (select 1 from team_members tm where tm.project_id = literature_collections.project_id and tm.user_id = auth.uid())
+  );
+
+-- ── Literature Items ──────────────────────────────────────────────────────────
+
+create table if not exists literature_items (
+  id              uuid primary key default gen_random_uuid(),
+  project_id      uuid not null references projects(id) on delete cascade,
+  scope           text not null check (scope in ('lab','my')) default 'lab',
+  type            text not null check (type in ('article','book','preprint','report','thesis')) default 'article',
+  title           text not null,
+  authors         text[] not null default '{}',
+  year            int,
+  journal         text,
+  publisher       text,
+  volume          text,
+  pages           text,
+  doi             text,
+  abstract        text,
+  tags            text[] not null default '{}',
+  status          text not null check (status in ('unread','reading','read')) default 'unread',
+  rating          int not null default 0,
+  notes           text not null default '',
+  files           jsonb not null default '[]',
+  collections     text[] not null default '{}',
+  related_ids     text[] not null default '{}',
+  added_by        uuid not null references auth.users(id),
+  added_at        timestamptz not null default now()
+);
+
+alter table literature_items enable row level security;
+
+create policy "project members can read literature" on literature_items
+  for select using (
+    exists (select 1 from team_members tm where tm.project_id = literature_items.project_id and tm.user_id = auth.uid())
+  );
+
+create policy "project members can manage literature" on literature_items
+  for all using (
+    exists (select 1 from team_members tm where tm.project_id = literature_items.project_id and tm.user_id = auth.uid())
+  ) with check (
+    auth.uid() = added_by
+  );

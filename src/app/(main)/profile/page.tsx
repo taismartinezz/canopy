@@ -25,10 +25,11 @@ function TwitterIcon() {
   );
 }
 import {
-  CURRENT_USER_ID, getUser, PROJECT, TASKS, LITERATURE_ITEMS,
-  JOURNAL_ENTRIES, JOURNAL_PROMPTS, ACTIVE_PROMPT_IDS,
+  CURRENT_USER_ID, getUser, PROJECT,
+  JOURNAL_PROMPTS, ACTIVE_PROMPT_IDS,
   getStoredUser, getStoredProject,
 } from "@/lib/mock-data";
+import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { showToast } from "@/components/ui/Toast";
 import type { TaskStatus, PromptCategory } from "@/types";
 
@@ -447,24 +448,77 @@ export default function ProfilePage() {
     if (localStorage.getItem("canopy_project_institution")) setProjectInstitution(localStorage.getItem("canopy_project_institution")!);
     if (localStorage.getItem("canopy_project_research_type")) setResearchType(localStorage.getItem("canopy_project_research_type")!);
     if (localStorage.getItem("canopy_project_participation")) setResearchParticipation(localStorage.getItem("canopy_project_participation")!);
+
+    // Supabase is authoritative — overwrite any stale localStorage defaults
+    if (isSupabaseConfigured) {
+      supabase.auth.getUser().then(({ data: { user } }) => {
+        if (!user) return;
+        supabase
+          .from("user_profiles")
+          .select("name, role, institution, bio, department, avatar_initials")
+          .eq("id", user.id)
+          .single()
+          .then(({ data }) => {
+            if (!data) return;
+            if (data.name)            setName(data.name as string);
+            if (data.role)            setIsPi(data.role === "pi");
+            if (data.institution)     setInstitution(data.institution as string);
+            if (data.bio != null)     setBio((data.bio as string) ?? "");
+            if (data.department != null) setDepartment((data.department as string) ?? "");
+            if (data.avatar_initials) setAvatarInitials(data.avatar_initials as string);
+          });
+      });
+    }
   }, []);
 
-  // ── Computed activity data ────────────────────────────────────────────────
-  const myTasks = TASKS.filter((t) => t.assigneeIds.includes(CURRENT_USER_ID));
-  const taskCounts: Record<TaskStatus, number> = {
-    todo: myTasks.filter((t) => t.status === "todo").length,
-    in_progress: myTasks.filter((t) => t.status === "in_progress").length,
-    in_review: myTasks.filter((t) => t.status === "in_review").length,
-    done: myTasks.filter((t) => t.status === "done").length,
-  };
-  const recentTasks = [...myTasks]
-    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
-    .slice(0, 5);
-  const litCount = LITERATURE_ITEMS.filter((li) => li.addedById === CURRENT_USER_ID).length;
-  const currentMonth = new Date().toISOString().slice(0, 7);
-  const journalStreak = JOURNAL_ENTRIES.filter(
-    (je) => je.userId === CURRENT_USER_ID && je.date.startsWith(currentMonth),
-  ).length;
+  // ── Activity stats — loaded from Supabase ────────────────────────────────
+  const [taskCounts, setTaskCounts] = useState<Record<TaskStatus, number>>({
+    todo: 0, in_progress: 0, in_review: 0, done: 0,
+  });
+  const [recentTasks, setRecentTasks] = useState<import("@/types").Task[]>([]);
+  const [litCount, setLitCount] = useState(0);
+  const [journalStreak, setJournalStreak] = useState(0);
+
+  useEffect(() => {
+    const sp = getStoredProject();
+    const projectId = sp.id;
+    if (!projectId || projectId === "p1") return;
+
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) return;
+
+      supabase.from("tasks").select("id,status,title,due_date,updated_at")
+        .eq("project_id", projectId)
+        .then(({ data }) => {
+          if (!data) return;
+          const counts = { todo: 0, in_progress: 0, in_review: 0, done: 0 } as Record<TaskStatus, number>;
+          data.forEach((t) => { counts[t.status as TaskStatus] = (counts[t.status as TaskStatus] ?? 0) + 1; });
+          setTaskCounts(counts);
+          const recent = [...data]
+            .sort((a, b) => new Date(b.updated_at as string).getTime() - new Date(a.updated_at as string).getTime())
+            .slice(0, 5)
+            .map((row) => ({
+              id: row.id as string, projectId: projectId, title: row.title as string,
+              description: "", status: row.status as TaskStatus,
+              priority: "medium" as const, assigneeIds: [],
+              dueDate: row.due_date as string | undefined,
+              createdAt: row.updated_at as string, updatedAt: row.updated_at as string,
+              comments: [], files: [], links: [],
+            }));
+          setRecentTasks(recent);
+        });
+
+      supabase.from("literature_items").select("id", { count: "exact", head: true })
+        .eq("project_id", projectId).eq("added_by", user.id)
+        .then(({ count }) => setLitCount(count ?? 0));
+
+      const monthStart = new Date().toISOString().slice(0, 7) + "-01";
+      supabase.from("journal_entries").select("id", { count: "exact", head: true })
+        .eq("user_id", user.id).gte("date", monthStart)
+        .then(({ count }) => setJournalStreak(count ?? 0));
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── Handlers ─────────────────────────────────────────────────────────────
   const handlePhotoChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
