@@ -247,7 +247,12 @@ function KanbanPreview() {
           </Link>
         }
       />
-      <div className="p-5 grid grid-cols-4 gap-4">
+      {/* Scroll wrapper: horizontal scroll on mobile, grid on desktop */}
+      <div
+        className="overflow-x-auto"
+        style={{ WebkitOverflowScrolling: "touch" }}
+      >
+      <div className="p-4 md:p-5 grid gap-4" style={{ gridTemplateColumns: "repeat(4, minmax(240px, 1fr))", minWidth: "min(100%, 960px)" }}>
         {columns.map((status) => {
           const cfg = STATUS_CONFIG[status];
           const tasks = tasksByStatus[status];
@@ -307,6 +312,7 @@ function KanbanPreview() {
           );
         })}
       </div>
+      </div>{/* end scroll wrapper */}
     </Card>
   );
 }
@@ -373,39 +379,37 @@ export default function DashboardPage() {
   });
 
   return (
-    <div className="p-6" style={{ maxWidth: 1400 }}>
+    <div className="p-4 md:p-6" style={{ maxWidth: 1400 }}>
       {/* Header */}
-      <div className="flex items-start justify-between mb-6">
-        <div>
-          <h1
-            style={{
-              fontFamily: "var(--font-lora)",
-              fontWeight: 700,
-              fontSize: 26,
-              color: "var(--color-navy)",
-              margin: 0,
-              lineHeight: 1.2,
-            }}
-          >
-            {PROJECT.name}
-          </h1>
-          <p style={{ fontSize: 13, color: "var(--color-secondary)", marginTop: 4 }}>{today}</p>
-        </div>
+      <div className="mb-5 md:mb-6">
+        <h1
+          style={{
+            fontFamily: "var(--font-lora)",
+            fontWeight: 700,
+            fontSize: 26,
+            color: "var(--color-navy)",
+            margin: 0,
+            lineHeight: 1.2,
+          }}
+        >
+          {PROJECT.name}
+        </h1>
+        <p style={{ fontSize: 13, color: "var(--color-secondary)", marginTop: 4 }}>{today}</p>
       </div>
 
-      {/* Row 1: Upcoming + Team Activity */}
-      <div className="grid grid-cols-2 gap-5 mb-5">
+      {/* Row 1: Upcoming + Team Activity — stack on mobile */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5 mb-4 md:mb-5">
         <UpcomingWidget events={EVENTS} />
         <TeamActivityWidget events={ACTIVITY} />
       </div>
 
-      {/* Row 2: Kanban preview (full width) */}
-      <div className="mb-5">
+      {/* Row 2: Kanban preview — horizontal scroll on mobile */}
+      <div className="mb-4 md:mb-5">
         <KanbanPreview />
       </div>
 
-      {/* Row 3: Opportunities + Lab Wins */}
-      <div className="grid grid-cols-2 gap-5">
+      {/* Row 3: Opportunities + Lab Wins — stack on mobile */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
         <PostsCard title="Opportunities" posts={DASHBOARD_POSTS} type="opportunity" />
         <PostsCard title="Lab Wins" posts={DASHBOARD_POSTS} type="lab_win" />
       </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { TEAM_MEMBERS, TASKS, CURRENT_USER_ID, formatRelativeTime, getUser } from "@/lib/mock-data";
 import type { TeamMember, TaskStatus } from "@/types";
 import Avatar from "@/components/ui/Avatar";
@@ -24,50 +24,56 @@ const STATUS_COLORS: Record<TaskStatus, string> = {
 
 // ── Member profile panel ──────────────────────────────────────────────────────
 
-function MemberPanel({
-  member,
-  onClose,
-}: {
-  member: TeamMember;
-  onClose: () => void;
-}) {
-  const totalTasks = Object.values(member.taskCounts).reduce((a, b) => a + b, 0);
+function MemberPanel({ member, onClose }: { member: TeamMember; onClose: () => void }) {
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    function check() { setIsMobile(window.innerWidth < 768); }
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) { if (e.key === "Escape") onClose(); }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
 
   return (
     <>
+      {/* Backdrop — desktop only */}
+      {!isMobile && (
+        <div className="fixed inset-0 z-30" style={{ backgroundColor: "rgba(27,46,75,0.15)" }} onClick={onClose} />
+      )}
+
+      {/* Panel */}
       <div
-        className="fixed inset-0 z-30"
-        style={{ backgroundColor: "rgba(27,46,75,0.15)" }}
-        onClick={onClose}
-      />
-      <div
-        className="fixed right-0 top-0 h-full z-40 flex flex-col animate-slide-in"
-        style={{
-          width: 340,
+        className={isMobile ? "animate-slide-in-bottom" : "animate-slide-in"}
+        style={isMobile ? {
+          position: "fixed", inset: 0, zIndex: 40, display: "flex", flexDirection: "column",
+          backgroundColor: "var(--color-surface)",
+        } : {
+          position: "fixed", top: 0, right: 0, height: "100%", zIndex: 40,
+          display: "flex", flexDirection: "column", width: 340,
           backgroundColor: "var(--color-surface)",
           borderLeft: "1px solid var(--color-border)",
           boxShadow: "-4px 0 20px rgba(27,46,75,0.1)",
         }}
       >
-        <div className="px-6 pt-6 pb-4" style={{ borderBottom: "1px solid var(--color-border)" }}>
+        <div className="px-5 pt-5 pb-4" style={{ borderBottom: "1px solid var(--color-border)" }}>
           <div className="flex items-start justify-between">
-            <div className="flex items-center gap-4">
-              <Avatar user={member} size={52} />
+            <div className="flex items-center gap-3">
+              <Avatar user={member} size={48} />
               <div>
-                <h2 style={{ fontFamily: "var(--font-lora)", fontWeight: 600, fontSize: 17, color: "var(--color-body)", margin: 0 }}>
-                  {member.name}
-                </h2>
+                <h2 style={{ fontFamily: "var(--font-lora)", fontWeight: 600, fontSize: 17, color: "var(--color-body)", margin: 0 }}>{member.name}</h2>
                 <p style={{ fontSize: 12, color: "var(--color-secondary)", marginTop: 3, textTransform: "capitalize" }}>
                   {member.role === "pi" ? "Principal Investigator" : "Researcher"}
                 </p>
               </div>
             </div>
-            <button
-              onClick={onClose}
-              className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[rgba(27,46,75,0.06)] transition-colors"
-              aria-label="Close"
-            >
-              <X size={15} color="var(--color-secondary)" />
+            <button onClick={onClose} className="flex items-center justify-center rounded-lg hover:bg-[rgba(27,46,75,0.06)] transition-colors" style={{ width: 44, height: 44 }} aria-label="Close">
+              <X size={18} color="var(--color-secondary)" />
             </button>
           </div>
         </div>
@@ -329,10 +335,10 @@ export default function TeamPage() {
       className="flex flex-col h-full overflow-auto"
       style={{ fontFamily: "var(--font-roboto)" }}
     >
-      <div className="p-6" style={{ maxWidth: 1200 }}>
+      <div className="p-4 md:p-6" style={{ maxWidth: 1200 }}>
 
         {/* Header */}
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-5 md:mb-6">
           <div>
             <h1
               style={{
@@ -391,8 +397,8 @@ export default function TeamPage() {
           </div>
         </div>
 
-        {/* Team grid */}
-        <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))" }}>
+        {/* Team grid — 1 column on mobile, auto-fill on desktop */}
+        <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 280px), 1fr))" }}>
           {TEAM_MEMBERS.map((member) => (
             <MemberCard
               key={member.id}
@@ -424,12 +430,12 @@ export default function TeamPage() {
               padding: "24px 28px",
             }}
           >
-            <div className="flex items-start gap-6">
-              <div className="flex-1">
+            <div className="flex flex-col md:flex-row items-start gap-4 md:gap-6">
+              <div className="flex-1 w-full">
                 <p style={{ fontSize: 13, color: "var(--color-secondary)", marginBottom: 16 }}>
                   Propose a time and invite your team to vote on availability.
                 </p>
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   {["Mon Jun 8", "Tue Jun 9", "Wed Jun 10"].map((day) => (
                     <button
                       key={day}
@@ -463,6 +469,7 @@ export default function TeamPage() {
                 </div>
               </div>
               <button
+                className="w-full md:w-auto"
                 style={{
                   backgroundColor: "var(--color-navy)",
                   color: "#fff",

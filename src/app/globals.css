@@ -108,11 +108,23 @@ body {
   to   { transform: translateX(0);    opacity: 1; }
 }
 
+@keyframes slide-in-bottom {
+  from { transform: translateY(100%); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+@keyframes slide-in-left {
+  from { transform: translateX(-100%); opacity: 0; }
+  to   { transform: translateX(0);     opacity: 1; }
+}
+
 @keyframes fade-in {
   from { opacity: 0; }
   to   { opacity: 1; }
 }
 
-.animate-slide-in { animation: slide-in-right 0.22s ease-out; }
-.animate-fade-in  { animation: fade-in 0.18s ease-out; }
-.animate-pulse-ring { animation: pulse-ring 1.4s ease-in-out infinite; }
+.animate-slide-in        { animation: slide-in-right  0.22s ease-out; }
+.animate-slide-in-bottom { animation: slide-in-bottom 0.24s ease-out; }
+.animate-slide-in-left   { animation: slide-in-left   0.22s ease-out; }
+.animate-fade-in         { animation: fade-in         0.18s ease-out; }
+.animate-pulse-ring      { animation: pulse-ring      1.4s  ease-in-out infinite; }

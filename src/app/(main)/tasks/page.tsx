@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import {
   DndContext, DragEndEvent, DragOverlay, DragStartEvent,
   PointerSensor, useSensor, useSensors, closestCorners,
@@ -368,8 +368,22 @@ function TaskDetailPanel({ task, onClose, onUpdateStatus }: {
 }) {
   const [activeTab, setActiveTab] = useState<"comments" | "files">("comments");
   const [commentText, setCommentText] = useState("");
+  const [isMobile, setIsMobile] = useState(false);
   const cfg = STATUS_CONFIG[task.status];
   const currentUser = getUser(CURRENT_USER_ID)!;
+
+  useEffect(() => {
+    function check() { setIsMobile(window.innerWidth < 768); }
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) { if (e.key === "Escape") onClose(); }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
 
   return (
     <>
@@ -380,10 +394,24 @@ function TaskDetailPanel({ task, onClose, onUpdateStatus }: {
         onClick={onClose}
       />
 
-      {/* Panel */}
+      {/* Panel — right drawer on desktop, full-screen slide-up on mobile */}
       <div
-        className="fixed right-0 top-0 h-full z-40 flex flex-col animate-slide-in"
-        style={{
+        className={isMobile ? "animate-slide-in-bottom" : "animate-slide-in"}
+        style={isMobile ? {
+          position: "fixed",
+          inset: 0,
+          zIndex: 40,
+          display: "flex",
+          flexDirection: "column",
+          backgroundColor: "var(--color-surface)",
+        } : {
+          position: "fixed",
+          right: 0,
+          top: 0,
+          height: "100%",
+          zIndex: 40,
+          display: "flex",
+          flexDirection: "column",
           width: 480,
           backgroundColor: "var(--color-surface)",
           borderLeft: "1px solid var(--color-border)",
@@ -423,10 +451,11 @@ function TaskDetailPanel({ task, onClose, onUpdateStatus }: {
             </div>
             <button
               onClick={onClose}
-              className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[rgba(27,46,75,0.06)] transition-colors shrink-0"
+              className="flex items-center justify-center rounded-lg hover:bg-[rgba(27,46,75,0.06)] transition-colors shrink-0"
+              style={{ width: 44, height: 44 }}
               aria-label="Close panel"
             >
-              <X size={16} color="var(--color-secondary)" />
+              <X size={18} color="var(--color-secondary)" />
             </button>
           </div>
 
@@ -806,93 +835,82 @@ export default function TasksPage() {
   return (
     <div className="flex flex-col h-full" style={{ fontFamily: "var(--font-roboto)" }}>
 
-      {/* Toolbar */}
+      {/* Toolbar — row 1: title + view toggle + add button */}
       <div
-        className="flex items-center justify-between px-6 py-3 gap-4"
-        style={{
-          backgroundColor: "var(--color-surface)",
-          borderBottom: "1px solid var(--color-border)",
-          minHeight: 56,
-        }}
+        className="px-4 md:px-6 pt-3 pb-2"
+        style={{ backgroundColor: "var(--color-surface)", borderBottom: "1px solid var(--color-border)" }}
       >
-        <div>
-          <h1 style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 22, color: "var(--color-navy)", margin: 0 }}>
+        <div className="flex items-center gap-3 mb-2">
+          <h1 style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 22, color: "var(--color-navy)", margin: 0, flex: 1 }}>
             Tasks
           </h1>
-        </div>
-
-        {/* View toggle */}
-        <div
-          className="flex items-center rounded-lg p-0.5"
-          style={{ backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)" }}
-        >
-          {(["board", "list"] as const).map((v) => (
-            <button
-              key={v}
-              onClick={() => setView(v)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all"
-              style={{
-                fontSize: 12,
-                fontWeight: 600,
-                backgroundColor: view === v ? "var(--color-navy)" : "transparent",
-                color: view === v ? "#fff" : "var(--color-secondary)",
-                minHeight: 32,
-              }}
-            >
-              {v === "board" ? <LayoutGrid size={13} /> : <List size={13} />}
-              {v === "board" ? "Board" : "List"}
-            </button>
-          ))}
-        </div>
-
-        <div className="flex items-center gap-3 flex-1 max-w-xs ml-auto">
-          {/* Search */}
-          <div className="relative flex-1">
-            <Search
-              size={14}
-              className="absolute left-3 top-1/2 -translate-y-1/2"
-              color="var(--color-secondary)"
-            />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search tasks..."
-              style={{
-                width: "100%",
-                paddingLeft: 32,
-                paddingRight: 12,
-                height: 36,
-                border: "1px solid var(--color-border)",
-                borderRadius: 7,
-                fontSize: 13,
-                fontFamily: "var(--font-roboto)",
-                backgroundColor: "var(--color-surface)",
-                outline: "none",
-              }}
-            />
+          {/* View toggle */}
+          <div
+            className="flex items-center rounded-lg p-0.5 shrink-0"
+            style={{ backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)" }}
+          >
+            {(["board", "list"] as const).map((v) => (
+              <button
+                key={v}
+                onClick={() => setView(v)}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md transition-all"
+                style={{
+                  fontSize: 12,
+                  fontWeight: 600,
+                  backgroundColor: view === v ? "var(--color-navy)" : "transparent",
+                  color: view === v ? "#fff" : "var(--color-secondary)",
+                  minHeight: 36,
+                  minWidth: 44,
+                  justifyContent: "center",
+                }}
+              >
+                {v === "board" ? <LayoutGrid size={14} /> : <List size={14} />}
+                <span className="hidden sm:inline">{v === "board" ? "Board" : "List"}</span>
+              </button>
+            ))}
           </div>
+          <button
+            className="flex items-center gap-1.5 px-3 md:px-4 py-2 shrink-0 transition-opacity hover:opacity-90"
+            style={{
+              backgroundColor: "var(--color-navy)",
+              color: "#fff",
+              fontSize: 12,
+              fontWeight: 700,
+              borderRadius: 7,
+              border: "none",
+              cursor: "pointer",
+              minHeight: 44,
+            }}
+          >
+            <Plus size={13} />
+            <span className="hidden sm:inline">Add Task</span>
+          </button>
         </div>
-
-        <button
-          className="flex items-center gap-1.5 px-4 py-2 rounded-lg transition-opacity hover:opacity-90"
-          style={{
-            backgroundColor: "var(--color-navy)",
-            color: "#fff",
-            fontSize: 12,
-            fontWeight: 700,
-            fontFamily: "var(--font-roboto)",
-            borderRadius: 7,
-            border: "none",
-            cursor: "pointer",
-            minHeight: 36,
-          }}
-        >
-          <Plus size={13} /> Add Task
-        </button>
+        {/* Toolbar row 2: search (always visible on its own row) */}
+        <div className="pb-2 relative">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2" color="var(--color-secondary)" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search tasks..."
+            style={{
+              width: "100%",
+              paddingLeft: 32,
+              paddingRight: 12,
+              height: 36,
+              border: "1px solid var(--color-border)",
+              borderRadius: 7,
+              fontSize: 13,
+              fontFamily: "var(--font-roboto)",
+              backgroundColor: "var(--color-canvas)",
+              outline: "none",
+            }}
+          />
+        </div>
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-auto p-6">
+      <div className="flex-1 overflow-auto p-4 md:p-6">
         {view === "board" ? (
           <DndContext
             sensors={sensors}
@@ -900,7 +918,9 @@ export default function TasksPage() {
             onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
           >
-            <div className="grid gap-5" style={{ gridTemplateColumns: "repeat(4, 1fr)", alignItems: "start" }}>
+          {/* Horizontal scroll on mobile, grid on desktop */}
+          <div className="overflow-x-auto" style={{ WebkitOverflowScrolling: "touch" }}>
+            <div className="grid gap-4 md:gap-5" style={{ gridTemplateColumns: "repeat(4, minmax(240px, 1fr))", alignItems: "start", minWidth: "min(100%, 960px)" }}>
               {STATUS_ORDER.map((status) => (
                 <KanbanColumn
                   key={status}
@@ -911,6 +931,7 @@ export default function TasksPage() {
                 />
               ))}
             </div>
+          </div>{/* end scroll wrapper */}
             <DragOverlay>
               {activeTask && (
                 <div style={{ opacity: 0.85, transform: "rotate(2deg)" }}>
@@ -930,10 +951,10 @@ export default function TasksPage() {
               backgroundColor: "var(--color-surface)",
               border: "1px solid var(--color-border)",
               borderRadius: 10,
-              overflow: "hidden",
+              overflow: "auto",
             }}
           >
-            <table className="w-full border-collapse">
+            <table className="border-collapse" style={{ width: "100%", minWidth: 600 }}>
               <thead>
                 <tr style={{ borderBottom: "1px solid var(--color-border)" }}>
                   {["", "Title", "Status", "Priority", "Assignees", "Due Date", ""].map((col, i) => (
