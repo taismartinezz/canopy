@@ -6,7 +6,7 @@ import {
   CHECKIN_QUESTIONS, CHECKIN_LABELS, CHECKIN_COLORS,
 } from "@/lib/mock-data";
 import type { JournalEntry, CheckinResponse } from "@/types";
-import { Lock, Mic, MicOff, HelpingHand, Search, Plus, X, Phone, ChevronLeft } from "lucide-react";
+import { Lock, Mic, MicOff, HelpingHand, Search, Plus, X, Phone, ChevronLeft, Users, Building2 } from "lucide-react";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -176,7 +176,7 @@ function SupportModal({ onClose }: { onClose: () => void }) {
         <div className="space-y-3">
           <button className="w-full text-left px-4 py-3.5 rounded-lg transition-all hover:shadow-sm" style={{ backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)", borderRadius: 10 }}>
             <div className="flex items-start gap-3">
-              <span style={{ fontSize: 18, marginTop: 1 }}>🤝</span>
+              <Users size={18} color="var(--color-navy)" style={{ marginTop: 2, flexShrink: 0 }} />
               <div>
                 <p style={{ fontSize: 13, fontWeight: 600, color: "var(--color-body)" }}>Request a check-in with your supervisor</p>
                 <p style={{ fontSize: 12, color: "var(--color-secondary)", marginTop: 3, lineHeight: 1.4 }}>Sends an anonymous notification to your PI. Your identity is never shared.</p>
@@ -185,7 +185,7 @@ function SupportModal({ onClose }: { onClose: () => void }) {
           </button>
           <a href="#" className="block px-4 py-3.5 rounded-lg transition-all hover:shadow-sm" style={{ backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)", borderRadius: 10, textDecoration: "none" }}>
             <div className="flex items-start gap-3">
-              <span style={{ fontSize: 18, marginTop: 1 }}>🏛️</span>
+              <Building2 size={18} color="var(--color-navy)" style={{ marginTop: 2, flexShrink: 0 }} />
               <div>
                 <p style={{ fontSize: 13, fontWeight: 600, color: "var(--color-body)" }}>Counseling & Psychological Services (CAPS)</p>
                 <p style={{ fontSize: 12, color: "var(--color-secondary)", marginTop: 3 }}>University of Michigan CAPS — (734) 764-8312</p>

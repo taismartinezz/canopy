@@ -526,11 +526,11 @@ export const JOURNAL_ENTRIES: JournalEntry[] = [
 // ── Literature ────────────────────────────────────────────────────────────────
 
 export const LITERATURE_COLLECTIONS: LiteratureCollection[] = [
-  { id: "lc0", name: "All Items",          emoji: "📚", itemCount: 18 },
-  { id: "lc1", name: "IRB & Ethics",       emoji: "📋", itemCount: 3  },
-  { id: "lc2", name: "Trauma Studies",     emoji: "🧠", itemCount: 8  },
-  { id: "lc3", name: "Research Methods",   emoji: "🔬", itemCount: 4  },
-  { id: "lc4", name: "Researcher Wellbeing", emoji: "💚", itemCount: 3 },
+  { id: "lc0", name: "All Items",            iconName: "Library",       itemCount: 18 },
+  { id: "lc1", name: "IRB & Ethics",         iconName: "ClipboardList", itemCount: 3  },
+  { id: "lc2", name: "Trauma Studies",       iconName: "Brain",         itemCount: 8  },
+  { id: "lc3", name: "Research Methods",     iconName: "Microscope",    itemCount: 4  },
+  { id: "lc4", name: "Researcher Wellbeing", iconName: "Heart",         itemCount: 3  },
 ];
 
 export const LITERATURE_ITEMS: LiteratureItem[] = [

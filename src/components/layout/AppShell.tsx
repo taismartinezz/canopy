@@ -2,13 +2,14 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard, CheckSquare, BookOpen, BookMarked, Users,
   Bell, ChevronDown, LogOut, Settings, User, Menu, X,
 } from "lucide-react";
 import { USERS, NOTIFICATIONS, PROJECT, CURRENT_USER_ID, getUser } from "@/lib/mock-data";
 import Avatar from "@/components/ui/Avatar";
+import CanopyLogo from "@/components/ui/CanopyLogo";
 
 const NAV_ITEMS = [
   { href: "/",           label: "Dashboard",  icon: LayoutDashboard },
@@ -18,13 +19,6 @@ const NAV_ITEMS = [
   { href: "/team",       label: "Team",       icon: Users           },
 ];
 
-function CanopyIcon() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path d="M12 2C9 2 6 5 6 8C6 10 7 11.5 8 12.5C6.5 13 5 14.5 5 16.5C5 18.5 6.5 20 8.5 20H12V22H14V20H15.5C17.5 20 19 18.5 19 16.5C19 14.5 17.5 13 16 12.5C17 11.5 18 10 18 8C18 5 15 2 12 2Z" fill="#1B2E4B"/>
-    </svg>
-  );
-}
 
 function NotifDot({ count }: { count: number }) {
   if (count === 0) return null;
@@ -176,7 +170,11 @@ function NotifPanel({ onClose, userId }: { onClose: () => void; userId: string }
 
 // ── Profile menu ──────────────────────────────────────────────────────────────
 
-function ProfileMenu({ user, onClose }: { user: ReturnType<typeof getUser>; onClose: () => void }) {
+function ProfileMenu({ user, onClose, onSignOut }: {
+  user: ReturnType<typeof getUser>;
+  onClose: () => void;
+  onSignOut: () => void;
+}) {
   if (!user) return null;
   return (
     <div
@@ -194,7 +192,7 @@ function ProfileMenu({ user, onClose }: { user: ReturnType<typeof getUser>; onCl
           </button>
         ))}
         <div style={{ borderTop: "1px solid var(--color-border)", marginTop: 4, paddingTop: 4 }}>
-          <button onClick={onClose} className="w-full flex items-center gap-2.5 px-4 text-left transition-colors hover:bg-[rgba(27,46,75,0.06)]" style={{ fontSize: 13, color: "var(--color-error)", minHeight: 44 }}>
+          <button onClick={onSignOut} className="w-full flex items-center gap-2.5 px-4 text-left transition-colors hover:bg-[rgba(27,46,75,0.06)]" style={{ fontSize: 13, color: "var(--color-error)", minHeight: 44 }}>
             <LogOut size={14} /> Sign out
           </button>
         </div>
@@ -207,9 +205,21 @@ function ProfileMenu({ user, onClose }: { user: ReturnType<typeof getUser>; onCl
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [notifOpen, setNotifOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [authed, setAuthed] = useState(false);
+
+  // Auth gate — check localStorage on mount, redirect to /login if absent
+  useEffect(() => {
+    if (localStorage.getItem("canopy_authed") === "true") {
+      setAuthed(true);
+    } else {
+      router.replace("/login");
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const currentUser = getUser(CURRENT_USER_ID)!;
   const unreadCount = NOTIFICATIONS.filter((n) => !n.read && n.recipientId === CURRENT_USER_ID).length;
@@ -234,6 +244,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     return href === "/" ? pathname === "/" : pathname.startsWith(href);
   }
 
+  function handleSignOut() {
+    localStorage.removeItem("canopy_authed");
+    router.push("/login");
+  }
+
+  // Don't render anything until auth check completes (prevents content flash)
+  if (!authed) return null;
+
   return (
     <div className="flex h-full" style={{ fontFamily: "var(--font-roboto)" }}>
 
@@ -252,7 +270,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         className="hidden md:flex flex-col items-center pt-3 pb-3 gap-3 shrink-0"
         style={{ width: 40, backgroundColor: "var(--color-strip)", borderRight: "1px solid var(--color-border)", zIndex: 10 }}
       >
-        <div className="w-8 h-8 flex items-center justify-center mb-1"><CanopyIcon /></div>
+        <div className="w-8 h-8 flex items-center justify-center mb-1"><CanopyLogo size={28} /></div>
         <button aria-label={PROJECT.name} title={PROJECT.name}>
           <div className="w-9 h-9 rounded-[10px] flex items-center justify-center" style={{ backgroundColor: "var(--color-navy)", color: "#fff", fontSize: 12, fontWeight: 700 }}>MI</div>
         </button>
@@ -306,10 +324,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <Menu size={20} color="var(--color-navy)" />
           </button>
 
-          {/* Mobile wordmark */}
-          <span className="md:hidden" style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 17, color: "var(--color-navy)" }}>
-            Canopy
-          </span>
+          {/* Mobile wordmark + logo */}
+          <div className="md:hidden flex items-center gap-2">
+            <CanopyLogo size={24} />
+            <span style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 17, color: "var(--color-navy)" }}>
+              Canopy
+            </span>
+          </div>
 
           {/* Desktop project name */}
           <span className="hidden md:block" style={{ fontSize: 13, color: "var(--color-secondary)" }}>
@@ -348,7 +369,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 <Avatar user={currentUser} size={28} />
                 <ChevronDown size={14} color="var(--color-secondary)" className="hidden sm:block" />
               </button>
-              {profileOpen && <ProfileMenu user={currentUser} onClose={() => setProfileOpen(false)} />}
+              {profileOpen && (
+                <ProfileMenu
+                  user={currentUser}
+                  onClose={() => setProfileOpen(false)}
+                  onSignOut={handleSignOut}
+                />
+              )}
             </div>
           </div>
         </header>

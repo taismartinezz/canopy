@@ -171,7 +171,7 @@ export interface LiteratureItem {
 export interface LiteratureCollection {
   id: string;
   name: string;
-  emoji: string;
+  iconName: string;
   itemCount: number;
 }
 

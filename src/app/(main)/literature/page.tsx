@@ -9,17 +9,31 @@ import type { LiteratureItem, ReadStatus, LiteratureType, LibraryScope } from "@
 import {
   Plus, Search, Download, FileText, File, X,
   Tag, Star, ExternalLink, Copy, Check, ChevronLeft,
+  Book, BarChart2, GraduationCap,
+  Library, ClipboardList, Brain, Microscope, Heart,
 } from "lucide-react";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 const TYPE_ICONS: Record<LiteratureType, React.ReactNode> = {
-  article:  <span title="Article"  style={{ fontSize: 15 }}>📄</span>,
-  book:     <span title="Book"     style={{ fontSize: 15 }}>📘</span>,
-  preprint: <span title="Preprint" style={{ fontSize: 15 }}>📑</span>,
-  report:   <span title="Report"   style={{ fontSize: 15 }}>📊</span>,
-  thesis:   <span title="Thesis"   style={{ fontSize: 15 }}>🎓</span>,
+  article:  <FileText    size={14} color="var(--color-secondary)" aria-label="Article"  />,
+  book:     <Book        size={14} color="var(--color-secondary)" aria-label="Book"     />,
+  preprint: <FileText    size={14} color="var(--color-secondary)" aria-label="Preprint" />,
+  report:   <BarChart2   size={14} color="var(--color-secondary)" aria-label="Report"   />,
+  thesis:   <GraduationCap size={14} color="var(--color-secondary)" aria-label="Thesis"/>,
 };
+
+function collectionIcon(iconName: string, active: boolean) {
+  const color = active ? "#fff" : "var(--color-secondary)";
+  const map: Record<string, React.ReactNode> = {
+    Library:       <Library       size={14} color={color} />,
+    ClipboardList: <ClipboardList size={14} color={color} />,
+    Brain:         <Brain         size={14} color={color} />,
+    Microscope:    <Microscope    size={14} color={color} />,
+    Heart:         <Heart         size={14} color={color} />,
+  };
+  return map[iconName] ?? <Library size={14} color={color} />;
+}
 
 const STATUS_CONFIG: Record<ReadStatus, { label: string; color: string; bg: string }> = {
   read:    { label: "Read",    color: "#2E7D52", bg: "#D4EDE0" },
@@ -106,7 +120,10 @@ function CollectionsSidebar({
               border: "none", borderRadius: 8, cursor: "pointer", fontSize: 13, textAlign: "left", minHeight: 44,
               margin: "0 4px", width: "calc(100% - 8px)",
             }}>
-            <span className="flex items-center gap-2"><span style={{ fontSize: 14 }}>{col.emoji}</span>{col.name}</span>
+            <span className="flex items-center gap-2">
+              {collectionIcon(col.iconName, activeCollection === col.id)}
+              {col.name}
+            </span>
             <span style={{ fontSize: 11, fontWeight: 600, color: activeCollection === col.id ? "rgba(255,255,255,0.7)" : "var(--color-secondary)" }}>{col.itemCount}</span>
           </button>
         ))}
