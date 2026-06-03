@@ -2,9 +2,10 @@
 
 import { useState, useRef, useEffect } from "react";
 import {
-  JOURNAL_ENTRIES, JOURNAL_PROMPTS, ACTIVE_PROMPT_IDS,
-  CHECKIN_QUESTIONS, CHECKIN_LABELS, CHECKIN_COLORS, CURRENT_USER_ID,
+  JOURNAL_PROMPTS, ACTIVE_PROMPT_IDS,
+  CHECKIN_QUESTIONS, CHECKIN_LABELS, CHECKIN_COLORS,
 } from "@/lib/mock-data";
+import { supabase } from "@/lib/supabase";
 import type { JournalEntry, CheckinResponse, PromptCategory } from "@/types";
 import { Lock, Mic, MicOff, HelpingHand, Search, Plus, X, Phone, ChevronLeft, Users, Building2 } from "lucide-react";
 
@@ -386,7 +387,9 @@ function EntryListItem({ entry, selected, onClick }: { entry: JournalEntry; sele
 export default function JournalPage() {
   const todayISO = getTodayISO();
 
-  const [entries, setEntries]               = useState<JournalEntry[]>(JOURNAL_ENTRIES);
+  const [entries, setEntries]               = useState<JournalEntry[]>([]);
+  const [loadingEntries, setLoadingEntries] = useState(true);
+  const [authUserId, setAuthUserId]         = useState("local");
   const [activePromptIds, setActivePromptIds] = useState<string[]>(ACTIVE_PROMPT_IDS);
   const [selectedEntryId, setSelectedEntryId] = useState<string | "new">("new");
   const [responses, setResponses]           = useState<Record<string, string>>({});
@@ -472,7 +475,7 @@ export default function JournalPage() {
 
     const newEntry: JournalEntry = {
       id: crypto.randomUUID(),
-      userId: CURRENT_USER_ID,
+      userId: authUserId,
       date: todayISO,
       prompts: activePrompts.map((p) => ({
         promptId: p.id,
@@ -500,6 +503,32 @@ export default function JournalPage() {
     else { document.body.style.overflow = ""; }
     return () => { document.body.style.overflow = ""; };
   }, [entryListOpen]);
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) { setLoadingEntries(false); return; }
+      setAuthUserId(user.id);
+      supabase
+        .from("journal_entries")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("date", { ascending: false })
+        .then(({ data, error }) => {
+          if (!error && data) setEntries(data.map((row) => ({
+            id: row.id as string,
+            userId: row.user_id as string,
+            date: row.date as string,
+            prompts: (row.prompts as JournalEntry["prompts"]) ?? [],
+            checkin: (row.checkin as JournalEntry["checkin"]) ?? [],
+            isDraft: row.is_draft as boolean,
+            createdAt: row.created_at as string,
+            updatedAt: row.updated_at as string,
+          })));
+          setLoadingEntries(false);
+        });
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const showPromptBanner = !isViewingEntry && !promptDismissed;
 

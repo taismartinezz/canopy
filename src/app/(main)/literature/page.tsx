@@ -2,9 +2,10 @@
 
 import { useState, useEffect, useRef } from "react";
 import {
-  LITERATURE_ITEMS, LITERATURE_COLLECTIONS, getUser,
   formatFileSize, CURRENT_USER_ID,
 } from "@/lib/mock-data";
+import { supabase } from "@/lib/supabase";
+import { getStoredProject } from "@/lib/mock-data";
 import type { LiteratureItem, ReadStatus, LiteratureType, LibraryScope, LiteratureFile } from "@/types";
 import {
   Plus, Search, Download, FileText, File, X,
@@ -257,7 +258,15 @@ function CollectionsSidebar({
       </div>
 
       <div className="flex-1 overflow-y-auto py-2">
-        {LITERATURE_COLLECTIONS.map((col) => (
+        {[
+          { id: "lc0", name: "All Items", iconName: "Library", itemCount: items.length },
+          ...[...new Set(items.flatMap((i) => i.collections))].map((colId) => ({
+            id: colId,
+            name: colId,
+            iconName: "Library",
+            itemCount: items.filter((i) => i.collections.includes(colId)).length,
+          })),
+        ].map((col) => (
           <button key={col.id} onClick={() => { setActiveCollection(col.id); onClose?.(); }}
             className="w-full flex items-center justify-between px-3 py-2"
             style={{ backgroundColor: activeCollection === col.id ? "var(--color-navy)" : "transparent", color: activeCollection === col.id ? "#fff" : "var(--color-body)", border: "none", borderRadius: 8, cursor: "pointer", fontSize: 13, textAlign: "left", minHeight: 44, margin: "0 4px", width: "calc(100% - 8px)" }}>
@@ -298,11 +307,12 @@ const DETAIL_TABS = ["Info", "Abstract", "Notes", "Tags", "Files", "Cite", "Rela
 type DetailTab = typeof DETAIL_TABS[number];
 
 function DetailPanelContent({
-  item, onClose, onUpdateItem,
+  item, onClose, onUpdateItem, allItems,
 }: {
   item: LiteratureItem;
   onClose: () => void;
   onUpdateItem: (id: string, updates: Partial<LiteratureItem>) => void;
+  allItems: LiteratureItem[];
 }) {
   const [tab, setTab]                     = useState<DetailTab>("Info");
   const [citationStyle, setCitationStyle] = useState<"apa" | "mla" | "chicago">("apa");
@@ -569,7 +579,7 @@ function DetailPanelContent({
               : (
                 <div className="space-y-2 mb-4">
                   {item.relatedIds.map((id) => {
-                    const rel = LITERATURE_ITEMS.find((i) => i.id === id);
+                    const rel = allItems.find((i) => i.id === id);
                     if (!rel) return null;
                     return (
                       <button key={id} className="w-full text-left flex items-start gap-2 px-3 py-2.5 rounded-lg" style={{ backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)", borderRadius: 8, minHeight: 44 }}>
@@ -596,7 +606,8 @@ function DetailPanelContent({
 // ── Literature page ───────────────────────────────────────────────────────────
 
 export default function LiteraturePage() {
-  const [items, setItems]               = useState<LiteratureItem[]>(LITERATURE_ITEMS);
+  const [items, setItems]               = useState<LiteratureItem[]>([]);
+  const [loadingItems, setLoadingItems] = useState(true);
   const [scope, setScope]               = useState<LibraryScope>("lab");
   const [activeCollection, setActiveCollection] = useState("lc0");
   const [selectedItem, setSelectedItem] = useState<LiteratureItem | null>(null);
@@ -612,6 +623,44 @@ export default function LiteraturePage() {
     check();
     window.addEventListener("resize", check);
     return () => window.removeEventListener("resize", check);
+  }, []);
+
+  useEffect(() => {
+    const projectId = getStoredProject().id;
+    if (!projectId || projectId === "p1") { setLoadingItems(false); return; }
+    supabase
+      .from("literature_items")
+      .select("*")
+      .eq("project_id", projectId)
+      .order("added_at", { ascending: false })
+      .then(({ data }) => {
+        if (data) setItems(data.map((row) => ({
+          id: row.id as string,
+          projectId: row.project_id as string,
+          scope: row.scope as LiteratureItem["scope"],
+          type: row.type as LiteratureItem["type"],
+          title: row.title as string,
+          authors: (row.authors as string[]) ?? [],
+          year: (row.year as number | null) ?? 0,
+          journal: row.journal as string | undefined,
+          publisher: row.publisher as string | undefined,
+          volume: row.volume as string | undefined,
+          pages: row.pages as string | undefined,
+          doi: row.doi as string | undefined,
+          abstract: row.abstract as string | undefined,
+          tags: (row.tags as string[]) ?? [],
+          status: row.status as LiteratureItem["status"],
+          rating: row.rating as number,
+          notes: row.notes as string,
+          files: (row.files as LiteratureItem["files"]) ?? [],
+          addedById: row.added_by as string,
+          addedAt: row.added_at as string,
+          collections: (row.collections as string[]) ?? [],
+          relatedIds: (row.related_ids as string[]) ?? [],
+        })));
+        setLoadingItems(false);
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -715,7 +764,11 @@ export default function LiteraturePage() {
           </div>
 
           <div className="flex-1 overflow-y-auto">
-            {filtered.length === 0
+            {loadingItems
+              ? <div className="flex items-center justify-center h-40"><p style={{ fontSize: 13, color: "var(--color-secondary)" }}>Loading…</p></div>
+              : filtered.length === 0 && items.length === 0
+              ? <div className="flex items-center justify-center h-40"><p style={{ fontSize: 13, color: "var(--color-secondary)" }}>No items yet. Add your first paper.</p></div>
+              : filtered.length === 0
               ? <div className="flex items-center justify-center h-40"><p style={{ fontSize: 13, color: "var(--color-secondary)" }}>No items found.</p></div>
               : filtered.map((item) => {
                   const isSelected = selectedItem?.id === item.id && !isMobile;
@@ -742,11 +795,11 @@ export default function LiteraturePage() {
         <>
           {isMobile ? (
             <div className="fixed inset-0 z-40 animate-slide-in-bottom" style={{ backgroundColor: "var(--color-surface)" }}>
-              <DetailPanelContent item={selectedItem} onClose={() => setSelectedItem(null)} onUpdateItem={updateItem} />
+              <DetailPanelContent item={selectedItem} onClose={() => setSelectedItem(null)} onUpdateItem={updateItem} allItems={items} />
             </div>
           ) : (
             <div className="flex flex-col shrink-0" style={{ width: 340, borderLeft: "1px solid var(--color-border)" }}>
-              <DetailPanelContent item={selectedItem} onClose={() => setSelectedItem(null)} onUpdateItem={updateItem} />
+              <DetailPanelContent item={selectedItem} onClose={() => setSelectedItem(null)} onUpdateItem={updateItem} allItems={items} />
             </div>
           )}
         </>

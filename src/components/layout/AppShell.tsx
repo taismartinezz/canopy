@@ -5,12 +5,13 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard, CheckSquare, BookOpen, BookMarked, Users,
-  Bell, ChevronDown, LogOut, Settings, User, Menu, X,
+  Bell, ChevronDown, LogOut, Settings, User as UserIcon, Menu, X,
 } from "lucide-react";
 import {
-  USERS, NOTIFICATIONS, PROJECT, CURRENT_USER_ID, getUser,
+  NOTIFICATIONS, PROJECT, CURRENT_USER_ID, getUser,
   getStoredProject, getStoredUser,
 } from "@/lib/mock-data";
+import type { User } from "@/types";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import Toast from "@/components/ui/Toast";
 import Avatar from "@/components/ui/Avatar";
@@ -53,11 +54,15 @@ function SidebarBody({
   onLinkClick,
   showCloseButton,
   onClose,
+  team,
+  currentUserId,
 }: {
   isActive: (href: string) => boolean;
   onLinkClick?: () => void;
   showCloseButton?: boolean;
   onClose?: () => void;
+  team: User[];
+  currentUserId: string;
 }) {
   return (
     <div className="flex flex-col h-full" style={{ backgroundColor: "var(--color-sidebar)" }}>
@@ -116,13 +121,16 @@ function SidebarBody({
           Team
         </p>
         <div className="max-h-48 overflow-y-auto space-y-0.5">
-          {USERS.map((user) => (
+          {team.length === 0 && (
+            <p style={{ fontSize: 12, color: "var(--color-secondary)", padding: "2px 4px" }}>No teammates yet.</p>
+          )}
+          {team.map((user) => (
             <div key={user.id} className="flex items-center gap-2 px-1 py-1" style={{ minHeight: 32 }}>
               <Avatar user={user} size={22} />
               <span style={{
                 fontSize: 13,
-                color: user.id === CURRENT_USER_ID ? "var(--color-navy)" : "var(--color-body)",
-                fontWeight: user.id === CURRENT_USER_ID ? 600 : 400,
+                color: user.id === currentUserId ? "var(--color-navy)" : "var(--color-body)",
+                fontWeight: user.id === currentUserId ? 600 : 400,
                 overflow: "hidden",
                 textOverflow: "ellipsis",
                 whiteSpace: "nowrap",
@@ -197,7 +205,7 @@ function ProfileMenu({ user, onClose, onSignOut, onNavigateProfile }: {
           className="w-full flex items-center gap-2.5 px-4 text-left transition-colors hover:bg-[rgba(27,46,75,0.06)]"
           style={{ fontSize: 13, color: "var(--color-body)", minHeight: 44 }}
         >
-          <User size={14} /> Profile
+          <UserIcon size={14} /> Profile
         </button>
         <button
           onClick={onClose}
@@ -234,13 +242,48 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [authed, setAuthed] = useState(false);
   const [storedProject, setStoredProject] = useState(getStoredProject);
   const [currentUser, setCurrentUser] = useState(getStoredUser);
+  const [team, setTeam] = useState<User[]>([]);
+  const [sidebarUserId, setSidebarUserId] = useState(CURRENT_USER_ID);
 
   // Auth gate — Supabase session when configured, localStorage fallback otherwise
   useEffect(() => {
     function admit() {
+      const sp = getStoredProject();
+      const su = getStoredUser();
       setAuthed(true);
-      setStoredProject(getStoredProject());
-      setCurrentUser(getStoredUser());
+      setStoredProject(sp);
+      setCurrentUser(su);
+
+      // Patch real email + user ID from Supabase auth (always, regardless of project)
+      supabase.auth.getUser().then(({ data: { user: authUser } }) => {
+        if (!authUser) return;
+        setSidebarUserId(authUser.id);
+        if (authUser.email) {
+          setCurrentUser((prev) => ({ ...prev, email: authUser.email! }));
+        }
+
+        // Load real team from Supabase
+        const projectId = sp.id;
+        if (!projectId || projectId === "p1") return;
+        supabase
+          .from("team_members")
+          .select("user_id, role, user_profiles(name, avatar_color, avatar_initials)")
+          .eq("project_id", projectId)
+          .then(({ data }) => {
+            if (data) setTeam(data.map((row) => {
+              const profiles = row.user_profiles as unknown as Record<string, string>[] | null;
+              const p = Array.isArray(profiles) ? profiles[0] : null;
+              return {
+                id: row.user_id as string,
+                name: p?.name ?? "Unknown",
+                email: "",
+                role: row.role as User["role"],
+                avatarColor: p?.avatar_color ?? "#B4D4E3",
+                avatarInitials: p?.avatar_initials ?? "??",
+              };
+            }));
+          });
+      });
     }
 
     if (isSupabaseConfigured) {
@@ -321,7 +364,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         className="hidden md:flex flex-col shrink-0"
         style={{ width: 210, borderRight: "1px solid var(--color-border)" }}
       >
-        <SidebarBody isActive={isActive} />
+        <SidebarBody isActive={isActive} team={team} currentUserId={sidebarUserId} />
       </div>
 
       {/* ── Mobile nav drawer — fixed overlay, slide in/out ── */}
@@ -342,6 +385,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           onLinkClick={() => setMobileNavOpen(false)}
           showCloseButton
           onClose={() => setMobileNavOpen(false)}
+          team={team}
+          currentUserId={sidebarUserId}
         />
       </div>
 
