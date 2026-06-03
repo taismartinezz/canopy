@@ -1,14 +1,16 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
-  X, Send, Paperclip, Download, Trash2, FileText, File, Image, Table, ExternalLink,
+  X, Send, Paperclip, Download, Trash2, FileText, File, Image, Table,
+  ExternalLink, Plus,
 } from "lucide-react";
 import {
   USERS, CURRENT_USER_ID, formatRelativeTime, formatDate, formatFileSize, getUser,
 } from "@/lib/mock-data";
-import type { Task, TaskStatus, TaskPriority, User } from "@/types";
+import type { Task, TaskStatus, TaskPriority, User, TaskComment, TaskFile } from "@/types";
 import Avatar from "@/components/ui/Avatar";
+import { showToast } from "@/components/ui/Toast";
 
 // ── Shared config ─────────────────────────────────────────────────────────────
 
@@ -88,20 +90,44 @@ export function FileIcon({ type }: { type: string }) {
   return <File size={14} color="var(--color-secondary)" />;
 }
 
+function guessFileType(name: string): TaskFile["type"] {
+  const ext = name.split(".").pop()?.toLowerCase() ?? "";
+  if (ext === "pdf") return "pdf";
+  if (["jpg", "jpeg", "png", "gif", "svg", "webp", "avif"].includes(ext)) return "image";
+  if (["xlsx", "xls", "csv"].includes(ext)) return "spreadsheet";
+  if (["docx", "doc"].includes(ext)) return "docx";
+  return "other";
+}
+
 // ── Task detail panel ─────────────────────────────────────────────────────────
 
 export default function TaskDetailPanel({
   task,
   onClose,
   onUpdateStatus,
+  onUpdateTask,
 }: {
   task: Task;
   onClose: () => void;
   onUpdateStatus: (status: TaskStatus) => void;
+  onUpdateTask?: (updates: Partial<Task>) => void;
 }) {
   const [activeTab, setActiveTab] = useState<"comments" | "files">("comments");
   const [commentText, setCommentText] = useState("");
   const [isMobile, setIsMobile] = useState(false);
+  const [addAssigneeOpen, setAddAssigneeOpen] = useState(false);
+
+  // Local copies — initialized from task, mutated locally & pushed to parent
+  const [localComments, setLocalComments] = useState<TaskComment[]>(task.comments);
+  const [localFiles, setLocalFiles]       = useState<TaskFile[]>(task.files);
+  const [localAssigneeIds, setLocalAssigneeIds] = useState<string[]>(task.assigneeIds);
+
+  // Sync if parent updates the task (e.g. task switched)
+  useEffect(() => { setLocalComments(task.comments); }, [task.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setLocalFiles(task.files); },       [task.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setLocalAssigneeIds(task.assigneeIds); }, [task.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const cfg = STATUS_CONFIG[task.status];
   const currentUser = getUser(CURRENT_USER_ID)!;
 
@@ -118,6 +144,67 @@ export default function TaskDetailPanel({
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
 
+  // ── Comment actions ───────────────────────────────────────────────────────
+
+  function handleSendComment() {
+    const text = commentText.trim();
+    if (!text) return;
+    const newComment: TaskComment = {
+      id: crypto.randomUUID(),
+      authorId: CURRENT_USER_ID,
+      content: text,
+      createdAt: new Date().toISOString(),
+    };
+    const updated = [...localComments, newComment];
+    setLocalComments(updated);
+    onUpdateTask?.({ comments: updated });
+    setCommentText("");
+  }
+
+  // ── File actions ──────────────────────────────────────────────────────────
+
+  function handleFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const newFile: TaskFile = {
+      id: crypto.randomUUID(),
+      name: file.name,
+      size: file.size,
+      uploaderId: CURRENT_USER_ID,
+      uploadedAt: new Date().toISOString(),
+      url: "",
+      type: guessFileType(file.name),
+    };
+    const updated = [...localFiles, newFile];
+    setLocalFiles(updated);
+    onUpdateTask?.({ files: updated });
+    e.target.value = "";
+  }
+
+  function handleDeleteFile(id: string) {
+    if (!window.confirm("Remove this file?")) return;
+    const updated = localFiles.filter((f) => f.id !== id);
+    setLocalFiles(updated);
+    onUpdateTask?.({ files: updated });
+  }
+
+  // ── Assignee actions ──────────────────────────────────────────────────────
+
+  function removeAssignee(id: string) {
+    const updated = localAssigneeIds.filter((x) => x !== id);
+    setLocalAssigneeIds(updated);
+    onUpdateTask?.({ assigneeIds: updated });
+  }
+
+  function addAssignee(id: string) {
+    const updated = [...localAssigneeIds, id];
+    setLocalAssigneeIds(updated);
+    onUpdateTask?.({ assigneeIds: updated });
+    setAddAssigneeOpen(false);
+  }
+
+  const unassignedUsers = USERS.filter((u) => !localAssigneeIds.includes(u.id));
+
   return (
     <>
       {/* Backdrop */}
@@ -127,32 +214,13 @@ export default function TaskDetailPanel({
         onClick={onClose}
       />
 
-      {/* Panel — right drawer on desktop, full-screen slide-up on mobile */}
+      {/* Panel */}
       <div
         className={isMobile ? "animate-slide-in-bottom" : "animate-slide-in"}
         style={
           isMobile
-            ? {
-                position: "fixed",
-                inset: 0,
-                zIndex: 40,
-                display: "flex",
-                flexDirection: "column",
-                backgroundColor: "var(--color-surface)",
-              }
-            : {
-                position: "fixed",
-                right: 0,
-                top: 0,
-                height: "100%",
-                zIndex: 40,
-                display: "flex",
-                flexDirection: "column",
-                width: 480,
-                backgroundColor: "var(--color-surface)",
-                borderLeft: "1px solid var(--color-border)",
-                boxShadow: "-4px 0 20px rgba(27,46,75,0.12)",
-              }
+            ? { position: "fixed", inset: 0, zIndex: 40, display: "flex", flexDirection: "column", backgroundColor: "var(--color-surface)" }
+            : { position: "fixed", right: 0, top: 0, height: "100%", zIndex: 40, display: "flex", flexDirection: "column", width: 480, backgroundColor: "var(--color-surface)", borderLeft: "1px solid var(--color-border)", boxShadow: "-4px 0 20px rgba(27,46,75,0.12)" }
         }
       >
         {/* Header */}
@@ -160,38 +228,15 @@ export default function TaskDetailPanel({
           <div className="flex items-start justify-between gap-3">
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-2">
-                <span
-                  className="px-2.5 py-0.5"
-                  style={{
-                    backgroundColor: `${cfg.dot}20`,
-                    color: cfg.dot,
-                    borderRadius: 5,
-                    fontSize: 11,
-                    fontWeight: 700,
-                  }}
-                >
+                <span className="px-2.5 py-0.5" style={{ backgroundColor: `${cfg.dot}20`, color: cfg.dot, borderRadius: 5, fontSize: 11, fontWeight: 700 }}>
                   {cfg.label}
                 </span>
               </div>
-              <h2
-                style={{
-                  fontFamily: "var(--font-lora)",
-                  fontWeight: 600,
-                  fontSize: 17,
-                  color: "var(--color-body)",
-                  lineHeight: 1.3,
-                  margin: 0,
-                }}
-              >
+              <h2 style={{ fontFamily: "var(--font-lora)", fontWeight: 600, fontSize: 17, color: "var(--color-body)", lineHeight: 1.3, margin: 0 }}>
                 {task.title}
               </h2>
             </div>
-            <button
-              onClick={onClose}
-              className="flex items-center justify-center rounded-lg hover:bg-[rgba(27,46,75,0.06)] transition-colors shrink-0"
-              style={{ width: 44, height: 44 }}
-              aria-label="Close panel"
-            >
+            <button onClick={onClose} className="flex items-center justify-center rounded-lg hover:bg-[rgba(27,46,75,0.06)] transition-colors shrink-0" style={{ width: 44, height: 44 }} aria-label="Close panel">
               <X size={18} color="var(--color-secondary)" />
             </button>
           </div>
@@ -199,117 +244,84 @@ export default function TaskDetailPanel({
           {/* 2×2 metadata grid */}
           <div className="grid grid-cols-2 gap-x-6 gap-y-3 mt-4">
             <div>
-              <p
-                style={{
-                  fontSize: 11,
-                  fontWeight: 700,
-                  color: "var(--color-secondary)",
-                  textTransform: "uppercase",
-                  letterSpacing: "0.05em",
-                  marginBottom: 6,
-                }}
-              >
-                Status
-              </p>
+              <p style={{ fontSize: 11, fontWeight: 700, color: "var(--color-secondary)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>Status</p>
               <select
                 value={task.status}
                 onChange={(e) => onUpdateStatus(e.target.value as TaskStatus)}
                 className="cursor-pointer"
-                style={{
-                  fontSize: 13,
-                  color: cfg.dot,
-                  backgroundColor: `${cfg.dot}18`,
-                  border: "none",
-                  borderRadius: 5,
-                  padding: "3px 8px",
-                  fontWeight: 600,
-                  fontFamily: "var(--font-roboto)",
-                }}
+                style={{ fontSize: 13, color: cfg.dot, backgroundColor: `${cfg.dot}18`, border: "none", borderRadius: 5, padding: "3px 8px", fontWeight: 600, fontFamily: "var(--font-roboto)" }}
               >
                 {STATUS_ORDER.map((s) => (
-                  <option key={s} value={s}>
-                    {STATUS_CONFIG[s].label}
-                  </option>
+                  <option key={s} value={s}>{STATUS_CONFIG[s].label}</option>
                 ))}
               </select>
             </div>
 
             <div>
-              <p
-                style={{
-                  fontSize: 11,
-                  fontWeight: 700,
-                  color: "var(--color-secondary)",
-                  textTransform: "uppercase",
-                  letterSpacing: "0.05em",
-                  marginBottom: 6,
-                }}
-              >
-                Priority
-              </p>
+              <p style={{ fontSize: 11, fontWeight: 700, color: "var(--color-secondary)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>Priority</p>
               <PriorityBadge priority={task.priority} />
             </div>
 
             <div>
-              <p
-                style={{
-                  fontSize: 11,
-                  fontWeight: 700,
-                  color: "var(--color-secondary)",
-                  textTransform: "uppercase",
-                  letterSpacing: "0.05em",
-                  marginBottom: 6,
-                }}
-              >
-                Due Date
-              </p>
-              <p style={{ fontSize: 13, color: "var(--color-body)" }}>
-                {task.dueDate ? formatDate(task.dueDate) : "No due date"}
-              </p>
+              <p style={{ fontSize: 11, fontWeight: 700, color: "var(--color-secondary)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>Due Date</p>
+              <p style={{ fontSize: 13, color: "var(--color-body)" }}>{task.dueDate ? formatDate(task.dueDate) : "No due date"}</p>
             </div>
 
             <div>
-              <p
-                style={{
-                  fontSize: 11,
-                  fontWeight: 700,
-                  color: "var(--color-secondary)",
-                  textTransform: "uppercase",
-                  letterSpacing: "0.05em",
-                  marginBottom: 6,
-                }}
-              >
-                Assignees
-              </p>
-              <div className="flex flex-wrap gap-1.5">
-                {task.assigneeIds.length === 0 ? (
+              <p style={{ fontSize: 11, fontWeight: 700, color: "var(--color-secondary)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>Assignees</p>
+              <div className="flex flex-wrap gap-1.5 relative">
+                {localAssigneeIds.length === 0 ? (
                   <span style={{ fontSize: 13, color: "var(--color-secondary)" }}>Unassigned</span>
                 ) : (
-                  task.assigneeIds.map((id) => {
+                  localAssigneeIds.map((id) => {
                     const user = getUser(id);
                     if (!user) return null;
                     return (
-                      <span
-                        key={id}
-                        className="flex items-center gap-1.5 px-2 py-1"
-                        style={{
-                          backgroundColor: "var(--color-canvas)",
-                          border: "1px solid var(--color-border)",
-                          borderRadius: 20,
-                          fontSize: 12,
-                        }}
-                      >
+                      <span key={id} className="flex items-center gap-1.5 px-2 py-1" style={{ backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)", borderRadius: 20, fontSize: 12 }}>
                         <Avatar user={user} size={16} />
                         {user.name.split(" ")[0]}
                         <button
-                          className="ml-0.5 hover:text-error"
-                          style={{ color: "var(--color-secondary)" }}
+                          onClick={() => removeAssignee(id)}
+                          className="ml-0.5 hover:opacity-70 transition-opacity"
+                          style={{ color: "var(--color-secondary)", lineHeight: 1 }}
+                          aria-label={`Remove ${user.name}`}
                         >
                           ×
                         </button>
                       </span>
                     );
                   })
+                )}
+                {/* + Add assignee */}
+                {unassignedUsers.length > 0 && (
+                  <div className="relative">
+                    <button
+                      onClick={() => setAddAssigneeOpen((o) => !o)}
+                      className="flex items-center justify-center w-7 h-7 rounded-full hover:bg-[rgba(27,46,75,0.06)] transition-colors"
+                      style={{ border: "1px dashed var(--color-border)" }}
+                      aria-label="Add assignee"
+                    >
+                      <Plus size={12} color="var(--color-secondary)" />
+                    </button>
+                    {addAssigneeOpen && (
+                      <div
+                        className="absolute left-0 top-8 z-20 animate-fade-in"
+                        style={{ width: 180, backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 8, boxShadow: "var(--shadow-card)", padding: "4px 0" }}
+                      >
+                        {unassignedUsers.map((u) => (
+                          <button
+                            key={u.id}
+                            onClick={() => addAssignee(u.id)}
+                            className="w-full flex items-center gap-2 px-3 py-2 hover:bg-[rgba(27,46,75,0.06)] transition-colors"
+                            style={{ fontSize: 13, color: "var(--color-body)" }}
+                          >
+                            <Avatar user={u} size={20} />
+                            {u.name.split(" ")[0]}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
             </div>
@@ -319,46 +331,18 @@ export default function TaskDetailPanel({
         {/* Description */}
         {task.description && (
           <div className="px-6 py-4" style={{ borderBottom: "1px solid var(--color-border)" }}>
-            <p style={{ fontSize: 13, color: "var(--color-body)", lineHeight: 1.6 }}>
-              {task.description}
-            </p>
+            <p style={{ fontSize: 13, color: "var(--color-body)", lineHeight: 1.6 }}>{task.description}</p>
           </div>
         )}
 
         {/* Linked docs */}
         {task.links.length > 0 && (
           <div className="px-6 py-3" style={{ borderBottom: "1px solid var(--color-border)" }}>
-            <p
-              style={{
-                fontSize: 11,
-                fontWeight: 700,
-                color: "var(--color-secondary)",
-                textTransform: "uppercase",
-                letterSpacing: "0.05em",
-                marginBottom: 8,
-              }}
-            >
-              Linked Documents
-            </p>
+            <p style={{ fontSize: 11, fontWeight: 700, color: "var(--color-secondary)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>Linked Documents</p>
             <div className="space-y-2">
               {task.links.map((link) => (
-                <a
-                  key={link.id}
-                  href={link.url}
-                  className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-[rgba(27,46,75,0.04)] transition-colors"
-                  style={{
-                    backgroundColor: "var(--color-canvas)",
-                    border: "1px solid var(--color-border)",
-                    textDecoration: "none",
-                  }}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  {link.type === "google_doc" ? (
-                    <FileText size={14} color="#1B2E4B" />
-                  ) : (
-                    <Table size={14} color="#1B2E4B" />
-                  )}
+                <a key={link.id} href={link.url} className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-[rgba(27,46,75,0.04)] transition-colors" style={{ backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)", textDecoration: "none" }} target="_blank" rel="noopener noreferrer">
+                  {link.type === "google_doc" ? <FileText size={14} color="#1B2E4B" /> : <Table size={14} color="#1B2E4B" />}
                   <span style={{ fontSize: 13, color: "var(--color-body)", flex: 1 }}>{link.title}</span>
                   <ExternalLink size={12} color="var(--color-secondary)" />
                 </a>
@@ -380,28 +364,18 @@ export default function TaskDetailPanel({
                 color: activeTab === tab ? "var(--color-navy)" : "var(--color-secondary)",
                 background: "none",
                 border: "none",
-                borderBottom:
-                  activeTab === tab ? "2px solid var(--color-navy)" : "2px solid transparent",
+                borderBottom: activeTab === tab ? "2px solid var(--color-navy)" : "2px solid transparent",
                 cursor: "pointer",
               }}
             >
               {tab === "comments" ? (
-                "Comments"
+                <>Comments {localComments.length > 0 && <span style={{ fontSize: 10, fontWeight: 700, color: "var(--color-secondary)" }}>({localComments.length})</span>}</>
               ) : (
                 <>
                   Files
-                  {task.files.length > 0 && (
-                    <span
-                      className="ml-1.5 px-1.5 py-0.5 rounded"
-                      style={{
-                        backgroundColor: "var(--color-canvas)",
-                        border: "1px solid var(--color-border)",
-                        fontSize: 10,
-                        fontWeight: 700,
-                        color: "var(--color-secondary)",
-                      }}
-                    >
-                      {task.files.length}
+                  {localFiles.length > 0 && (
+                    <span className="ml-1.5 px-1.5 py-0.5 rounded" style={{ backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)", fontSize: 10, fontWeight: 700, color: "var(--color-secondary)" }}>
+                      {localFiles.length}
                     </span>
                   )}
                 </>
@@ -415,37 +389,24 @@ export default function TaskDetailPanel({
           {activeTab === "comments" && (
             <div className="flex flex-col h-full">
               <div className="flex-1 px-6 py-4 space-y-4">
-                {task.comments.length === 0 && (
+                {localComments.length === 0 && (
                   <p style={{ fontSize: 13, color: "var(--color-secondary)" }}>No comments yet.</p>
                 )}
-                {task.comments.map((comment) => {
+                {localComments.map((comment) => {
                   const author = getUser(comment.authorId);
                   if (!author) return null;
+                  const isNew = !task.comments.find((c) => c.id === comment.id);
                   return (
                     <div key={comment.id} className="flex gap-3">
                       <Avatar user={author} size={26} className="mt-1 shrink-0" />
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
-                          <span
-                            style={{ fontSize: 13, fontWeight: 600, color: "var(--color-body)" }}
-                          >
-                            {author.name}
-                          </span>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: "var(--color-body)" }}>{author.name}</span>
                           <span style={{ fontSize: 11, color: "var(--color-secondary)" }}>
-                            {formatRelativeTime(comment.createdAt)}
+                            {isNew ? "just now" : formatRelativeTime(comment.createdAt)}
                           </span>
                         </div>
-                        <div
-                          style={{
-                            backgroundColor: "var(--color-canvas)",
-                            border: "1px solid var(--color-border)",
-                            borderRadius: "4px 12px 12px 12px",
-                            padding: "10px 14px",
-                            fontSize: 13,
-                            color: "var(--color-body)",
-                            lineHeight: 1.5,
-                          }}
-                        >
+                        <div style={{ backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)", borderRadius: "4px 12px 12px 12px", padding: "10px 14px", fontSize: 13, color: "var(--color-body)", lineHeight: 1.5 }}>
                           {comment.content}
                         </div>
                       </div>
@@ -454,11 +415,7 @@ export default function TaskDetailPanel({
                 })}
               </div>
 
-              {/* Comment input */}
-              <div
-                className="px-4 py-3 flex gap-3 items-end"
-                style={{ borderTop: "1px solid var(--color-border)" }}
-              >
+              <div className="px-4 py-3 flex gap-3 items-end" style={{ borderTop: "1px solid var(--color-border)" }}>
                 <Avatar user={currentUser} size={26} className="mb-0.5 shrink-0" />
                 <div className="flex-1 relative">
                   <textarea
@@ -467,37 +424,17 @@ export default function TaskDetailPanel({
                     placeholder="Leave a comment..."
                     rows={2}
                     className="w-full resize-none"
-                    style={{
-                      fontSize: 13,
-                      color: "var(--color-body)",
-                      backgroundColor: "var(--color-canvas)",
-                      border: "1px solid var(--color-border)",
-                      borderRadius: 8,
-                      padding: "8px 12px",
-                      fontFamily: "var(--font-roboto)",
-                      outline: "none",
-                    }}
+                    style={{ fontSize: 13, color: "var(--color-body)", backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)", borderRadius: 8, padding: "8px 12px", fontFamily: "var(--font-roboto)", outline: "none" }}
                     onKeyDown={(e) => {
-                      if (e.key === "Enter" && !e.shiftKey) {
-                        e.preventDefault();
-                        setCommentText("");
-                      }
+                      if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSendComment(); }
                     }}
                   />
                 </div>
                 <button
+                  onClick={handleSendComment}
                   disabled={!commentText.trim()}
                   className="px-3 py-2 flex items-center gap-1.5 rounded-lg transition-opacity disabled:opacity-40"
-                  style={{
-                    backgroundColor: "var(--color-navy)",
-                    color: "#fff",
-                    fontSize: 12,
-                    fontWeight: 700,
-                    borderRadius: 7,
-                    border: "none",
-                    cursor: commentText.trim() ? "pointer" : "default",
-                    minHeight: 36,
-                  }}
+                  style={{ backgroundColor: "var(--color-navy)", color: "#fff", fontSize: 12, fontWeight: 700, borderRadius: 7, border: "none", cursor: commentText.trim() ? "pointer" : "default", minHeight: 36 }}
                 >
                   <Send size={13} /> Send
                 </button>
@@ -507,36 +444,32 @@ export default function TaskDetailPanel({
 
           {activeTab === "files" && (
             <div className="px-6 py-4">
-              {task.files.length === 0 ? (
-                <p style={{ fontSize: 13, color: "var(--color-secondary)", marginBottom: 16 }}>
-                  No files attached yet.
-                </p>
-              ) : (
+              <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileSelected} />
+
+              {localFiles.length > 0 && (
                 <div className="space-y-2 mb-4">
-                  {task.files.map((file) => (
-                    <div
-                      key={file.id}
-                      className="flex items-center gap-3 px-3 py-2.5 rounded-lg"
-                      style={{
-                        backgroundColor: "var(--color-canvas)",
-                        border: "1px solid var(--color-border)",
-                      }}
-                    >
+                  {localFiles.map((file) => (
+                    <div key={file.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg" style={{ backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)" }}>
                       <FileIcon type={file.type} />
                       <div className="flex-1 min-w-0">
-                        <p style={{ fontSize: 13, color: "var(--color-body)", fontWeight: 500 }}>
-                          {file.name}
-                        </p>
+                        <p style={{ fontSize: 13, color: "var(--color-body)", fontWeight: 500 }}>{file.name}</p>
                         <p style={{ fontSize: 11, color: "var(--color-secondary)" }}>
-                          {formatFileSize(file.size)} · uploaded by{" "}
-                          {getUser(file.uploaderId)?.name.split(" ")[0]}
+                          {formatFileSize(file.size)} · uploaded by {getUser(file.uploaderId)?.name.split(" ")[0]}
                         </p>
                       </div>
-                      <button className="w-7 h-7 flex items-center justify-center rounded hover:bg-[rgba(27,46,75,0.06)] transition-colors">
+                      <button
+                        onClick={() => showToast("Download started", "info")}
+                        className="w-7 h-7 flex items-center justify-center rounded hover:bg-[rgba(27,46,75,0.06)] transition-colors"
+                        aria-label="Download"
+                      >
                         <Download size={13} color="var(--color-navy)" />
                       </button>
                       {file.uploaderId === CURRENT_USER_ID && (
-                        <button className="w-7 h-7 flex items-center justify-center rounded hover:bg-[rgba(27,46,75,0.06)] transition-colors">
+                        <button
+                          onClick={() => handleDeleteFile(file.id)}
+                          className="w-7 h-7 flex items-center justify-center rounded hover:bg-[rgba(27,46,75,0.06)] transition-colors"
+                          aria-label="Delete file"
+                        >
                           <Trash2 size={13} color="var(--color-error)" />
                         </button>
                       )}
@@ -545,23 +478,18 @@ export default function TaskDetailPanel({
                 </div>
               )}
 
-              {/* Upload area */}
+              {localFiles.length === 0 && (
+                <p style={{ fontSize: 13, color: "var(--color-secondary)", marginBottom: 16 }}>No files attached yet.</p>
+              )}
+
               <div
+                onClick={() => fileInputRef.current?.click()}
                 className="flex flex-col items-center justify-center gap-2 rounded-lg cursor-pointer transition-colors hover:bg-[rgba(27,46,75,0.03)]"
-                style={{
-                  border: "2px dashed var(--color-border)",
-                  borderRadius: 8,
-                  padding: "24px 16px",
-                  textAlign: "center",
-                }}
+                style={{ border: "2px dashed var(--color-border)", borderRadius: 8, padding: "24px 16px", textAlign: "center" }}
               >
                 <Paperclip size={18} color="var(--color-secondary)" />
-                <p style={{ fontSize: 13, color: "var(--color-secondary)" }}>
-                  Drop files here or click to upload
-                </p>
-                <p style={{ fontSize: 11, color: "var(--color-secondary)" }}>
-                  PDF, DOCX, images, spreadsheets
-                </p>
+                <p style={{ fontSize: 13, color: "var(--color-secondary)" }}>Drop files here or click to upload</p>
+                <p style={{ fontSize: 11, color: "var(--color-secondary)" }}>PDF, DOCX, images, spreadsheets</p>
               </div>
             </div>
           )}

@@ -8,6 +8,7 @@ import {
   Bell, ChevronDown, LogOut, Settings, User, Menu, X,
 } from "lucide-react";
 import { USERS, NOTIFICATIONS, PROJECT, CURRENT_USER_ID, getUser } from "@/lib/mock-data";
+import Toast from "@/components/ui/Toast";
 import Avatar from "@/components/ui/Avatar";
 import CanopyLogo from "@/components/ui/CanopyLogo";
 
@@ -253,6 +254,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   if (!authed) return null;
 
   return (
+    <>
     <div className="flex h-full" style={{ fontFamily: "var(--font-roboto)" }}>
 
       {/* Mobile nav backdrop */}
@@ -384,5 +386,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         <main className="flex-1 overflow-auto min-h-0">{children}</main>
       </div>
     </div>
+    <Toast />
+    </>
   );
 }
