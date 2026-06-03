@@ -1,0 +1,118 @@
+@import "tailwindcss";
+
+@theme {
+  /* ── Canopy Design System ── */
+
+  /* Canvas & surfaces */
+  --color-canvas:   #F6F8FC;
+  --color-sidebar:  #E8ECF1;
+  --color-strip:    #D8DCE3;
+  --color-surface:  #FFFFFF;
+
+  /* Navy — the ONLY accent color */
+  --color-navy:       #1B2E4B;
+  --color-navy-hover: #2E4A6F;
+  --color-navy-dim:   rgba(27, 46, 75, 0.06);
+  --color-navy-scrim: rgba(27, 46, 75, 0.15);
+
+  /* Text */
+  --color-body:       #2D2D2D;
+  --color-secondary:  #6B6B6B;
+
+  /* Border */
+  --color-border:     #DDE1E7;
+
+  /* Semantic */
+  --color-success:    #2E7D52;
+  --color-warning:    #A0622A;
+  --color-error:      #C0392B;
+
+  /* Status / priority background tints */
+  --color-error-bg:   #FDDCDC;
+  --color-warning-bg: #FDEFD4;
+  --color-success-bg: #D4EDE0;
+
+  /* Task status column dots */
+  --color-todo:       #64748B;
+  --color-inprogress: #1B2E4B;
+  --color-inreview:   #A0622A;
+  --color-done:       #2E7D52;
+
+  /* Fonts */
+  --font-lora:   var(--font-lora), serif;
+  --font-roboto: var(--font-roboto), sans-serif;
+
+  /* Border radii */
+  --radius-card:    10px;
+  --radius-inner:   8px;
+  --radius-button:  7px;
+  --radius-pill:    20px;
+
+  /* Shadows */
+  --shadow-card: 0 3px 10px rgba(27, 46, 75, 0.09);
+}
+
+/* ── Reset & Base ── */
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-roboto);
+  font-size: 14px;
+  color: var(--color-body);
+  background: var(--color-canvas);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Typography helpers ── */
+.font-lora   { font-family: var(--font-lora); }
+.font-roboto { font-family: var(--font-roboto); }
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar        { width: 6px; height: 6px; }
+::-webkit-scrollbar-track  { background: transparent; }
+::-webkit-scrollbar-thumb  { background: var(--color-border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #bcc3cc; }
+
+/* ── Focus ring ── */
+:focus-visible {
+  outline: 2px solid var(--color-navy);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ── Reduced motion ── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ── Animations ── */
+@keyframes pulse-ring {
+  0%   { transform: scale(1);    opacity: 0.7; }
+  50%  { transform: scale(1.35); opacity: 0.3; }
+  100% { transform: scale(1);    opacity: 0.7; }
+}
+
+@keyframes slide-in-right {
+  from { transform: translateX(100%); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.animate-slide-in { animation: slide-in-right 0.22s ease-out; }
+.animate-fade-in  { animation: fade-in 0.18s ease-out; }
+.animate-pulse-ring { animation: pulse-ring 1.4s ease-in-out infinite; }
