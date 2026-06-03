@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Building2 } from "lucide-react";
 import CanopyLogo from "@/components/ui/CanopyLogo";
+import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 
 // ── Provider icons ────────────────────────────────────────────────────────────
 
@@ -193,32 +194,49 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  // Already authed? Send to app immediately.
+  // Already authed? Skip login and go to app (or onboarding if no project yet).
   useEffect(() => {
-    if (localStorage.getItem("canopy_authed") === "true") {
-      router.replace("/");
+    const dest = localStorage.getItem("canopy_project") ? "/" : "/onboarding";
+    if (isSupabaseConfigured) {
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (session) router.replace(dest);
+      });
+    } else if (localStorage.getItem("canopy_authed") === "true") {
+      router.replace(dest);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleEmailAuth = useCallback(() => {
-    if (!email.includes("@")) {
-      setError("Please enter a valid email address.");
-      return;
-    }
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters.");
-      return;
-    }
+  const handleEmailAuth = useCallback(async () => {
+    if (!email.includes("@")) { setError("Please enter a valid email address."); return; }
+    if (password.length < 6) { setError("Password must be at least 6 characters."); return; }
     setError("");
-    localStorage.setItem("canopy_authed", "true");
-    router.push("/");
-  }, [email, password, router]);
+    setLoading(true);
+    const dest = localStorage.getItem("canopy_project") ? "/" : "/onboarding";
 
-  const handleLogin = useCallback(() => {
+    if (isSupabaseConfigured) {
+      const { error: authError } = mode === "signin"
+        ? await supabase.auth.signInWithPassword({ email, password })
+        : await supabase.auth.signUp({ email, password });
+      setLoading(false);
+      if (authError) { setError(authError.message); return; }
+    } else {
+      setLoading(false);
+    }
+
     localStorage.setItem("canopy_authed", "true");
-    router.push("/");
+    router.push(dest);
+  }, [email, password, mode, router]);
+
+  const handleOAuth = useCallback(async (provider: "github" | "google" | "azure") => {
+    if (isSupabaseConfigured) {
+      await supabase.auth.signInWithOAuth({ provider });
+      return;
+    }
+    localStorage.setItem("canopy_authed", "true");
+    router.push(localStorage.getItem("canopy_project") ? "/" : "/onboarding");
   }, [router]);
 
   return (
@@ -304,21 +322,21 @@ export default function LoginPage() {
             icon={<GitHubIcon />}
             label="Continue with GitHub"
             ariaLabel="Sign in with GitHub"
-            onClick={handleLogin}
+            onClick={() => handleOAuth("github")}
           />
 
           <AuthButton
             icon={<GoogleIcon />}
             label="Continue with Google"
             ariaLabel="Sign in with Google"
-            onClick={handleLogin}
+            onClick={() => handleOAuth("google")}
           />
 
           <AuthButton
             icon={<MicrosoftIcon />}
             label="Continue with Microsoft"
             ariaLabel="Sign in with Microsoft"
-            onClick={handleLogin}
+            onClick={() => handleOAuth("azure")}
           />
 
           <AuthButton
@@ -453,7 +471,7 @@ export default function LoginPage() {
           onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "#2E4A6F"; }}
           onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "#1B2E4B"; }}
         >
-          {mode === "signin" ? "Continue with email" : "Create account"}
+          {loading ? "Please wait…" : mode === "signin" ? "Continue with email" : "Create account"}
         </button>
 
         {error && (

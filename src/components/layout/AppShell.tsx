@@ -7,7 +7,11 @@ import {
   LayoutDashboard, CheckSquare, BookOpen, BookMarked, Users,
   Bell, ChevronDown, LogOut, Settings, User, Menu, X,
 } from "lucide-react";
-import { USERS, NOTIFICATIONS, PROJECT, CURRENT_USER_ID, getUser } from "@/lib/mock-data";
+import {
+  USERS, NOTIFICATIONS, PROJECT, CURRENT_USER_ID, getUser,
+  getStoredProject, getStoredUser,
+} from "@/lib/mock-data";
+import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import Toast from "@/components/ui/Toast";
 import Avatar from "@/components/ui/Avatar";
 import CanopyLogo from "@/components/ui/CanopyLogo";
@@ -214,6 +218,13 @@ function ProfileMenu({ user, onClose, onSignOut, onNavigateProfile }: {
 
 // ── AppShell ──────────────────────────────────────────────────────────────────
 
+function projectInitials(name: string): string {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return "??";
+  if (words.length === 1) return words[0].substring(0, 2).toUpperCase();
+  return (words[0][0] + words[1][0]).toUpperCase();
+}
+
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -221,18 +232,34 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [profileOpen, setProfileOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [authed, setAuthed] = useState(false);
+  const [storedProject, setStoredProject] = useState(getStoredProject);
+  const [currentUser, setCurrentUser] = useState(getStoredUser);
 
-  // Auth gate — check localStorage on mount, redirect to /login if absent
+  // Auth gate — Supabase session when configured, localStorage fallback otherwise
   useEffect(() => {
-    if (localStorage.getItem("canopy_authed") === "true") {
+    function admit() {
       setAuthed(true);
+      setStoredProject(getStoredProject());
+      setCurrentUser(getStoredUser());
+    }
+
+    if (isSupabaseConfigured) {
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (session) { admit(); } else { router.replace("/login"); }
+      });
+
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+        if (!session) router.replace("/login");
+      });
+
+      return () => subscription.unsubscribe();
     } else {
-      router.replace("/login");
+      if (localStorage.getItem("canopy_authed") === "true") { admit(); }
+      else { router.replace("/login"); }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const currentUser = getUser(CURRENT_USER_ID)!;
   const unreadCount = NOTIFICATIONS.filter((n) => !n.read && n.recipientId === CURRENT_USER_ID).length;
 
   useEffect(() => { setMobileNavOpen(false); setNotifOpen(false); setProfileOpen(false); }, [pathname]);
@@ -255,7 +282,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     return href === "/" ? pathname === "/" : pathname.startsWith(href);
   }
 
-  function handleSignOut() {
+  async function handleSignOut() {
+    if (isSupabaseConfigured) await supabase.auth.signOut();
     localStorage.removeItem("canopy_authed");
     router.push("/login");
   }
@@ -283,8 +311,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         style={{ width: 40, backgroundColor: "var(--color-strip)", borderRight: "1px solid var(--color-border)", zIndex: 10 }}
       >
         <div className="w-8 h-8 flex items-center justify-center mb-1"><CanopyLogo size={28} /></div>
-        <button aria-label={PROJECT.name} title={PROJECT.name}>
-          <div className="w-9 h-9 rounded-[10px] flex items-center justify-center" style={{ backgroundColor: "var(--color-navy)", color: "#fff", fontSize: 12, fontWeight: 700 }}>MI</div>
+        <button aria-label={storedProject.name} title={storedProject.name}>
+          <div className="w-9 h-9 rounded-[10px] flex items-center justify-center" style={{ backgroundColor: "var(--color-navy)", color: "#fff", fontSize: 12, fontWeight: 700 }}>{projectInitials(storedProject.name)}</div>
         </button>
       </div>
 
@@ -346,15 +374,17 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
           {/* Desktop project name */}
           <span className="hidden md:block" style={{ fontSize: 13, color: "var(--color-secondary)" }}>
-            {PROJECT.name}
+            {storedProject.name}
           </span>
 
           <div className="flex items-center gap-2 ml-auto">
             {/* Institution badge — sm and up */}
-            <span className="hidden sm:inline-block px-3 py-1 shrink-0"
-              style={{ backgroundColor: "var(--color-navy)", color: "#fff", borderRadius: 20, fontSize: 11, fontWeight: 600, whiteSpace: "nowrap" }}>
-              {PROJECT.institution}
-            </span>
+            {storedProject.institution && (
+              <span className="hidden sm:inline-block px-3 py-1 shrink-0"
+                style={{ backgroundColor: "var(--color-navy)", color: "#fff", borderRadius: 20, fontSize: 11, fontWeight: 600, whiteSpace: "nowrap" }}>
+                {storedProject.institution}
+              </span>
+            )}
 
             {/* Notification bell */}
             <div className="relative">
