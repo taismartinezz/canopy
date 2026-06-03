@@ -188,6 +188,11 @@ function InstitutionModal({ onClose }: { onClose: () => void }) {
 export default function LoginPage() {
   const router = useRouter();
   const [ssoOpen, setSsoOpen] = useState(false);
+  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
 
   // Already authed? Send to app immediately.
   useEffect(() => {
@@ -196,6 +201,20 @@ export default function LoginPage() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const handleEmailAuth = useCallback(() => {
+    if (!email.includes("@")) {
+      setError("Please enter a valid email address.");
+      return;
+    }
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters.");
+      return;
+    }
+    setError("");
+    localStorage.setItem("canopy_authed", "true");
+    router.push("/");
+  }, [email, password, router]);
 
   const handleLogin = useCallback(() => {
     localStorage.setItem("canopy_authed", "true");
@@ -311,6 +330,167 @@ export default function LoginPage() {
             dashed
           />
         </div>
+
+        {/* Or divider */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            marginTop: 24,
+            marginBottom: 24,
+          }}
+        >
+          <div style={{ flex: 1, height: 1, backgroundColor: "#DDE1E7" }} />
+          <span
+            style={{
+              fontFamily: "var(--font-roboto)",
+              fontWeight: 400,
+              fontSize: 12,
+              color: "#6B6B6B",
+            }}
+          >
+            or
+          </span>
+          <div style={{ flex: 1, height: 1, backgroundColor: "#DDE1E7" }} />
+        </div>
+
+        {/* Email form */}
+        {mode === "signup" && (
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => { setName(e.target.value); setError(""); }}
+            placeholder="Full name"
+            autoComplete="name"
+            aria-label="Full name"
+            style={{
+              display: "block",
+              width: "100%",
+              height: 44,
+              border: "1px solid #DDE1E7",
+              borderRadius: 8,
+              padding: "0 14px",
+              fontFamily: "var(--font-roboto)",
+              fontWeight: 400,
+              fontSize: 14,
+              color: "#2D2D2D",
+              outline: "none",
+              boxSizing: "border-box",
+              marginBottom: 10,
+            }}
+            onFocus={(e) => { e.currentTarget.style.borderColor = "#1B2E4B"; }}
+            onBlur={(e) => { e.currentTarget.style.borderColor = "#DDE1E7"; }}
+          />
+        )}
+        <input
+          type="email"
+          value={email}
+          onChange={(e) => { setEmail(e.target.value); setError(""); }}
+          placeholder="Work or university email"
+          autoComplete="email"
+          aria-label="Work or university email"
+          style={{
+            display: "block",
+            width: "100%",
+            height: 44,
+            border: "1px solid #DDE1E7",
+            borderRadius: 8,
+            padding: "0 14px",
+            fontFamily: "var(--font-roboto)",
+            fontWeight: 400,
+            fontSize: 14,
+            color: "#2D2D2D",
+            outline: "none",
+            boxSizing: "border-box",
+          }}
+          onFocus={(e) => { e.currentTarget.style.borderColor = "#1B2E4B"; }}
+          onBlur={(e) => { e.currentTarget.style.borderColor = "#DDE1E7"; }}
+        />
+        <input
+          type="password"
+          value={password}
+          onChange={(e) => { setPassword(e.target.value); setError(""); }}
+          placeholder="Password"
+          autoComplete={mode === "signin" ? "current-password" : "new-password"}
+          aria-label="Password"
+          style={{
+            display: "block",
+            width: "100%",
+            height: 44,
+            border: "1px solid #DDE1E7",
+            borderRadius: 8,
+            padding: "0 14px",
+            fontFamily: "var(--font-roboto)",
+            fontWeight: 400,
+            fontSize: 14,
+            color: "#2D2D2D",
+            outline: "none",
+            boxSizing: "border-box",
+            marginTop: 10,
+          }}
+          onFocus={(e) => { e.currentTarget.style.borderColor = "#1B2E4B"; }}
+          onBlur={(e) => { e.currentTarget.style.borderColor = "#DDE1E7"; }}
+        />
+        <button
+          onClick={handleEmailAuth}
+          style={{
+            display: "block",
+            width: "100%",
+            height: 44,
+            minHeight: 44,
+            backgroundColor: "#1B2E4B",
+            color: "#ffffff",
+            border: "none",
+            borderRadius: 8,
+            fontFamily: "var(--font-roboto)",
+            fontWeight: 700,
+            fontSize: 13,
+            cursor: "pointer",
+            marginTop: 12,
+            transition: "background-color 150ms ease",
+          }}
+          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "#2E4A6F"; }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "#1B2E4B"; }}
+        >
+          {mode === "signin" ? "Continue with email" : "Create account"}
+        </button>
+
+        {error && (
+          <p
+            role="alert"
+            style={{
+              fontFamily: "var(--font-roboto)",
+              fontWeight: 400,
+              fontSize: 12,
+              color: "#C0392B",
+              margin: "8px 0 0",
+            }}
+          >
+            {error}
+          </p>
+        )}
+
+        <p
+          style={{
+            fontFamily: "var(--font-roboto)",
+            fontWeight: 400,
+            fontSize: 12,
+            color: "#6B6B6B",
+            textAlign: "center",
+            margin: "12px 0 0",
+          }}
+        >
+          {mode === "signin" ? "Don't have an account? " : "Already have an account? "}
+          <span
+            onClick={() => { setMode(mode === "signin" ? "signup" : "signin"); setError(""); }}
+            style={{ color: "#1B2E4B", cursor: "pointer" }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.textDecoration = "underline"; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.textDecoration = "none"; }}
+          >
+            {mode === "signin" ? "Sign up" : "Sign in"}
+          </span>
+        </p>
       </div>
 
       {/* Footer */}
