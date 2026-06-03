@@ -171,10 +171,11 @@ function NotifPanel({ onClose, userId }: { onClose: () => void; userId: string }
 
 // ── Profile menu ──────────────────────────────────────────────────────────────
 
-function ProfileMenu({ user, onClose, onSignOut }: {
+function ProfileMenu({ user, onClose, onSignOut, onNavigateProfile }: {
   user: ReturnType<typeof getUser>;
   onClose: () => void;
   onSignOut: () => void;
+  onNavigateProfile: () => void;
 }) {
   if (!user) return null;
   return (
@@ -187,11 +188,20 @@ function ProfileMenu({ user, onClose, onSignOut }: {
         <p style={{ fontSize: 11, color: "var(--color-secondary)", marginTop: 1 }}>{user.email}</p>
       </div>
       <div className="py-1">
-        {[{ label: "Profile", icon: User }, { label: "Settings", icon: Settings }].map(({ label, icon: Icon }) => (
-          <button key={label} onClick={onClose} className="w-full flex items-center gap-2.5 px-4 text-left transition-colors hover:bg-[rgba(27,46,75,0.06)]" style={{ fontSize: 13, color: "var(--color-body)", minHeight: 44 }}>
-            <Icon size={14} /> {label}
-          </button>
-        ))}
+        <button
+          onClick={() => { onNavigateProfile(); onClose(); }}
+          className="w-full flex items-center gap-2.5 px-4 text-left transition-colors hover:bg-[rgba(27,46,75,0.06)]"
+          style={{ fontSize: 13, color: "var(--color-body)", minHeight: 44 }}
+        >
+          <User size={14} /> Profile
+        </button>
+        <button
+          onClick={onClose}
+          className="w-full flex items-center gap-2.5 px-4 text-left transition-colors hover:bg-[rgba(27,46,75,0.06)]"
+          style={{ fontSize: 13, color: "var(--color-body)", minHeight: 44 }}
+        >
+          <Settings size={14} /> Settings
+        </button>
         <div style={{ borderTop: "1px solid var(--color-border)", marginTop: 4, paddingTop: 4 }}>
           <button onClick={onSignOut} className="w-full flex items-center gap-2.5 px-4 text-left transition-colors hover:bg-[rgba(27,46,75,0.06)]" style={{ fontSize: 13, color: "var(--color-error)", minHeight: 44 }}>
             <LogOut size={14} /> Sign out
@@ -376,6 +386,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                   user={currentUser}
                   onClose={() => setProfileOpen(false)}
                   onSignOut={handleSignOut}
+                  onNavigateProfile={() => router.push("/profile")}
                 />
               )}
             </div>
