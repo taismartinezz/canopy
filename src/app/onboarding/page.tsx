@@ -367,14 +367,17 @@ async function syncOnboardingToSupabase({
       }
     } else if (enteredInviteCode) {
       // Look up the project linked to the invite code
-      const { data: inviteData } = await supabase
+      const normalizedCode = enteredInviteCode.trim().toUpperCase();
+      console.log("[Sync] looking up invite code:", normalizedCode);
+      const { data: inviteData, error: inviteErr } = await supabase
         .from("invite_codes")
         .select("project_id, id")
-        .eq("code", enteredInviteCode.trim().toUpperCase())
+        .eq("code", normalizedCode)
         .maybeSingle();
+      console.log("[Sync] invite_codes lookup:", inviteData, inviteErr);
 
       if (!inviteData?.project_id) {
-        return "Invalid invite code. Please check the code and try again.";
+        return `Invalid invite code. Please check the code and try again.${inviteErr ? ` (${inviteErr.message})` : ""}`;
       }
 
       projectId = inviteData.project_id as string;
@@ -383,7 +386,7 @@ async function syncOnboardingToSupabase({
       await supabase.from("invite_codes").update({
         used_by: user.id,
         used_at: new Date().toISOString(),
-      }).eq("code", enteredInviteCode.trim().toUpperCase());
+      }).eq("code", normalizedCode);
 
       // Clear the pending invite from localStorage
       if (typeof window !== "undefined") {
@@ -402,25 +405,31 @@ async function syncOnboardingToSupabase({
 
     const profilePayload = {
       id: user.id, name: userName, role: userRole,
-      institution: resolvedInstitution || null, avatar_initials: avatarInitials,
+      institution: resolvedInstitution ?? "", avatar_initials: avatarInitials,
       project_id: projectId,
       bio: bio ?? "",
       department: department ?? "",
+      avatar_color: "#B4D4E3",
     };
     console.log("[Sync] upserting profile...", profilePayload);
     const { error: upsertError } = await supabase.from("user_profiles").upsert(profilePayload);
-    console.log("[Sync] profile result:", upsertError ?? "ok");
+    console.log("[Sync] profile upsert result:", upsertError ?? "ok");
+    if (upsertError) return `Profile save failed: ${upsertError.message}`;
+
+    const { data: verify } = await supabase
+      .from("user_profiles")
+      .select("*")
+      .eq("id", user.id)
+      .maybeSingle();
+    console.log("[Sync] verification read:", verify);
 
     console.log("[Sync] inserting team_member...");
     const { data: memberData, error: memberErr } = await supabase.from("team_members").upsert(
       { project_id: projectId, user_id: user.id, role: userRole },
       { onConflict: "project_id,user_id" },
     ).select();
-    if (userRole === "researcher") {
-      console.log("[Sync] researcher team_member insert result:", memberData, memberErr);
-    } else {
-      console.log("[Sync] team_member result:", memberErr ?? "ok");
-    }
+    console.log("[Sync] team_member result:", memberData, memberErr);
+    if (memberErr) return `Team membership save failed: ${memberErr.message}`;
 
     return null;
   } catch (err) {
