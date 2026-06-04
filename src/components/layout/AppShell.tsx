@@ -248,40 +248,69 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   // Auth gate — Supabase session when configured, localStorage fallback otherwise
   useEffect(() => {
     function admit() {
-      const sp = getStoredProject();
-      const su = getStoredUser();
       setAuthed(true);
-      setStoredProject(sp);
-      setCurrentUser(su);
+      setStoredProject(getStoredProject());
 
-      // Patch real email + user ID from Supabase auth (always, regardless of project)
+      // Load identity exclusively from Supabase — never trust stale localStorage
       supabase.auth.getUser().then(({ data: { user: authUser } }) => {
         if (!authUser) return;
         setSidebarUserId(authUser.id);
-        if (authUser.email) {
-          setCurrentUser((prev) => ({ ...prev, email: authUser.email! }));
-        }
 
-        // Load real team from Supabase
-        const projectId = sp.id;
-        if (!projectId || projectId === "p1") return;
+        // Fetch the real profile row
         supabase
-          .from("team_members")
-          .select("user_id, role, user_profiles(name, avatar_color, avatar_initials)")
-          .eq("project_id", projectId)
-          .then(({ data }) => {
-            if (data) setTeam(data.map((row) => {
-              const profiles = row.user_profiles as unknown as Record<string, string>[] | null;
-              const p = Array.isArray(profiles) ? profiles[0] : null;
-              return {
-                id: row.user_id as string,
-                name: p?.name ?? "Unknown",
-                email: "",
-                role: row.role as User["role"],
-                avatarColor: p?.avatar_color ?? "#B4D4E3",
-                avatarInitials: p?.avatar_initials ?? "??",
-              };
-            }));
+          .from("user_profiles")
+          .select("name, role, avatar_initials, avatar_color, institution")
+          .eq("id", authUser.id)
+          .single()
+          .then(({ data: profile }) => {
+            setCurrentUser({
+              id: authUser.id,
+              email: authUser.email ?? "",
+              name: (profile?.name as string) ?? authUser.email ?? "",
+              role: ((profile?.role as User["role"]) ?? "researcher"),
+              avatarColor: (profile?.avatar_color as string) ?? "#B4D4E3",
+              avatarInitials: (profile?.avatar_initials as string) ?? "??",
+              institution: (profile?.institution as string) ?? undefined,
+            });
+          });
+
+        // Fetch project for the header strip
+        supabase
+          .from("user_profiles")
+          .select("project_id, projects(name, institution)")
+          .eq("id", authUser.id)
+          .single()
+          .then(({ data: up }) => {
+            if (!up?.project_id) return;
+            const proj = Array.isArray(up.projects) ? up.projects[0] : up.projects;
+            if (proj) {
+              setStoredProject((prev) => ({
+                ...prev,
+                id: up.project_id as string,
+                name: (proj as Record<string, string>).name ?? prev.name,
+                institution: (proj as Record<string, string>).institution ?? prev.institution,
+              }));
+            }
+
+            // Load team
+            supabase
+              .from("team_members")
+              .select("user_id, role, user_profiles(name, avatar_color, avatar_initials)")
+              .eq("project_id", up.project_id as string)
+              .then(({ data }) => {
+                if (data) setTeam(data.map((row) => {
+                  const profiles = row.user_profiles as unknown as Record<string, string>[] | null;
+                  const p = Array.isArray(profiles) ? profiles[0] : null;
+                  return {
+                    id: row.user_id as string,
+                    name: p?.name ?? "Unknown",
+                    email: "",
+                    role: row.role as User["role"],
+                    avatarColor: p?.avatar_color ?? "#B4D4E3",
+                    avatarInitials: p?.avatar_initials ?? "??",
+                  };
+                }));
+              });
           });
       });
     }
