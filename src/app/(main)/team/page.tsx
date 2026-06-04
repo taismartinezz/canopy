@@ -346,24 +346,46 @@ export default function TeamPage() {
         const projectId = profileData?.project_id as string | undefined;
         if (!projectId) { setLoading(false); return; }
 
-        const { data } = await supabase
-          .from("team_members")
-          .select("*, user_profiles(name, avatar_color, avatar_initials, institution)")
-          .eq("project_id", projectId);
+        const [{ data: memberData }, { data: taskData }] = await Promise.all([
+          supabase
+            .from("team_members")
+            .select("*, user_profiles(name, avatar_color, avatar_initials, institution)")
+            .eq("project_id", projectId),
+          supabase
+            .from("tasks")
+            .select("status, task_assignees(user_id)")
+            .eq("project_id", projectId),
+        ]);
 
-        if (data) {
-          const members: TeamMember[] = data.map((row) => {
+        // Build per-user task count map from task_assignees join
+        const countMap: Record<string, Record<TaskStatus, number>> = {};
+        if (taskData) {
+          for (const task of taskData) {
+            const assignees = (task.task_assignees as { user_id: string }[]) ?? [];
+            for (const { user_id } of assignees) {
+              if (!countMap[user_id]) {
+                countMap[user_id] = { todo: 0, in_progress: 0, in_review: 0, done: 0 };
+              }
+              const s = task.status as TaskStatus;
+              countMap[user_id][s] = (countMap[user_id][s] ?? 0) + 1;
+            }
+          }
+        }
+
+        if (memberData) {
+          const members: TeamMember[] = memberData.map((row) => {
             const profiles = row.user_profiles as unknown as Record<string, string>[] | Record<string, string> | null;
             const profile = Array.isArray(profiles) ? profiles[0] : (profiles as Record<string, string> | null);
+            const uid = row.user_id as string;
             return {
-              id: row.user_id as string,
+              id: uid,
               name: profile?.name ?? "Unknown",
               email: "",
               role: row.role as TeamMember["role"],
               avatarColor: profile?.avatar_color ?? "#B4D4E3",
               avatarInitials: profile?.avatar_initials ?? "??",
               institution: profile?.institution,
-              taskCounts: { todo: 0, in_progress: 0, in_review: 0, done: 0 },
+              taskCounts: countMap[uid] ?? { todo: 0, in_progress: 0, in_review: 0, done: 0 },
               weeklyUpdate: undefined,
               weeklyUpdatedAt: undefined,
             };
