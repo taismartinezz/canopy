@@ -241,7 +241,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [authed, setAuthed] = useState(false);
   const [storedProject, setStoredProject] = useState(getStoredProject);
-  const [currentUser, setCurrentUser] = useState(getStoredUser);
+  const [currentUser, setCurrentUser] = useState<User>(() =>
+    isSupabaseConfigured
+      ? { id: "", email: "", name: "", role: "researcher", avatarColor: "#B4D4E3", avatarInitials: "" }
+      : getStoredUser()
+  );
   const [team, setTeam] = useState<User[]>([]);
   const [sidebarUserId, setSidebarUserId] = useState(CURRENT_USER_ID);
 
@@ -258,15 +262,17 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) { router.replace("/login"); return; }
 
-        setAuthed(true);
         const authUser = session.user;
         setSidebarUserId(authUser.id);
 
-        const { data: profile } = await supabase
+        const { data: profile, error: profileErr } = await supabase
           .from("user_profiles")
           .select("name, role, avatar_initials, avatar_color, institution, project_id, projects(name, institution)")
           .eq("id", authUser.id)
           .maybeSingle();
+
+        if (profileErr) console.error("[AppShell] profile query error:", profileErr);
+        if (!profile) console.error("[AppShell] no user_profiles row for", authUser.email, "— re-run seed or check Supabase Table Editor");
 
         setCurrentUser({
           id: authUser.id,
@@ -277,6 +283,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           avatarInitials: (profile?.avatar_initials as string) ?? "??",
           institution: (profile?.institution as string) ?? undefined,
         });
+        setAuthed(true);
 
         const projectId = profile?.project_id as string | undefined;
         if (projectId) {
