@@ -607,7 +607,7 @@ export default function DashboardPage() {
         // Fetch tasks
         const { data: taskData, error: taskError } = await supabase
           .from("tasks")
-          .select("*")
+          .select("*, task_assignees(user_id)")
           .eq("project_id", pid)
           .order("created_at", { ascending: false });
         if (taskError) console.error("[Dashboard] tasks error:", taskError);
@@ -619,7 +619,8 @@ export default function DashboardPage() {
             description: (row.description as string) ?? "",
             status: row.status as TaskStatus,
             priority: row.priority as Task["priority"],
-            assigneeIds: (row.assignee_ids as string[]) ?? [],
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            assigneeIds: ((row.task_assignees as any[]) ?? []).map((ta) => ta.user_id as string),
             dueDate: row.due_date as string | undefined,
             createdAt: row.created_at as string,
             updatedAt: row.updated_at as string,

@@ -116,8 +116,8 @@ function AddItemModal({
       .from("literature_items")
       .insert({
         project_id: projectId,
-        scope,
-        type,
+        user_id: currentUserId,
+        library: scope,
         title: title.trim(),
         authors: authors.split(",").map((a) => a.trim()).filter(Boolean),
         year: parseInt(year) || new Date().getFullYear(),
@@ -125,13 +125,6 @@ function AddItemModal({
         doi: doi.trim() || null,
         tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
         status,
-        rating: 0,
-        notes: null,
-        files: [],
-        added_by: currentUserId,
-        added_at: now,
-        collections: [],
-        related_ids: [],
       })
       .select()
       .single();
@@ -146,22 +139,23 @@ function AddItemModal({
     const newItem: LiteratureItem = {
       id: data.id as string,
       projectId: data.project_id as string,
-      scope: data.scope as LiteratureItem["scope"],
-      type: data.type as LiteratureItem["type"],
+      scope: (data.library as LiteratureItem["scope"]) ?? scope,
+      type: "article",
       title: data.title as string,
       authors: (data.authors as string[]) ?? [],
       year: (data.year as number) ?? 0,
       journal: (data.journal as string) ?? undefined,
       doi: (data.doi as string) ?? undefined,
+      abstract: (data.abstract as string) ?? undefined,
       tags: (data.tags as string[]) ?? [],
       status: data.status as LiteratureItem["status"],
-      rating: data.rating as number,
-      notes: (data.notes as string) ?? "",
-      files: (data.files as LiteratureItem["files"]) ?? [],
-      addedById: data.added_by as string,
-      addedAt: data.added_at as string,
-      collections: (data.collections as string[]) ?? [],
-      relatedIds: (data.related_ids as string[]) ?? [],
+      rating: 0,
+      notes: "",
+      files: [],
+      addedById: data.user_id as string,
+      addedAt: data.created_at as string,
+      collections: [],
+      relatedIds: [],
     };
     onSave(newItem);
   }
@@ -685,32 +679,33 @@ export default function LiteraturePage() {
         .from("literature_items")
         .select("*")
         .eq("project_id", projectId)
-        .order("added_at", { ascending: false })
-        .then(({ data }) => {
-        if (data) setItems(data.map((row) => ({
-          id: row.id as string,
-          projectId: row.project_id as string,
-          scope: row.scope as LiteratureItem["scope"],
-          type: row.type as LiteratureItem["type"],
-          title: row.title as string,
-          authors: (row.authors as string[]) ?? [],
-          year: (row.year as number | null) ?? 0,
-          journal: row.journal as string | undefined,
-          publisher: row.publisher as string | undefined,
-          volume: row.volume as string | undefined,
-          pages: row.pages as string | undefined,
-          doi: row.doi as string | undefined,
-          abstract: row.abstract as string | undefined,
-          tags: (row.tags as string[]) ?? [],
-          status: row.status as LiteratureItem["status"],
-          rating: row.rating as number,
-          notes: row.notes as string,
-          files: (row.files as LiteratureItem["files"]) ?? [],
-          addedById: row.added_by as string,
-          addedAt: row.added_at as string,
-          collections: (row.collections as string[]) ?? [],
-          relatedIds: (row.related_ids as string[]) ?? [],
-        })));
+        .order("created_at", { ascending: false })
+        .then(({ data, error: fetchError }) => {
+          if (fetchError) console.error("[Literature] fetch error:", fetchError);
+          if (data) setItems(data.map((row) => ({
+            id: row.id as string,
+            projectId: row.project_id as string,
+            scope: ((row.library ?? row.scope) as LiteratureItem["scope"]) ?? "lab",
+            type: (row.type as LiteratureItem["type"]) ?? "article",
+            title: row.title as string,
+            authors: (row.authors as string[]) ?? [],
+            year: (row.year as number | null) ?? 0,
+            journal: row.journal as string | undefined,
+            publisher: row.publisher as string | undefined,
+            volume: row.volume as string | undefined,
+            pages: row.pages as string | undefined,
+            doi: row.doi as string | undefined,
+            abstract: row.abstract as string | undefined,
+            tags: (row.tags as string[]) ?? [],
+            status: row.status as LiteratureItem["status"],
+            rating: (row.rating as number) ?? 0,
+            notes: (row.notes as string) ?? "",
+            files: (row.files as LiteratureItem["files"]) ?? [],
+            addedById: (row.user_id ?? row.added_by) as string,
+            addedAt: (row.created_at ?? row.added_at) as string,
+            collections: (row.collections as string[]) ?? [],
+            relatedIds: (row.related_ids as string[]) ?? [],
+          })));
           setLoadingItems(false);
         });
     });

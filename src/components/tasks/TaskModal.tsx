@@ -89,11 +89,7 @@ export default function TaskModal({
           description: description.trim() || null,
           status,
           priority,
-          assignee_ids: assigneeIds,
           due_date: dueDate || null,
-          comments: [],
-          files: [],
-          links: [],
         })
         .select()
         .single();
@@ -105,6 +101,14 @@ export default function TaskModal({
         return;
       }
 
+      // Insert assignees into task_assignees
+      if (assigneeIds.length > 0) {
+        const { error: assignError } = await supabase
+          .from("task_assignees")
+          .insert(assigneeIds.map((userId) => ({ task_id: data.id, user_id: userId })));
+        if (assignError) console.error("[TaskModal] task_assignees insert error:", assignError);
+      }
+
       const saved: Task = {
         id: data.id as string,
         projectId: data.project_id as string,
@@ -112,7 +116,7 @@ export default function TaskModal({
         description: (data.description as string) ?? undefined,
         status: data.status as TaskStatus,
         priority: data.priority as TaskPriority,
-        assigneeIds: (data.assignee_ids as string[]) ?? [],
+        assigneeIds,
         dueDate: (data.due_date as string) ?? undefined,
         createdAt: data.created_at as string,
         updatedAt: data.updated_at as string,
@@ -146,7 +150,6 @@ export default function TaskModal({
           priority,
           due_date: dueDate || null,
           status,
-          assignee_ids: assigneeIds,
           updated_at: now,
         })
         .eq("id", task.id)
@@ -158,6 +161,15 @@ export default function TaskModal({
         setError("Failed to save changes. Please try again.");
         setSaving(false);
         return;
+      }
+
+      // Replace assignees: delete existing, insert new
+      await supabase.from("task_assignees").delete().eq("task_id", task.id);
+      if (assigneeIds.length > 0) {
+        const { error: assignError } = await supabase
+          .from("task_assignees")
+          .insert(assigneeIds.map((userId) => ({ task_id: task.id, user_id: userId })));
+        if (assignError) console.error("[TaskModal] task_assignees update error:", assignError);
       }
 
       // Notify newly added assignees
@@ -185,7 +197,7 @@ export default function TaskModal({
         priority: data.priority as TaskPriority,
         dueDate: (data.due_date as string) ?? undefined,
         status: data.status as TaskStatus,
-        assigneeIds: (data.assignee_ids as string[]) ?? [],
+        assigneeIds,
         updatedAt: data.updated_at as string,
       };
 
