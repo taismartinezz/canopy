@@ -80,17 +80,25 @@ export default function TaskModal({
 
     const now = new Date().toISOString();
 
+    // Always resolve userId from session — prop may be empty if parent hasn't loaded yet
+    const { data: { session } } = await supabase.auth.getSession();
+    const userId = session?.user?.id ?? currentUserId;
+
     if (mode === "add") {
+      const payload = {
+        project_id: projectId,
+        created_by: userId,
+        title: title.trim(),
+        description: description.trim() || null,
+        status,
+        priority,
+        due_date: dueDate || null,
+      };
+      console.log("[TaskModal] insert payload:", payload);
+
       const { data, error: insertError } = await supabase
         .from("tasks")
-        .insert({
-          project_id: projectId,
-          title: title.trim(),
-          description: description.trim() || null,
-          status,
-          priority,
-          due_date: dueDate || null,
-        })
+        .insert(payload)
         .select()
         .single();
 
