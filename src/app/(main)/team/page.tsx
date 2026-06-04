@@ -353,8 +353,8 @@ export default function TeamPage() {
 
         if (data) {
           const members: TeamMember[] = data.map((row) => {
-            const profiles = row.user_profiles as unknown as Record<string, string>[] | null;
-            const profile = Array.isArray(profiles) ? profiles[0] : null;
+            const profiles = row.user_profiles as unknown as Record<string, string>[] | Record<string, string> | null;
+            const profile = Array.isArray(profiles) ? profiles[0] : (profiles as Record<string, string> | null);
             return {
               id: row.user_id as string,
               name: profile?.name ?? "Unknown",
