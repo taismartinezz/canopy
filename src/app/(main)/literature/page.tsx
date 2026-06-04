@@ -5,7 +5,6 @@ import {
   formatFileSize, CURRENT_USER_ID,
 } from "@/lib/mock-data";
 import { supabase } from "@/lib/supabase";
-import { getStoredProject } from "@/lib/mock-data";
 import type { LiteratureItem, ReadStatus, LiteratureType, LibraryScope, LiteratureFile } from "@/types";
 import {
   Plus, Search, Download, FileText, File, X,
@@ -626,14 +625,21 @@ export default function LiteraturePage() {
   }, []);
 
   useEffect(() => {
-    const projectId = getStoredProject().id;
-    if (!projectId || projectId === "p1") { setLoadingItems(false); return; }
-    supabase
-      .from("literature_items")
-      .select("*")
-      .eq("project_id", projectId)
-      .order("added_at", { ascending: false })
-      .then(({ data }) => {
+    supabase.auth.getUser().then(async ({ data: { user } }) => {
+      if (!user) { setLoadingItems(false); return; }
+      const { data: profile } = await supabase
+        .from("user_profiles")
+        .select("project_id")
+        .eq("id", user.id)
+        .maybeSingle();
+      const projectId = profile?.project_id as string | undefined;
+      if (!projectId) { setLoadingItems(false); return; }
+      supabase
+        .from("literature_items")
+        .select("*")
+        .eq("project_id", projectId)
+        .order("added_at", { ascending: false })
+        .then(({ data }) => {
         if (data) setItems(data.map((row) => ({
           id: row.id as string,
           projectId: row.project_id as string,
@@ -658,8 +664,9 @@ export default function LiteraturePage() {
           collections: (row.collections as string[]) ?? [],
           relatedIds: (row.related_ids as string[]) ?? [],
         })));
-        setLoadingItems(false);
-      });
+          setLoadingItems(false);
+        });
+    });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

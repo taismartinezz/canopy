@@ -512,18 +512,27 @@ export default function JournalPage() {
         .from("journal_entries")
         .select("*")
         .eq("user_id", user.id)
-        .order("date", { ascending: false })
+        .order("created_at", { ascending: false })
         .then(({ data, error }) => {
-          if (!error && data) setEntries(data.map((row) => ({
-            id: row.id as string,
-            userId: row.user_id as string,
-            date: row.date as string,
-            prompts: (row.prompts as JournalEntry["prompts"]) ?? [],
-            checkin: (row.checkin as JournalEntry["checkin"]) ?? [],
-            isDraft: row.is_draft as boolean,
-            createdAt: row.created_at as string,
-            updatedAt: row.updated_at as string,
-          })));
+          if (error) console.error("[Journal] query error:", error);
+          if (!error && data) setEntries(data.map((row) => {
+            const c = (row.content ?? {}) as {
+              date?: string;
+              prompts?: JournalEntry["prompts"];
+              checkin?: JournalEntry["checkin"];
+              isDraft?: boolean;
+            };
+            return {
+              id: row.id as string,
+              userId: row.user_id as string,
+              date: c.date ?? (row.created_at as string).split("T")[0],
+              prompts: c.prompts ?? [],
+              checkin: c.checkin ?? [],
+              isDraft: c.isDraft ?? false,
+              createdAt: row.created_at as string,
+              updatedAt: row.updated_at as string,
+            };
+          }));
           setLoadingEntries(false);
         });
     });

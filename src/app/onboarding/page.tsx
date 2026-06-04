@@ -324,20 +324,24 @@ async function syncOnboardingToSupabase({
     let resolvedInstitution = institution;
 
     if (userRole === "pi") {
-      const { data: existing } = await supabase
+      console.log("[Sync] checking for existing project for owner:", user.id);
+      const { data: existing, error: existingErr } = await supabase
         .from("projects")
         .select("id")
         .eq("owner_id", user.id)
         .maybeSingle();
+      console.log("[Sync] existing project result:", existing, existingErr);
 
       if (existing) {
         projectId = existing.id as string;
       } else {
-        const { data: created } = await supabase
+        console.log("[Sync] inserting project...");
+        const { data: created, error: createErr } = await supabase
           .from("projects")
           .insert({ name: projectName, institution, research_type: researchType, owner_id: user.id })
           .select("id")
           .single();
+        console.log("[Sync] project result:", created, createErr);
         if (!created) return null;
         projectId = created.id as string;
       }
@@ -347,8 +351,8 @@ async function syncOnboardingToSupabase({
         const { error: codeErr } = await supabase.from("invite_codes").insert({
           code: inviteCode, project_id: projectId, created_by: user.id,
         });
-        if (codeErr) console.error("[syncOnboardingToSupabase] generic invite_code insert error:", codeErr);
-        else console.log("[syncOnboardingToSupabase] generic invite_code saved:", inviteCode);
+        if (codeErr) console.error("[Sync] generic invite_code insert error:", codeErr);
+        else console.log("[Sync] generic invite_code saved:", inviteCode);
       }
       // Save one unique code per invited email
       if (inviteEmails && inviteEmails.length > 0) {
@@ -357,8 +361,8 @@ async function syncOnboardingToSupabase({
           const { error: emailCodeErr } = await supabase.from("invite_codes").insert({
             code, project_id: projectId, created_by: user.id,
           });
-          if (emailCodeErr) console.error(`[syncOnboardingToSupabase] invite_code insert error for ${email}:`, emailCodeErr);
-          else console.log(`[syncOnboardingToSupabase] invite_code saved for ${email}:`, code);
+          if (emailCodeErr) console.error(`[Sync] invite_code insert error for ${email}:`, emailCodeErr);
+          else console.log(`[Sync] invite_code saved for ${email}:`, code);
         }
       }
     } else if (enteredInviteCode) {
@@ -403,14 +407,20 @@ async function syncOnboardingToSupabase({
       bio: bio ?? "",
       department: department ?? "",
     };
-    console.log("[syncOnboardingToSupabase] upserting to user_profiles:", profilePayload);
+    console.log("[Sync] upserting profile...", profilePayload);
     const { error: upsertError } = await supabase.from("user_profiles").upsert(profilePayload);
-    if (upsertError) console.error("[syncOnboardingToSupabase] upsert error:", upsertError);
+    console.log("[Sync] profile result:", upsertError ?? "ok");
 
-    await supabase.from("team_members").upsert(
+    console.log("[Sync] inserting team_member...");
+    const { data: memberData, error: memberErr } = await supabase.from("team_members").upsert(
       { project_id: projectId, user_id: user.id, role: userRole },
       { onConflict: "project_id,user_id" },
-    );
+    ).select();
+    if (userRole === "researcher") {
+      console.log("[Sync] researcher team_member insert result:", memberData, memberErr);
+    } else {
+      console.log("[Sync] team_member result:", memberErr ?? "ok");
+    }
 
     return null;
   } catch (err) {
@@ -592,6 +602,7 @@ export default function OnboardingPage() {
     }
 
     // Await Supabase sync so the profile row exists before AppShell loads
+    console.log("[Onboarding] starting sync...");
     if (isSupabaseConfigured) {
       const syncErr = await syncOnboardingToSupabase({
         projectName, institution, researchType,
@@ -602,6 +613,7 @@ export default function OnboardingPage() {
         department: role === "researcher" ? profileDept : undefined,
         inviteEmails: role === "pi" ? inviteEmails : undefined,
       });
+      console.log("[Onboarding] sync result:", syncErr ?? "ok");
       if (syncErr) {
         setSyncError(syncErr);
         setSubmitting(false);
@@ -609,6 +621,7 @@ export default function OnboardingPage() {
       }
     }
 
+    console.log("[Onboarding] navigating to /profile");
     router.push("/profile");
   }
 

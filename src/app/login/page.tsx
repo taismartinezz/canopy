@@ -215,8 +215,14 @@ export default function LoginPage() {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (!session?.user) { setChecking(false); return; }
       try {
-        const { data: member } = await supabase
+        const { data: member, error: memberError } = await supabase
           .from("team_members").select("id").eq("user_id", session.user.id).maybeSingle();
+        console.log("[Login] team_members check result:", member, memberError);
+        if (memberError) {
+          console.error("[Login] team_members query error — staying on login:", memberError);
+          setChecking(false);
+          return;
+        }
         router.replace(member ? "/" : "/onboarding");
       } catch {
         // On query error stay on /login — do not bounce to /onboarding
@@ -249,8 +255,14 @@ export default function LoginPage() {
       const user = session?.user;
       if (!user) { setError("Sign-in succeeded but session has no user."); setLoading(false); return; }
 
-      const { data: member } = await supabase
+      const { data: member, error: memberError } = await supabase
         .from("team_members").select("id").eq("user_id", user.id).maybeSingle();
+      console.log("[Login] team_members check result:", member, memberError);
+      if (memberError) {
+        console.error("[Login] team_members query error — staying on login:", memberError);
+        setLoading(false);
+        return;
+      }
       router.push(member ? "/" : "/onboarding");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "An unexpected error occurred.");
