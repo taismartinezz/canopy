@@ -350,16 +350,15 @@ export default function ProfilePage() {
   const router = useRouter();
   const currentUser = getUser(CURRENT_USER_ID)!;
   const [isPi, setIsPi] = useState(false);
-  const [avatarInitials, setAvatarInitials] = useState(currentUser.avatarInitials);
-  const [projectCreatedAt, setProjectCreatedAt] = useState(PROJECT.createdAt);
+  const [avatarInitials, setAvatarInitials] = useState(isSupabaseConfigured ? "" : currentUser.avatarInitials);
+  const [projectCreatedAt, setProjectCreatedAt] = useState(isSupabaseConfigured ? "" : PROJECT.createdAt);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // ── Persisted profile state ──────────────────────────────────────────────
   const [photo, setPhoto] = useState<string | null>(null);
-  const [name, setName] = useState(currentUser.name);
-  const [institution, setInstitution] = useState(PROJECT.institution);
-  // isPi and name/institution defaults are overridden from canopy_user in useEffect
+  const [name, setName] = useState(isSupabaseConfigured ? "" : currentUser.name);
+  const [institution, setInstitution] = useState("");
   const [bio, setBio] = useState("");
   const [interests, setInterests] = useState<string[]>([]);
   const [department, setDepartment] = useState("");
@@ -384,16 +383,48 @@ export default function ProfilePage() {
   const [promptModalOpen, setPromptModalOpen] = useState(false);
   const [archiveModalOpen, setArchiveModalOpen] = useState(false);
 
-  // ── PI / Lab Settings state (defaults overridden by getStoredProject in useEffect)
-  const [projectName, setProjectName] = useState(PROJECT.name);
-  const [projectInstitution, setProjectInstitution] = useState(PROJECT.institution);
-  const [researchType, setResearchType] = useState<string>(PROJECT.researchType);
-  const [researchParticipation, setResearchParticipation] = useState<string>(PROJECT.researchParticipation);
+  // ── PI / Lab Settings state ───────────────────────────────────────────────
+  const [projectName, setProjectName] = useState(isSupabaseConfigured ? "" : PROJECT.name);
+  const [projectInstitution, setProjectInstitution] = useState("");
+  const [researchType, setResearchType] = useState<string>(isSupabaseConfigured ? "" : PROJECT.researchType);
+  const [researchParticipation, setResearchParticipation] = useState<string>(isSupabaseConfigured ? "" : PROJECT.researchParticipation);
   const [activePromptIds, setActivePromptIds] = useState<string[]>(ACTIVE_PROMPT_IDS);
 
-  // ── Load from localStorage on mount ─────────────────────────────────────
+  // ── Load profile on mount ────────────────────────────────────────────────
   useEffect(() => {
-    // Onboarding data as baseline
+    if (isSupabaseConfigured) {
+      // Supabase is the sole source of truth — never read from localStorage or mock defaults
+      supabase.auth.getUser().then(({ data: { user } }) => {
+        if (!user) return;
+        supabase
+          .from("user_profiles")
+          .select("name, role, institution, bio, department, avatar_initials, project_id, projects(name, institution, created_at, research_type, research_participation)")
+          .eq("id", user.id)
+          .maybeSingle()
+          .then(({ data }) => {
+            if (!data) return;
+            if (data.name)               setName(data.name as string);
+            if (data.role)               setIsPi(data.role === "pi");
+            setInstitution((data.institution as string) ?? "");
+            if (data.bio != null)        setBio((data.bio as string) ?? "");
+            if (data.department != null) setDepartment((data.department as string) ?? "");
+            if (data.avatar_initials)    setAvatarInitials(data.avatar_initials as string);
+
+            const proj = Array.isArray(data.projects) ? data.projects[0] : data.projects;
+            if (proj) {
+              const p = proj as Record<string, string>;
+              if (p.name)                   setProjectName(p.name);
+              setProjectInstitution(p.institution ?? "");
+              if (p.created_at)             setProjectCreatedAt(p.created_at);
+              if (p.research_type)          setResearchType(p.research_type);
+              if (p.research_participation) setResearchParticipation(p.research_participation);
+            }
+          });
+      });
+      return;
+    }
+
+    // Demo mode (no Supabase) — use localStorage / mock defaults
     const onboardUser = getStoredUser();
     const onboardProject = getStoredProject();
     setIsPi(onboardUser.role === "pi");
@@ -403,27 +434,20 @@ export default function ProfilePage() {
     if (onboardUser.institution) setInstitution(onboardUser.institution);
     else setInstitution(onboardProject.institution);
 
-    // Profile-specific edits override onboarding defaults
     const storedPhoto = localStorage.getItem("canopy_profile_photo");
     if (storedPhoto) setPhoto(storedPhoto);
-
     const storedName = localStorage.getItem("canopy_profile_name");
     if (storedName) setName(storedName);
-
     const storedInstitution = localStorage.getItem("canopy_profile_institution");
     if (storedInstitution) setInstitution(storedInstitution);
-
     const storedBio = localStorage.getItem("canopy_profile_bio");
     if (storedBio) setBio(storedBio);
-
     const storedDepartment = localStorage.getItem("canopy_profile_department");
     if (storedDepartment) setDepartment(storedDepartment);
-
     try {
       const storedInterests = localStorage.getItem("canopy_profile_interests");
       if (storedInterests) setInterests(JSON.parse(storedInterests));
     } catch { /* ignore */ }
-
     setLinks({
       scholar: localStorage.getItem("canopy_profile_links_scholar") ?? "",
       linkedin: localStorage.getItem("canopy_profile_links_linkedin") ?? "",
@@ -432,43 +456,18 @@ export default function ProfilePage() {
       website: localStorage.getItem("canopy_profile_links_website") ?? "",
       orcid: localStorage.getItem("canopy_profile_links_orcid") ?? "",
     });
-
     try {
       const storedPrompts = localStorage.getItem("canopy_project_active_prompts");
       if (storedPrompts) setActivePromptIds(JSON.parse(storedPrompts));
     } catch { /* ignore */ }
 
-    // Onboarding project as baseline for lab settings
     setProjectName(onboardProject.name);
     setProjectInstitution(onboardProject.institution);
     if (onboardProject.researchType) setResearchType(onboardProject.researchType);
-
-    // Profile-specific lab setting edits override onboarding
     if (localStorage.getItem("canopy_project_name")) setProjectName(localStorage.getItem("canopy_project_name")!);
     if (localStorage.getItem("canopy_project_institution")) setProjectInstitution(localStorage.getItem("canopy_project_institution")!);
     if (localStorage.getItem("canopy_project_research_type")) setResearchType(localStorage.getItem("canopy_project_research_type")!);
     if (localStorage.getItem("canopy_project_participation")) setResearchParticipation(localStorage.getItem("canopy_project_participation")!);
-
-    // Supabase is authoritative — overwrite any stale localStorage defaults
-    if (isSupabaseConfigured) {
-      supabase.auth.getUser().then(({ data: { user } }) => {
-        if (!user) return;
-        supabase
-          .from("user_profiles")
-          .select("name, role, institution, bio, department, avatar_initials")
-          .eq("id", user.id)
-          .maybeSingle()
-          .then(({ data }) => {
-            if (!data) return;
-            if (data.name)            setName(data.name as string);
-            if (data.role)            setIsPi(data.role === "pi");
-            if (data.institution)     setInstitution(data.institution as string);
-            if (data.bio != null)     setBio((data.bio as string) ?? "");
-            if (data.department != null) setDepartment((data.department as string) ?? "");
-            if (data.avatar_initials) setAvatarInitials(data.avatar_initials as string);
-          });
-      });
-    }
   }, []);
 
   // ── Activity stats — loaded from Supabase ────────────────────────────────
@@ -480,42 +479,50 @@ export default function ProfilePage() {
   const [journalStreak, setJournalStreak] = useState(0);
 
   useEffect(() => {
-    const sp = getStoredProject();
-    const projectId = sp.id;
-    if (!projectId || projectId === "p1") return;
+    if (!isSupabaseConfigured) return;
 
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) return;
 
-      supabase.from("tasks").select("id,status,title,due_date,updated_at")
-        .eq("project_id", projectId)
-        .then(({ data }) => {
-          if (!data) return;
-          const counts = { todo: 0, in_progress: 0, in_review: 0, done: 0 } as Record<TaskStatus, number>;
-          data.forEach((t) => { counts[t.status as TaskStatus] = (counts[t.status as TaskStatus] ?? 0) + 1; });
-          setTaskCounts(counts);
-          const recent = [...data]
-            .sort((a, b) => new Date(b.updated_at as string).getTime() - new Date(a.updated_at as string).getTime())
-            .slice(0, 5)
-            .map((row) => ({
-              id: row.id as string, projectId: projectId, title: row.title as string,
-              description: "", status: row.status as TaskStatus,
-              priority: "medium" as const, assigneeIds: [],
-              dueDate: row.due_date as string | undefined,
-              createdAt: row.updated_at as string, updatedAt: row.updated_at as string,
-              comments: [], files: [], links: [],
-            }));
-          setRecentTasks(recent);
+      supabase
+        .from("user_profiles")
+        .select("project_id")
+        .eq("id", user.id)
+        .maybeSingle()
+        .then(({ data: up }) => {
+          const projectId = up?.project_id as string | undefined;
+          if (!projectId) return;
+
+          supabase.from("tasks").select("id,status,title,due_date,updated_at")
+            .eq("project_id", projectId)
+            .then(({ data }) => {
+              if (!data) return;
+              const counts = { todo: 0, in_progress: 0, in_review: 0, done: 0 } as Record<TaskStatus, number>;
+              data.forEach((t) => { counts[t.status as TaskStatus] = (counts[t.status as TaskStatus] ?? 0) + 1; });
+              setTaskCounts(counts);
+              const recent = [...data]
+                .sort((a, b) => new Date(b.updated_at as string).getTime() - new Date(a.updated_at as string).getTime())
+                .slice(0, 5)
+                .map((row) => ({
+                  id: row.id as string, projectId, title: row.title as string,
+                  description: "", status: row.status as TaskStatus,
+                  priority: "medium" as const, assigneeIds: [],
+                  dueDate: row.due_date as string | undefined,
+                  createdAt: row.updated_at as string, updatedAt: row.updated_at as string,
+                  comments: [], files: [], links: [],
+                }));
+              setRecentTasks(recent);
+            });
+
+          supabase.from("literature_items").select("id", { count: "exact", head: true })
+            .eq("project_id", projectId).eq("added_by", user.id)
+            .then(({ count }) => setLitCount(count ?? 0));
+
+          const monthStart = new Date().toISOString().slice(0, 7) + "-01";
+          supabase.from("journal_entries").select("id", { count: "exact", head: true })
+            .eq("user_id", user.id).gte("date", monthStart)
+            .then(({ count }) => setJournalStreak(count ?? 0));
         });
-
-      supabase.from("literature_items").select("id", { count: "exact", head: true })
-        .eq("project_id", projectId).eq("added_by", user.id)
-        .then(({ count }) => setLitCount(count ?? 0));
-
-      const monthStart = new Date().toISOString().slice(0, 7) + "-01";
-      supabase.from("journal_entries").select("id", { count: "exact", head: true })
-        .eq("user_id", user.id).gte("date", monthStart)
-        .then(({ count }) => setJournalStreak(count ?? 0));
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

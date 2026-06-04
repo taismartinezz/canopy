@@ -157,7 +157,7 @@ function SupportModal({ onClose }: { onClose: () => void }) {
               <Building2 size={18} color="var(--color-navy)" style={{ marginTop: 2, flexShrink: 0 }} />
               <div>
                 <p style={{ fontSize: 13, fontWeight: 600, color: "var(--color-body)" }}>Counseling & Psychological Services (CAPS)</p>
-                <p style={{ fontSize: 12, color: "var(--color-secondary)", marginTop: 3 }}>University of Michigan CAPS — (734) 764-8312</p>
+                <p style={{ fontSize: 12, color: "var(--color-secondary)", marginTop: 3 }}>Check with your institution's counseling services</p>
               </div>
             </div>
           </a>
