@@ -625,7 +625,8 @@ export default function LiteraturePage() {
   }, []);
 
   useEffect(() => {
-    supabase.auth.getUser().then(async ({ data: { user } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      const user = session?.user ?? null;
       if (!user) { setLoadingItems(false); return; }
       const { data: profile } = await supabase
         .from("user_profiles")

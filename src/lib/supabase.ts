@@ -11,6 +11,8 @@ export const isSupabaseConfigured = !!(
   (process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
 );
 
+console.log("[Supabase] key prefix:", key.substring(0, 20));
+
 export const supabase = createClient(
   isSupabaseConfigured ? url : "https://placeholder.supabase.co",
   isSupabaseConfigured ? key : "placeholder",

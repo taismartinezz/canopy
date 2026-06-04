@@ -403,7 +403,8 @@ export default function ProfilePage() {
   // ── Load profile & project from Supabase ─────────────────────────────────
   useEffect(() => {
     const load = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { session } } = await supabase.auth.getSession();
+      const user = session?.user ?? null;
       if (!user) { router.push("/login"); return; }
       console.log("[Profile] user id:", user?.id);
 
@@ -450,7 +451,8 @@ export default function ProfilePage() {
 
     const projectId = project.id as string;
 
-    supabase.auth.getUser().then(({ data: { user } }) => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      const user = session?.user ?? null;
       if (!user) return;
 
       supabase.from("tasks").select("id,status,title,due_date,created_at")
@@ -488,7 +490,8 @@ export default function ProfilePage() {
   // ── Load invite codes once profile is known (PI only) ────────────────────
   useEffect(() => {
     if (!profile || profile.role !== "pi") return;
-    supabase.auth.getUser().then(({ data: { user } }) => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      const user = session?.user ?? null;
       if (!user) return;
       supabase.from("invite_codes")
         .select("id, code, used_by, created_at")
@@ -503,7 +506,8 @@ export default function ProfilePage() {
 
   const handleGenerateCode = useCallback(async () => {
     setGeneratingCode(true);
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { session } } = await supabase.auth.getSession();
+    const user = session?.user ?? null;
     if (!user || !project?.id) { setGeneratingCode(false); return; }
     const code = "CANOPY-" + Math.random().toString(36).substring(2, 6).toUpperCase();
     const { data } = await supabase.from("invite_codes")
@@ -547,7 +551,8 @@ export default function ProfilePage() {
         ? parts[0].substring(0, 2).toUpperCase()
         : (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { session } } = await supabase.auth.getSession();
+      const user = session?.user ?? null;
       if (user) {
         const { data: updated } = await supabase
           .from("user_profiles")
@@ -587,7 +592,8 @@ export default function ProfilePage() {
     setInterests(draftInterests);
     setLinks(draftLinks);
 
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { session } } = await supabase.auth.getSession();
+    const user = session?.user ?? null;
     if (user) {
       const { data: updated } = await supabase
         .from("user_profiles")

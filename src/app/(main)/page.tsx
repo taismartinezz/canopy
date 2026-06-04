@@ -485,7 +485,8 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (isSupabaseConfigured) {
-      supabase.auth.getUser().then(({ data: { user } }) => {
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        const user = session?.user ?? null;
         if (!user) return;
         supabase
           .from("user_profiles")

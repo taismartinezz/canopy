@@ -505,7 +505,8 @@ export default function JournalPage() {
   }, [entryListOpen]);
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      const user = session?.user ?? null;
       if (!user) { setLoadingEntries(false); return; }
       setAuthUserId(user.id);
       supabase

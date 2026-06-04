@@ -335,7 +335,8 @@ export default function TasksPage() {
   const [currentUserId, setCurrentUserId] = useState<string>("");
 
   useEffect(() => {
-    supabase.auth.getUser().then(async ({ data: { user } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      const user = session?.user ?? null;
       if (!user) { setLoading(false); return; }
       setCurrentUserId(user.id);
 
