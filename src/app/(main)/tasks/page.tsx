@@ -351,7 +351,7 @@ export default function TasksPage() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: members } = await (supabase
         .from("team_members")
-        .select("user_id, user_profiles(name, avatar_initials, avatar_color, role)")
+        .select("*, user_profiles(name, avatar_initials, avatar_color, role)")
         .eq("project_id", projectId) as any);
 
       if (members) {

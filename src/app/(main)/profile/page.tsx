@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   ChevronLeft, GraduationCap, BookOpen, Globe,
-  Link as LinkIcon, Settings, Lock, X,
+  Link as LinkIcon, Settings, Lock, X, Copy, Plus, Check,
 } from "lucide-react";
 
 function LinkedinIcon() {
@@ -387,6 +387,11 @@ export default function ProfilePage() {
   const [researchParticipation, setResearchParticipation] = useState("");
   const [activePromptIds, setActivePromptIds] = useState<string[]>(ACTIVE_PROMPT_IDS);
 
+  // ── Invite codes (PI only) ────────────────────────────────────────────────
+  const [inviteCodes, setInviteCodes] = useState<{ id: string; code: string; used_by: string | null; created_at: string }[]>([]);
+  const [generatingCode, setGeneratingCode] = useState(false);
+  const [copiedCodeId, setCopiedCodeId] = useState<string | null>(null);
+
   // ── Activity stats ────────────────────────────────────────────────────────
   const [taskCounts, setTaskCounts] = useState<Record<TaskStatus, number>>({
     todo: 0, in_progress: 0, in_review: 0, done: 0,
@@ -448,7 +453,7 @@ export default function ProfilePage() {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) return;
 
-      supabase.from("tasks").select("id,status,title,due_date,updated_at")
+      supabase.from("tasks").select("id,status,title,due_date,created_at")
         .eq("project_id", projectId)
         .then(({ data }) => {
           if (!data) return;
@@ -456,14 +461,14 @@ export default function ProfilePage() {
           data.forEach((t) => { counts[t.status as TaskStatus] = (counts[t.status as TaskStatus] ?? 0) + 1; });
           setTaskCounts(counts);
           const recent = [...data]
-            .sort((a, b) => new Date(b.updated_at as string).getTime() - new Date(a.updated_at as string).getTime())
+            .sort((a, b) => new Date(b.created_at as string).getTime() - new Date(a.created_at as string).getTime())
             .slice(0, 5)
             .map((row) => ({
               id: row.id as string, projectId, title: row.title as string,
               description: "", status: row.status as TaskStatus,
               priority: "medium" as const, assigneeIds: [],
               dueDate: row.due_date as string | undefined,
-              createdAt: row.updated_at as string, updatedAt: row.updated_at as string,
+              createdAt: row.created_at as string, updatedAt: row.created_at as string,
               comments: [], files: [], links: [],
             }));
           setRecentTasks(recent);
@@ -475,10 +480,46 @@ export default function ProfilePage() {
 
       const monthStart = new Date().toISOString().slice(0, 7) + "-01";
       supabase.from("journal_entries").select("id", { count: "exact", head: true })
-        .eq("user_id", user.id).gte("date", monthStart)
+        .eq("user_id", user.id).gte("created_at", monthStart)
         .then(({ count }) => setJournalStreak(count ?? 0));
     });
   }, [project]);
+
+  // ── Load invite codes once profile is known (PI only) ────────────────────
+  useEffect(() => {
+    if (!profile || profile.role !== "pi") return;
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) return;
+      supabase.from("invite_codes")
+        .select("id, code, used_by, created_at")
+        .eq("created_by", user.id)
+        .order("created_at", { ascending: false })
+        .then(({ data }) => {
+          if (data) setInviteCodes(data as typeof inviteCodes);
+        });
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile]);
+
+  const handleGenerateCode = useCallback(async () => {
+    setGeneratingCode(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user || !project?.id) { setGeneratingCode(false); return; }
+    const code = "CANOPY-" + Math.random().toString(36).substring(2, 6).toUpperCase();
+    const { data } = await supabase.from("invite_codes")
+      .insert({ code, project_id: project.id, created_by: user.id })
+      .select("id, code, used_by, created_at")
+      .single();
+    if (data) setInviteCodes((prev) => [data as (typeof inviteCodes)[0], ...prev]);
+    setGeneratingCode(false);
+  }, [project]);
+
+  const handleCopyInvite = useCallback(async (codeId: string, code: string) => {
+    const link = `${window.location.origin}/login?invite=${code}`;
+    await navigator.clipboard.writeText(link).catch(() => {});
+    setCopiedCodeId(codeId);
+    setTimeout(() => setCopiedCodeId((prev) => (prev === codeId ? null : prev)), 2000);
+  }, []);
 
   // ── Handlers ─────────────────────────────────────────────────────────────
 
@@ -1229,6 +1270,81 @@ export default function ProfilePage() {
                   >
                     Manage prompts ({activePromptIds.length} active)
                   </button>
+                </div>
+
+                {/* ── Invite ───────────────────────────────────────────── */}
+                <div>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                    <SectionLabel>Invite</SectionLabel>
+                    <button
+                      onClick={handleGenerateCode}
+                      disabled={generatingCode}
+                      style={{
+                        display: "inline-flex", alignItems: "center", gap: 6,
+                        height: 36, padding: "0 14px",
+                        backgroundColor: "#fff", border: "1px solid #DDE1E7", borderRadius: 8,
+                        fontFamily: "var(--font-roboto)", fontWeight: 600, fontSize: 12,
+                        color: "#1B2E4B", cursor: generatingCode ? "default" : "pointer",
+                        opacity: generatingCode ? 0.6 : 1,
+                      }}
+                      onMouseEnter={(e) => { if (!generatingCode) (e.currentTarget as HTMLElement).style.borderColor = "#B8C4D4"; }}
+                      onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "#DDE1E7"; }}
+                    >
+                      <Plus size={12} />
+                      Generate new code
+                    </button>
+                  </div>
+                  {inviteCodes.length === 0 ? (
+                    <p style={{ fontFamily: "var(--font-roboto)", fontSize: 13, color: "#6B6B6B" }}>
+                      No invite codes yet. Generate one to invite researchers.
+                    </p>
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      {inviteCodes.map((ic) => (
+                        <div
+                          key={ic.id}
+                          style={{
+                            display: "flex", alignItems: "center", justifyContent: "space-between",
+                            padding: "10px 14px", border: "1px solid #DDE1E7", borderRadius: 8,
+                            backgroundColor: ic.used_by ? "#F6F8FC" : "#fff",
+                          }}
+                        >
+                          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                            <span style={{
+                              fontFamily: "var(--font-roboto)", fontWeight: 600, fontSize: 13,
+                              color: ic.used_by ? "#6B6B6B" : "#1B2E4B",
+                              letterSpacing: "0.04em",
+                            }}>
+                              {ic.code}
+                            </span>
+                            <span style={{ fontFamily: "var(--font-roboto)", fontSize: 11, color: "#6B6B6B" }}>
+                              {ic.used_by ? "Used" : "Available"}
+                            </span>
+                          </div>
+                          {!ic.used_by && (
+                            <button
+                              onClick={() => handleCopyInvite(ic.id, ic.code)}
+                              style={{
+                                display: "inline-flex", alignItems: "center", gap: 5,
+                                height: 32, padding: "0 12px",
+                                backgroundColor: copiedCodeId === ic.id ? "#EEF5EE" : "#fff",
+                                border: "1px solid #DDE1E7", borderRadius: 7,
+                                fontFamily: "var(--font-roboto)", fontWeight: 600, fontSize: 12,
+                                color: copiedCodeId === ic.id ? "#2E7D52" : "#1B2E4B",
+                                cursor: "pointer", transition: "background-color 150ms ease",
+                              }}
+                              onMouseEnter={(e) => { if (copiedCodeId !== ic.id) (e.currentTarget as HTMLElement).style.borderColor = "#B8C4D4"; }}
+                              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "#DDE1E7"; }}
+                            >
+                              {copiedCodeId === ic.id
+                                ? <><Check size={11} />Copied!</>
+                                : <><Copy size={11} />Copy invite link</>}
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <button

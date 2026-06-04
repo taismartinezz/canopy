@@ -71,6 +71,10 @@ create table if not exists team_members (
   unique (project_id, user_id)
 );
 
+-- FK to user_profiles lets PostgREST resolve the join in select queries
+alter table team_members add constraint if not exists fk_team_members_user_profiles
+  foreign key (user_id) references user_profiles(id) on delete cascade;
+
 alter table team_members enable row level security;
 
 create policy "members can read team" on team_members

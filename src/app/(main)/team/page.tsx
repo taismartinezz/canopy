@@ -348,7 +348,7 @@ export default function TeamPage() {
 
         const { data } = await supabase
           .from("team_members")
-          .select("user_id, role, user_profiles(name, avatar_color, avatar_initials, institution)")
+          .select("*, user_profiles(name, avatar_color, avatar_initials, institution)")
           .eq("project_id", projectId);
 
         if (data) {

@@ -272,7 +272,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
           const { data: members } = await supabase
             .from("team_members")
-            .select("user_id, role, user_profiles(name, avatar_color, avatar_initials)")
+            .select("*, user_profiles(name, avatar_color, avatar_initials)")
             .eq("project_id", membership.project_id);
 
           if (members) {
