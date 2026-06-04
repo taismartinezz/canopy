@@ -12,14 +12,6 @@ type Role = "pi" | "researcher";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const RESEARCH_TYPES = [
-  "Trauma Studies",
-  "Oncology",
-  "Conflict Zone Research",
-  "Forensic Research",
-  "Crisis Response",
-  "Other",
-];
 
 // ── Shared styles ─────────────────────────────────────────────────────────────
 
@@ -288,36 +280,11 @@ function ProjectForm({
 
       {showResearchType && setResearchType && (
         <Field label="Research type">
-          <div style={{ position: "relative" }}>
-            <select
-              value={researchType ?? ""}
-              onChange={(e) => setResearchType(e.target.value)}
-              style={{
-                ...INPUT_STYLE,
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                appearance: "none" as any,
-                cursor: "pointer",
-                paddingRight: 36,
-                color: researchType ? "#2D2D2D" : "#9CA3AF",
-              }}
-              onFocus={(e) => { e.currentTarget.style.borderColor = "#1B2E4B"; }}
-              onBlur={(e) => { e.currentTarget.style.borderColor = "#DDE1E7"; }}
-            >
-              <option value="" disabled hidden>Select research type</option>
-              {RESEARCH_TYPES.map((t) => (
-                <option key={t} value={t}>{t}</option>
-              ))}
-            </select>
-            <span
-              style={{
-                position: "absolute", right: 12, top: "50%",
-                transform: "translateY(-50%)", pointerEvents: "none",
-                color: "#6B6B6B", fontSize: 10,
-              }}
-            >
-              ▼
-            </span>
-          </div>
+          <TextInput
+            value={researchType ?? ""}
+            onChange={setResearchType}
+            placeholder="e.g. Moral injury in military veterans"
+          />
         </Field>
       )}
 
@@ -338,11 +305,11 @@ function ProjectForm({
 
 async function syncOnboardingToSupabase({
   projectName, institution, researchType,
-  userName, userRole, inviteCode, bio, department,
+  userName, userRole, inviteCode, enteredInviteCode, bio, department,
 }: {
   projectName: string; institution: string; researchType: string;
   userName: string; userRole: "pi" | "researcher"; inviteCode?: string;
-  bio?: string; department?: string;
+  enteredInviteCode?: string; bio?: string; department?: string;
 }) {
   try {
     const { data: { user } } = await supabase.auth.getUser();
@@ -354,9 +321,9 @@ async function syncOnboardingToSupabase({
       : (nameParts[0][0] + nameParts[nameParts.length - 1][0]).toUpperCase();
 
     let projectId: string;
+    let resolvedInstitution = institution;
 
     if (userRole === "pi") {
-      // Reuse seeded project if one already exists for this user
       const { data: existing } = await supabase
         .from("projects")
         .select("id")
@@ -380,7 +347,36 @@ async function syncOnboardingToSupabase({
           code: inviteCode, project_id: projectId, created_by: user.id,
         });
       }
+    } else if (enteredInviteCode) {
+      // Look up the project linked to the invite code
+      const { data: inviteData } = await supabase
+        .from("invite_codes")
+        .select("project_id, projects(institution)")
+        .eq("code", enteredInviteCode)
+        .maybeSingle();
+
+      if (inviteData?.project_id) {
+        projectId = inviteData.project_id as string;
+        const projRaw = inviteData.projects;
+        const proj = Array.isArray(projRaw) ? projRaw[0] : projRaw as { institution: string } | null;
+        resolvedInstitution = (proj as { institution: string } | null)?.institution ?? institution;
+        // Mark code as used
+        await supabase.from("invite_codes").update({
+          used_by: user.id,
+          used_at: new Date().toISOString(),
+        }).eq("code", enteredInviteCode);
+      } else {
+        // Invite code not found; fall back to creating own project
+        const { data: created } = await supabase
+          .from("projects")
+          .insert({ name: projectName, institution, research_type: researchType, owner_id: user.id })
+          .select("id")
+          .single();
+        if (!created) return;
+        projectId = created.id as string;
+      }
     } else {
+      // Researcher creating own workspace (no invite code)
       const { data: created } = await supabase
         .from("projects")
         .insert({ name: projectName, institution, research_type: researchType, owner_id: user.id })
@@ -392,7 +388,7 @@ async function syncOnboardingToSupabase({
 
     await supabase.from("user_profiles").upsert({
       id: user.id, name: userName, role: userRole,
-      institution: institution || null, avatar_initials: avatarInitials,
+      institution: resolvedInstitution || null, avatar_initials: avatarInitials,
       project_id: projectId,
       bio: bio || null,
       department: department || null,
@@ -576,6 +572,7 @@ export default function OnboardingPage() {
         projectName, institution, researchType,
         userName, userRole,
         inviteCode: role === "pi" ? generatedCode : undefined,
+        enteredInviteCode: role === "researcher" && inviteCode.length >= 6 ? inviteCode : undefined,
         bio: role === "researcher" ? profileBio : undefined,
         department: role === "researcher" ? profileDept : undefined,
       });

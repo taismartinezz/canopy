@@ -355,6 +355,9 @@ export default function ProfilePage() {
   const [projectCreatedAt, setProjectCreatedAt] = useState(isSupabaseConfigured ? "" : PROJECT.createdAt);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const authInitRef = useRef(false);
+  const lastUserIdRef = useRef<string | null>(null);
+  const [reloadCount, setReloadCount] = useState(0);
 
   // ── Persisted profile state ──────────────────────────────────────────────
   const [photo, setPhoto] = useState<string | null>(null);
@@ -390,6 +393,30 @@ export default function ProfilePage() {
   const [researchType, setResearchType] = useState<string>(isSupabaseConfigured ? "" : PROJECT.researchType);
   const [researchParticipation, setResearchParticipation] = useState<string>(isSupabaseConfigured ? "" : PROJECT.researchParticipation);
   const [activePromptIds, setActivePromptIds] = useState<string[]>(ACTIVE_PROMPT_IDS);
+
+  // ── Clear stale state when a different user signs in ────────────────────
+  useEffect(() => {
+    if (!isSupabaseConfigured) return;
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      const newUserId = session?.user?.id ?? null;
+      if (!authInitRef.current) {
+        authInitRef.current = true;
+        lastUserIdRef.current = newUserId;
+        return;
+      }
+      if (newUserId === lastUserIdRef.current) return;
+      lastUserIdRef.current = newUserId;
+      // Wipe all localStorage user cache so old data never bleeds across sessions
+      Object.keys(localStorage).filter(k => k.startsWith("canopy_")).forEach(k => localStorage.removeItem(k));
+      // Reset React state for all user-specific fields
+      setName(""); setIsPi(false); setAvatarInitials(""); setAvatarColor("#B4D4E3");
+      setInstitution(""); setBio(""); setDepartment("");
+      setProjectName(""); setProjectInstitution(""); setResearchType(""); setResearchParticipation(""); setProjectCreatedAt("");
+      if (newUserId) setReloadCount(c => c + 1);
+    });
+    return () => subscription.unsubscribe();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── Load profile on mount ────────────────────────────────────────────────
   useEffect(() => {
@@ -483,7 +510,8 @@ export default function ProfilePage() {
     if (localStorage.getItem("canopy_project_institution")) setProjectInstitution(localStorage.getItem("canopy_project_institution")!);
     if (localStorage.getItem("canopy_project_research_type")) setResearchType(localStorage.getItem("canopy_project_research_type")!);
     if (localStorage.getItem("canopy_project_participation")) setResearchParticipation(localStorage.getItem("canopy_project_participation")!);
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reloadCount]);
 
   // ── Activity stats — loaded from Supabase ────────────────────────────────
   const [taskCounts, setTaskCounts] = useState<Record<TaskStatus, number>>({
@@ -540,7 +568,7 @@ export default function ProfilePage() {
         });
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [reloadCount]);
 
   // ── Handlers ─────────────────────────────────────────────────────────────
   const handlePhotoChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -682,9 +710,9 @@ export default function ProfilePage() {
   ];
 
   // ── Render ────────────────────────────────────────────────────────────────
-  const memberSinceDate = new Date(projectCreatedAt).toLocaleDateString("en-US", {
-    month: "long", day: "numeric", year: "numeric",
-  });
+  const memberSinceDate = projectCreatedAt
+    ? new Date(projectCreatedAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })
+    : "";
   const roleBadgeLabel = isPi ? "Principal Investigator" : "Researcher";
 
   return (
@@ -885,6 +913,7 @@ export default function ProfilePage() {
                 style={{
                   fontFamily: "var(--font-roboto)", fontWeight: 400, fontSize: 14,
                   color: "#6B6B6B", margin: 0, cursor: "text",
+                  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "100%",
                 }}
               >
                 {institution}
