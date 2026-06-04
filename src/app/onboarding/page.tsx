@@ -310,10 +310,10 @@ async function syncOnboardingToSupabase({
   projectName: string; institution: string; researchType: string;
   userName: string; userRole: "pi" | "researcher"; inviteCode?: string;
   enteredInviteCode?: string; bio?: string; department?: string; inviteEmails?: string[];
-}) {
+}): Promise<string | null> {
   try {
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    if (!user) return null;
 
     const nameParts = userName.trim().split(/\s+/).filter(Boolean);
     const avatarInitials = nameParts.length === 0 ? "??"
@@ -338,52 +338,52 @@ async function syncOnboardingToSupabase({
           .insert({ name: projectName, institution, research_type: researchType, owner_id: user.id })
           .select("id")
           .single();
-        if (!created) return;
+        if (!created) return null;
         projectId = created.id as string;
       }
 
       // Save the generic shareable code
       if (inviteCode) {
-        await supabase.from("invite_codes").insert({
+        const { error: codeErr } = await supabase.from("invite_codes").insert({
           code: inviteCode, project_id: projectId, created_by: user.id,
         });
+        if (codeErr) console.error("[syncOnboardingToSupabase] generic invite_code insert error:", codeErr);
+        else console.log("[syncOnboardingToSupabase] generic invite_code saved:", inviteCode);
       }
       // Save one unique code per invited email
       if (inviteEmails && inviteEmails.length > 0) {
-        const emailCodes = inviteEmails.map(() => ({
-          code: "CANOPY-" + Math.random().toString(36).substring(2, 6).toUpperCase(),
-          project_id: projectId,
-          created_by: user.id,
-        }));
-        await supabase.from("invite_codes").insert(emailCodes);
+        for (const email of inviteEmails) {
+          const code = "CANOPY-" + Math.random().toString(36).substring(2, 6).toUpperCase();
+          const { error: emailCodeErr } = await supabase.from("invite_codes").insert({
+            code, project_id: projectId, created_by: user.id,
+          });
+          if (emailCodeErr) console.error(`[syncOnboardingToSupabase] invite_code insert error for ${email}:`, emailCodeErr);
+          else console.log(`[syncOnboardingToSupabase] invite_code saved for ${email}:`, code);
+        }
       }
     } else if (enteredInviteCode) {
       // Look up the project linked to the invite code
       const { data: inviteData } = await supabase
         .from("invite_codes")
-        .select("project_id, projects(institution)")
-        .eq("code", enteredInviteCode)
+        .select("project_id, id")
+        .eq("code", enteredInviteCode.trim().toUpperCase())
         .maybeSingle();
 
-      if (inviteData?.project_id) {
-        projectId = inviteData.project_id as string;
-        const projRaw = inviteData.projects;
-        const proj = Array.isArray(projRaw) ? projRaw[0] : projRaw as { institution: string } | null;
-        resolvedInstitution = (proj as { institution: string } | null)?.institution ?? institution;
-        // Mark code as used
-        await supabase.from("invite_codes").update({
-          used_by: user.id,
-          used_at: new Date().toISOString(),
-        }).eq("code", enteredInviteCode);
-      } else {
-        // Invite code not found; fall back to creating own project
-        const { data: created } = await supabase
-          .from("projects")
-          .insert({ name: projectName, institution, research_type: researchType, owner_id: user.id })
-          .select("id")
-          .single();
-        if (!created) return;
-        projectId = created.id as string;
+      if (!inviteData?.project_id) {
+        return "Invalid invite code. Please check the code and try again.";
+      }
+
+      projectId = inviteData.project_id as string;
+
+      // Mark code as used
+      await supabase.from("invite_codes").update({
+        used_by: user.id,
+        used_at: new Date().toISOString(),
+      }).eq("code", enteredInviteCode.trim().toUpperCase());
+
+      // Clear the pending invite from localStorage
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("pendingInviteCode");
       }
     } else {
       // Researcher creating own workspace (no invite code)
@@ -392,7 +392,7 @@ async function syncOnboardingToSupabase({
         .insert({ name: projectName, institution, research_type: researchType, owner_id: user.id })
         .select("id")
         .single();
-      if (!created) return;
+      if (!created) return null;
       projectId = created.id as string;
     }
 
@@ -411,8 +411,11 @@ async function syncOnboardingToSupabase({
       { project_id: projectId, user_id: user.id, role: userRole },
       { onConflict: "project_id,user_id" },
     );
+
+    return null;
   } catch (err) {
     console.error("[syncOnboardingToSupabase] unexpected error:", err);
+    return null;
   }
 }
 
@@ -450,6 +453,7 @@ export default function OnboardingPage() {
   const [profileBio, setProfileBio] = useState("");
 
   const [submitting, setSubmitting] = useState(false);
+  const [syncError, setSyncError] = useState("");
   const checked = useRef(false);
 
   // Guard: must be authed; if already onboarded skip to /
@@ -458,11 +462,8 @@ export default function OnboardingPage() {
     checked.current = true;
 
     // Pre-fill invite code if researcher arrived via an invite link
-    const pendingInvite = localStorage.getItem("canopy_pending_invite");
-    if (pendingInvite) {
-      setInviteCode(pendingInvite);
-      localStorage.removeItem("canopy_pending_invite");
-    }
+    const pendingInvite = localStorage.getItem("pendingInviteCode");
+    if (pendingInvite) setInviteCode(pendingInvite);
 
     if (!isSupabaseConfigured) {
       if (!localStorage.getItem("canopy_authed")) { router.replace("/login"); return; }
@@ -592,7 +593,7 @@ export default function OnboardingPage() {
 
     // Await Supabase sync so the profile row exists before AppShell loads
     if (isSupabaseConfigured) {
-      await syncOnboardingToSupabase({
+      const syncErr = await syncOnboardingToSupabase({
         projectName, institution, researchType,
         userName, userRole,
         inviteCode: role === "pi" ? generatedCode : undefined,
@@ -601,6 +602,11 @@ export default function OnboardingPage() {
         department: role === "researcher" ? profileDept : undefined,
         inviteEmails: role === "pi" ? inviteEmails : undefined,
       });
+      if (syncErr) {
+        setSyncError(syncErr);
+        setSubmitting(false);
+        return;
+      }
     }
 
     router.push("/profile");
@@ -1077,6 +1083,22 @@ export default function OnboardingPage() {
           <NavButton onClick={completeOnboarding} disabled={!canContinue || submitting}>
             {submitting ? "Saving…" : "Go to my workspace"}
           </NavButton>
+
+          {syncError && (
+            <p
+              role="alert"
+              style={{
+                fontFamily: "var(--font-roboto)",
+                fontSize: 13,
+                color: "#C0392B",
+                marginTop: 10,
+                marginBottom: 0,
+                textAlign: "center",
+              }}
+            >
+              {syncError}
+            </p>
+          )}
         </div>
       </div>
     );

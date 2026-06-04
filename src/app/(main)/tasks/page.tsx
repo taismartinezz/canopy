@@ -10,7 +10,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { LayoutGrid, List, Search, Plus, MoreHorizontal } from "lucide-react";
-import { formatDate, getStoredProject } from "@/lib/mock-data";
+import { formatDate } from "@/lib/mock-data";
 import { supabase } from "@/lib/supabase";
 import type { Task, TaskStatus, User, UserRole } from "@/types";
 import Avatar from "@/components/ui/Avatar";
@@ -335,59 +335,64 @@ export default function TasksPage() {
   const [currentUserId, setCurrentUserId] = useState<string>("");
 
   useEffect(() => {
-    const projectId = getStoredProject().id;
-    if (!projectId || projectId === "p1") { setLoading(false); return; }
+    supabase.auth.getUser().then(async ({ data: { user } }) => {
+      if (!user) { setLoading(false); return; }
+      setCurrentUserId(user.id);
 
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (user) setCurrentUserId(user.id);
+      const { data: profile } = await supabase
+        .from("user_profiles")
+        .select("project_id")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      const projectId = profile?.project_id as string | undefined;
+      if (!projectId) { setLoading(false); return; }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: members } = await (supabase
+        .from("team_members")
+        .select("user_id, user_profiles(name, avatar_initials, avatar_color, role)")
+        .eq("project_id", projectId) as any);
+
+      if (members) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        setTeamMembers((members as any[]).map((row) => {
+          const p = Array.isArray(row.user_profiles) ? row.user_profiles[0] : row.user_profiles;
+          const id = row.user_id as string;
+          return {
+            id,
+            name: p?.name ?? "Team Member",
+            email: "",
+            role: (p?.role ?? "researcher") as UserRole,
+            avatarColor: p?.avatar_color ?? avatarColorFromId(id),
+            avatarInitials: p?.avatar_initials ?? "??",
+          } as User;
+        }));
+      }
+
+      const { data, error } = await supabase
+        .from("tasks")
+        .select("*")
+        .eq("project_id", projectId)
+        .order("created_at", { ascending: false });
+
+      if (!error && data) setTasks(data.map((row) => ({
+        id: row.id as string,
+        projectId: row.project_id as string,
+        title: row.title as string,
+        description: row.description as string,
+        status: row.status as TaskStatus,
+        priority: row.priority as Task["priority"],
+        assigneeIds: (row.assignee_ids as string[]) ?? [],
+        dueDate: row.due_date as string | undefined,
+        createdAt: row.created_at as string,
+        updatedAt: row.updated_at as string,
+        comments: (row.comments as Task["comments"]) ?? [],
+        files: (row.files as Task["files"]) ?? [],
+        links: (row.links as Task["links"]) ?? [],
+      })));
+      setLoading(false);
     });
-
-    supabase
-      .from("team_members")
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .select("user_id, user_profiles(name, avatar_initials, role)" as any)
-      .eq("project_id", projectId)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .then(({ data }: { data: any[] | null }) => {
-        if (data) {
-          setTeamMembers(data.map((row) => {
-            const profile = Array.isArray(row.user_profiles) ? row.user_profiles[0] : row.user_profiles;
-            const id = row.user_id as string;
-            return {
-              id,
-              name: profile?.name ?? "Team Member",
-              email: "",
-              role: (profile?.role ?? "researcher") as UserRole,
-              avatarColor: avatarColorFromId(id),
-              avatarInitials: profile?.avatar_initials ?? "??",
-            } as User;
-          }));
-        }
-      });
-
-    supabase
-      .from("tasks")
-      .select("*")
-      .eq("project_id", projectId)
-      .order("created_at", { ascending: false })
-      .then(({ data, error }) => {
-        if (!error && data) setTasks(data.map((row) => ({
-          id: row.id as string,
-          projectId: row.project_id as string,
-          title: row.title as string,
-          description: row.description as string,
-          status: row.status as TaskStatus,
-          priority: row.priority as Task["priority"],
-          assigneeIds: (row.assignee_ids as string[]) ?? [],
-          dueDate: row.due_date as string | undefined,
-          createdAt: row.created_at as string,
-          updatedAt: row.updated_at as string,
-          comments: (row.comments as Task["comments"]) ?? [],
-          files: (row.files as Task["files"]) ?? [],
-          links: (row.links as Task["links"]) ?? [],
-        })));
-        setLoading(false);
-      });
   }, []);
 
   const sensors = useSensors(

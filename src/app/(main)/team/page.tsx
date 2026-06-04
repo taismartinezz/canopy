@@ -337,14 +337,20 @@ export default function TeamPage() {
   useEffect(() => {
     if (!currentUserId) return;
 
-    const projectId = getStoredProject().id;
-    if (!projectId || projectId === "p1") { setLoading(false); return; }
-
     supabase
-      .from("team_members")
-      .select("user_id, role, user_profiles(name, avatar_color, avatar_initials, institution)")
-      .eq("project_id", projectId)
-      .then(({ data }) => {
+      .from("user_profiles")
+      .select("project_id")
+      .eq("id", currentUserId)
+      .maybeSingle()
+      .then(async ({ data: profileData }) => {
+        const projectId = profileData?.project_id as string | undefined;
+        if (!projectId) { setLoading(false); return; }
+
+        const { data } = await supabase
+          .from("team_members")
+          .select("user_id, role, user_profiles(name, avatar_color, avatar_initials, institution)")
+          .eq("project_id", projectId);
+
         if (data) {
           const members: TeamMember[] = data.map((row) => {
             const profiles = row.user_profiles as unknown as Record<string, string>[] | null;

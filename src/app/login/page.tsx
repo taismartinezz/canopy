@@ -205,7 +205,7 @@ export default function LoginPage() {
 
     // Capture invite code from URL before any redirect
     const inviteParam = new URLSearchParams(window.location.search).get("invite");
-    if (inviteParam) localStorage.setItem("canopy_pending_invite", inviteParam);
+    if (inviteParam) localStorage.setItem("pendingInviteCode", inviteParam);
 
     if (!isSupabaseConfigured) {
       if (localStorage.getItem("canopy_authed") === "true") router.replace("/");
