@@ -110,10 +110,11 @@ export default function TaskModal({
       }
 
       // Insert assignees into task_assignees
+      console.log("[TaskModal] task_assignees insert — task_id:", data.id, "assignee user_ids:", assigneeIds);
       if (assigneeIds.length > 0) {
         const { error: assignError } = await supabase
           .from("task_assignees")
-          .insert(assigneeIds.map((userId) => ({ task_id: data.id, user_id: userId })));
+          .insert(assigneeIds.map((aid) => ({ task_id: data.id, user_id: aid })));
         if (assignError) console.error("[TaskModal] task_assignees insert error:", assignError);
       }
 
@@ -133,20 +134,31 @@ export default function TaskModal({
         links: [],
       };
 
-      // Notify assignees (not the creator)
-      const toNotify = assigneeIds.filter((id) => id !== currentUserId);
+      // Notify assignees — use session userId so the filter is never undefined
+      const toNotify = assigneeIds.filter((id) => id !== userId);
       if (toNotify.length > 0) {
-        const notifs = toNotify.map((userId) => ({
-          user_id: userId,
+        const notifs = toNotify.map((aid) => ({
+          user_id: aid,
           type: "task_assigned",
           title: "You were assigned to a task",
-          body: `"${title.trim()}" was assigned to you`,
+          body: `You were assigned to "${title.trim()}"`,
           related_id: saved.id,
           read: false,
         }));
+        console.log("[TaskModal] notification payload:", notifs);
         const { error: notifError } = await supabase.from("notifications").insert(notifs);
         if (notifError) console.error("[TaskModal] notification insert error:", notifError);
+        else console.log("[TaskModal] notifications inserted OK");
       }
+
+      // Log activity — task created
+      supabase.from("activity_feed").insert({
+        project_id: projectId,
+        user_id: userId,
+        action_type: "created",
+        item_name: saved.title,
+        item_type: "task",
+      }).then(({ error }) => { if (error) console.error("[TaskModal] activity insert error:", error); });
 
       onSave(saved);
     } else if (mode === "edit" && task) {
@@ -180,22 +192,22 @@ export default function TaskModal({
         if (assignError) console.error("[TaskModal] task_assignees update error:", assignError);
       }
 
-      // Notify newly added assignees
+      // Notify newly added assignees (use session userId, never undefined)
       const prevIds = task.assigneeIds ?? [];
-      const newlyAdded = assigneeIds.filter(
-        (id) => !prevIds.includes(id) && id !== currentUserId
-      );
+      const newlyAdded = assigneeIds.filter((id) => !prevIds.includes(id) && id !== userId);
       if (newlyAdded.length > 0) {
-        const notifs = newlyAdded.map((userId) => ({
-          user_id: userId,
+        const notifs = newlyAdded.map((aid) => ({
+          user_id: aid,
           type: "task_assigned",
           title: "You were assigned to a task",
-          body: `"${title.trim()}" was assigned to you`,
+          body: `You were assigned to "${title.trim()}"`,
           related_id: task.id,
           read: false,
         }));
+        console.log("[TaskModal] edit — notification payload:", notifs);
         const { error: notifError } = await supabase.from("notifications").insert(notifs);
         if (notifError) console.error("[TaskModal] notification insert error:", notifError);
+        else console.log("[TaskModal] edit notifications inserted OK");
       }
 
       const saved: Task = {

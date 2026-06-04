@@ -157,6 +157,15 @@ function AddItemModal({
       collections: [],
       relatedIds: [],
     };
+    // Log activity
+    supabase.from("activity_feed").insert({
+      project_id: projectId,
+      user_id: currentUserId,
+      action_type: "added",
+      item_name: newItem.title,
+      item_type: "paper",
+    }).then(({ error }) => { if (error) console.error("[Literature] activity insert error:", error); });
+
     onSave(newItem);
   }
 

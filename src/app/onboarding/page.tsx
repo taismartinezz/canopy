@@ -318,7 +318,7 @@ async function syncOnboardingToSupabase({
 
     const nameParts = userName.trim().split(/\s+/).filter(Boolean);
     const avatarInitials = nameParts.length === 0 ? "??"
-      : nameParts.length === 1 ? nameParts[0].substring(0, 2).toUpperCase()
+      : nameParts.length === 1 ? nameParts[0][0].toUpperCase()
       : (nameParts[0][0] + nameParts[nameParts.length - 1][0]).toUpperCase();
 
     let projectId: string;
@@ -614,7 +614,7 @@ export default function OnboardingPage() {
       nameParts.length === 0
         ? "??"
         : nameParts.length === 1
-          ? nameParts[0].substring(0, 2).toUpperCase()
+          ? nameParts[0][0].toUpperCase()
           : (nameParts[0][0] + nameParts[nameParts.length - 1][0]).toUpperCase();
 
     localStorage.setItem(

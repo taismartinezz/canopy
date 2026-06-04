@@ -181,6 +181,7 @@ function KanbanColumn({
   onEditTask,
   onDeleteTask,
   onAddTask,
+  onArchiveDone,
   teamMembers = [],
 }: {
   status: TaskStatus;
@@ -190,10 +191,10 @@ function KanbanColumn({
   onEditTask: (task: Task) => void;
   onDeleteTask: (taskId: string) => void;
   onAddTask: (status: TaskStatus) => void;
+  onArchiveDone?: () => void;
   teamMembers?: User[];
 }) {
   const cfg = STATUS_CONFIG[status];
-  // Make the column itself droppable so empty columns accept drops
   const { setNodeRef: setDropRef, isOver } = useDroppable({ id: status });
 
   return (
@@ -203,9 +204,18 @@ function KanbanColumn({
         <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--color-body)" }}>
           {cfg.label}
         </span>
-        <span className="ml-auto flex items-center justify-center w-5 h-5 rounded-full" style={{ backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)", fontSize: 11, fontWeight: 600, color: "var(--color-secondary)" }}>
+        <span className="flex items-center justify-center w-5 h-5 rounded-full" style={{ backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)", fontSize: 11, fontWeight: 600, color: "var(--color-secondary)" }}>
           {tasks.length}
         </span>
+        {status === "done" && tasks.length >= 3 && onArchiveDone && (
+          <button
+            onClick={onArchiveDone}
+            title="Archive all done tasks"
+            style={{ marginLeft: "auto", fontSize: 10, fontWeight: 600, color: "var(--color-secondary)", background: "none", border: "1px solid var(--color-border)", borderRadius: 4, padding: "2px 6px", cursor: "pointer", whiteSpace: "nowrap" }}
+          >
+            Archive all
+          </button>
+        )}
       </div>
 
       <div
@@ -425,6 +435,7 @@ export default function TasksPage() {
         .from("tasks")
         .select("*, task_assignees(user_id)")
         .eq("project_id", pid)
+        .eq("archived", false)
         .order("created_at", { ascending: false });
 
       if (error) console.error("[Tasks] fetch error:", error);
@@ -489,11 +500,25 @@ export default function TasksPage() {
   }, []);
 
   const moveTask = useCallback((taskId: string, status: TaskStatus) => {
-    setTasks((prev) => prev.map((t) => t.id === taskId ? { ...t, status } : t));
+    setTasks((prev) => {
+      const task = prev.find((t) => t.id === taskId);
+      if (task && task.status !== status && projectId && currentUserId) {
+        supabase.from("activity_feed").insert({
+          project_id: projectId,
+          user_id: currentUserId,
+          action_type: "moved",
+          item_name: task.title,
+          item_type: "task",
+          from_status: task.status,
+          to_status: status,
+        }).then(({ error }) => { if (error) console.error("[Tasks] activity insert error:", error); });
+      }
+      return prev.map((t) => t.id === taskId ? { ...t, status } : t);
+    });
     setSelectedTask((prev) => prev?.id === taskId ? { ...prev, status } : prev);
     supabase.from("tasks").update({ status }).eq("id", taskId)
       .then(({ error }) => { if (error) console.error("[Tasks] moveTask error:", error); });
-  }, []);
+  }, [projectId, currentUserId]);
 
   const updateTask = useCallback((taskId: string, updates: Partial<Task>) => {
     setTasks((prev) => prev.map((t) => t.id === taskId ? { ...t, ...updates } : t));
@@ -516,6 +541,17 @@ export default function TasksPage() {
     setSelectedTask((prev) => prev?.id === taskId ? null : prev);
     supabase.from("tasks").delete().eq("id", taskId)
       .then(({ error }) => { if (error) console.error("[Tasks] deleteTask error:", error); });
+  }, []);
+
+  const archiveDoneTasks = useCallback(() => {
+    setTasks((prev) => {
+      const doneIds = prev.filter((t) => t.status === "done").map((t) => t.id);
+      if (doneIds.length === 0) return prev;
+      supabase.from("tasks").update({ archived: true }).in("id", doneIds)
+        .then(({ error }) => { if (error) console.error("[Tasks] archive error:", error); });
+      return prev.filter((t) => t.status !== "done");
+    });
+    setSelectedTask((prev) => prev?.status === "done" ? null : prev);
   }, []);
 
   const filteredTasks = tasks.filter((t) => {
@@ -615,6 +651,7 @@ export default function TasksPage() {
                     onEditTask={(t) => setModalState({ mode: "edit", task: t })}
                     onDeleteTask={deleteTask}
                     onAddTask={(s) => setModalState({ mode: "add", status: s })}
+                    onArchiveDone={archiveDoneTasks}
                     teamMembers={teamMembers}
                   />
                 ))}
@@ -671,6 +708,7 @@ export default function TasksPage() {
           onClose={() => setSelectedTask(null)}
           onUpdateStatus={(status) => moveTask(selectedTask.id, status)}
           onUpdateTask={(updates) => updateTask(selectedTask.id, updates)}
+          onDeleteTask={deleteTask}
           teamMembers={teamMembers}
           currentUserId={currentUserId}
         />

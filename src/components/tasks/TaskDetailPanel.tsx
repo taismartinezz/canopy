@@ -106,6 +106,7 @@ export default function TaskDetailPanel({
   onClose,
   onUpdateStatus,
   onUpdateTask,
+  onDeleteTask,
   teamMembers = [],
   currentUserId = "",
 }: {
@@ -113,6 +114,7 @@ export default function TaskDetailPanel({
   onClose: () => void;
   onUpdateStatus: (status: TaskStatus) => void;
   onUpdateTask?: (updates: Partial<Task>) => void;
+  onDeleteTask?: (taskId: string) => void;
   teamMembers?: User[];
   currentUserId?: string;
 }) {
@@ -120,6 +122,7 @@ export default function TaskDetailPanel({
   const [commentText, setCommentText] = useState("");
   const [isMobile, setIsMobile] = useState(false);
   const [addAssigneeOpen, setAddAssigneeOpen] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
 
   // Local copies — initialized from task, mutated locally & pushed to parent
   const [localComments, setLocalComments] = useState<TaskComment[]>(task.comments);
@@ -502,6 +505,40 @@ export default function TaskDetailPanel({
             </div>
           )}
         </div>
+
+        {/* Delete task */}
+        {onDeleteTask && (
+          <div className="px-6 py-3" style={{ borderTop: "1px solid var(--color-border)" }}>
+            {!deleteConfirm ? (
+              <button
+                onClick={() => setDeleteConfirm(true)}
+                style={{ fontSize: 12, color: "var(--color-error)", background: "none", border: "none", cursor: "pointer", padding: 0 }}
+              >
+                Delete task
+              </button>
+            ) : (
+              <div className="flex items-center gap-3 flex-wrap">
+                <p style={{ fontSize: 12, color: "var(--color-body)", margin: 0 }}>
+                  Delete this task? This cannot be undone.
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setDeleteConfirm(false)}
+                    style={{ fontSize: 12, fontWeight: 600, color: "var(--color-secondary)", background: "none", border: "1px solid var(--color-border)", borderRadius: 5, padding: "4px 12px", cursor: "pointer" }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => { onDeleteTask(task.id); onClose(); }}
+                    style={{ fontSize: 12, fontWeight: 700, color: "#fff", backgroundColor: "var(--color-error)", border: "none", borderRadius: 5, padding: "4px 12px", cursor: "pointer" }}
+                  >
+                    Confirm
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </>
   );

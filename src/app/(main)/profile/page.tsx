@@ -548,7 +548,7 @@ export default function ProfilePage() {
     if (trimmed) {
       const parts = trimmed.split(/\s+/).filter(Boolean);
       const newInitials = parts.length === 1
-        ? parts[0].substring(0, 2).toUpperCase()
+        ? parts[0][0].toUpperCase()
         : (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 
       const { data: { session } } = await supabase.auth.getSession();

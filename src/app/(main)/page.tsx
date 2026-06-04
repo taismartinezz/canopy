@@ -7,11 +7,11 @@ import {
   useDraggable, useDroppable,
 } from "@dnd-kit/core";
 import {
-  EVENTS, ACTIVITY, TASKS, DASHBOARD_POSTS,
+  TASKS, DASHBOARD_POSTS,
   formatRelativeTime, formatDate, getUser, CURRENT_USER_ID, getStoredProject,
 } from "@/lib/mock-data";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
-import type { Task, ActivityEvent, CalendarEvent, DashboardPost, TaskStatus, User } from "@/types";
+import type { Task, CalendarEvent, DashboardPost, TaskStatus, User } from "@/types";
 import Avatar from "@/components/ui/Avatar";
 import { Plus, ChevronRight, X } from "lucide-react";
 import Link from "next/link";
@@ -186,27 +186,68 @@ function UpcomingWidget({
   );
 }
 
+// ── Activity feed row type ────────────────────────────────────────────────────
+
+type ActivityRow = {
+  id: string;
+  user_id: string;
+  action_type: string;
+  item_name: string;
+  item_type: string;
+  from_status?: string;
+  to_status?: string;
+  created_at: string;
+};
+
+function activityVerb(row: ActivityRow): string {
+  if (row.action_type === "created") return "created";
+  if (row.action_type === "added") return "added";
+  if (row.action_type === "moved") return `moved`;
+  return row.action_type;
+}
+
+function activitySuffix(row: ActivityRow): string | null {
+  if (row.action_type === "moved" && row.to_status) {
+    const labels: Record<string, string> = {
+      todo: "To Do", in_progress: "In Progress", in_review: "In Review", done: "Done",
+    };
+    return `to ${labels[row.to_status] ?? row.to_status}`;
+  }
+  return null;
+}
+
 // ── Team activity widget ──────────────────────────────────────────────────────
 
-function TeamActivityWidget({ events }: { events: ActivityEvent[] }) {
+function TeamActivityWidget({ rows, teamMembers }: { rows: ActivityRow[]; teamMembers: User[] }) {
+  if (rows.length === 0) {
+    return (
+      <Card>
+        <CardHeader title="Team Activity" />
+        <div className="px-5 py-4">
+          <p style={{ fontSize: 13, color: "var(--color-secondary)" }}>No activity yet.</p>
+        </div>
+      </Card>
+    );
+  }
   return (
     <Card>
       <CardHeader title="Team Activity" />
       <div>
-        {events.map((evt, i) => {
-          const actor = getUser(evt.actorId);
-          if (!actor) return null;
+        {rows.map((row, i) => {
+          const actor = teamMembers.find((u) => u.id === row.user_id);
+          const name = actor?.name.split(" ")[0] ?? "Someone";
+          const suffix = activitySuffix(row);
           return (
-            <div key={evt.id} className="flex items-start gap-3 px-5 py-3" style={{ borderBottom: i < events.length - 1 ? "1px solid var(--color-border)" : undefined }}>
-              <Avatar user={actor} size={26} className="mt-0.5 shrink-0" />
+            <div key={row.id} className="flex items-start gap-3 px-5 py-3" style={{ borderBottom: i < rows.length - 1 ? "1px solid var(--color-border)" : undefined }}>
+              {actor && <Avatar user={actor} size={26} className="mt-0.5 shrink-0" />}
               <div className="flex-1 min-w-0">
                 <p style={{ fontSize: 13, color: "var(--color-body)", lineHeight: 1.4 }}>
-                  <span style={{ fontWeight: 600 }}>{actor.name.split(" ")[0]}</span>{" "}
-                  {evt.action}{" "}
-                  <span style={{ fontWeight: 500 }}>{evt.objectLabel}</span>
-                  {evt.destination && <> to <span style={{ fontWeight: 600, color: "var(--color-navy)" }}>{evt.destination}</span></>}
+                  <span style={{ fontWeight: 600 }}>{name}</span>{" "}
+                  {activityVerb(row)}{" "}
+                  <span style={{ fontWeight: 500 }}>{row.item_name}</span>
+                  {suffix && <> <span style={{ color: "var(--color-navy)", fontWeight: 600 }}>{suffix}</span></>}
                 </p>
-                <p style={{ fontSize: 11, color: "var(--color-secondary)", marginTop: 2 }}>{formatRelativeTime(evt.createdAt)}</p>
+                <p style={{ fontSize: 11, color: "var(--color-secondary)", marginTop: 2 }}>{formatRelativeTime(row.created_at)}</p>
               </div>
             </div>
           );
@@ -560,7 +601,7 @@ export default function DashboardPage() {
   const [userId, setUserId]           = useState("");
   const [teamMembers, setTeamMembers] = useState<User[]>([]);
   const [dashEvents, setDashEvents]   = useState<CalendarEvent[]>([]);
-  const [dashActivity, setDashActivity] = useState<ActivityEvent[]>([]);
+  const [dashActivity, setDashActivity] = useState<ActivityRow[]>([]);
   const [dashPosts, setDashPosts]     = useState<DashboardPost[]>([]);
 
   useEffect(() => {
@@ -686,6 +727,18 @@ export default function DashboardPage() {
             })),
           ]);
         }
+
+        // Fetch activity feed
+        const { data: actData, error: actError } = await supabase
+          .from("activity_feed")
+          .select("*")
+          .eq("project_id", pid)
+          .order("created_at", { ascending: false })
+          .limit(10);
+        if (actError) console.error("[Dashboard] activity_feed error:", actError);
+        if (!actError && actData) {
+          setDashActivity(actData as ActivityRow[]);
+        }
       });
       return;
     }
@@ -695,8 +748,6 @@ export default function DashboardPage() {
     setProjectName(sp.name);
     if (!localStorage.getItem("canopy_project")) {
       setTasks(TASKS);
-      setDashEvents(EVENTS);
-      setDashActivity(ACTIVITY);
       setDashPosts(DASHBOARD_POSTS);
     }
   }, []);
@@ -728,7 +779,7 @@ export default function DashboardPage() {
       {/* Row 1 */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5 mb-4 md:mb-5">
         <UpcomingWidget events={dashEvents} projectId={projectId} />
-        <TeamActivityWidget events={dashActivity} />
+        <TeamActivityWidget rows={dashActivity} teamMembers={teamMembers} />
       </div>
 
       {/* Row 2: Kanban preview */}

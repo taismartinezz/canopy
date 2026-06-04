@@ -2,12 +2,24 @@
 
 import { useState, useRef, useEffect } from "react";
 import {
-  JOURNAL_PROMPTS, ACTIVE_PROMPT_IDS,
   CHECKIN_QUESTIONS, CHECKIN_LABELS, CHECKIN_COLORS,
 } from "@/lib/mock-data";
 import { supabase } from "@/lib/supabase";
 import type { JournalEntry, CheckinResponse, PromptCategory } from "@/types";
 import { Lock, Mic, MicOff, HelpingHand, Search, Plus, X, Phone, ChevronLeft, Users, Building2 } from "lucide-react";
+
+// ── Preset prompts for the picker ─────────────────────────────────────────────
+
+const DEFAULT_PROMPT = "How was your day?";
+const PRESET_PROMPTS = [
+  "What challenged you today?",
+  "What are you grateful for?",
+  "What's on your mind about your research?",
+  "How are you feeling about your team?",
+  "What do you want to remember from today?",
+];
+
+type AddedPrompt = { id: string; text: string; response: string };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -205,24 +217,14 @@ function DiscardDraftModal({ onKeep, onDiscard }: { onKeep: () => void; onDiscar
   );
 }
 
-// ── Prompt bank modal ─────────────────────────────────────────────────────────
+// ── Prompt picker dropdown ────────────────────────────────────────────────────
 
-function PromptBankModal({ activeIds, onSave, onClose }: {
-  activeIds: string[];
-  onSave: (ids: string[]) => void;
+function PromptPicker({ usedTexts, onSelect, onClose }: {
+  usedTexts: string[];
+  onSelect: (text: string) => void;
   onClose: () => void;
 }) {
-  const [selected, setSelected] = useState<string[]>(activeIds);
-
-  function toggle(id: string) {
-    setSelected((prev) =>
-      prev.includes(id)
-        ? prev.filter((x) => x !== id)
-        : prev.length < 3 ? [...prev, id] : prev
-    );
-  }
-
-  const categories = [...new Set(JOURNAL_PROMPTS.map((p) => p.category))] as PromptCategory[];
+  const available = PRESET_PROMPTS.filter((t) => !usedTexts.includes(t));
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) { if (e.key === "Escape") onClose(); }
@@ -230,71 +232,20 @@ function PromptBankModal({ activeIds, onSave, onClose }: {
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
 
+  if (available.length === 0) return null;
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in" style={{ backgroundColor: "rgba(27,46,75,0.35)" }} onClick={onClose}>
-      <div style={{ backgroundColor: "var(--color-surface)", maxWidth: 560, width: "100%", borderRadius: 10, padding: 28, boxShadow: "0 8px 40px rgba(27,46,75,0.18)", maxHeight: "85dvh", overflowY: "auto" }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between mb-1">
-          <h2 style={{ fontFamily: "var(--font-lora)", fontWeight: 600, fontSize: 17, color: "var(--color-navy)", margin: 0 }}>
-            Choose your prompts
-          </h2>
-          <button onClick={onClose} className="flex items-center justify-center rounded-lg hover:bg-[rgba(27,46,75,0.06)]" style={{ width: 36, height: 36 }} aria-label="Close">
-            <X size={16} color="var(--color-secondary)" />
-          </button>
-        </div>
-        <p style={{ fontSize: 12, color: "var(--color-secondary)", marginBottom: 20, marginTop: 4 }}>
-          Select up to 3 prompts. {selected.length}/3 selected.
-        </p>
-
-        {categories.map((cat) => {
-          const prompts = JOURNAL_PROMPTS.filter((p) => p.category === cat);
-          return (
-            <div key={cat} className="mb-5">
-              <p style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--color-secondary)", marginBottom: 8 }}>
-                {CATEGORY_LABELS[cat]}
-              </p>
-              <div className="space-y-2">
-                {prompts.map((p) => {
-                  const isSelected = selected.includes(p.id);
-                  const disabled = !isSelected && selected.length >= 3;
-                  return (
-                    <button
-                      key={p.id}
-                      onClick={() => !disabled && toggle(p.id)}
-                      className="w-full text-left px-4 py-3 rounded-lg transition-all"
-                      style={{
-                        border: `1px solid ${isSelected ? "var(--color-navy)" : "var(--color-border)"}`,
-                        backgroundColor: isSelected ? "rgba(27,46,75,0.05)" : "transparent",
-                        cursor: disabled ? "not-allowed" : "pointer",
-                        opacity: disabled ? 0.45 : 1,
-                        fontFamily: "var(--font-lora)",
-                        fontSize: 13,
-                        color: "var(--color-body)",
-                        lineHeight: 1.45,
-                      }}
-                    >
-                      {p.text}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          );
-        })}
-
-        <div className="flex justify-end gap-2 mt-2 pt-4" style={{ borderTop: "1px solid var(--color-border)" }}>
-          <button onClick={onClose} style={{ fontSize: 13, fontWeight: 600, color: "var(--color-body)", border: "1px solid var(--color-border)", borderRadius: 7, padding: "8px 16px", backgroundColor: "transparent", cursor: "pointer", fontFamily: "var(--font-roboto)" }}>
-            Cancel
-          </button>
-          <button
-            onClick={() => { onSave(selected); onClose(); }}
-            style={{ fontSize: 13, fontWeight: 700, color: "#fff", backgroundColor: "var(--color-navy)", border: "none", borderRadius: 7, padding: "8px 20px", cursor: "pointer", fontFamily: "var(--font-roboto)" }}
-          >
-            Save prompts
-          </button>
-        </div>
-      </div>
+    <div className="animate-fade-in" style={{ position: "absolute", top: "calc(100% + 6px)", left: 0, zIndex: 30, width: 300, backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 10, boxShadow: "var(--shadow-card)", padding: "6px 0" }}>
+      {available.map((text) => (
+        <button
+          key={text}
+          onClick={() => { onSelect(text); onClose(); }}
+          className="w-full text-left px-4 py-2.5 hover:bg-[rgba(27,46,75,0.05)] transition-colors"
+          style={{ fontSize: 13, color: "var(--color-body)", fontFamily: "var(--font-lora)", lineHeight: 1.4, background: "none", border: "none", cursor: "pointer" }}
+        >
+          {text}
+        </button>
+      ))}
     </div>
   );
 }
@@ -390,28 +341,19 @@ export default function JournalPage() {
   const [entries, setEntries]               = useState<JournalEntry[]>([]);
   const [loadingEntries, setLoadingEntries] = useState(true);
   const [authUserId, setAuthUserId]         = useState("local");
-  const [activePromptIds, setActivePromptIds] = useState<string[]>(ACTIVE_PROMPT_IDS);
   const [selectedEntryId, setSelectedEntryId] = useState<string | "new">("new");
-  const [responses, setResponses]           = useState<Record<string, string>>({});
+  // New prompt state
+  const [defaultResponse, setDefaultResponse] = useState("");
+  const [addedPrompts, setAddedPrompts]     = useState<AddedPrompt[]>([]);
+  const [promptPickerOpen, setPromptPickerOpen] = useState(false);
   const [checkinResponses, setCheckinResponses] = useState<CheckinResponse[]>([]);
   const [supportOpen, setSupportOpen]       = useState(false);
   const [search, setSearch]                 = useState("");
   const [entryListOpen, setEntryListOpen]   = useState(false);
   const [saveMsg, setSaveMsg]               = useState<{ text: string; color: string } | null>(null);
-  const [promptBankOpen, setPromptBankOpen] = useState(false);
   const [discardModalOpen, setDiscardModalOpen] = useState(false);
-  const [promptDismissed, setPromptDismissed] = useState(() => {
-    if (typeof window === "undefined") return false;
-    const ts = localStorage.getItem(DISMISS_KEY);
-    if (!ts) return false;
-    return Date.now() - parseInt(ts) < 7 * 24 * 60 * 60 * 1000;
-  });
 
-  const activePrompts = activePromptIds
-    .map((id) => JOURNAL_PROMPTS.find((p) => p.id === id))
-    .filter(Boolean) as typeof JOURNAL_PROMPTS;
-
-  const checkinTotal   = CHECKIN_QUESTIONS.length;
+  const checkinTotal    = CHECKIN_QUESTIONS.length;
   const checkinAnswered = checkinResponses.length;
 
   const filteredEntries = entries.filter((e) =>
@@ -441,7 +383,8 @@ export default function JournalPage() {
   }
 
   function handleNewEntry() {
-    const draftExists = hasDraft() || Object.values(responses).some((v) => v.trim());
+    const hasContent = defaultResponse.trim() || addedPrompts.some((p) => p.response.trim());
+    const draftExists = hasDraft() || hasContent;
     if (draftExists && selectedEntryId === "new") {
       setDiscardModalOpen(true);
     } else {
@@ -450,7 +393,8 @@ export default function JournalPage() {
   }
 
   function resetToNew() {
-    setResponses({});
+    setDefaultResponse("");
+    setAddedPrompts([]);
     setCheckinResponses([]);
     setSelectedEntryId("new");
     setSaveMsg(null);
@@ -459,27 +403,40 @@ export default function JournalPage() {
   }
 
   function handleSaveDraft() {
-    const draft = { responses, checkinResponses, timestamp: Date.now() };
+    const draft = { defaultResponse, addedPrompts, checkinResponses, timestamp: Date.now() };
     localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
     setSaveMsg({ text: "Draft saved.", color: "var(--color-secondary)" });
     setTimeout(() => setSaveMsg(null), 2000);
   }
 
+  function addPrompt(text: string) {
+    setAddedPrompts((prev) => [...prev, { id: crypto.randomUUID(), text, response: "" }]);
+  }
+
+  function removePrompt(id: string) {
+    setAddedPrompts((prev) => prev.filter((p) => p.id !== id));
+  }
+
+  function updateAddedResponse(id: string, response: string) {
+    setAddedPrompts((prev) => prev.map((p) => p.id === id ? { ...p, response } : p));
+  }
+
   async function handleSaveEntry() {
-    const hasResponse = Object.values(responses).some((v) => v.trim());
+    const hasResponse = defaultResponse.trim() || addedPrompts.some((p) => p.response.trim());
     if (!hasResponse) {
       setSaveMsg({ text: "Write at least one reflection to save.", color: "var(--color-error)" });
       setTimeout(() => setSaveMsg(null), 3000);
       return;
     }
 
+    const allPrompts = [
+      { promptId: "default", promptText: DEFAULT_PROMPT, response: defaultResponse },
+      ...addedPrompts.map((p) => ({ promptId: p.id, promptText: p.text, response: p.response })),
+    ].filter((p) => p.response.trim());
+
     const content = {
       date: todayISO,
-      prompts: activePrompts.map((p) => ({
-        promptId: p.id,
-        promptText: p.text,
-        response: responses[p.id] ?? "",
-      })),
+      prompts: allPrompts,
       checkin: checkinResponses,
       isDraft: false,
     };
@@ -560,8 +517,6 @@ export default function JournalPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const showPromptBanner = !isViewingEntry && !promptDismissed;
-
   return (
     <div className="flex h-full" style={{ fontFamily: "var(--font-roboto)" }}>
 
@@ -621,27 +576,6 @@ export default function JournalPage() {
             )}
           </div>
 
-          {/* Weekly prompt banner */}
-          {showPromptBanner && (
-            <div className="mb-6 flex items-center justify-between gap-3 px-4 py-3 rounded-lg animate-fade-in" style={{ backgroundColor: "rgba(27,46,75,0.04)", border: "1px solid var(--color-border)", borderRadius: 8 }}>
-              <p style={{ fontSize: 13, color: "var(--color-body)" }}>Using these prompts again next week?</p>
-              <div className="flex gap-2 shrink-0">
-                <button
-                  onClick={() => { localStorage.setItem(DISMISS_KEY, String(Date.now())); setPromptDismissed(true); }}
-                  style={{ fontSize: 12, fontWeight: 600, color: "var(--color-navy)", border: "1px solid var(--color-navy)", borderRadius: 6, padding: "5px 12px", backgroundColor: "transparent", cursor: "pointer", fontFamily: "var(--font-roboto)" }}
-                >
-                  Keep them
-                </button>
-                <button
-                  onClick={() => setPromptBankOpen(true)}
-                  style={{ fontSize: 12, fontWeight: 600, color: "var(--color-secondary)", border: "1px solid var(--color-border)", borderRadius: 6, padding: "5px 12px", backgroundColor: "transparent", cursor: "pointer", fontFamily: "var(--font-roboto)" }}
-                >
-                  Edit prompts
-                </button>
-              </div>
-            </div>
-          )}
-
           {/* Reflections */}
           <div className="mb-8">
             <h2 style={{ fontFamily: "var(--font-lora)", fontWeight: 600, fontSize: 16, color: "var(--color-body)", marginBottom: 16 }}>Reflections</h2>
@@ -651,13 +585,60 @@ export default function JournalPage() {
                   <PromptCard key={pr.promptId} number={i + 1} promptText={pr.promptText} response={pr.response} onResponseChange={() => {}} />
                 ))
               ) : (
-                activePrompts.map((prompt, i) => (
+                <>
+                  {/* Default prompt */}
                   <PromptCard
-                    key={prompt.id} number={i + 1} promptText={prompt.text}
-                    response={responses[prompt.id] ?? ""}
-                    onResponseChange={(v) => setResponses((prev) => ({ ...prev, [prompt.id]: v }))}
+                    number={1}
+                    promptText={DEFAULT_PROMPT}
+                    response={defaultResponse}
+                    onResponseChange={setDefaultResponse}
                   />
-                ))
+
+                  {/* User-added prompts */}
+                  {addedPrompts.map((p, i) => (
+                    <div key={p.id} className="relative">
+                      <PromptCard
+                        number={i + 2}
+                        promptText={p.text}
+                        response={p.response}
+                        onResponseChange={(v) => updateAddedResponse(p.id, v)}
+                      />
+                      <button
+                        onClick={() => removePrompt(p.id)}
+                        className="absolute top-3 right-14 flex items-center justify-center rounded hover:bg-[rgba(27,46,75,0.06)]"
+                        style={{ width: 28, height: 28 }}
+                        aria-label="Remove prompt"
+                      >
+                        <X size={14} color="var(--color-secondary)" />
+                      </button>
+                    </div>
+                  ))}
+
+                  {/* Add a prompt button */}
+                  {addedPrompts.length < PRESET_PROMPTS.length && (
+                    <div className="relative" style={{ display: "inline-block" }}>
+                      <button
+                        onClick={() => setPromptPickerOpen((o) => !o)}
+                        className="flex items-center gap-2 px-4 py-2 rounded-lg transition-colors hover:bg-[rgba(27,46,75,0.06)]"
+                        style={{ fontSize: 13, color: "var(--color-navy)", fontWeight: 600, border: "1px dashed var(--color-border)", borderRadius: 8, cursor: "pointer", backgroundColor: "transparent", fontFamily: "var(--font-roboto)" }}
+                      >
+                        <Plus size={14} /> Add a prompt
+                      </button>
+                      {promptPickerOpen && (
+                        <>
+                          <div className="fixed inset-0 z-20" onClick={() => setPromptPickerOpen(false)} aria-hidden="true" />
+                          <div style={{ position: "relative", zIndex: 30 }}>
+                            <PromptPicker
+                              usedTexts={addedPrompts.map((p) => p.text)}
+                              onSelect={addPrompt}
+                              onClose={() => setPromptPickerOpen(false)}
+                            />
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </div>
@@ -714,8 +695,7 @@ export default function JournalPage() {
         )}
       </div>
 
-      {supportOpen     && <SupportModal onClose={() => setSupportOpen(false)} />}
-      {promptBankOpen  && <PromptBankModal activeIds={activePromptIds} onSave={setActivePromptIds} onClose={() => setPromptBankOpen(false)} />}
+      {supportOpen      && <SupportModal onClose={() => setSupportOpen(false)} />}
       {discardModalOpen && <DiscardDraftModal onKeep={() => setDiscardModalOpen(false)} onDiscard={resetToNew} />}
     </div>
   );
