@@ -465,7 +465,7 @@ export default function JournalPage() {
     setTimeout(() => setSaveMsg(null), 2000);
   }
 
-  function handleSaveEntry() {
+  async function handleSaveEntry() {
     const hasResponse = Object.values(responses).some((v) => v.trim());
     if (!hasResponse) {
       setSaveMsg({ text: "Write at least one reflection to save.", color: "var(--color-error)" });
@@ -473,9 +473,7 @@ export default function JournalPage() {
       return;
     }
 
-    const newEntry: JournalEntry = {
-      id: crypto.randomUUID(),
-      userId: authUserId,
+    const content = {
       date: todayISO,
       prompts: activePrompts.map((p) => ({
         promptId: p.id,
@@ -484,8 +482,30 @@ export default function JournalPage() {
       })),
       checkin: checkinResponses,
       isDraft: false,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+    };
+
+    const { data, error } = await supabase
+      .from("journal_entries")
+      .insert({ user_id: authUserId, content })
+      .select()
+      .single();
+
+    if (error) {
+      console.error("[Journal] insert error:", error);
+      setSaveMsg({ text: "Failed to save. Please try again.", color: "var(--color-error)" });
+      setTimeout(() => setSaveMsg(null), 3000);
+      return;
+    }
+
+    const newEntry: JournalEntry = {
+      id: data.id as string,
+      userId: authUserId,
+      date: todayISO,
+      prompts: content.prompts,
+      checkin: content.checkin,
+      isDraft: false,
+      createdAt: data.created_at as string,
+      updatedAt: data.updated_at as string,
     };
 
     setEntries((prev) => [newEntry, ...prev]);

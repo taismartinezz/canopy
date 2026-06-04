@@ -7,11 +7,11 @@ import {
   useDraggable, useDroppable,
 } from "@dnd-kit/core";
 import {
-  EVENTS, ACTIVITY, TASKS, DASHBOARD_POSTS, USERS,
+  EVENTS, ACTIVITY, TASKS, DASHBOARD_POSTS,
   formatRelativeTime, formatDate, getUser, CURRENT_USER_ID, getStoredProject,
 } from "@/lib/mock-data";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
-import type { Task, ActivityEvent, CalendarEvent, DashboardPost, TaskStatus } from "@/types";
+import type { Task, ActivityEvent, CalendarEvent, DashboardPost, TaskStatus, User } from "@/types";
 import Avatar from "@/components/ui/Avatar";
 import { Plus, ChevronRight, X } from "lucide-react";
 import Link from "next/link";
@@ -55,28 +55,55 @@ const inlineInputStyle: React.CSSProperties = {
 
 // ── Upcoming widget ───────────────────────────────────────────────────────────
 
-function UpcomingWidget({ events: initialEvents }: { events: CalendarEvent[] }) {
+function UpcomingWidget({
+  events: initialEvents,
+  projectId,
+}: {
+  events: CalendarEvent[];
+  projectId: string;
+}) {
   const [events, setEvents] = useState<CalendarEvent[]>(initialEvents);
   const [showForm, setShowForm] = useState(false);
   const [title, setTitle]   = useState("");
   const [date, setDate]     = useState("");
   const [time, setTime]     = useState("");
 
+  // Sync if parent provides new events (Supabase fetch resolves after mount)
+  useEffect(() => { setEvents(initialEvents); }, [initialEvents]);
+
   const upcoming = events
     .filter((e) => new Date(e.date) >= new Date(new Date().toDateString()))
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
     .slice(0, 5);
 
-  function handleAdd() {
+  async function handleAdd() {
     if (!title.trim() || !date) return;
-    const newEvent: CalendarEvent = {
-      id: crypto.randomUUID(),
-      title: title.trim(),
-      date,
-      time: time || undefined,
-      projectId: getStoredProject().id,
-    };
-    setEvents((prev) => [newEvent, ...prev]);
+
+    if (projectId) {
+      const { data, error } = await supabase
+        .from("events")
+        .insert({ project_id: projectId, title: title.trim(), date, time: time || null })
+        .select()
+        .single();
+      if (error) {
+        console.error("[UpcomingWidget] event insert error:", error);
+      } else if (data) {
+        const newEvent: CalendarEvent = {
+          id: data.id as string,
+          title: data.title as string,
+          date: data.date as string,
+          time: (data.time as string) ?? undefined,
+          projectId: data.project_id as string,
+        };
+        setEvents((prev) => [newEvent, ...prev]);
+      }
+    } else {
+      // Demo fallback
+      setEvents((prev) => [
+        ...prev,
+        { id: crypto.randomUUID(), title: title.trim(), date, time: time || undefined, projectId },
+      ]);
+    }
     setTitle(""); setDate(""); setTime("");
     setShowForm(false);
   }
@@ -191,11 +218,13 @@ function TeamActivityWidget({ events }: { events: ActivityEvent[] }) {
 
 // ── Mini task card ────────────────────────────────────────────────────────────
 
-function MiniTaskCardContent({ task }: { task: Task }) {
+function MiniTaskCardContent({ task, teamMembers }: { task: Task; teamMembers: User[] }) {
   const priority  = PRIORITY_COLORS[task.priority];
   const priorityBg = PRIORITY_BG[task.priority];
   const symbol    = PRIORITY_SYMBOLS[task.priority];
-  const assignees = task.assigneeIds.map((id) => USERS.find((u) => u.id === id)).filter(Boolean);
+  const assignees = task.assigneeIds
+    .map((id) => teamMembers.find((u) => u.id === id) ?? getUser(id))
+    .filter(Boolean) as User[];
 
   return (
     <div className="p-3">
@@ -219,7 +248,11 @@ function MiniTaskCardContent({ task }: { task: Task }) {
 
 // ── Draggable mini task card ──────────────────────────────────────────────────
 
-function DraggableMiniTaskCard({ task, onClick, isMobile }: { task: Task; onClick: () => void; isMobile: boolean }) {
+function DraggableMiniTaskCard({
+  task, onClick, isMobile, teamMembers,
+}: {
+  task: Task; onClick: () => void; isMobile: boolean; teamMembers: User[];
+}) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: task.id });
 
   return (
@@ -240,7 +273,7 @@ function DraggableMiniTaskCard({ task, onClick, isMobile }: { task: Task; onClic
       onMouseEnter={(e) => { if (!isDragging) { const el = e.currentTarget as HTMLElement; el.style.borderColor = "#B8C4D4"; el.style.boxShadow = "var(--shadow-card)"; } }}
       onMouseLeave={(e) => { if (!isDragging) { const el = e.currentTarget as HTMLElement; el.style.borderColor = "var(--color-border)"; el.style.boxShadow = ""; } }}
     >
-      <MiniTaskCardContent task={task} />
+      <MiniTaskCardContent task={task} teamMembers={teamMembers} />
     </div>
   );
 }
@@ -248,11 +281,12 @@ function DraggableMiniTaskCard({ task, onClick, isMobile }: { task: Task; onClic
 // ── Droppable kanban column ───────────────────────────────────────────────────
 
 function DroppableColumn({
-  status, displayTasks, total, isMobile, onTaskClick, onAddTask,
+  status, displayTasks, total, isMobile, onTaskClick, onAddTask, teamMembers,
 }: {
   status: TaskStatus; displayTasks: Task[]; total: number;
   isMobile: boolean; onTaskClick: (task: Task) => void;
   onAddTask: (status: TaskStatus) => void;
+  teamMembers: User[];
 }) {
   const cfg = STATUS_CONFIG[status];
   const { setNodeRef, isOver } = useDroppable({ id: status });
@@ -271,7 +305,7 @@ function DroppableColumn({
 
       <div ref={setNodeRef} className="space-y-2" style={{ border: isOver ? "2px dashed #1B2E4B" : "2px dashed transparent", borderRadius: 8, padding: 4, minHeight: 60, transition: "border-color 0.15s" }}>
         {displayTasks.map((task) => (
-          <DraggableMiniTaskCard key={task.id} task={task} onClick={() => onTaskClick(task)} isMobile={isMobile} />
+          <DraggableMiniTaskCard key={task.id} task={task} onClick={() => onTaskClick(task)} isMobile={isMobile} teamMembers={teamMembers} />
         ))}
         {total > 3 && (
           <Link href="/tasks" style={{ fontSize: 12, color: "var(--color-navy)", textDecoration: "none", display: "block", paddingTop: 4, paddingLeft: 4 }}>
@@ -294,12 +328,13 @@ function DroppableColumn({
 // ── Kanban preview ────────────────────────────────────────────────────────────
 
 function KanbanPreview({
-  tasks, onTaskClick, onMoveTask, onAddTask,
+  tasks, onTaskClick, onMoveTask, onAddTask, teamMembers,
 }: {
   tasks: Task[];
   onTaskClick: (task: Task) => void;
   onMoveTask: (taskId: string, status: TaskStatus) => void;
   onAddTask: (status: TaskStatus) => void;
+  teamMembers: User[];
 }) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [isMobile, setIsMobile] = useState(false);
@@ -360,13 +395,14 @@ function KanbanPreview({
                   isMobile={isMobile}
                   onTaskClick={onTaskClick}
                   onAddTask={onAddTask}
+                  teamMembers={teamMembers}
                 />
               ))}
             </div>
             <DragOverlay>
               {activeTask && (
                 <div style={{ opacity: 0.9, backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 8, boxShadow: "0 8px 24px rgba(27,46,75,0.18)" }}>
-                  <MiniTaskCardContent task={activeTask} />
+                  <MiniTaskCardContent task={activeTask} teamMembers={teamMembers} />
                 </div>
               )}
             </DragOverlay>
@@ -379,29 +415,70 @@ function KanbanPreview({
 
 // ── Posts card (Opportunities / Lab Wins) ─────────────────────────────────────
 
-function PostsCard({ title, posts: initialPosts, type }: { title: string; posts: DashboardPost[]; type: "opportunity" | "lab_win" }) {
+function PostsCard({
+  title,
+  posts: initialPosts,
+  type,
+  projectId,
+  userId,
+  teamMembers,
+}: {
+  title: string;
+  posts: DashboardPost[];
+  type: "opportunity" | "lab_win";
+  projectId: string;
+  userId: string;
+  teamMembers: User[];
+}) {
   const [posts, setPosts] = useState<DashboardPost[]>(initialPosts);
   const [showForm, setShowForm] = useState(false);
   const [content, setContent] = useState("");
 
+  useEffect(() => { setPosts(initialPosts); }, [initialPosts]);
+
   const filtered = posts.filter((p) => p.type === type);
 
-  function handlePost() {
+  const table = type === "lab_win" ? "lab_wins" : "opportunities";
+
+  async function handlePost() {
     if (!content.trim()) return;
-    const author = getUser(CURRENT_USER_ID);
-    const newPost: DashboardPost = {
-      id: crypto.randomUUID(),
-      authorId: CURRENT_USER_ID,
-      content: content.trim(),
-      createdAt: new Date().toISOString(),
-      type,
-    };
-    setPosts((prev) => [newPost, ...prev]);
+
+    if (projectId && userId) {
+      const { data, error } = await supabase
+        .from(table)
+        .insert({ project_id: projectId, author_id: userId, content: content.trim() })
+        .select()
+        .single();
+      if (error) {
+        console.error(`[PostsCard] ${table} insert error:`, error);
+      } else if (data) {
+        const newPost: DashboardPost = {
+          id: data.id as string,
+          authorId: data.author_id as string,
+          content: data.content as string,
+          createdAt: data.created_at as string,
+          type,
+        };
+        setPosts((prev) => [newPost, ...prev]);
+      }
+    } else {
+      // Demo fallback
+      setPosts((prev) => [
+        {
+          id: crypto.randomUUID(),
+          authorId: CURRENT_USER_ID,
+          content: content.trim(),
+          createdAt: new Date().toISOString(),
+          type,
+        },
+        ...prev,
+      ]);
+    }
     setContent("");
     setShowForm(false);
   }
 
-  const currentUser = getUser(CURRENT_USER_ID);
+  const currentUser = teamMembers.find((u) => u.id === userId) ?? getUser(CURRENT_USER_ID);
 
   return (
     <Card>
@@ -422,7 +499,7 @@ function PostsCard({ title, posts: initialPosts, type }: { title: string; posts:
           <p style={{ color: "var(--color-secondary)", fontSize: 13 }}>Nothing posted yet. Add the first one.</p>
         )}
         {filtered.map((post) => {
-          const author = getUser(post.authorId);
+          const author = teamMembers.find((u) => u.id === post.authorId) ?? getUser(post.authorId);
           return (
             <div key={post.id} className="flex gap-3">
               {author && <Avatar user={author} size={24} className="mt-0.5 shrink-0" />}
@@ -479,48 +556,135 @@ export default function DashboardPage() {
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [modalStatus, setModalStatus] = useState<TaskStatus | null>(null);
   const [projectName, setProjectName] = useState("");
+  const [projectId, setProjectId]     = useState("");
+  const [userId, setUserId]           = useState("");
+  const [teamMembers, setTeamMembers] = useState<User[]>([]);
   const [dashEvents, setDashEvents]   = useState<CalendarEvent[]>([]);
   const [dashActivity, setDashActivity] = useState<ActivityEvent[]>([]);
   const [dashPosts, setDashPosts]     = useState<DashboardPost[]>([]);
 
   useEffect(() => {
     if (isSupabaseConfigured) {
-      supabase.auth.getSession().then(({ data: { session } }) => {
+      supabase.auth.getSession().then(async ({ data: { session } }) => {
         const user = session?.user ?? null;
         if (!user) return;
-        supabase
+        setUserId(user.id);
+
+        const { data: up } = await supabase
           .from("user_profiles")
           .select("project_id, projects(name)")
           .eq("id", user.id)
-          .maybeSingle()
-          .then(({ data: up }) => {
-            if (!up?.project_id) return;
-            const proj = Array.isArray(up.projects) ? up.projects[0] : up.projects;
-            if (proj) setProjectName((proj as Record<string, string>).name ?? "");
+          .maybeSingle();
 
-            supabase
-              .from("tasks")
-              .select("*")
-              .eq("project_id", up.project_id as string)
-              .order("created_at", { ascending: false })
-              .then(({ data, error }) => {
-                if (!error && data) setTasks(data.map((row) => ({
-                  id: row.id as string,
-                  projectId: row.project_id as string,
-                  title: row.title as string,
-                  description: (row.description as string) ?? "",
-                  status: row.status as TaskStatus,
-                  priority: row.priority as Task["priority"],
-                  assigneeIds: (row.assignee_ids as string[]) ?? [],
-                  dueDate: row.due_date as string | undefined,
-                  createdAt: row.created_at as string,
-                  updatedAt: row.updated_at as string,
-                  comments: (row.comments as Task["comments"]) ?? [],
-                  files: (row.files as Task["files"]) ?? [],
-                  links: (row.links as Task["links"]) ?? [],
-                })));
-              });
-          });
+        if (!up?.project_id) return;
+        const pid = up.project_id as string;
+        setProjectId(pid);
+
+        const proj = Array.isArray(up.projects) ? up.projects[0] : up.projects;
+        if (proj) setProjectName((proj as Record<string, string>).name ?? "");
+
+        // Fetch team members for avatar display
+        const { data: members } = await supabase
+          .from("team_members")
+          .select("*, user_profiles(name, avatar_color, avatar_initials, role)")
+          .eq("project_id", pid);
+
+        if (members) {
+          setTeamMembers(members.map((row) => {
+            const p = Array.isArray(row.user_profiles) ? row.user_profiles[0] : row.user_profiles;
+            const profile = p as Record<string, string> | null;
+            return {
+              id: row.user_id as string,
+              name: profile?.name ?? "Team Member",
+              email: "",
+              role: (row.role ?? "researcher") as User["role"],
+              avatarColor: profile?.avatar_color ?? "#B4D4E3",
+              avatarInitials: profile?.avatar_initials ?? "??",
+            } as User;
+          }));
+        }
+
+        // Fetch tasks
+        const { data: taskData, error: taskError } = await supabase
+          .from("tasks")
+          .select("*")
+          .eq("project_id", pid)
+          .order("created_at", { ascending: false });
+        if (taskError) console.error("[Dashboard] tasks error:", taskError);
+        if (!taskError && taskData) {
+          setTasks(taskData.map((row) => ({
+            id: row.id as string,
+            projectId: row.project_id as string,
+            title: row.title as string,
+            description: (row.description as string) ?? "",
+            status: row.status as TaskStatus,
+            priority: row.priority as Task["priority"],
+            assigneeIds: (row.assignee_ids as string[]) ?? [],
+            dueDate: row.due_date as string | undefined,
+            createdAt: row.created_at as string,
+            updatedAt: row.updated_at as string,
+            comments: (row.comments as Task["comments"]) ?? [],
+            files: (row.files as Task["files"]) ?? [],
+            links: (row.links as Task["links"]) ?? [],
+          })));
+        }
+
+        // Fetch events
+        const { data: evData, error: evError } = await supabase
+          .from("events")
+          .select("*")
+          .eq("project_id", pid)
+          .order("date", { ascending: true });
+        if (evError) console.error("[Dashboard] events error:", evError);
+        if (!evError && evData) {
+          setDashEvents(evData.map((row) => ({
+            id: row.id as string,
+            title: row.title as string,
+            date: row.date as string,
+            time: (row.time as string) ?? undefined,
+            projectId: row.project_id as string,
+          })));
+        }
+
+        // Fetch lab wins
+        const { data: winsData, error: winsError } = await supabase
+          .from("lab_wins")
+          .select("*")
+          .eq("project_id", pid)
+          .order("created_at", { ascending: false });
+        if (winsError) console.error("[Dashboard] lab_wins error:", winsError);
+        if (!winsError && winsData) {
+          setDashPosts((prev) => [
+            ...prev.filter((p) => p.type !== "lab_win"),
+            ...winsData.map((row) => ({
+              id: row.id as string,
+              authorId: row.author_id as string,
+              content: row.content as string,
+              createdAt: row.created_at as string,
+              type: "lab_win" as const,
+            })),
+          ]);
+        }
+
+        // Fetch opportunities
+        const { data: oppsData, error: oppsError } = await supabase
+          .from("opportunities")
+          .select("*")
+          .eq("project_id", pid)
+          .order("created_at", { ascending: false });
+        if (oppsError) console.error("[Dashboard] opportunities error:", oppsError);
+        if (!oppsError && oppsData) {
+          setDashPosts((prev) => [
+            ...prev.filter((p) => p.type !== "opportunity"),
+            ...oppsData.map((row) => ({
+              id: row.id as string,
+              authorId: row.author_id as string,
+              content: row.content as string,
+              createdAt: row.created_at as string,
+              type: "opportunity" as const,
+            })),
+          ]);
+        }
       });
       return;
     }
@@ -541,6 +705,8 @@ export default function DashboardPage() {
   const moveTask = useCallback((taskId: string, status: TaskStatus) => {
     setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, status } : t)));
     setSelectedTask((prev) => (prev?.id === taskId ? { ...prev, status } : prev));
+    supabase.from("tasks").update({ status }).eq("id", taskId)
+      .then(({ error }) => { if (error) console.error("[Dashboard] moveTask error:", error); });
   }, []);
 
   const addTask = useCallback((task: Task) => {
@@ -560,7 +726,7 @@ export default function DashboardPage() {
 
       {/* Row 1 */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5 mb-4 md:mb-5">
-        <UpcomingWidget events={dashEvents} />
+        <UpcomingWidget events={dashEvents} projectId={projectId} />
         <TeamActivityWidget events={dashActivity} />
       </div>
 
@@ -571,13 +737,28 @@ export default function DashboardPage() {
           onTaskClick={setSelectedTask}
           onMoveTask={moveTask}
           onAddTask={(status) => setModalStatus(status)}
+          teamMembers={teamMembers}
         />
       </div>
 
       {/* Row 3: Opportunities + Lab Wins */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
-        <PostsCard title="Opportunities" posts={dashPosts} type="opportunity" />
-        <PostsCard title="Lab Wins" posts={dashPosts} type="lab_win" />
+        <PostsCard
+          title="Opportunities"
+          posts={dashPosts}
+          type="opportunity"
+          projectId={projectId}
+          userId={userId}
+          teamMembers={teamMembers}
+        />
+        <PostsCard
+          title="Lab Wins"
+          posts={dashPosts}
+          type="lab_win"
+          projectId={projectId}
+          userId={userId}
+          teamMembers={teamMembers}
+        />
       </div>
 
       {/* Task detail panel */}
@@ -586,6 +767,7 @@ export default function DashboardPage() {
           task={selectedTask}
           onClose={() => setSelectedTask(null)}
           onUpdateStatus={(status) => moveTask(selectedTask.id, status)}
+          teamMembers={teamMembers}
         />
       )}
 
@@ -596,6 +778,9 @@ export default function DashboardPage() {
           initialStatus={modalStatus}
           onSave={addTask}
           onClose={() => setModalStatus(null)}
+          teamMembers={teamMembers}
+          currentUserId={userId}
+          projectId={projectId}
         />
       )}
 

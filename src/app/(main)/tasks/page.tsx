@@ -333,6 +333,7 @@ export default function TasksPage() {
   const [modalState, setModalState] = useState<ModalState>(null);
   const [teamMembers, setTeamMembers] = useState<User[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string>("");
+  const [projectId, setProjectId] = useState<string>("");
 
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
@@ -348,6 +349,7 @@ export default function TasksPage() {
 
       const projectId = profile?.project_id as string | undefined;
       if (!projectId) { setLoading(false); return; }
+      setProjectId(projectId);
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: members } = await (supabase
@@ -410,6 +412,8 @@ export default function TasksPage() {
       const activeTask = prev.find((t) => t.id === active.id);
       const overTask   = prev.find((t) => t.id === over.id);
       if (!activeTask || !overTask || activeTask.status === overTask.status) return prev;
+      supabase.from("tasks").update({ status: overTask.status }).eq("id", active.id)
+        .then(({ error }) => { if (error) console.error("[Tasks] drag status error:", error); });
       return prev.map((t) => t.id === active.id ? { ...t, status: overTask.status } : t);
     });
   }, []);
@@ -417,6 +421,8 @@ export default function TasksPage() {
   const moveTask = useCallback((taskId: string, status: TaskStatus) => {
     setTasks((prev) => prev.map((t) => t.id === taskId ? { ...t, status } : t));
     setSelectedTask((prev) => prev?.id === taskId ? { ...prev, status } : prev);
+    supabase.from("tasks").update({ status }).eq("id", taskId)
+      .then(({ error }) => { if (error) console.error("[Tasks] moveTask error:", error); });
   }, []);
 
   const updateTask = useCallback((taskId: string, updates: Partial<Task>) => {
@@ -438,6 +444,8 @@ export default function TasksPage() {
   const deleteTask = useCallback((taskId: string) => {
     setTasks((prev) => prev.filter((t) => t.id !== taskId));
     setSelectedTask((prev) => prev?.id === taskId ? null : prev);
+    supabase.from("tasks").delete().eq("id", taskId)
+      .then(({ error }) => { if (error) console.error("[Tasks] deleteTask error:", error); });
   }, []);
 
   const filteredTasks = tasks.filter((t) =>
@@ -581,6 +589,7 @@ export default function TasksPage() {
           onClose={() => setModalState(null)}
           teamMembers={teamMembers}
           currentUserId={currentUserId}
+          projectId={projectId}
         />
       )}
 

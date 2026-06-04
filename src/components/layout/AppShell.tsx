@@ -7,7 +7,6 @@ import {
   LayoutDashboard, CheckSquare, BookOpen, BookMarked, Users,
   Bell, ChevronDown, LogOut, Settings, User as UserIcon, Menu, X,
 } from "lucide-react";
-import { NOTIFICATIONS } from "@/lib/mock-data";
 import type { User } from "@/types";
 import { supabase } from "@/lib/supabase";
 import Toast from "@/components/ui/Toast";
@@ -145,8 +144,16 @@ function SidebarBody({
 
 // ── Notification panel ────────────────────────────────────────────────────────
 
-function NotifPanel({ onClose, userId }: { onClose: () => void; userId: string }) {
-  const notifs = NOTIFICATIONS.filter((n) => n.recipientId === userId);
+type SupabaseNotif = {
+  id: string;
+  type: string;
+  title: string;
+  body?: string;
+  read: boolean;
+  created_at: string;
+};
+
+function NotifPanel({ onClose, notifications }: { onClose: () => void; notifications: SupabaseNotif[] }) {
   return (
     <div
       className="absolute right-0 top-full mt-2 animate-fade-in"
@@ -160,16 +167,16 @@ function NotifPanel({ onClose, userId }: { onClose: () => void; userId: string }
         </button>
       </div>
       <div style={{ maxHeight: 320, overflowY: "auto" }}>
-        {notifs.length === 0 ? (
+        {notifications.length === 0 ? (
           <p className="px-4 py-6 text-center" style={{ color: "var(--color-secondary)", fontSize: 13 }}>No notifications</p>
         ) : (
-          notifs.map((n) => (
+          notifications.map((n) => (
             <div key={n.id} className="px-4 py-3" style={{ backgroundColor: n.read ? undefined : "rgba(27,46,75,0.03)", borderBottom: "1px solid var(--color-border)" }}>
               <p style={{ fontSize: 13, color: "var(--color-body)" }}>
                 {!n.read && <span className="inline-block w-2 h-2 rounded-full mr-2" style={{ backgroundColor: "var(--color-navy)", verticalAlign: "middle" }} />}
-                {n.message}
+                {n.title}{n.body ? ` — ${n.body}` : ""}
               </p>
-              <p style={{ fontSize: 11, color: "var(--color-secondary)", marginTop: 2 }}>{relTime(n.createdAt)}</p>
+              <p style={{ fontSize: 11, color: "var(--color-secondary)", marginTop: 2 }}>{relTime(n.created_at)}</p>
             </div>
           ))
         )}
@@ -239,10 +246,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<any>(null);
   const [project, setProject] = useState<any>(null);
   const [team, setTeam] = useState<User[]>([]);
+  const [notifications, setNotifications] = useState<SupabaseNotif[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
   const hasFetched = useRef(false);
 
   // Auth gate + data load
   useEffect(() => {
+    let notifChannel: ReturnType<typeof supabase.channel> | null = null;
+
     async function init() {
       try {
         const { data: { session } } = await supabase.auth.getSession();
@@ -292,6 +303,32 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           }
         }
 
+        // Fetch notifications
+        const { data: notifs, error: notifError } = await supabase
+          .from("notifications")
+          .select("*")
+          .eq("user_id", user.id)
+          .order("created_at", { ascending: false });
+        if (notifError) console.error("[AppShell] notifications error:", notifError);
+        if (notifs) {
+          setNotifications(notifs as SupabaseNotif[]);
+          setUnreadCount(notifs.filter((n) => !n.read).length);
+        }
+
+        // Realtime subscription for new notifications
+        notifChannel = supabase
+          .channel(`notifications:${user.id}`)
+          .on("postgres_changes", {
+            event: "INSERT",
+            schema: "public",
+            table: "notifications",
+            filter: `user_id=eq.${user.id}`,
+          }, (payload) => {
+            setNotifications((prev) => [payload.new as SupabaseNotif, ...prev]);
+            setUnreadCount((prev) => prev + 1);
+          })
+          .subscribe();
+
         setProfile(prof);
         setAuthed(true);
       } catch (err) {
@@ -309,11 +346,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       if (event === "SIGNED_OUT") router.replace("/login");
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      subscription.unsubscribe();
+      notifChannel?.unsubscribe();
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  const unreadCount = NOTIFICATIONS.filter((n) => !n.read).length;
 
   useEffect(() => { setMobileNavOpen(false); setNotifOpen(false); setProfileOpen(false); }, [pathname]);
 
@@ -444,7 +482,24 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             {/* Notification bell */}
             <div className="relative">
               <button
-                onClick={() => { setNotifOpen(!notifOpen); setProfileOpen(false); }}
+                onClick={() => {
+                  const opening = !notifOpen;
+                  setNotifOpen(opening);
+                  setProfileOpen(false);
+                  if (opening && unreadCount > 0 && profile?.id) {
+                    supabase
+                      .from("notifications")
+                      .update({ read: true })
+                      .eq("user_id", profile.id)
+                      .eq("read", false)
+                      .then(({ error }) => {
+                        if (!error) {
+                          setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+                          setUnreadCount(0);
+                        }
+                      });
+                  }
+                }}
                 className="relative flex items-center justify-center rounded-lg transition-colors hover:bg-[rgba(27,46,75,0.06)]"
                 style={{ width: 44, height: 44 }}
                 aria-label={`Notifications, ${unreadCount} unread`}
@@ -452,7 +507,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 <Bell size={18} color="var(--color-body)" />
                 <NotifDot count={unreadCount} />
               </button>
-              {notifOpen && <NotifPanel onClose={() => setNotifOpen(false)} userId={profile?.id ?? ""} />}
+              {notifOpen && <NotifPanel onClose={() => setNotifOpen(false)} notifications={notifications} />}
             </div>
 
             {/* User avatar */}

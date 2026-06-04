@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import {
-  formatFileSize, CURRENT_USER_ID,
+  formatFileSize,
 } from "@/lib/mock-data";
 import { supabase } from "@/lib/supabase";
 import type { LiteratureItem, ReadStatus, LiteratureType, LibraryScope, LiteratureFile } from "@/types";
@@ -81,7 +81,14 @@ const labelStyle: React.CSSProperties = {
   letterSpacing: "0.05em", marginBottom: 5, display: "block",
 };
 
-function AddItemModal({ onSave, onClose }: { onSave: (item: LiteratureItem) => void; onClose: () => void }) {
+function AddItemModal({
+  onSave, onClose, projectId, currentUserId,
+}: {
+  onSave: (item: LiteratureItem) => void;
+  onClose: () => void;
+  projectId: string;
+  currentUserId: string;
+}) {
   const [type, setType]       = useState<LiteratureType>("article");
   const [title, setTitle]     = useState("");
   const [authors, setAuthors] = useState("");
@@ -92,6 +99,7 @@ function AddItemModal({ onSave, onClose }: { onSave: (item: LiteratureItem) => v
   const [scope, setScope]     = useState<LibraryScope>("lab");
   const [status, setStatus]   = useState<ReadStatus>("unread");
   const [error, setError]     = useState("");
+  const [saving, setSaving]   = useState(false);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) { if (e.key === "Escape") onClose(); }
@@ -99,28 +107,61 @@ function AddItemModal({ onSave, onClose }: { onSave: (item: LiteratureItem) => v
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  function handleSave() {
+  async function handleSave() {
     if (!title.trim()) { setError("Title is required."); return; }
+    setSaving(true);
     const now = new Date().toISOString();
+
+    const { data, error: insertError } = await supabase
+      .from("literature_items")
+      .insert({
+        project_id: projectId,
+        scope,
+        type,
+        title: title.trim(),
+        authors: authors.split(",").map((a) => a.trim()).filter(Boolean),
+        year: parseInt(year) || new Date().getFullYear(),
+        journal: journal.trim() || null,
+        doi: doi.trim() || null,
+        tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
+        status,
+        rating: 0,
+        notes: null,
+        files: [],
+        added_by: currentUserId,
+        added_at: now,
+        collections: [],
+        related_ids: [],
+      })
+      .select()
+      .single();
+
+    if (insertError) {
+      console.error("[Literature] insert error:", insertError);
+      setError("Failed to save. Please try again.");
+      setSaving(false);
+      return;
+    }
+
     const newItem: LiteratureItem = {
-      id: crypto.randomUUID(),
-      projectId: "p1",
-      scope,
-      type,
-      title: title.trim(),
-      authors: authors.split(",").map((a) => a.trim()).filter(Boolean),
-      year: parseInt(year) || new Date().getFullYear(),
-      journal: journal.trim() || undefined,
-      doi: doi.trim() || undefined,
-      tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
-      status,
-      rating: 0,
-      notes: "",
-      files: [],
-      addedById: CURRENT_USER_ID,
-      addedAt: now,
-      collections: [],
-      relatedIds: [],
+      id: data.id as string,
+      projectId: data.project_id as string,
+      scope: data.scope as LiteratureItem["scope"],
+      type: data.type as LiteratureItem["type"],
+      title: data.title as string,
+      authors: (data.authors as string[]) ?? [],
+      year: (data.year as number) ?? 0,
+      journal: (data.journal as string) ?? undefined,
+      doi: (data.doi as string) ?? undefined,
+      tags: (data.tags as string[]) ?? [],
+      status: data.status as LiteratureItem["status"],
+      rating: data.rating as number,
+      notes: (data.notes as string) ?? "",
+      files: (data.files as LiteratureItem["files"]) ?? [],
+      addedById: data.added_by as string,
+      addedAt: data.added_at as string,
+      collections: (data.collections as string[]) ?? [],
+      relatedIds: (data.related_ids as string[]) ?? [],
     };
     onSave(newItem);
   }
@@ -207,10 +248,10 @@ function AddItemModal({ onSave, onClose }: { onSave: (item: LiteratureItem) => v
 
         <div className="flex justify-end gap-2 mt-6">
           <button onClick={onClose} style={{ fontSize: 13, fontWeight: 600, color: "var(--color-body)", border: "1px solid var(--color-border)", borderRadius: 7, padding: "8px 16px", backgroundColor: "transparent", cursor: "pointer", minHeight: 44, fontFamily: "var(--font-roboto)" }}>Cancel</button>
-          <button onClick={handleSave} style={{ fontSize: 13, fontWeight: 700, color: "#fff", backgroundColor: "var(--color-navy)", border: "none", borderRadius: 7, padding: "8px 20px", cursor: "pointer", minHeight: 44, fontFamily: "var(--font-roboto)" }}
-            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "var(--color-navy-hover)"; }}
+          <button onClick={handleSave} disabled={saving} style={{ fontSize: 13, fontWeight: 700, color: "#fff", backgroundColor: "var(--color-navy)", border: "none", borderRadius: 7, padding: "8px 20px", cursor: saving ? "default" : "pointer", minHeight: 44, fontFamily: "var(--font-roboto)", opacity: saving ? 0.7 : 1 }}
+            onMouseEnter={(e) => { if (!saving) (e.currentTarget as HTMLElement).style.backgroundColor = "var(--color-navy-hover)"; }}
             onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "var(--color-navy)"; }}
-          >Add item</button>
+          >{saving ? "Saving…" : "Add item"}</button>
         </div>
       </div>
     </div>
@@ -306,12 +347,13 @@ const DETAIL_TABS = ["Info", "Abstract", "Notes", "Tags", "Files", "Cite", "Rela
 type DetailTab = typeof DETAIL_TABS[number];
 
 function DetailPanelContent({
-  item, onClose, onUpdateItem, allItems,
+  item, onClose, onUpdateItem, allItems, currentUserId,
 }: {
   item: LiteratureItem;
   onClose: () => void;
   onUpdateItem: (id: string, updates: Partial<LiteratureItem>) => void;
   allItems: LiteratureItem[];
+  currentUserId: string;
 }) {
   const [tab, setTab]                     = useState<DetailTab>("Info");
   const [citationStyle, setCitationStyle] = useState<"apa" | "mla" | "chicago">("apa");
@@ -380,7 +422,7 @@ function DetailPanelContent({
       id: crypto.randomUUID(),
       name: file.name,
       size: file.size,
-      uploaderId: CURRENT_USER_ID,
+      uploaderId: currentUserId,
       uploadedAt: new Date().toISOString(),
       ocrStatus: null,
     };
@@ -616,6 +658,8 @@ export default function LiteraturePage() {
   const [collectionsOpen, setCollectionsOpen] = useState(false);
   const [isMobile, setIsMobile]         = useState(false);
   const [addItemOpen, setAddItemOpen]   = useState(false);
+  const [projectId, setProjectId]       = useState("");
+  const [currentUserId, setCurrentUserId] = useState("");
 
   useEffect(() => {
     function check() { setIsMobile(window.innerWidth < 768); }
@@ -628,6 +672,7 @@ export default function LiteraturePage() {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       const user = session?.user ?? null;
       if (!user) { setLoadingItems(false); return; }
+      setCurrentUserId(user.id);
       const { data: profile } = await supabase
         .from("user_profiles")
         .select("project_id")
@@ -635,6 +680,7 @@ export default function LiteraturePage() {
         .maybeSingle();
       const projectId = profile?.project_id as string | undefined;
       if (!projectId) { setLoadingItems(false); return; }
+      setProjectId(projectId);
       supabase
         .from("literature_items")
         .select("*")
@@ -803,17 +849,17 @@ export default function LiteraturePage() {
         <>
           {isMobile ? (
             <div className="fixed inset-0 z-40 animate-slide-in-bottom" style={{ backgroundColor: "var(--color-surface)" }}>
-              <DetailPanelContent item={selectedItem} onClose={() => setSelectedItem(null)} onUpdateItem={updateItem} allItems={items} />
+              <DetailPanelContent item={selectedItem} onClose={() => setSelectedItem(null)} onUpdateItem={updateItem} allItems={items} currentUserId={currentUserId} />
             </div>
           ) : (
             <div className="flex flex-col shrink-0" style={{ width: 340, borderLeft: "1px solid var(--color-border)" }}>
-              <DetailPanelContent item={selectedItem} onClose={() => setSelectedItem(null)} onUpdateItem={updateItem} allItems={items} />
+              <DetailPanelContent item={selectedItem} onClose={() => setSelectedItem(null)} onUpdateItem={updateItem} allItems={items} currentUserId={currentUserId} />
             </div>
           )}
         </>
       )}
 
-      {addItemOpen && <AddItemModal onSave={addItem} onClose={() => setAddItemOpen(false)} />}
+      {addItemOpen && <AddItemModal onSave={addItem} onClose={() => setAddItemOpen(false)} projectId={projectId} currentUserId={currentUserId} />}
     </div>
   );
 }

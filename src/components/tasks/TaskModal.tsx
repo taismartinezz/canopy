@@ -5,6 +5,7 @@ import { X } from "lucide-react";
 import type { Task, TaskStatus, TaskPriority, User } from "@/types";
 import Avatar from "@/components/ui/Avatar";
 import { STATUS_CONFIG, STATUS_ORDER } from "@/components/tasks/TaskDetailPanel";
+import { supabase } from "@/lib/supabase";
 
 // ── Shared input style ────────────────────────────────────────────────────────
 
@@ -42,16 +43,29 @@ export interface TaskModalProps {
   onClose: () => void;
   teamMembers?: User[];
   currentUserId?: string;
+  projectId?: string;
 }
 
-export default function TaskModal({ mode, initialStatus = "todo", task, onSave, onClose, teamMembers = [], currentUserId = "" }: TaskModalProps) {
-  const [title, setTitle]           = useState(task?.title ?? "");
+export default function TaskModal({
+  mode,
+  initialStatus = "todo",
+  task,
+  onSave,
+  onClose,
+  teamMembers = [],
+  currentUserId = "",
+  projectId = "",
+}: TaskModalProps) {
+  const [title, setTitle]             = useState(task?.title ?? "");
   const [description, setDescription] = useState(task?.description ?? "");
-  const [priority, setPriority]     = useState<TaskPriority>(task?.priority ?? "medium");
-  const [dueDate, setDueDate]       = useState(task?.dueDate ?? "");
-  const [status, setStatus]         = useState<TaskStatus>(task?.status ?? initialStatus);
-  const [assigneeIds, setAssigneeIds] = useState<string[]>(task?.assigneeIds ?? (currentUserId ? [currentUserId] : []));
-  const [error, setError]           = useState("");
+  const [priority, setPriority]       = useState<TaskPriority>(task?.priority ?? "medium");
+  const [dueDate, setDueDate]         = useState(task?.dueDate ?? "");
+  const [status, setStatus]           = useState<TaskStatus>(task?.status ?? initialStatus);
+  const [assigneeIds, setAssigneeIds] = useState<string[]>(
+    task?.assigneeIds ?? (currentUserId ? [currentUserId] : [])
+  );
+  const [error, setError]   = useState("");
+  const [saving, setSaving] = useState(false);
 
   function toggleAssignee(id: string) {
     setAssigneeIds((prev) =>
@@ -59,39 +73,126 @@ export default function TaskModal({ mode, initialStatus = "todo", task, onSave, 
     );
   }
 
-  function handleSave() {
+  async function handleSave() {
     if (!title.trim()) { setError("Title is required."); return; }
     setError("");
+    setSaving(true);
 
     const now = new Date().toISOString();
-    const saved: Task = task
-      ? {
-          ...task,
+
+    if (mode === "add") {
+      const { data, error: insertError } = await supabase
+        .from("tasks")
+        .insert({
+          project_id: projectId,
           title: title.trim(),
-          description: description.trim() || undefined,
-          priority,
-          dueDate: dueDate || undefined,
-          status,
-          assigneeIds,
-          updatedAt: now,
-        }
-      : {
-          id: crypto.randomUUID(),
-          projectId: "p1",
-          title: title.trim(),
-          description: description.trim() || undefined,
+          description: description.trim() || null,
           status,
           priority,
-          assigneeIds,
-          dueDate: dueDate || undefined,
-          createdAt: now,
-          updatedAt: now,
+          assignee_ids: assigneeIds,
+          due_date: dueDate || null,
           comments: [],
           files: [],
           links: [],
-        };
+        })
+        .select()
+        .single();
 
-    onSave(saved);
+      if (insertError) {
+        console.error("[TaskModal] insert error:", insertError);
+        setError("Failed to save task. Please try again.");
+        setSaving(false);
+        return;
+      }
+
+      const saved: Task = {
+        id: data.id as string,
+        projectId: data.project_id as string,
+        title: data.title as string,
+        description: (data.description as string) ?? undefined,
+        status: data.status as TaskStatus,
+        priority: data.priority as TaskPriority,
+        assigneeIds: (data.assignee_ids as string[]) ?? [],
+        dueDate: (data.due_date as string) ?? undefined,
+        createdAt: data.created_at as string,
+        updatedAt: data.updated_at as string,
+        comments: [],
+        files: [],
+        links: [],
+      };
+
+      // Notify assignees (not the creator)
+      const toNotify = assigneeIds.filter((id) => id !== currentUserId);
+      if (toNotify.length > 0) {
+        const notifs = toNotify.map((userId) => ({
+          user_id: userId,
+          type: "task_assigned",
+          title: "You were assigned to a task",
+          body: `"${title.trim()}" was assigned to you`,
+          related_id: saved.id,
+          read: false,
+        }));
+        const { error: notifError } = await supabase.from("notifications").insert(notifs);
+        if (notifError) console.error("[TaskModal] notification insert error:", notifError);
+      }
+
+      onSave(saved);
+    } else if (mode === "edit" && task) {
+      const { data, error: updateError } = await supabase
+        .from("tasks")
+        .update({
+          title: title.trim(),
+          description: description.trim() || null,
+          priority,
+          due_date: dueDate || null,
+          status,
+          assignee_ids: assigneeIds,
+          updated_at: now,
+        })
+        .eq("id", task.id)
+        .select()
+        .single();
+
+      if (updateError) {
+        console.error("[TaskModal] update error:", updateError);
+        setError("Failed to save changes. Please try again.");
+        setSaving(false);
+        return;
+      }
+
+      // Notify newly added assignees
+      const prevIds = task.assigneeIds ?? [];
+      const newlyAdded = assigneeIds.filter(
+        (id) => !prevIds.includes(id) && id !== currentUserId
+      );
+      if (newlyAdded.length > 0) {
+        const notifs = newlyAdded.map((userId) => ({
+          user_id: userId,
+          type: "task_assigned",
+          title: "You were assigned to a task",
+          body: `"${title.trim()}" was assigned to you`,
+          related_id: task.id,
+          read: false,
+        }));
+        const { error: notifError } = await supabase.from("notifications").insert(notifs);
+        if (notifError) console.error("[TaskModal] notification insert error:", notifError);
+      }
+
+      const saved: Task = {
+        ...task,
+        title: data.title as string,
+        description: (data.description as string) ?? undefined,
+        priority: data.priority as TaskPriority,
+        dueDate: (data.due_date as string) ?? undefined,
+        status: data.status as TaskStatus,
+        assigneeIds: (data.assignee_ids as string[]) ?? [],
+        updatedAt: data.updated_at as string,
+      };
+
+      onSave(saved);
+    }
+
+    setSaving(false);
   }
 
   return (
@@ -263,6 +364,7 @@ export default function TaskModal({ mode, initialStatus = "todo", task, onSave, 
           </button>
           <button
             onClick={handleSave}
+            disabled={saving}
             style={{
               fontSize: 13,
               fontWeight: 700,
@@ -271,14 +373,15 @@ export default function TaskModal({ mode, initialStatus = "todo", task, onSave, 
               border: "none",
               borderRadius: 7,
               padding: "8px 20px",
-              cursor: "pointer",
+              cursor: saving ? "default" : "pointer",
               minHeight: 44,
               fontFamily: "var(--font-roboto)",
+              opacity: saving ? 0.7 : 1,
             }}
-            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "var(--color-navy-hover)"; }}
+            onMouseEnter={(e) => { if (!saving) (e.currentTarget as HTMLElement).style.backgroundColor = "var(--color-navy-hover)"; }}
             onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "var(--color-navy)"; }}
           >
-            {mode === "add" ? "Add task" : "Save changes"}
+            {saving ? "Saving…" : mode === "add" ? "Add task" : "Save changes"}
           </button>
         </div>
       </div>
