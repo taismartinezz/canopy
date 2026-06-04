@@ -4,15 +4,16 @@ import { useState, useCallback, useEffect } from "react";
 import {
   DndContext, DragEndEvent, DragOverlay, DragStartEvent,
   PointerSensor, useSensor, useSensors, closestCorners,
+  useDroppable,
 } from "@dnd-kit/core";
 import {
   SortableContext, useSortable, verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { LayoutGrid, List, Search, Plus, MoreHorizontal } from "lucide-react";
+import { LayoutGrid, List, Search, Plus, MoreHorizontal, ChevronDown } from "lucide-react";
 import { formatDate } from "@/lib/mock-data";
 import { supabase } from "@/lib/supabase";
-import type { Task, TaskStatus, User, UserRole } from "@/types";
+import type { Task, TaskStatus, TaskPriority, User, UserRole } from "@/types";
 import Avatar from "@/components/ui/Avatar";
 import Toast from "@/components/ui/Toast";
 import TaskDetailPanel, {
@@ -143,7 +144,6 @@ function TaskCard({
         </div>
       )}
 
-      {/* Inline delete confirm */}
       {deleteConfirm && (
         <div
           className="absolute right-0 top-8 z-20 animate-fade-in"
@@ -171,7 +171,7 @@ function TaskCard({
   );
 }
 
-// ── Kanban column ─────────────────────────────────────────────────────────────
+// ── Kanban column (droppable + sortable) ──────────────────────────────────────
 
 function KanbanColumn({
   status,
@@ -193,6 +193,8 @@ function KanbanColumn({
   teamMembers?: User[];
 }) {
   const cfg = STATUS_CONFIG[status];
+  // Make the column itself droppable so empty columns accept drops
+  const { setNodeRef: setDropRef, isOver } = useDroppable({ id: status });
 
   return (
     <div className="flex flex-col" style={{ minWidth: 0, flex: 1 }}>
@@ -206,26 +208,38 @@ function KanbanColumn({
         </span>
       </div>
 
-      <SortableContext items={tasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
-        <div className="flex flex-col gap-2 flex-1">
-          {tasks.length === 0 && (
-            <p style={{ fontSize: 12, color: "var(--color-secondary)", padding: "8px 4px" }}>
-              No tasks yet. Add your first one.
-            </p>
-          )}
-          {tasks.map((task) => (
-            <TaskCard
-              key={task.id}
-              task={task}
-              onClick={() => onTaskClick(task)}
-              onMoveStatus={(s) => onMoveTask(task.id, s)}
-              onEdit={() => onEditTask(task)}
-              onDelete={() => onDeleteTask(task.id)}
-              teamMembers={teamMembers}
-            />
-          ))}
-        </div>
-      </SortableContext>
+      <div
+        ref={setDropRef}
+        style={{
+          flex: 1,
+          borderRadius: 8,
+          border: isOver ? "2px dashed var(--color-navy)" : "2px dashed transparent",
+          transition: "border-color 0.15s",
+          padding: 2,
+          minHeight: 60,
+        }}
+      >
+        <SortableContext items={tasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
+          <div className="flex flex-col gap-2">
+            {tasks.length === 0 && (
+              <p style={{ fontSize: 12, color: "var(--color-secondary)", padding: "8px 4px" }}>
+                No tasks yet. Add your first one.
+              </p>
+            )}
+            {tasks.map((task) => (
+              <TaskCard
+                key={task.id}
+                task={task}
+                onClick={() => onTaskClick(task)}
+                onMoveStatus={(s) => onMoveTask(task.id, s)}
+                onEdit={() => onEditTask(task)}
+                onDelete={() => onDeleteTask(task.id)}
+                teamMembers={teamMembers}
+              />
+            ))}
+          </div>
+        </SortableContext>
+      </div>
 
       <button
         onClick={() => onAddTask(status)}
@@ -313,6 +327,38 @@ function TaskRow({
   );
 }
 
+// ── Filter select ─────────────────────────────────────────────────────────────
+
+function FilterSelect({
+  value, onChange, children,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="relative flex items-center shrink-0">
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="appearance-none pr-6"
+        style={{
+          height: 36, paddingLeft: 10, paddingRight: 24,
+          border: "1px solid var(--color-border)", borderRadius: 7,
+          fontSize: 12, fontFamily: "var(--font-roboto)",
+          backgroundColor: value !== "all" ? "rgba(27,46,75,0.06)" : "var(--color-canvas)",
+          color: value !== "all" ? "var(--color-navy)" : "var(--color-secondary)",
+          fontWeight: value !== "all" ? 600 : 400,
+          outline: "none", cursor: "pointer",
+        }}
+      >
+        {children}
+      </select>
+      <ChevronDown size={12} className="absolute right-2 pointer-events-none" color="var(--color-secondary)" />
+    </div>
+  );
+}
+
 // ── Tasks page ────────────────────────────────────────────────────────────────
 
 function avatarColorFromId(id: string): string {
@@ -329,6 +375,8 @@ export default function TasksPage() {
   const [loading, setLoading] = useState(true);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [search, setSearch] = useState("");
+  const [filterMember, setFilterMember] = useState("all");
+  const [filterPriority, setFilterPriority] = useState("all");
   const [activeId, setActiveId] = useState<string | null>(null);
   const [modalState, setModalState] = useState<ModalState>(null);
   const [teamMembers, setTeamMembers] = useState<User[]>([]);
@@ -347,15 +395,15 @@ export default function TasksPage() {
         .eq("id", user.id)
         .maybeSingle();
 
-      const projectId = profile?.project_id as string | undefined;
-      if (!projectId) { setLoading(false); return; }
-      setProjectId(projectId);
+      const pid = profile?.project_id as string | undefined;
+      if (!pid) { setLoading(false); return; }
+      setProjectId(pid);
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: members } = await (supabase
         .from("team_members")
         .select("*, user_profiles(name, avatar_initials, avatar_color, role)")
-        .eq("project_id", projectId) as any);
+        .eq("project_id", pid) as any);
 
       if (members) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -376,25 +424,28 @@ export default function TasksPage() {
       const { data, error } = await supabase
         .from("tasks")
         .select("*, task_assignees(user_id)")
-        .eq("project_id", projectId)
+        .eq("project_id", pid)
         .order("created_at", { ascending: false });
 
-      if (!error && data) setTasks(data.map((row) => ({
-        id: row.id as string,
-        projectId: row.project_id as string,
-        title: row.title as string,
-        description: row.description as string,
-        status: row.status as TaskStatus,
-        priority: row.priority as Task["priority"],
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        assigneeIds: ((row.task_assignees as any[]) ?? []).map((ta) => ta.user_id as string),
-        dueDate: row.due_date as string | undefined,
-        createdAt: row.created_at as string,
-        updatedAt: row.updated_at as string,
-        comments: (row.comments as Task["comments"]) ?? [],
-        files: (row.files as Task["files"]) ?? [],
-        links: (row.links as Task["links"]) ?? [],
-      })));
+      if (error) console.error("[Tasks] fetch error:", error);
+      if (!error && data) {
+        setTasks(data.map((row) => ({
+          id: row.id as string,
+          projectId: row.project_id as string,
+          title: row.title as string,
+          description: row.description as string,
+          status: row.status as TaskStatus,
+          priority: row.priority as Task["priority"],
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          assigneeIds: ((row.task_assignees as any[]) ?? []).map((ta) => ta.user_id as string),
+          dueDate: row.due_date as string | undefined,
+          createdAt: row.created_at as string,
+          updatedAt: row.updated_at as string,
+          comments: (row.comments as Task["comments"]) ?? [],
+          files: (row.files as Task["files"]) ?? [],
+          links: (row.links as Task["links"]) ?? [],
+        })));
+      }
       setLoading(false);
     });
   }, []);
@@ -409,13 +460,31 @@ export default function TasksPage() {
     setActiveId(null);
     const { active, over } = e;
     if (!over || active.id === over.id) return;
+
+    const activeTaskId = active.id as string;
+    const overId = over.id as string;
+
     setTasks((prev) => {
-      const activeTask = prev.find((t) => t.id === active.id);
-      const overTask   = prev.find((t) => t.id === over.id);
-      if (!activeTask || !overTask || activeTask.status === overTask.status) return prev;
-      supabase.from("tasks").update({ status: overTask.status }).eq("id", active.id)
+      const activeTask = prev.find((t) => t.id === activeTaskId);
+      if (!activeTask) return prev;
+
+      // Determine target status: column droppable (status string) or another task
+      let targetStatus: TaskStatus | undefined;
+      if ((STATUS_ORDER as string[]).includes(overId)) {
+        targetStatus = overId as TaskStatus;
+      } else {
+        const overTask = prev.find((t) => t.id === overId);
+        if (overTask && overTask.status !== activeTask.status) {
+          targetStatus = overTask.status;
+        }
+      }
+
+      if (!targetStatus || targetStatus === activeTask.status) return prev;
+
+      supabase.from("tasks").update({ status: targetStatus }).eq("id", activeTaskId)
         .then(({ error }) => { if (error) console.error("[Tasks] drag status error:", error); });
-      return prev.map((t) => t.id === active.id ? { ...t, status: overTask.status } : t);
+
+      return prev.map((t) => t.id === activeTaskId ? { ...t, status: targetStatus! } : t);
     });
   }, []);
 
@@ -449,15 +518,25 @@ export default function TasksPage() {
       .then(({ error }) => { if (error) console.error("[Tasks] deleteTask error:", error); });
   }, []);
 
-  const filteredTasks = tasks.filter((t) =>
-    search === "" || t.title.toLowerCase().includes(search.toLowerCase())
-  );
+  const filteredTasks = tasks.filter((t) => {
+    if (search && !t.title.toLowerCase().includes(search.toLowerCase())) return false;
+    if (filterMember !== "all" && !t.assigneeIds.includes(filterMember)) return false;
+    if (filterPriority !== "all" && t.priority !== filterPriority) return false;
+    return true;
+  });
 
   const tasksByStatus = Object.fromEntries(
     STATUS_ORDER.map((s) => [s, filteredTasks.filter((t) => t.status === s)])
   ) as Record<TaskStatus, Task[]>;
 
   const activeTask = activeId ? tasks.find((t) => t.id === activeId) : null;
+
+  const filterSelectStyle: React.CSSProperties = {
+    height: 36, fontSize: 12, fontFamily: "var(--font-roboto)",
+    border: "1px solid var(--color-border)", borderRadius: 7,
+    backgroundColor: "var(--color-canvas)", color: "var(--color-secondary)",
+    outline: "none", cursor: "pointer", paddingLeft: 8, paddingRight: 8,
+  };
 
   return (
     <div className="flex flex-col h-full" style={{ fontFamily: "var(--font-roboto)" }}>
@@ -488,14 +567,32 @@ export default function TasksPage() {
             <span className="hidden sm:inline">Add Task</span>
           </button>
         </div>
-        <div className="pb-2 relative">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2" color="var(--color-secondary)" />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search tasks..."
-            style={{ width: "100%", paddingLeft: 32, paddingRight: 12, height: 36, border: "1px solid var(--color-border)", borderRadius: 7, fontSize: 13, fontFamily: "var(--font-roboto)", backgroundColor: "var(--color-canvas)", outline: "none" }}
-          />
+
+        {/* Search + filters row */}
+        <div className="flex items-center gap-2 pb-2 flex-wrap">
+          <div className="relative flex-1 min-w-0" style={{ minWidth: 120 }}>
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2" color="var(--color-secondary)" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search tasks..."
+              style={{ width: "100%", paddingLeft: 32, paddingRight: 12, height: 36, border: "1px solid var(--color-border)", borderRadius: 7, fontSize: 13, fontFamily: "var(--font-roboto)", backgroundColor: "var(--color-canvas)", outline: "none" }}
+            />
+          </div>
+
+          <FilterSelect value={filterMember} onChange={setFilterMember}>
+            <option value="all">All Members</option>
+            {teamMembers.map((u) => (
+              <option key={u.id} value={u.id}>{u.name.split(" ")[0]}</option>
+            ))}
+          </FilterSelect>
+
+          <FilterSelect value={filterPriority} onChange={setFilterPriority}>
+            <option value="all">All Priorities</option>
+            <option value="high">High</option>
+            <option value="medium">Medium</option>
+            <option value="low">Low</option>
+          </FilterSelect>
         </div>
       </div>
 
@@ -568,7 +665,6 @@ export default function TasksPage() {
         ) : null}
       </div>
 
-      {/* Task detail panel */}
       {selectedTask && (
         <TaskDetailPanel
           task={selectedTask}
@@ -580,7 +676,6 @@ export default function TasksPage() {
         />
       )}
 
-      {/* Task modal */}
       {modalState && (
         <TaskModal
           mode={modalState.mode}

@@ -346,29 +346,32 @@ export default function TeamPage() {
         const projectId = profileData?.project_id as string | undefined;
         if (!projectId) { setLoading(false); return; }
 
-        const [{ data: memberData }, { data: taskData }] = await Promise.all([
+        const [{ data: memberData }, { data: assigneeRows, error: assigneeError }] = await Promise.all([
           supabase
             .from("team_members")
             .select("*, user_profiles(name, avatar_color, avatar_initials, institution)")
             .eq("project_id", projectId),
+          // Query through task_assignees so we get all rows regardless of tasks RLS
           supabase
-            .from("tasks")
-            .select("status, task_assignees(user_id)")
-            .eq("project_id", projectId),
+            .from("task_assignees")
+            .select("user_id, tasks!inner(status, project_id)")
+            .eq("tasks.project_id", projectId),
         ]);
 
-        // Build per-user task count map from task_assignees join
+        if (assigneeError) console.error("[Team] task count query error:", assigneeError);
+
+        // Build per-user task count map
         const countMap: Record<string, Record<TaskStatus, number>> = {};
-        if (taskData) {
-          for (const task of taskData) {
-            const assignees = (task.task_assignees as { user_id: string }[]) ?? [];
-            for (const { user_id } of assignees) {
-              if (!countMap[user_id]) {
-                countMap[user_id] = { todo: 0, in_progress: 0, in_review: 0, done: 0 };
-              }
-              const s = task.status as TaskStatus;
-              countMap[user_id][s] = (countMap[user_id][s] ?? 0) + 1;
+        if (assigneeRows) {
+          for (const row of assigneeRows) {
+            const uid = row.user_id as string;
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const taskStatus = ((row.tasks as any)?.status ?? (Array.isArray(row.tasks) ? (row.tasks as any[])[0]?.status : null)) as TaskStatus | null;
+            if (!taskStatus) continue;
+            if (!countMap[uid]) {
+              countMap[uid] = { todo: 0, in_progress: 0, in_review: 0, done: 0 };
             }
+            countMap[uid][taskStatus] = (countMap[uid][taskStatus] ?? 0) + 1;
           }
         }
 

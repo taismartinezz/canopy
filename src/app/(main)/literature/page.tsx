@@ -654,6 +654,8 @@ export default function LiteraturePage() {
   const [addItemOpen, setAddItemOpen]   = useState(false);
   const [projectId, setProjectId]       = useState("");
   const [currentUserId, setCurrentUserId] = useState("");
+  const [typeFilter, setTypeFilter]     = useState<LiteratureType | "all">("all");
+  const [yearSort, setYearSort]         = useState<"desc" | "asc">("desc");
 
   useEffect(() => {
     function check() { setIsMobile(window.innerWidth < 768); }
@@ -730,14 +732,17 @@ export default function LiteraturePage() {
 
   const scopedItems = items.filter((item) => scope === "my" ? item.scope === "my" : item.scope === "lab");
 
-  const filtered = scopedItems.filter((item) => {
-    if (search && !item.title.toLowerCase().includes(search.toLowerCase()) &&
-        !item.authors.some((a) => a.toLowerCase().includes(search.toLowerCase()))) return false;
-    if (statusFilter !== "all" && item.status !== statusFilter) return false;
-    if (activeTag && !item.tags.includes(activeTag)) return false;
-    if (activeCollection !== "lc0" && !item.collections.includes(activeCollection)) return false;
-    return true;
-  });
+  const filtered = scopedItems
+    .filter((item) => {
+      if (search && !item.title.toLowerCase().includes(search.toLowerCase()) &&
+          !item.authors.some((a) => a.toLowerCase().includes(search.toLowerCase()))) return false;
+      if (statusFilter !== "all" && item.status !== statusFilter) return false;
+      if (typeFilter !== "all" && item.type !== typeFilter) return false;
+      if (activeTag && !item.tags.includes(activeTag)) return false;
+      if (activeCollection !== "lc0" && !item.collections.includes(activeCollection)) return false;
+      return true;
+    })
+    .sort((a, b) => yearSort === "desc" ? b.year - a.year : a.year - b.year);
 
   const allTags = [...new Set(scopedItems.flatMap((i) => i.tags))].sort();
   const showingDetailMobile = isMobile && selectedItem !== null;
@@ -787,12 +792,27 @@ export default function LiteraturePage() {
                 style={{ width: "100%", paddingLeft: 30, paddingRight: 8, height: 36, border: "1px solid var(--color-border)", borderRadius: 7, fontSize: 12, fontFamily: "var(--font-roboto)", backgroundColor: "var(--color-canvas)", outline: "none" }} />
             </div>
             <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as ReadStatus | "all")}
-              style={{ height: 36, paddingLeft: 8, paddingRight: 16, border: "1px solid var(--color-border)", borderRadius: 7, fontSize: 12, fontFamily: "var(--font-roboto)", backgroundColor: "var(--color-canvas)", color: "var(--color-body)", outline: "none", cursor: "pointer" }}>
-              <option value="all">All</option>
+              style={{ height: 36, paddingLeft: 8, paddingRight: 8, border: "1px solid var(--color-border)", borderRadius: 7, fontSize: 12, fontFamily: "var(--font-roboto)", backgroundColor: statusFilter !== "all" ? "rgba(27,46,75,0.06)" : "var(--color-canvas)", color: "var(--color-body)", outline: "none", cursor: "pointer" }}>
+              <option value="all">All Status</option>
               <option value="read">Read</option>
               <option value="reading">Reading</option>
               <option value="unread">Unread</option>
             </select>
+            <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value as LiteratureType | "all")}
+              style={{ height: 36, paddingLeft: 8, paddingRight: 8, border: "1px solid var(--color-border)", borderRadius: 7, fontSize: 12, fontFamily: "var(--font-roboto)", backgroundColor: typeFilter !== "all" ? "rgba(27,46,75,0.06)" : "var(--color-canvas)", color: "var(--color-body)", outline: "none", cursor: "pointer" }}>
+              <option value="all">All Types</option>
+              <option value="article">Article</option>
+              <option value="book">Book</option>
+              <option value="preprint">Preprint</option>
+              <option value="report">Report</option>
+              <option value="thesis">Thesis</option>
+            </select>
+            <button
+              onClick={() => setYearSort((s) => s === "desc" ? "asc" : "desc")}
+              style={{ height: 36, paddingLeft: 10, paddingRight: 10, border: "1px solid var(--color-border)", borderRadius: 7, fontSize: 12, fontFamily: "var(--font-roboto)", backgroundColor: "var(--color-canvas)", color: "var(--color-secondary)", cursor: "pointer", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: 4 }}
+            >
+              Year {yearSort === "desc" ? "↓" : "↑"}
+            </button>
             <button onClick={() => setAddItemOpen(true)} className="md:hidden flex items-center gap-1 shrink-0"
               style={{ fontSize: 12, fontWeight: 700, color: "#fff", backgroundColor: "var(--color-navy)", border: "none", borderRadius: 7, padding: "6px 12px", cursor: "pointer", minHeight: 44, fontFamily: "var(--font-roboto)" }}>
               <Plus size={13} /> Add
