@@ -357,7 +357,7 @@ async function syncOnboardingToSupabase({
       .from("projects")
       .insert({ name: projectName, institution, research_type: researchType, owner_id: user.id })
       .select()
-      .single();
+      .maybeSingle();
 
     if (!project) return;
 
