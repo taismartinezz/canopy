@@ -255,6 +255,11 @@ export default function LoginPage() {
       const user = session?.user;
       if (!user) { setError("Sign-in succeeded but session has no user."); setLoading(false); return; }
 
+      if (mode === "signup") {
+        router.push("/onboarding");
+        return;
+      }
+
       const { data: member, error: memberError } = await supabase
         .from("team_members").select("id").eq("user_id", user.id).maybeSingle();
       console.log("[Login] team_members check result:", member, memberError);
