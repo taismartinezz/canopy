@@ -273,12 +273,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           .maybeSingle();
 
         if (profileErr) console.error("[AppShell] profile query error:", profileErr);
+        console.log("[AppShell] user_profiles row:", profile, "for", authUser.email);
         if (!profile) console.error("[AppShell] no user_profiles row for", authUser.email, "— re-run seed or check Supabase Table Editor");
 
         setCurrentUser({
           id: authUser.id,
           email: authUser.email ?? "",
-          name: (profile?.name as string) ?? authUser.email ?? "",
+          name: (profile?.name as string) ?? "",
           role: ((profile?.role as User["role"]) ?? "researcher"),
           avatarColor: (profile?.avatar_color as string) ?? "#B4D4E3",
           avatarInitials: (profile?.avatar_initials as string) ?? "??",

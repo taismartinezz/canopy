@@ -434,7 +434,7 @@ export default function ProfilePage() {
 
           if (error) console.error("[ProfilePage] profile query error:", error);
 
-          const resolvedName = (data?.name as string) ?? user.email ?? "";
+          const resolvedName = (data?.name as string) ?? "";
           const parts = resolvedName.trim().split(/\s+/).filter(Boolean);
           const resolvedInitials = (data?.avatar_initials as string)
             ?? (parts.length === 0 ? "??" : parts.length === 1
@@ -825,11 +825,11 @@ export default function ProfilePage() {
                     title="Click to edit"
                     style={{
                       fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 24,
-                      color: "#1B2E4B", margin: 0, cursor: "text",
+                      color: name ? "#1B2E4B" : "#9BAFC4", margin: 0, cursor: "text",
                       whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
                     }}
                   >
-                    {name}
+                    {name || "Set up your profile"}
                   </h1>
                 )}
               </div>

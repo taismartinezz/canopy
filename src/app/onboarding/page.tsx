@@ -436,6 +436,7 @@ export default function OnboardingPage() {
   const [profileDept, setProfileDept] = useState("");
   const [profileBio, setProfileBio] = useState("");
 
+  const [submitting, setSubmitting] = useState(false);
   const checked = useRef(false);
 
   // Guard: must be authed; if already onboarded skip to /
@@ -505,7 +506,10 @@ export default function OnboardingPage() {
     } catch { /* ignore */ }
   }, [generatedCode]);
 
-  function completeOnboarding() {
+  async function completeOnboarding() {
+    if (submitting) return;
+    setSubmitting(true);
+
     const usedInvite = inviteCode.length >= 6;
 
     let projectName: string;
@@ -566,9 +570,9 @@ export default function OnboardingPage() {
       localStorage.setItem("canopy_invite_code", generatedCode);
     }
 
-    // Best-effort Supabase sync — does not block navigation
+    // Await Supabase sync so the profile row exists before AppShell loads
     if (isSupabaseConfigured) {
-      syncOnboardingToSupabase({
+      await syncOnboardingToSupabase({
         projectName, institution, researchType,
         userName, userRole,
         inviteCode: role === "pi" ? generatedCode : undefined,
@@ -578,7 +582,7 @@ export default function OnboardingPage() {
       });
     }
 
-    router.push("/");
+    router.push("/profile");
   }
 
   // ── Step 1: Role selection ─────────────────────────────────────────────────
@@ -960,12 +964,13 @@ export default function OnboardingPage() {
             {`https://canopy.app/join/${generatedCode}`}
           </p>
 
-          <NavButton onClick={completeOnboarding}>
-            Go to my workspace
+          <NavButton onClick={completeOnboarding} disabled={submitting}>
+            {submitting ? "Saving…" : "Go to my workspace"}
           </NavButton>
 
           <button
             onClick={completeOnboarding}
+            disabled={submitting}
             style={{
               display: "block",
               width: "100%",
@@ -976,13 +981,14 @@ export default function OnboardingPage() {
               color: "#6B6B6B",
               background: "none",
               border: "none",
-              cursor: "pointer",
+              cursor: submitting ? "not-allowed" : "pointer",
               marginTop: 12,
               padding: 0,
               minHeight: 36,
+              opacity: submitting ? 0.5 : 1,
             }}
             onMouseEnter={(e) => {
-              (e.currentTarget as HTMLElement).style.textDecoration = "underline";
+              if (!submitting) (e.currentTarget as HTMLElement).style.textDecoration = "underline";
             }}
             onMouseLeave={(e) => {
               (e.currentTarget as HTMLElement).style.textDecoration = "none";
@@ -1047,8 +1053,8 @@ export default function OnboardingPage() {
             />
           </div>
 
-          <NavButton onClick={completeOnboarding} disabled={!canContinue}>
-            Go to my workspace
+          <NavButton onClick={completeOnboarding} disabled={!canContinue || submitting}>
+            {submitting ? "Saving…" : "Go to my workspace"}
           </NavButton>
         </div>
       </div>
