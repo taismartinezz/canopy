@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Building2 } from "lucide-react";
 import CanopyLogo from "@/components/ui/CanopyLogo";
@@ -195,15 +195,21 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [checking, setChecking] = useState(true);
+  const hasFetched = useRef(false);
 
   // Already authed? Route to correct destination.
   useEffect(() => {
+    if (hasFetched.current) return;
+    hasFetched.current = true;
+
     if (!isSupabaseConfigured) {
       if (localStorage.getItem("canopy_authed") === "true") router.replace("/");
+      else setChecking(false);
       return;
     }
     supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (!session?.user) return;
+      if (!session?.user) { setChecking(false); return; }
       try {
         const { data: member } = await supabase
           .from("team_members").select("id").eq("user_id", session.user.id).maybeSingle();
@@ -258,6 +264,8 @@ export default function LoginPage() {
     localStorage.setItem("canopy_authed", "true");
     router.push(localStorage.getItem("canopy_project") ? "/" : "/onboarding");
   }, [router]);
+
+  if (checking) return null;
 
   return (
     <div

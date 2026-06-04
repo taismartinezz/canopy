@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -248,6 +248,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   );
   const [team, setTeam] = useState<User[]>([]);
   const [sidebarUserId, setSidebarUserId] = useState(CURRENT_USER_ID);
+  const hasFetched = useRef(false);
 
   // Auth gate
   useEffect(() => {
@@ -323,10 +324,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       }
     }
 
-    init();
+    if (!hasFetched.current) {
+      hasFetched.current = true;
+      init();
+    }
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!session) router.replace("/login");
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "SIGNED_OUT") router.replace("/login");
     });
 
     return () => subscription.unsubscribe();
