@@ -73,7 +73,7 @@ async function seed() {
   console.log("\n── Seeding fresh data ───────────────────────────────────\n");
 
   // Auth accounts
-  console.log("1/4  Auth accounts");
+  console.log("1/2  Auth accounts");
   const { data: darrenData, error: darrenErr } = await supabase.auth.admin.createUser({
     email: "dgergle@gmail.com",
     password: "Canopy2024!",
@@ -95,7 +95,7 @@ async function seed() {
   console.log(`  ✓ created  taismartinez2028.1@u.northwestern.edu  (${tais.id})`);
 
   // Project
-  console.log("\n2/4  Project");
+  console.log("\n2/2  Project");
   const { data: project, error: projectErr } = await supabase
     .from("projects")
     .insert({ name: "4Chan MWG", institution: "Northwestern University", owner_id: darren.id })
@@ -104,45 +104,11 @@ async function seed() {
   if (projectErr) throw projectErr;
   console.log(`  ✓ "${project.name}"  (${project.id})`);
 
-  // User profiles
-  console.log("\n3/4  User profiles");
-  const { error: profileErr } = await supabase.from("user_profiles").insert([
-    {
-      id: darren.id,
-      name: "Darren Gergle",
-      role: "pi",
-      institution: "Northwestern University",
-      avatar_initials: "DG",
-      avatar_color: "#C5B4E3",
-      project_id: project.id,
-    },
-    {
-      id: tais.id,
-      name: "Tais Martinez",
-      role: "researcher",
-      institution: "Northwestern University",
-      avatar_initials: "TM",
-      avatar_color: "#B4D4E3",
-      project_id: project.id,
-    },
-  ]);
-  if (profileErr) throw profileErr;
-  console.log("  ✓ Darren Gergle   (pi)");
-  console.log("  ✓ Tais Martinez   (researcher)");
-
-  // Team members
-  console.log("\n4/4  Team members");
-  const { error: memberErr } = await supabase.from("team_members").insert([
-    { project_id: project.id, user_id: darren.id, role: "pi" },
-    { project_id: project.id, user_id: tais.id, role: "researcher" },
-  ]);
-  if (memberErr) throw memberErr;
-  console.log("  ✓ Both added to project");
-
   console.log("\n── Done ─────────────────────────────────────────────────");
   console.log(`\n  Project:    ${project.name}  (${project.id})`);
   console.log(`  PI:         Darren Gergle  (${darren.id})`);
-  console.log(`  Researcher: Tais Martinez  (${tais.id})\n`);
+  console.log(`  Researcher: Tais Martinez  (${tais.id})`);
+  console.log(`\n  Both users must complete onboarding to create profiles.\n`);
 }
 
 // ── Entry point ───────────────────────────────────────────────────────────────

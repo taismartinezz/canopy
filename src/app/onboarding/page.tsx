@@ -353,31 +353,55 @@ async function syncOnboardingToSupabase({
       : nameParts.length === 1 ? nameParts[0].substring(0, 2).toUpperCase()
       : (nameParts[0][0] + nameParts[nameParts.length - 1][0]).toUpperCase();
 
-    const { data: project } = await supabase
-      .from("projects")
-      .insert({ name: projectName, institution, research_type: researchType, owner_id: user.id })
-      .select()
-      .single();
+    let projectId: string;
 
-    if (!project) return;
+    if (userRole === "pi") {
+      // Reuse the seeded project if one already exists for this user
+      const { data: existing } = await supabase
+        .from("projects")
+        .select("id")
+        .eq("owner_id", user.id)
+        .maybeSingle();
+
+      if (existing) {
+        projectId = existing.id;
+      } else {
+        const { data: created } = await supabase
+          .from("projects")
+          .insert({ name: projectName, institution, research_type: researchType, owner_id: user.id })
+          .select("id")
+          .single();
+        if (!created) return;
+        projectId = created.id;
+      }
+
+      if (inviteCode) {
+        await supabase.from("invite_codes").insert({
+          code: inviteCode, project_id: projectId, created_by: user.id,
+        });
+      }
+    } else {
+      const { data: created } = await supabase
+        .from("projects")
+        .insert({ name: projectName, institution, research_type: researchType, owner_id: user.id })
+        .select("id")
+        .single();
+      if (!created) return;
+      projectId = created.id;
+    }
 
     await supabase.from("user_profiles").upsert({
       id: user.id, name: userName, role: userRole,
       institution: institution || null, avatar_initials: avatarInitials,
-      project_id: project.id,
+      project_id: projectId,
       bio: bio || null,
       department: department || null,
     });
 
-    await supabase.from("team_members").insert({
-      project_id: project.id, user_id: user.id, role: userRole,
-    });
-
-    if (userRole === "pi" && inviteCode) {
-      await supabase.from("invite_codes").insert({
-        code: inviteCode, project_id: project.id, created_by: user.id,
-      });
-    }
+    await supabase.from("team_members").upsert(
+      { project_id: projectId, user_id: user.id, role: userRole },
+      { onConflict: "project_id,user_id" },
+    );
   } catch {
     // Non-critical — localStorage copy is the source of truth until Supabase is authoritative
   }
