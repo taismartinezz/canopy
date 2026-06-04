@@ -215,7 +215,8 @@ export default function LoginPage() {
           .from("team_members").select("id").eq("user_id", session.user.id).maybeSingle();
         router.replace(member ? "/" : "/onboarding");
       } catch {
-        router.replace("/onboarding");
+        // On query error stay on /login — do not bounce to /onboarding
+        setChecking(false);
       }
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps

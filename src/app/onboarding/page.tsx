@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Users, BookOpen, Check, X } from "lucide-react";
 import CanopyLogo from "@/components/ui/CanopyLogo";
@@ -440,15 +440,23 @@ export default function OnboardingPage() {
   const [profileDept, setProfileDept] = useState("");
   const [profileBio, setProfileBio] = useState("");
 
+  const checked = useRef(false);
+
   // Guard: must be authed; if already onboarded skip to /
   useEffect(() => {
-    if (!localStorage.getItem("canopy_authed")) {
-      router.replace("/login");
+    if (checked.current) return;
+    checked.current = true;
+
+    if (!isSupabaseConfigured) {
+      if (!localStorage.getItem("canopy_authed")) { router.replace("/login"); return; }
+      if (localStorage.getItem("canopy_project")) router.replace("/");
       return;
     }
-    if (localStorage.getItem("canopy_project")) {
-      router.replace("/");
-    }
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) router.replace("/login");
+      // session exists → stay, let user complete onboarding
+    });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
