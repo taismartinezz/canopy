@@ -6,7 +6,7 @@ import {
   ExternalLink, Plus,
 } from "lucide-react";
 import {
-  USERS, CURRENT_USER_ID, formatRelativeTime, formatDate, formatFileSize, getUser,
+  CURRENT_USER_ID, formatRelativeTime, formatDate, formatFileSize, getUser,
 } from "@/lib/mock-data";
 import type { Task, TaskStatus, TaskPriority, User, TaskComment, TaskFile } from "@/types";
 import Avatar from "@/components/ui/Avatar";
@@ -50,17 +50,17 @@ export function PriorityBadge({ priority }: { priority: TaskPriority }) {
   );
 }
 
-export function AssigneeStack({ ids, size = 22 }: { ids: string[]; size?: number }) {
-  const users = ids.map((id) => USERS.find((u) => u.id === id)).filter(Boolean) as User[];
-  if (users.length === 0) return null;
+export function AssigneeStack({ ids, size = 22, users = [] }: { ids: string[]; size?: number; users?: User[] }) {
+  const resolved = ids.map((id) => users.find((u: User) => u.id === id)).filter(Boolean) as User[];
+  if (resolved.length === 0) return null;
   return (
     <div className="flex items-center">
-      {users.slice(0, 4).map((user, i) => (
+      {resolved.slice(0, 4).map((user, i) => (
         <div key={user.id} style={{ marginLeft: i > 0 ? -6 : 0, zIndex: 4 - i, position: "relative" }}>
           <Avatar user={user} size={size} />
         </div>
       ))}
-      {users.length > 4 && (
+      {resolved.length > 4 && (
         <span
           style={{
             marginLeft: -6,
@@ -76,7 +76,7 @@ export function AssigneeStack({ ids, size = 22 }: { ids: string[]; size?: number
             color: "var(--color-secondary)",
           }}
         >
-          +{users.length - 4}
+          +{resolved.length - 4}
         </span>
       )}
     </div>
@@ -106,11 +106,15 @@ export default function TaskDetailPanel({
   onClose,
   onUpdateStatus,
   onUpdateTask,
+  teamMembers = [],
+  currentUserId = "",
 }: {
   task: Task;
   onClose: () => void;
   onUpdateStatus: (status: TaskStatus) => void;
   onUpdateTask?: (updates: Partial<Task>) => void;
+  teamMembers?: User[];
+  currentUserId?: string;
 }) {
   const [activeTab, setActiveTab] = useState<"comments" | "files">("comments");
   const [commentText, setCommentText] = useState("");
@@ -127,9 +131,13 @@ export default function TaskDetailPanel({
   useEffect(() => { setLocalFiles(task.files); },       [task.id]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { setLocalAssigneeIds(task.assigneeIds); }, [task.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  function lookupUser(id: string): User | undefined {
+    return teamMembers.find((u) => u.id === id) ?? getUser(id);
+  }
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cfg = STATUS_CONFIG[task.status];
-  const currentUser = getUser(CURRENT_USER_ID)!;
+  const currentUser = lookupUser(currentUserId || CURRENT_USER_ID) ?? teamMembers[0];
 
   useEffect(() => {
     function check() { setIsMobile(window.innerWidth < 768); }
@@ -151,7 +159,7 @@ export default function TaskDetailPanel({
     if (!text) return;
     const newComment: TaskComment = {
       id: crypto.randomUUID(),
-      authorId: CURRENT_USER_ID,
+      authorId: currentUserId || CURRENT_USER_ID,
       content: text,
       createdAt: new Date().toISOString(),
     };
@@ -170,7 +178,7 @@ export default function TaskDetailPanel({
       id: crypto.randomUUID(),
       name: file.name,
       size: file.size,
-      uploaderId: CURRENT_USER_ID,
+      uploaderId: currentUserId || CURRENT_USER_ID,
       uploadedAt: new Date().toISOString(),
       url: "",
       type: guessFileType(file.name),
@@ -203,7 +211,7 @@ export default function TaskDetailPanel({
     setAddAssigneeOpen(false);
   }
 
-  const unassignedUsers = USERS.filter((u) => !localAssigneeIds.includes(u.id));
+  const unassignedUsers = teamMembers.filter((u: User) => !localAssigneeIds.includes(u.id));
 
   return (
     <>
@@ -274,7 +282,7 @@ export default function TaskDetailPanel({
                   <span style={{ fontSize: 13, color: "var(--color-secondary)" }}>Unassigned</span>
                 ) : (
                   localAssigneeIds.map((id) => {
-                    const user = getUser(id);
+                    const user = lookupUser(id);
                     if (!user) return null;
                     return (
                       <span key={id} className="flex items-center gap-1.5 px-2 py-1" style={{ backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)", borderRadius: 20, fontSize: 12 }}>
@@ -393,7 +401,7 @@ export default function TaskDetailPanel({
                   <p style={{ fontSize: 13, color: "var(--color-secondary)" }}>No comments yet.</p>
                 )}
                 {localComments.map((comment) => {
-                  const author = getUser(comment.authorId);
+                  const author = lookupUser(comment.authorId);
                   if (!author) return null;
                   const isNew = !task.comments.find((c) => c.id === comment.id);
                   return (
@@ -454,7 +462,7 @@ export default function TaskDetailPanel({
                       <div className="flex-1 min-w-0">
                         <p style={{ fontSize: 13, color: "var(--color-body)", fontWeight: 500 }}>{file.name}</p>
                         <p style={{ fontSize: 11, color: "var(--color-secondary)" }}>
-                          {formatFileSize(file.size)} · uploaded by {getUser(file.uploaderId)?.name.split(" ")[0]}
+                          {formatFileSize(file.size)} · uploaded by {lookupUser(file.uploaderId)?.name.split(" ")[0]}
                         </p>
                       </div>
                       <button
@@ -464,7 +472,7 @@ export default function TaskDetailPanel({
                       >
                         <Download size={13} color="var(--color-navy)" />
                       </button>
-                      {file.uploaderId === CURRENT_USER_ID && (
+                      {file.uploaderId === (currentUserId || CURRENT_USER_ID) && (
                         <button
                           onClick={() => handleDeleteFile(file.id)}
                           className="w-7 h-7 flex items-center justify-center rounded hover:bg-[rgba(27,46,75,0.06)] transition-colors"

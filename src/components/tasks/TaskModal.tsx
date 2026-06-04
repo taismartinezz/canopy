@@ -2,8 +2,7 @@
 
 import { useState } from "react";
 import { X } from "lucide-react";
-import { USERS, CURRENT_USER_ID } from "@/lib/mock-data";
-import type { Task, TaskStatus, TaskPriority } from "@/types";
+import type { Task, TaskStatus, TaskPriority, User } from "@/types";
 import Avatar from "@/components/ui/Avatar";
 import { STATUS_CONFIG, STATUS_ORDER } from "@/components/tasks/TaskDetailPanel";
 
@@ -41,15 +40,17 @@ export interface TaskModalProps {
   task?: Task;
   onSave: (task: Task) => void;
   onClose: () => void;
+  teamMembers?: User[];
+  currentUserId?: string;
 }
 
-export default function TaskModal({ mode, initialStatus = "todo", task, onSave, onClose }: TaskModalProps) {
+export default function TaskModal({ mode, initialStatus = "todo", task, onSave, onClose, teamMembers = [], currentUserId = "" }: TaskModalProps) {
   const [title, setTitle]           = useState(task?.title ?? "");
   const [description, setDescription] = useState(task?.description ?? "");
   const [priority, setPriority]     = useState<TaskPriority>(task?.priority ?? "medium");
   const [dueDate, setDueDate]       = useState(task?.dueDate ?? "");
   const [status, setStatus]         = useState<TaskStatus>(task?.status ?? initialStatus);
-  const [assigneeIds, setAssigneeIds] = useState<string[]>(task?.assigneeIds ?? [CURRENT_USER_ID]);
+  const [assigneeIds, setAssigneeIds] = useState<string[]>(task?.assigneeIds ?? (currentUserId ? [currentUserId] : []));
   const [error, setError]           = useState("");
 
   function toggleAssignee(id: string) {
@@ -215,7 +216,7 @@ export default function TaskModal({ mode, initialStatus = "todo", task, onSave, 
           <div>
             <label style={labelStyle}>Assignees</label>
             <div className="flex flex-wrap gap-2">
-              {USERS.map((user) => {
+              {teamMembers.map((user) => {
                 const selected = assigneeIds.includes(user.id);
                 return (
                   <button

@@ -12,7 +12,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { LayoutGrid, List, Search, Plus, MoreHorizontal } from "lucide-react";
 import { formatDate, getStoredProject } from "@/lib/mock-data";
 import { supabase } from "@/lib/supabase";
-import type { Task, TaskStatus } from "@/types";
+import type { Task, TaskStatus, User, UserRole } from "@/types";
 import Avatar from "@/components/ui/Avatar";
 import Toast from "@/components/ui/Toast";
 import TaskDetailPanel, {
@@ -36,6 +36,7 @@ function TaskCard({
   onEdit,
   onDelete,
   isDragging = false,
+  teamMembers = [],
 }: {
   task: Task;
   onClick: () => void;
@@ -43,6 +44,7 @@ function TaskCard({
   onEdit: () => void;
   onDelete: () => void;
   isDragging?: boolean;
+  teamMembers?: User[];
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
@@ -92,7 +94,7 @@ function TaskCard({
             {task.dueDate ? formatDate(task.dueDate) : "—"}
           </span>
           <PriorityBadge priority={task.priority} />
-          <AssigneeStack ids={task.assigneeIds} size={20} />
+          <AssigneeStack ids={task.assigneeIds} size={20} users={teamMembers} />
         </div>
       </div>
 
@@ -179,6 +181,7 @@ function KanbanColumn({
   onEditTask,
   onDeleteTask,
   onAddTask,
+  teamMembers = [],
 }: {
   status: TaskStatus;
   tasks: Task[];
@@ -187,6 +190,7 @@ function KanbanColumn({
   onEditTask: (task: Task) => void;
   onDeleteTask: (taskId: string) => void;
   onAddTask: (status: TaskStatus) => void;
+  teamMembers?: User[];
 }) {
   const cfg = STATUS_CONFIG[status];
 
@@ -217,6 +221,7 @@ function KanbanColumn({
               onMoveStatus={(s) => onMoveTask(task.id, s)}
               onEdit={() => onEditTask(task)}
               onDelete={() => onDeleteTask(task.id)}
+              teamMembers={teamMembers}
             />
           ))}
         </div>
@@ -239,10 +244,12 @@ function TaskRow({
   task,
   onClick,
   onToggleDone,
+  teamMembers = [],
 }: {
   task: Task;
   onClick: () => void;
   onToggleDone: () => void;
+  teamMembers?: User[];
 }) {
   return (
     <tr
@@ -293,7 +300,7 @@ function TaskRow({
         </span>
       </td>
       <td className="py-2.5 pr-3"><PriorityBadge priority={task.priority} /></td>
-      <td className="py-2.5 pr-3"><AssigneeStack ids={task.assigneeIds} size={22} /></td>
+      <td className="py-2.5 pr-3"><AssigneeStack ids={task.assigneeIds} size={22} users={teamMembers} /></td>
       <td className="py-2.5 pr-5" style={{ fontSize: "12.4px", color: "var(--color-secondary)", whiteSpace: "nowrap" }}>
         {task.dueDate ? formatDate(task.dueDate) : "—"}
       </td>
@@ -308,6 +315,14 @@ function TaskRow({
 
 // ── Tasks page ────────────────────────────────────────────────────────────────
 
+function avatarColorFromId(id: string): string {
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) {
+    hash = (hash * 31 + id.charCodeAt(i)) >>> 0;
+  }
+  return `hsl(${hash % 360}, 55%, 80%)`;
+}
+
 export default function TasksPage() {
   const [view, setView] = useState<"board" | "list">("board");
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -316,10 +331,40 @@ export default function TasksPage() {
   const [search, setSearch] = useState("");
   const [activeId, setActiveId] = useState<string | null>(null);
   const [modalState, setModalState] = useState<ModalState>(null);
+  const [teamMembers, setTeamMembers] = useState<User[]>([]);
+  const [currentUserId, setCurrentUserId] = useState<string>("");
 
   useEffect(() => {
     const projectId = getStoredProject().id;
     if (!projectId || projectId === "p1") { setLoading(false); return; }
+
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) setCurrentUserId(user.id);
+    });
+
+    supabase
+      .from("team_members")
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .select("user_id, user_profiles(name, avatar_initials, role)" as any)
+      .eq("project_id", projectId)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .then(({ data }: { data: any[] | null }) => {
+        if (data) {
+          setTeamMembers(data.map((row) => {
+            const profile = Array.isArray(row.user_profiles) ? row.user_profiles[0] : row.user_profiles;
+            const id = row.user_id as string;
+            return {
+              id,
+              name: profile?.name ?? "Team Member",
+              email: "",
+              role: (profile?.role ?? "researcher") as UserRole,
+              avatarColor: avatarColorFromId(id),
+              avatarInitials: profile?.avatar_initials ?? "??",
+            } as User;
+          }));
+        }
+      });
+
     supabase
       .from("tasks")
       .select("*")
@@ -458,6 +503,7 @@ export default function TasksPage() {
                     onEditTask={(t) => setModalState({ mode: "edit", task: t })}
                     onDeleteTask={deleteTask}
                     onAddTask={(s) => setModalState({ mode: "add", status: s })}
+                    teamMembers={teamMembers}
                   />
                 ))}
               </div>
@@ -472,6 +518,7 @@ export default function TasksPage() {
                     onEdit={() => {}}
                     onDelete={() => {}}
                     isDragging
+                    teamMembers={teamMembers}
                   />
                 </div>
               )}
@@ -497,6 +544,7 @@ export default function TasksPage() {
                     task={task}
                     onClick={() => setSelectedTask(task)}
                     onToggleDone={() => moveTask(task.id, task.status === "done" ? "in_progress" : "done")}
+                    teamMembers={teamMembers}
                   />
                 ))}
               </tbody>
@@ -512,6 +560,8 @@ export default function TasksPage() {
           onClose={() => setSelectedTask(null)}
           onUpdateStatus={(status) => moveTask(selectedTask.id, status)}
           onUpdateTask={(updates) => updateTask(selectedTask.id, updates)}
+          teamMembers={teamMembers}
+          currentUserId={currentUserId}
         />
       )}
 
@@ -523,6 +573,8 @@ export default function TasksPage() {
           task={modalState.mode === "edit" ? modalState.task : undefined}
           onSave={modalState.mode === "add" ? addTask : editTask}
           onClose={() => setModalState(null)}
+          teamMembers={teamMembers}
+          currentUserId={currentUserId}
         />
       )}
 

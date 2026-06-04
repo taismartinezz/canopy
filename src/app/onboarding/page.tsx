@@ -305,11 +305,11 @@ function ProjectForm({
 
 async function syncOnboardingToSupabase({
   projectName, institution, researchType,
-  userName, userRole, inviteCode, enteredInviteCode, bio, department,
+  userName, userRole, inviteCode, enteredInviteCode, bio, department, inviteEmails,
 }: {
   projectName: string; institution: string; researchType: string;
   userName: string; userRole: "pi" | "researcher"; inviteCode?: string;
-  enteredInviteCode?: string; bio?: string; department?: string;
+  enteredInviteCode?: string; bio?: string; department?: string; inviteEmails?: string[];
 }) {
   try {
     const { data: { user } } = await supabase.auth.getUser();
@@ -342,10 +342,20 @@ async function syncOnboardingToSupabase({
         projectId = created.id as string;
       }
 
+      // Save the generic shareable code
       if (inviteCode) {
         await supabase.from("invite_codes").insert({
           code: inviteCode, project_id: projectId, created_by: user.id,
         });
+      }
+      // Save one unique code per invited email
+      if (inviteEmails && inviteEmails.length > 0) {
+        const emailCodes = inviteEmails.map(() => ({
+          code: "CANOPY-" + Math.random().toString(36).substring(2, 6).toUpperCase(),
+          project_id: projectId,
+          created_by: user.id,
+        }));
+        await supabase.from("invite_codes").insert(emailCodes);
       }
     } else if (enteredInviteCode) {
       // Look up the project linked to the invite code
@@ -447,6 +457,13 @@ export default function OnboardingPage() {
     if (checked.current) return;
     checked.current = true;
 
+    // Pre-fill invite code if researcher arrived via an invite link
+    const pendingInvite = localStorage.getItem("canopy_pending_invite");
+    if (pendingInvite) {
+      setInviteCode(pendingInvite);
+      localStorage.removeItem("canopy_pending_invite");
+    }
+
     if (!isSupabaseConfigured) {
       if (!localStorage.getItem("canopy_authed")) { router.replace("/login"); return; }
       if (localStorage.getItem("canopy_project")) router.replace("/");
@@ -503,7 +520,7 @@ export default function OnboardingPage() {
 
   const handleCopyLink = useCallback(async () => {
     try {
-      await navigator.clipboard.writeText(`https://canopy.app/join/${generatedCode}`);
+      await navigator.clipboard.writeText(`${window.location.origin}/login?invite=${generatedCode}`);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch { /* ignore */ }
@@ -582,6 +599,7 @@ export default function OnboardingPage() {
         enteredInviteCode: role === "researcher" && inviteCode.length >= 6 ? inviteCode : undefined,
         bio: role === "researcher" ? profileBio : undefined,
         department: role === "researcher" ? profileDept : undefined,
+        inviteEmails: role === "pi" ? inviteEmails : undefined,
       });
     }
 
@@ -964,7 +982,7 @@ export default function OnboardingPage() {
               marginBottom: 0,
             }}
           >
-            {`https://canopy.app/join/${generatedCode}`}
+            {typeof window !== "undefined" ? `${window.location.origin}/login?invite=${generatedCode}` : `/login?invite=${generatedCode}`}
           </p>
 
           <NavButton onClick={completeOnboarding} disabled={submitting}>
