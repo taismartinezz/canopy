@@ -16,7 +16,6 @@ export const USERS: User[] = [
     role: "pi",
     avatarColor: "#C5B4E3",
     avatarInitials: "YO",
-    institution: "University of Michigan",
   },
   {
     id: "u1",
@@ -61,7 +60,7 @@ export function getUser(id: string) {
 export const PROJECT: Project = {
   id: "p1",
   name: "Moral Injury & Resilience Study",
-  institution: "University of Michigan",
+  institution: "",
   researchType: "trauma",
   researchParticipation: "wellbeing_only",
   createdAt: "2025-09-01T00:00:00Z",

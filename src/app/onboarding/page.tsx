@@ -283,7 +283,7 @@ function ProjectForm({
       </Field>
 
       <Field label="Institution">
-        <TextInput value={institution} onChange={setInstitution} placeholder="e.g. University of Michigan" />
+        <TextInput value={institution} onChange={setInstitution} placeholder="e.g. Your university or research center" />
       </Field>
 
       {showResearchType && setResearchType && (
