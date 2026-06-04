@@ -400,18 +400,21 @@ export default function ProfilePage() {
     const load = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { router.push("/login"); return; }
+      console.log("[Profile] user id:", user?.id);
 
       const { data: prof } = await supabase
         .from("user_profiles")
         .select("*")
         .eq("id", user.id)
         .maybeSingle();
+      console.log("[Profile] user_profiles row:", prof);
 
       const { data: membership } = await supabase
         .from("team_members")
         .select("project_id")
         .eq("user_id", user.id)
         .maybeSingle();
+      console.log("[Profile] membership:", membership);
 
       if (membership?.project_id) {
         const { data: proj } = await supabase
@@ -419,6 +422,7 @@ export default function ProfilePage() {
           .select("*")
           .eq("id", membership.project_id)
           .maybeSingle();
+        console.log("[Profile] project:", proj);
         setProject(proj);
         if (proj) {
           setProjectName((proj.name as string) ?? "");

@@ -390,18 +390,19 @@ async function syncOnboardingToSupabase({
       id: user.id, name: userName, role: userRole,
       institution: resolvedInstitution || null, avatar_initials: avatarInitials,
       project_id: projectId,
-      bio: bio || null,
-      department: department || null,
+      bio: bio ?? "",
+      department: department ?? "",
     };
     console.log("[syncOnboardingToSupabase] upserting to user_profiles:", profilePayload);
-    await supabase.from("user_profiles").upsert(profilePayload);
+    const { error: upsertError } = await supabase.from("user_profiles").upsert(profilePayload);
+    if (upsertError) console.error("[syncOnboardingToSupabase] upsert error:", upsertError);
 
     await supabase.from("team_members").upsert(
       { project_id: projectId, user_id: user.id, role: userRole },
       { onConflict: "project_id,user_id" },
     );
-  } catch {
-    // Non-critical — localStorage copy is the source of truth until Supabase is authoritative
+  } catch (err) {
+    console.error("[syncOnboardingToSupabase] unexpected error:", err);
   }
 }
 
