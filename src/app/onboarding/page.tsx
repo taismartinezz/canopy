@@ -353,13 +353,42 @@ async function syncOnboardingToSupabase({
       : nameParts.length === 1 ? nameParts[0].substring(0, 2).toUpperCase()
       : (nameParts[0][0] + nameParts[nameParts.length - 1][0]).toUpperCase();
 
-    const { data: project } = await supabase
-      .from("projects")
-      .insert({ name: projectName, institution, research_type: researchType, owner_id: user.id })
-      .select()
-      .single();
+    let projectId: string;
 
-    if (!project) return;
+    if (userRole === "pi") {
+      // Reuse seeded project if one already exists for this user
+      const { data: existing } = await supabase
+        .from("projects")
+        .select("id")
+        .eq("owner_id", user.id)
+        .maybeSingle();
+
+      if (existing) {
+        projectId = existing.id as string;
+      } else {
+        const { data: created } = await supabase
+          .from("projects")
+          .insert({ name: projectName, institution, research_type: researchType, owner_id: user.id })
+          .select("id")
+          .single();
+        if (!created) return;
+        projectId = created.id as string;
+      }
+
+      if (inviteCode) {
+        await supabase.from("invite_codes").insert({
+          code: inviteCode, project_id: projectId, created_by: user.id,
+        });
+      }
+    } else {
+      const { data: created } = await supabase
+        .from("projects")
+        .insert({ name: projectName, institution, research_type: researchType, owner_id: user.id })
+        .select("id")
+        .single();
+      if (!created) return;
+      projectId = created.id as string;
+    }
 
     await supabase.from("user_profiles").upsert({
       id: user.id, name: userName, role: userRole,
