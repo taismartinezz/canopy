@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { CURRENT_USER_ID, formatRelativeTime, getStoredUser, getStoredProject } from "@/lib/mock-data";
-import { supabase } from "@/lib/supabase";
+import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import type { TeamMember, TaskStatus } from "@/types";
 import Avatar from "@/components/ui/Avatar";
 import { Video, Calendar, X, Edit3, Check, Minus } from "lucide-react";
@@ -312,20 +312,33 @@ export default function TeamPage() {
   const [storedProjectName, setStoredProjectName] = useState("");
   const [team, setTeam] = useState<TeamMember[]>([]);
   const [loading, setLoading] = useState(true);
-  const [currentUserId, setCurrentUserId] = useState(CURRENT_USER_ID);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(
+    isSupabaseConfigured ? null : CURRENT_USER_ID
+  );
+  const closeMemberPanel = useCallback(() => setSelectedMember(null), []);
+  const closeMeetingModal = useCallback(() => setMeetingModalOpen(false), []);
 
+  // Initialize UI state and resolve userId from auth session.
   useEffect(() => {
     const su = getStoredUser();
     const sp = getStoredProject();
     setIsPi(su.role === "pi");
     setStoredProjectName(sp.name);
 
-    const projectId = sp.id;
-    if (!projectId || projectId === "p1") { setLoading(false); return; }
+    if (!isSupabaseConfigured) { setLoading(false); return; }
 
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (user) setCurrentUserId(user.id);
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) setCurrentUserId(session.user.id);
+      else setLoading(false);
     });
+  }, []);
+
+  // Query team_members only once we have a confirmed userId.
+  useEffect(() => {
+    if (!currentUserId) return;
+
+    const projectId = getStoredProject().id;
+    if (!projectId || projectId === "p1") { setLoading(false); return; }
 
     supabase
       .from("team_members")
@@ -353,7 +366,7 @@ export default function TeamPage() {
         }
         setLoading(false);
       });
-  }, []);
+  }, [currentUserId]);
 
   return (
     <div className="flex flex-col h-full overflow-auto" style={{ fontFamily: "var(--font-roboto)" }}>
@@ -418,8 +431,8 @@ export default function TeamPage() {
         </div>
       </div>
 
-      {selectedMember && <MemberPanel member={selectedMember} onClose={() => setSelectedMember(null)} />}
-      {meetingModalOpen && <MeetingModal onClose={() => setMeetingModalOpen(false)} />}
+      {selectedMember && <MemberPanel member={selectedMember} onClose={closeMemberPanel} />}
+      {meetingModalOpen && <MeetingModal onClose={closeMeetingModal} />}
     </div>
   );
 }

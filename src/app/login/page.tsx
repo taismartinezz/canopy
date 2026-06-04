@@ -203,12 +203,10 @@ export default function LoginPage() {
       return;
     }
     supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (!session) return;
+      if (!session?.user) return;
       try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
         const { data: member } = await supabase
-          .from("team_members").select("id").eq("user_id", user.id).maybeSingle();
+          .from("team_members").select("id").eq("user_id", session.user.id).maybeSingle();
         router.replace(member ? "/" : "/onboarding");
       } catch {
         router.replace("/onboarding");
