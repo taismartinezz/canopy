@@ -336,6 +336,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   async function handleSignOut() {
     await supabase.auth.signOut();
+    localStorage.clear();
     router.push("/login");
   }
 
