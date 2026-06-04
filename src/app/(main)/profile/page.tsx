@@ -351,6 +351,7 @@ export default function ProfilePage() {
   const currentUser = getUser(CURRENT_USER_ID)!;
   const [isPi, setIsPi] = useState(false);
   const [avatarInitials, setAvatarInitials] = useState(isSupabaseConfigured ? "" : currentUser.avatarInitials);
+  const [avatarColor, setAvatarColor] = useState(isSupabaseConfigured ? "#B4D4E3" : currentUser.avatarColor);
   const [projectCreatedAt, setProjectCreatedAt] = useState(isSupabaseConfigured ? "" : PROJECT.createdAt);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -393,34 +394,47 @@ export default function ProfilePage() {
   // ── Load profile on mount ────────────────────────────────────────────────
   useEffect(() => {
     if (isSupabaseConfigured) {
-      // Supabase is the sole source of truth — never read from localStorage or mock defaults
-      supabase.auth.getUser().then(({ data: { user } }) => {
-        if (!user) return;
-        supabase
-          .from("user_profiles")
-          .select("name, role, institution, bio, department, avatar_initials, project_id, projects(name, institution, created_at, research_type, research_participation)")
-          .eq("id", user.id)
-          .maybeSingle()
-          .then(({ data }) => {
-            if (!data) return;
-            if (data.name)               setName(data.name as string);
-            if (data.role)               setIsPi(data.role === "pi");
-            setInstitution((data.institution as string) ?? "");
-            if (data.bio != null)        setBio((data.bio as string) ?? "");
-            if (data.department != null) setDepartment((data.department as string) ?? "");
-            if (data.avatar_initials)    setAvatarInitials(data.avatar_initials as string);
+      (async () => {
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (!user) return;
 
-            const proj = Array.isArray(data.projects) ? data.projects[0] : data.projects;
-            if (proj) {
-              const p = proj as Record<string, string>;
-              if (p.name)                   setProjectName(p.name);
-              setProjectInstitution(p.institution ?? "");
-              if (p.created_at)             setProjectCreatedAt(p.created_at);
-              if (p.research_type)          setResearchType(p.research_type);
-              if (p.research_participation) setResearchParticipation(p.research_participation);
-            }
-          });
-      });
+          const { data, error } = await supabase
+            .from("user_profiles")
+            .select("name, role, institution, bio, department, avatar_initials, avatar_color, project_id, projects(name, institution, created_at, research_type, research_participation)")
+            .eq("id", user.id)
+            .maybeSingle();
+
+          if (error) console.error("[ProfilePage] profile query error:", error);
+
+          const resolvedName = (data?.name as string) ?? user.email ?? "";
+          const parts = resolvedName.trim().split(/\s+/).filter(Boolean);
+          const resolvedInitials = (data?.avatar_initials as string)
+            ?? (parts.length === 0 ? "??" : parts.length === 1
+              ? parts[0].substring(0, 2).toUpperCase()
+              : (parts[0][0] + parts[parts.length - 1][0]).toUpperCase());
+
+          setName(resolvedName);
+          setIsPi((data?.role as string) === "pi");
+          setAvatarInitials(resolvedInitials);
+          setAvatarColor((data?.avatar_color as string) ?? "#B4D4E3");
+          setInstitution((data?.institution as string) ?? "");
+          if (data?.bio != null)        setBio(data.bio as string);
+          if (data?.department != null) setDepartment(data.department as string);
+
+          const proj = Array.isArray(data?.projects) ? data?.projects[0] : data?.projects;
+          if (proj) {
+            const p = proj as Record<string, string>;
+            if (p.name)                   setProjectName(p.name);
+            setProjectInstitution(p.institution ?? "");
+            if (p.created_at)             setProjectCreatedAt(p.created_at);
+            if (p.research_type)          setResearchType(p.research_type);
+            if (p.research_participation) setResearchParticipation(p.research_participation);
+          }
+        } catch (err) {
+          console.error("[ProfilePage] failed to load profile:", err);
+        }
+      })();
       return;
     }
 
@@ -429,6 +443,7 @@ export default function ProfilePage() {
     const onboardProject = getStoredProject();
     setIsPi(onboardUser.role === "pi");
     setAvatarInitials(onboardUser.avatarInitials);
+    setAvatarColor(onboardUser.avatarColor);
     setProjectCreatedAt(onboardProject.createdAt);
     setName(onboardUser.name);
     if (onboardUser.institution) setInstitution(onboardUser.institution);
@@ -711,7 +726,7 @@ export default function ProfilePage() {
             ) : (
               <div style={{
                 width: 96, height: 96, borderRadius: "50%", flexShrink: 0,
-                backgroundColor: currentUser.avatarColor,
+                backgroundColor: avatarColor,
                 display: "flex", alignItems: "center", justifyContent: "center",
                 fontFamily: "var(--font-roboto)", fontWeight: 600, fontSize: 28, color: "#3a3a3a",
                 userSelect: "none",
