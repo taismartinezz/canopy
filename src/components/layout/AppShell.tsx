@@ -245,90 +245,84 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [team, setTeam] = useState<User[]>([]);
   const [sidebarUserId, setSidebarUserId] = useState(CURRENT_USER_ID);
 
-  // Auth gate — Supabase session when configured, localStorage fallback otherwise
+  // Auth gate
   useEffect(() => {
-    function admit() {
-      setAuthed(true);
-      setStoredProject(getStoredProject());
+    if (!isSupabaseConfigured) {
+      if (localStorage.getItem("canopy_authed") === "true") { setAuthed(true); }
+      else { router.replace("/login"); }
+      return;
+    }
 
-      // Load identity exclusively from Supabase — never trust stale localStorage
-      supabase.auth.getUser().then(({ data: { user: authUser } }) => {
-        if (!authUser) return;
+    async function init() {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) { router.replace("/login"); return; }
+
+        setAuthed(true);
+        const authUser = session.user;
         setSidebarUserId(authUser.id);
 
-        // Fetch the real profile row
-        supabase
+        const { data: profile } = await supabase
           .from("user_profiles")
-          .select("name, role, avatar_initials, avatar_color, institution")
+          .select("name, role, avatar_initials, avatar_color, institution, project_id, projects(name, institution)")
           .eq("id", authUser.id)
-          .maybeSingle()
-          .then(({ data: profile }) => {
-            setCurrentUser({
-              id: authUser.id,
-              email: authUser.email ?? "",
-              name: (profile?.name as string) ?? authUser.email ?? "",
-              role: ((profile?.role as User["role"]) ?? "researcher"),
-              avatarColor: (profile?.avatar_color as string) ?? "#B4D4E3",
-              avatarInitials: (profile?.avatar_initials as string) ?? "??",
-              institution: (profile?.institution as string) ?? undefined,
-            });
-          });
+          .maybeSingle();
 
-        // Fetch project for the header strip
-        supabase
-          .from("user_profiles")
-          .select("project_id, projects(name, institution)")
-          .eq("id", authUser.id)
-          .maybeSingle()
-          .then(({ data: up }) => {
-            if (!up?.project_id) return;
-            const proj = Array.isArray(up.projects) ? up.projects[0] : up.projects;
-            if (proj) {
-              setStoredProject((prev) => ({
-                ...prev,
-                id: up.project_id as string,
-                name: (proj as Record<string, string>).name ?? prev.name,
-                institution: (proj as Record<string, string>).institution ?? prev.institution,
-              }));
-            }
+        setCurrentUser({
+          id: authUser.id,
+          email: authUser.email ?? "",
+          name: (profile?.name as string) ?? authUser.email ?? "",
+          role: ((profile?.role as User["role"]) ?? "researcher"),
+          avatarColor: (profile?.avatar_color as string) ?? "#B4D4E3",
+          avatarInitials: (profile?.avatar_initials as string) ?? "??",
+          institution: (profile?.institution as string) ?? undefined,
+        });
 
-            // Load team
-            supabase
-              .from("team_members")
-              .select("user_id, role, user_profiles(name, avatar_color, avatar_initials)")
-              .eq("project_id", up.project_id as string)
-              .then(({ data }) => {
-                if (data) setTeam(data.map((row) => {
-                  const profiles = row.user_profiles as unknown as Record<string, string>[] | null;
-                  const p = Array.isArray(profiles) ? profiles[0] : null;
-                  return {
-                    id: row.user_id as string,
-                    name: p?.name ?? "Unknown",
-                    email: "",
-                    role: row.role as User["role"],
-                    avatarColor: p?.avatar_color ?? "#B4D4E3",
-                    avatarInitials: p?.avatar_initials ?? "??",
-                  };
-                }));
-              });
-          });
-      });
+        const projectId = profile?.project_id as string | undefined;
+        if (projectId) {
+          const proj = Array.isArray(profile?.projects) ? profile?.projects[0] : profile?.projects;
+          if (proj) {
+            setStoredProject((prev) => ({
+              ...prev,
+              id: projectId,
+              name: (proj as Record<string, string>).name ?? prev.name,
+              institution: (proj as Record<string, string>).institution ?? prev.institution,
+            }));
+          }
+
+          const { data: members } = await supabase
+            .from("team_members")
+            .select("user_id, role, user_profiles(name, avatar_color, avatar_initials)")
+            .eq("project_id", projectId);
+
+          if (members) {
+            setTeam(members.map((row) => {
+              const profiles = row.user_profiles as unknown as Record<string, string>[] | null;
+              const p = Array.isArray(profiles) ? profiles[0] : null;
+              return {
+                id: row.user_id as string,
+                name: p?.name ?? "Unknown",
+                email: "",
+                role: row.role as User["role"],
+                avatarColor: p?.avatar_color ?? "#B4D4E3",
+                avatarInitials: p?.avatar_initials ?? "??",
+              };
+            }));
+          }
+        }
+      } catch (err) {
+        console.error("[AppShell] init error:", err);
+        router.replace("/login");
+      }
     }
 
-    if (isSupabaseConfigured) {
-      supabase.auth.getSession().then(({ data: { session } }) => {
-        if (session) { admit(); } else { router.replace("/login"); }
-      });
+    init();
 
-      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-        if (!session) router.replace("/login");
-      });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!session) router.replace("/login");
+    });
 
-      return () => subscription.unsubscribe();
-    } else {
-      if (localStorage.getItem("canopy_authed") === "true") { admit(); }
-      else { router.replace("/login"); }
-    }
+    return () => subscription.unsubscribe();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

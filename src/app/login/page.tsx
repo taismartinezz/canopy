@@ -196,16 +196,24 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // Already authed? Skip login and go to app (or onboarding if no project yet).
+  // Already authed? Route to correct destination.
   useEffect(() => {
-    const dest = localStorage.getItem("canopy_project") ? "/" : "/onboarding";
-    if (isSupabaseConfigured) {
-      supabase.auth.getSession().then(({ data: { session } }) => {
-        if (session) router.replace(dest);
-      });
-    } else if (localStorage.getItem("canopy_authed") === "true") {
-      router.replace(dest);
+    if (!isSupabaseConfigured) {
+      if (localStorage.getItem("canopy_authed") === "true") router.replace("/");
+      return;
     }
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (!session) return;
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        const { data: member } = await supabase
+          .from("team_members").select("id").eq("user_id", user.id).maybeSingle();
+        router.replace(member ? "/" : "/onboarding");
+      } catch {
+        router.replace("/onboarding");
+      }
+    });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -215,30 +223,29 @@ export default function LoginPage() {
     setError("");
     setLoading(true);
 
-    if (isSupabaseConfigured) {
-      const { error: authError } = mode === "signin"
-        ? await supabase.auth.signInWithPassword({ email, password })
-        : await supabase.auth.signUp({ email, password });
+    if (!isSupabaseConfigured) {
       setLoading(false);
-      if (authError) { setError(authError.message); return; }
-
-      // Clear any stale data from a previous user's session
-      localStorage.removeItem("canopy_user");
-      localStorage.removeItem("canopy_project");
-      localStorage.removeItem("canopy_authed");
-
-      // Determine destination from Supabase — does this user have a profile+project?
-      const { data: { user } } = await supabase.auth.getUser();
-      const { data: profile } = user
-        ? await supabase.from("user_profiles").select("project_id").eq("id", user.id).maybeSingle()
-        : { data: null };
-      router.push(profile?.project_id ? "/" : "/onboarding");
+      localStorage.setItem("canopy_authed", "true");
+      router.push("/");
       return;
     }
 
-    setLoading(false);
-    localStorage.setItem("canopy_authed", "true");
-    router.push(localStorage.getItem("canopy_project") ? "/" : "/onboarding");
+    try {
+      const { error: authError } = mode === "signin"
+        ? await supabase.auth.signInWithPassword({ email, password })
+        : await supabase.auth.signUp({ email, password });
+      if (authError) { setError(authError.message); setLoading(false); return; }
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { setError("Sign-in succeeded but could not retrieve user."); setLoading(false); return; }
+
+      const { data: member } = await supabase
+        .from("team_members").select("id").eq("user_id", user.id).maybeSingle();
+      router.push(member ? "/" : "/onboarding");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "An unexpected error occurred.");
+      setLoading(false);
+    }
   }, [email, password, mode, router]);
 
   const handleOAuth = useCallback(async (provider: "github" | "google" | "azure") => {
