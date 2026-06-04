@@ -140,8 +140,8 @@ export default function TaskModal({
         const notifs = toNotify.map((aid) => ({
           user_id: aid,
           type: "task_assigned",
-          title: "You were assigned to a task",
-          body: `You were assigned to "${title.trim()}"`,
+          title: `You were assigned to "${title.trim()}"`,
+          body: null,
           related_id: saved.id,
           read: false,
         }));

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard, CheckSquare, BookOpen, BookMarked, Users,
-  Bell, ChevronDown, LogOut, Settings, User as UserIcon, Menu, X,
+  Bell, ChevronDown, LogOut, User as UserIcon, Menu, X,
 } from "lucide-react";
 import type { User } from "@/types";
 import { supabase } from "@/lib/supabase";
@@ -209,13 +209,6 @@ function ProfileMenu({ user, onClose, onSignOut, onNavigateProfile }: {
           style={{ fontSize: 13, color: "var(--color-body)", minHeight: 44 }}
         >
           <UserIcon size={14} /> Profile
-        </button>
-        <button
-          onClick={onClose}
-          className="w-full flex items-center gap-2.5 px-4 text-left transition-colors hover:bg-[rgba(27,46,75,0.06)]"
-          style={{ fontSize: 13, color: "var(--color-body)", minHeight: 44 }}
-        >
-          <Settings size={14} /> Settings
         </button>
         <div style={{ borderTop: "1px solid var(--color-border)", marginTop: 4, paddingTop: 4 }}>
           <button onClick={onSignOut} className="w-full flex items-center gap-2.5 px-4 text-left transition-colors hover:bg-[rgba(27,46,75,0.06)]" style={{ fontSize: 13, color: "var(--color-error)", minHeight: 44 }}>

@@ -475,11 +475,11 @@ export default function TasksPage() {
     const activeTaskId = active.id as string;
     const overId = over.id as string;
 
+    // Resolve target status outside setTasks so the Supabase call is a clean side-effect
     setTasks((prev) => {
       const activeTask = prev.find((t) => t.id === activeTaskId);
       if (!activeTask) return prev;
 
-      // Determine target status: column droppable (status string) or another task
       let targetStatus: TaskStatus | undefined;
       if ((STATUS_ORDER as string[]).includes(overId)) {
         targetStatus = overId as TaskStatus;
@@ -492,8 +492,14 @@ export default function TasksPage() {
 
       if (!targetStatus || targetStatus === activeTask.status) return prev;
 
-      supabase.from("tasks").update({ status: targetStatus }).eq("id", activeTaskId)
-        .then(({ error }) => { if (error) console.error("[Tasks] drag status error:", error); });
+      // Persist outside the updater to avoid double-fire in StrictMode
+      setTimeout(() => {
+        supabase.from("tasks").update({ status: targetStatus }).eq("id", activeTaskId)
+          .then(({ error }) => {
+            if (error) console.error("[Tasks] drag status error:", error);
+            else console.log("[Tasks] drag status saved:", activeTaskId, "→", targetStatus);
+          });
+      }, 0);
 
       return prev.map((t) => t.id === activeTaskId ? { ...t, status: targetStatus! } : t);
     });
