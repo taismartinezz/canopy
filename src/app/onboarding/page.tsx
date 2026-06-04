@@ -487,27 +487,35 @@ export default function OnboardingPage() {
 
   const [submitting, setSubmitting] = useState(false);
   const [syncError, setSyncError] = useState("");
+  const [sessionReady, setSessionReady] = useState(false);
   const checked = useRef(false);
 
-  // Guard: must be authed; if already onboarded skip to /
+  // Guard: session check runs FIRST — nothing renders until this resolves
   useEffect(() => {
     if (checked.current) return;
     checked.current = true;
 
-    // Pre-fill invite code if researcher arrived via an invite link
-    const pendingInvite = localStorage.getItem("pendingInviteCode");
-    if (pendingInvite) setInviteCode(pendingInvite);
+    async function init() {
+      if (!isSupabaseConfigured) {
+        if (!localStorage.getItem("canopy_authed")) { router.replace("/login"); return; }
+        const pendingInvite = localStorage.getItem("pendingInviteCode");
+        if (pendingInvite) setInviteCode(pendingInvite);
+        if (localStorage.getItem("canopy_project")) { router.replace("/"); return; }
+        setSessionReady(true);
+        return;
+      }
 
-    if (!isSupabaseConfigured) {
-      if (!localStorage.getItem("canopy_authed")) { router.replace("/login"); return; }
-      if (localStorage.getItem("canopy_project")) router.replace("/");
-      return;
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) { router.push("/login"); return; }
+
+      // Pre-fill invite code if researcher arrived via an invite link
+      const pendingInvite = localStorage.getItem("pendingInviteCode");
+      if (pendingInvite) setInviteCode(pendingInvite);
+
+      setSessionReady(true);
     }
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session) router.replace("/login");
-      // session exists → stay, let user complete onboarding
-    });
+    init();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -647,6 +655,8 @@ export default function OnboardingPage() {
     console.log("[Onboarding] navigating to /profile");
     router.push("/profile");
   }
+
+  if (!sessionReady) return null;
 
   // ── Step 1: Role selection ─────────────────────────────────────────────────
 
