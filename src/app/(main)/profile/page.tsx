@@ -24,12 +24,11 @@ function TwitterIcon() {
     </svg>
   );
 }
+
 import {
-  CURRENT_USER_ID, getUser, PROJECT,
   JOURNAL_PROMPTS, ACTIVE_PROMPT_IDS,
-  getStoredUser, getStoredProject,
 } from "@/lib/mock-data";
-import { supabase, isSupabaseConfigured } from "@/lib/supabase";
+import { supabase } from "@/lib/supabase";
 import { showToast } from "@/components/ui/Toast";
 import type { TaskStatus, PromptCategory } from "@/types";
 
@@ -348,25 +347,15 @@ type TabId = "about" | "links" | "activity" | "lab_settings";
 
 export default function ProfilePage() {
   const router = useRouter();
-  const currentUser = getUser(CURRENT_USER_ID)!;
-  const [isPi, setIsPi] = useState(false);
-  const [avatarInitials, setAvatarInitials] = useState(isSupabaseConfigured ? "" : currentUser.avatarInitials);
-  const [avatarColor, setAvatarColor] = useState(isSupabaseConfigured ? "#B4D4E3" : currentUser.avatarColor);
-  const [projectCreatedAt, setProjectCreatedAt] = useState(isSupabaseConfigured ? "" : PROJECT.createdAt);
-
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const authInitRef = useRef(false);
-  const lastUserIdRef = useRef<string | null>(null);
-  const [reloadCount, setReloadCount] = useState(0);
 
-  // ── Persisted profile state ──────────────────────────────────────────────
+  // ── Source of truth: Supabase ─────────────────────────────────────────────
+  const [profile, setProfile] = useState<any>(null);
+  const [project, setProject] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  // ── Photo (local only — needs Supabase Storage to persist) ───────────────
   const [photo, setPhoto] = useState<string | null>(null);
-  const [name, setName] = useState(isSupabaseConfigured ? "" : currentUser.name);
-  const [institution, setInstitution] = useState("");
-  const [bio, setBio] = useState("");
-  const [interests, setInterests] = useState<string[]>([]);
-  const [department, setDepartment] = useState("");
-  const [links, setLinks] = useState<LinkFields>(EMPTY_LINKS);
 
   // ── Edit mode ────────────────────────────────────────────────────────────
   const [editMode, setEditMode] = useState(false);
@@ -382,138 +371,23 @@ export default function ProfilePage() {
   const [editingInstitution, setEditingInstitution] = useState(false);
   const [institutionInput, setInstitutionInput] = useState("");
 
+  // ── Links & interests (UI-only until added to Supabase schema) ───────────
+  const [interests, setInterests] = useState<string[]>([]);
+  const [links, setLinks] = useState<LinkFields>(EMPTY_LINKS);
+
   // ── UI state ─────────────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState<TabId>("about");
   const [promptModalOpen, setPromptModalOpen] = useState(false);
   const [archiveModalOpen, setArchiveModalOpen] = useState(false);
 
-  // ── PI / Lab Settings state ───────────────────────────────────────────────
-  const [projectName, setProjectName] = useState(isSupabaseConfigured ? "" : PROJECT.name);
+  // ── PI Lab Settings state (initialized from project after load) ──────────
+  const [projectName, setProjectName] = useState("");
   const [projectInstitution, setProjectInstitution] = useState("");
-  const [researchType, setResearchType] = useState<string>(isSupabaseConfigured ? "" : PROJECT.researchType);
-  const [researchParticipation, setResearchParticipation] = useState<string>(isSupabaseConfigured ? "" : PROJECT.researchParticipation);
+  const [researchType, setResearchType] = useState("");
+  const [researchParticipation, setResearchParticipation] = useState("");
   const [activePromptIds, setActivePromptIds] = useState<string[]>(ACTIVE_PROMPT_IDS);
 
-  // ── Clear stale state when a different user signs in ────────────────────
-  useEffect(() => {
-    if (!isSupabaseConfigured) return;
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      const newUserId = session?.user?.id ?? null;
-      if (!authInitRef.current) {
-        authInitRef.current = true;
-        lastUserIdRef.current = newUserId;
-        return;
-      }
-      if (newUserId === lastUserIdRef.current) return;
-      lastUserIdRef.current = newUserId;
-      // Wipe all localStorage user cache so old data never bleeds across sessions
-      Object.keys(localStorage).filter(k => k.startsWith("canopy_")).forEach(k => localStorage.removeItem(k));
-      // Reset React state for all user-specific fields
-      setName(""); setIsPi(false); setAvatarInitials(""); setAvatarColor("#B4D4E3");
-      setInstitution(""); setBio(""); setDepartment("");
-      setProjectName(""); setProjectInstitution(""); setResearchType(""); setResearchParticipation(""); setProjectCreatedAt("");
-      if (newUserId) setReloadCount(c => c + 1);
-    });
-    return () => subscription.unsubscribe();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // ── Load profile on mount ────────────────────────────────────────────────
-  useEffect(() => {
-    if (isSupabaseConfigured) {
-      (async () => {
-        try {
-          const { data: { user } } = await supabase.auth.getUser();
-          if (!user) return;
-
-          const { data, error } = await supabase
-            .from("user_profiles")
-            .select("name, role, institution, bio, department, avatar_initials, avatar_color, project_id, projects(name, institution, created_at, research_type, research_participation)")
-            .eq("id", user.id)
-            .maybeSingle();
-
-          if (error) console.error("[ProfilePage] profile query error:", error);
-
-          const resolvedName = (data?.name as string) ?? "";
-          const parts = resolvedName.trim().split(/\s+/).filter(Boolean);
-          const resolvedInitials = (data?.avatar_initials as string)
-            ?? (parts.length === 0 ? "??" : parts.length === 1
-              ? parts[0].substring(0, 2).toUpperCase()
-              : (parts[0][0] + parts[parts.length - 1][0]).toUpperCase());
-
-          setName(resolvedName);
-          setIsPi((data?.role as string) === "pi");
-          setAvatarInitials(resolvedInitials);
-          setAvatarColor((data?.avatar_color as string) ?? "#B4D4E3");
-          setInstitution((data?.institution as string) ?? "");
-          if (data?.bio != null)        setBio(data.bio as string);
-          if (data?.department != null) setDepartment(data.department as string);
-
-          const proj = Array.isArray(data?.projects) ? data?.projects[0] : data?.projects;
-          if (proj) {
-            const p = proj as Record<string, string>;
-            if (p.name)                   setProjectName(p.name);
-            setProjectInstitution(p.institution ?? "");
-            if (p.created_at)             setProjectCreatedAt(p.created_at);
-            if (p.research_type)          setResearchType(p.research_type);
-            if (p.research_participation) setResearchParticipation(p.research_participation);
-          }
-        } catch (err) {
-          console.error("[ProfilePage] failed to load profile:", err);
-        }
-      })();
-      return;
-    }
-
-    // Demo mode (no Supabase) — use localStorage / mock defaults
-    const onboardUser = getStoredUser();
-    const onboardProject = getStoredProject();
-    setIsPi(onboardUser.role === "pi");
-    setAvatarInitials(onboardUser.avatarInitials);
-    setAvatarColor(onboardUser.avatarColor);
-    setProjectCreatedAt(onboardProject.createdAt);
-    setName(onboardUser.name);
-    if (onboardUser.institution) setInstitution(onboardUser.institution);
-    else setInstitution(onboardProject.institution);
-
-    const storedPhoto = localStorage.getItem("canopy_profile_photo");
-    if (storedPhoto) setPhoto(storedPhoto);
-    const storedName = localStorage.getItem("canopy_profile_name");
-    if (storedName) setName(storedName);
-    const storedInstitution = localStorage.getItem("canopy_profile_institution");
-    if (storedInstitution) setInstitution(storedInstitution);
-    const storedBio = localStorage.getItem("canopy_profile_bio");
-    if (storedBio) setBio(storedBio);
-    const storedDepartment = localStorage.getItem("canopy_profile_department");
-    if (storedDepartment) setDepartment(storedDepartment);
-    try {
-      const storedInterests = localStorage.getItem("canopy_profile_interests");
-      if (storedInterests) setInterests(JSON.parse(storedInterests));
-    } catch { /* ignore */ }
-    setLinks({
-      scholar: localStorage.getItem("canopy_profile_links_scholar") ?? "",
-      linkedin: localStorage.getItem("canopy_profile_links_linkedin") ?? "",
-      researchgate: localStorage.getItem("canopy_profile_links_researchgate") ?? "",
-      twitter: localStorage.getItem("canopy_profile_links_twitter") ?? "",
-      website: localStorage.getItem("canopy_profile_links_website") ?? "",
-      orcid: localStorage.getItem("canopy_profile_links_orcid") ?? "",
-    });
-    try {
-      const storedPrompts = localStorage.getItem("canopy_project_active_prompts");
-      if (storedPrompts) setActivePromptIds(JSON.parse(storedPrompts));
-    } catch { /* ignore */ }
-
-    setProjectName(onboardProject.name);
-    setProjectInstitution(onboardProject.institution);
-    if (onboardProject.researchType) setResearchType(onboardProject.researchType);
-    if (localStorage.getItem("canopy_project_name")) setProjectName(localStorage.getItem("canopy_project_name")!);
-    if (localStorage.getItem("canopy_project_institution")) setProjectInstitution(localStorage.getItem("canopy_project_institution")!);
-    if (localStorage.getItem("canopy_project_research_type")) setResearchType(localStorage.getItem("canopy_project_research_type")!);
-    if (localStorage.getItem("canopy_project_participation")) setResearchParticipation(localStorage.getItem("canopy_project_participation")!);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reloadCount]);
-
-  // ── Activity stats — loaded from Supabase ────────────────────────────────
+  // ── Activity stats ────────────────────────────────────────────────────────
   const [taskCounts, setTaskCounts] = useState<Record<TaskStatus, number>>({
     todo: 0, in_progress: 0, in_review: 0, done: 0,
   });
@@ -521,56 +395,89 @@ export default function ProfilePage() {
   const [litCount, setLitCount] = useState(0);
   const [journalStreak, setJournalStreak] = useState(0);
 
+  // ── Load profile & project from Supabase ─────────────────────────────────
   useEffect(() => {
-    if (!isSupabaseConfigured) return;
+    const load = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { router.push("/login"); return; }
+
+      const { data: prof } = await supabase
+        .from("user_profiles")
+        .select("*")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      const { data: membership } = await supabase
+        .from("team_members")
+        .select("project_id")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (membership?.project_id) {
+        const { data: proj } = await supabase
+          .from("projects")
+          .select("*")
+          .eq("id", membership.project_id)
+          .maybeSingle();
+        setProject(proj);
+        if (proj) {
+          setProjectName((proj.name as string) ?? "");
+          setProjectInstitution((proj.institution as string) ?? "");
+          setResearchType((proj.research_type as string) ?? "");
+          setResearchParticipation((proj.research_participation as string) ?? "");
+        }
+      }
+
+      setProfile(prof);
+      setLoading(false);
+    };
+    load();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── Load activity stats once project is known ─────────────────────────────
+  useEffect(() => {
+    if (!project?.id) return;
+
+    const projectId = project.id as string;
 
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) return;
 
-      supabase
-        .from("user_profiles")
-        .select("project_id")
-        .eq("id", user.id)
-        .maybeSingle()
-        .then(({ data: up }) => {
-          const projectId = up?.project_id as string | undefined;
-          if (!projectId) return;
-
-          supabase.from("tasks").select("id,status,title,due_date,updated_at")
-            .eq("project_id", projectId)
-            .then(({ data }) => {
-              if (!data) return;
-              const counts = { todo: 0, in_progress: 0, in_review: 0, done: 0 } as Record<TaskStatus, number>;
-              data.forEach((t) => { counts[t.status as TaskStatus] = (counts[t.status as TaskStatus] ?? 0) + 1; });
-              setTaskCounts(counts);
-              const recent = [...data]
-                .sort((a, b) => new Date(b.updated_at as string).getTime() - new Date(a.updated_at as string).getTime())
-                .slice(0, 5)
-                .map((row) => ({
-                  id: row.id as string, projectId, title: row.title as string,
-                  description: "", status: row.status as TaskStatus,
-                  priority: "medium" as const, assigneeIds: [],
-                  dueDate: row.due_date as string | undefined,
-                  createdAt: row.updated_at as string, updatedAt: row.updated_at as string,
-                  comments: [], files: [], links: [],
-                }));
-              setRecentTasks(recent);
-            });
-
-          supabase.from("literature_items").select("id", { count: "exact", head: true })
-            .eq("project_id", projectId).eq("added_by", user.id)
-            .then(({ count }) => setLitCount(count ?? 0));
-
-          const monthStart = new Date().toISOString().slice(0, 7) + "-01";
-          supabase.from("journal_entries").select("id", { count: "exact", head: true })
-            .eq("user_id", user.id).gte("date", monthStart)
-            .then(({ count }) => setJournalStreak(count ?? 0));
+      supabase.from("tasks").select("id,status,title,due_date,updated_at")
+        .eq("project_id", projectId)
+        .then(({ data }) => {
+          if (!data) return;
+          const counts = { todo: 0, in_progress: 0, in_review: 0, done: 0 } as Record<TaskStatus, number>;
+          data.forEach((t) => { counts[t.status as TaskStatus] = (counts[t.status as TaskStatus] ?? 0) + 1; });
+          setTaskCounts(counts);
+          const recent = [...data]
+            .sort((a, b) => new Date(b.updated_at as string).getTime() - new Date(a.updated_at as string).getTime())
+            .slice(0, 5)
+            .map((row) => ({
+              id: row.id as string, projectId, title: row.title as string,
+              description: "", status: row.status as TaskStatus,
+              priority: "medium" as const, assigneeIds: [],
+              dueDate: row.due_date as string | undefined,
+              createdAt: row.updated_at as string, updatedAt: row.updated_at as string,
+              comments: [], files: [], links: [],
+            }));
+          setRecentTasks(recent);
         });
+
+      supabase.from("literature_items").select("id", { count: "exact", head: true })
+        .eq("project_id", projectId).eq("added_by", user.id)
+        .then(({ count }) => setLitCount(count ?? 0));
+
+      const monthStart = new Date().toISOString().slice(0, 7) + "-01";
+      supabase.from("journal_entries").select("id", { count: "exact", head: true })
+        .eq("user_id", user.id).gte("date", monthStart)
+        .then(({ count }) => setJournalStreak(count ?? 0));
     });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reloadCount]);
+  }, [project]);
 
   // ── Handlers ─────────────────────────────────────────────────────────────
+
   const handlePhotoChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -578,7 +485,6 @@ export default function ProfilePage() {
     reader.onload = (ev) => {
       const dataUrl = ev.target?.result as string;
       setPhoto(dataUrl);
-      localStorage.setItem("canopy_profile_photo", dataUrl);
     };
     reader.readAsDataURL(file);
     e.target.value = "";
@@ -586,50 +492,66 @@ export default function ProfilePage() {
 
   const handleRemovePhoto = useCallback(() => {
     setPhoto(null);
-    localStorage.removeItem("canopy_profile_photo");
   }, []);
 
-  const handleSaveName = useCallback(() => {
+  const handleSaveName = useCallback(async () => {
     const trimmed = nameInput.trim();
     if (trimmed) {
-      setName(trimmed);
-      localStorage.setItem("canopy_profile_name", trimmed);
+      const parts = trimmed.split(/\s+/).filter(Boolean);
+      const newInitials = parts.length === 1
+        ? parts[0].substring(0, 2).toUpperCase()
+        : (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: updated } = await supabase
+          .from("user_profiles")
+          .update({ name: trimmed, avatar_initials: newInitials })
+          .eq("id", user.id)
+          .select("*")
+          .maybeSingle();
+        if (updated) setProfile(updated);
+      }
     }
     setEditingName(false);
   }, [nameInput]);
 
-  const handleSaveInstitution = useCallback(() => {
+  const handleSaveInstitution = useCallback(async () => {
     const trimmed = institutionInput.trim();
-    if (trimmed) {
-      setInstitution(trimmed);
-      localStorage.setItem("canopy_profile_institution", trimmed);
+    if (trimmed && project?.id) {
+      const { data: updatedProj } = await supabase
+        .from("projects")
+        .update({ institution: trimmed })
+        .eq("id", project.id)
+        .select("*")
+        .maybeSingle();
+      if (updatedProj) setProject(updatedProj);
     }
     setEditingInstitution(false);
-  }, [institutionInput]);
+  }, [institutionInput, project]);
 
   const handleEnterEditMode = useCallback(() => {
-    setDraftBio(bio);
+    setDraftBio(profile?.bio ?? "");
     setDraftInterests([...interests]);
-    setDraftDepartment(department);
+    setDraftDepartment(profile?.department ?? "");
     setDraftLinks({ ...links });
     setEditMode(true);
-  }, [bio, interests, department, links]);
+  }, [profile, interests, links]);
 
-  const handleSaveProfile = useCallback(() => {
-    setBio(draftBio);
+  const handleSaveProfile = useCallback(async () => {
     setInterests(draftInterests);
-    setDepartment(draftDepartment);
     setLinks(draftLinks);
 
-    localStorage.setItem("canopy_profile_bio", draftBio);
-    localStorage.setItem("canopy_profile_department", draftDepartment);
-    localStorage.setItem("canopy_profile_interests", JSON.stringify(draftInterests));
-    localStorage.setItem("canopy_profile_links_scholar", draftLinks.scholar);
-    localStorage.setItem("canopy_profile_links_linkedin", draftLinks.linkedin);
-    localStorage.setItem("canopy_profile_links_researchgate", draftLinks.researchgate);
-    localStorage.setItem("canopy_profile_links_twitter", draftLinks.twitter);
-    localStorage.setItem("canopy_profile_links_website", draftLinks.website);
-    localStorage.setItem("canopy_profile_links_orcid", draftLinks.orcid);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      const { data: updated } = await supabase
+        .from("user_profiles")
+        .update({ bio: draftBio || null, department: draftDepartment || null })
+        .eq("id", user.id)
+        .select("*")
+        .maybeSingle();
+      if (updated) setProfile(updated);
+    }
 
     setEditMode(false);
     setInterestInput("");
@@ -649,18 +571,37 @@ export default function ProfilePage() {
     setInterestInput("");
   }, [interestInput, draftInterests]);
 
-  const handleSaveLabSettings = useCallback(() => {
-    localStorage.setItem("canopy_project_name", projectName);
-    localStorage.setItem("canopy_project_institution", projectInstitution);
-    localStorage.setItem("canopy_project_research_type", researchType);
-    localStorage.setItem("canopy_project_participation", researchParticipation);
+  const handleSaveLabSettings = useCallback(async () => {
+    if (!project?.id) return;
+    await supabase
+      .from("projects")
+      .update({
+        name: projectName,
+        institution: projectInstitution,
+        research_type: researchType,
+        research_participation: researchParticipation,
+      })
+      .eq("id", project.id);
+    setProject((prev: any) => ({
+      ...prev,
+      name: projectName,
+      institution: projectInstitution,
+      research_type: researchType,
+      research_participation: researchParticipation,
+    }));
     showToast("Lab settings saved.", "success");
-  }, [projectName, projectInstitution, researchType, researchParticipation]);
+  }, [project, projectName, projectInstitution, researchType, researchParticipation]);
 
   const handleSavePrompts = useCallback((ids: string[]) => {
     setActivePromptIds(ids);
-    localStorage.setItem("canopy_project_active_prompts", JSON.stringify(ids));
   }, []);
+
+  // ── Derived display values ────────────────────────────────────────────────
+  const isPi = profile?.role === "pi";
+  const memberSinceDate = profile?.created_at
+    ? new Date(profile.created_at).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })
+    : "";
+  const roleBadgeLabel = profile?.role === "pi" ? "Principal Investigator" : "Researcher";
 
   // ── Tabs ──────────────────────────────────────────────────────────────────
   const tabs: { id: TabId; label: string }[] = [
@@ -709,11 +650,16 @@ export default function ProfilePage() {
     },
   ];
 
+  // ── Loading guard ─────────────────────────────────────────────────────────
+  if (loading) return null;
+
   // ── Render ────────────────────────────────────────────────────────────────
-  const memberSinceDate = projectCreatedAt
-    ? new Date(projectCreatedAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })
-    : "";
-  const roleBadgeLabel = isPi ? "Principal Investigator" : "Researcher";
+  const displayName = profile?.name ?? "";
+  const displayInitials = profile?.avatar_initials ?? "??";
+  const displayAvatarColor = profile?.avatar_color ?? "#B4D4E3";
+  const displayInstitution = project?.institution ?? "";
+  const displayBio = profile?.bio ?? "";
+  const displayDepartment = profile?.department ?? "";
 
   return (
     <div style={{ padding: "40px 24px", backgroundColor: "var(--color-canvas)", minHeight: "100%" }}>
@@ -744,26 +690,24 @@ export default function ProfilePage() {
         }}>
           {/* Avatar column */}
           <div style={{ width: 140, flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
-            {/* Avatar circle */}
             {photo ? (
               <img
                 src={photo}
-                alt={name}
+                alt={displayName}
                 style={{ width: 96, height: 96, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }}
               />
             ) : (
               <div style={{
                 width: 96, height: 96, borderRadius: "50%", flexShrink: 0,
-                backgroundColor: avatarColor,
+                backgroundColor: displayAvatarColor,
                 display: "flex", alignItems: "center", justifyContent: "center",
                 fontFamily: "var(--font-roboto)", fontWeight: 600, fontSize: 28, color: "#3a3a3a",
                 userSelect: "none",
               }}>
-                {avatarInitials}
+                {displayInitials}
               </div>
             )}
 
-            {/* Change photo button */}
             <input
               ref={fileInputRef}
               type="file"
@@ -821,20 +765,19 @@ export default function ProfilePage() {
                   />
                 ) : (
                   <h1
-                    onClick={() => { setNameInput(name); setEditingName(true); }}
+                    onClick={() => { setNameInput(displayName); setEditingName(true); }}
                     title="Click to edit"
                     style={{
                       fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 24,
-                      color: name ? "#1B2E4B" : "#9BAFC4", margin: 0, cursor: "text",
+                      color: displayName ? "#1B2E4B" : "#9BAFC4", margin: 0, cursor: "text",
                       whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
                     }}
                   >
-                    {name || "Set up your profile"}
+                    {displayName || "Set up your profile"}
                   </h1>
                 )}
               </div>
 
-              {/* Edit / Save+Cancel controls */}
               {!editMode ? (
                 <button
                   onClick={handleEnterEditMode}
@@ -908,7 +851,7 @@ export default function ProfilePage() {
               />
             ) : (
               <p
-                onClick={() => { setInstitutionInput(institution); setEditingInstitution(true); }}
+                onClick={() => { setInstitutionInput(displayInstitution); setEditingInstitution(true); }}
                 title="Click to edit"
                 style={{
                   fontFamily: "var(--font-roboto)", fontWeight: 400, fontSize: 14,
@@ -916,7 +859,7 @@ export default function ProfilePage() {
                   overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "100%",
                 }}
               >
-                {institution}
+                {displayInstitution}
               </p>
             )}
           </div>
@@ -975,9 +918,9 @@ export default function ProfilePage() {
                   ) : (
                     <p style={{
                       fontFamily: "var(--font-roboto)", fontWeight: 400, fontSize: 14,
-                      color: bio ? "#2D2D2D" : "#6B6B6B", lineHeight: 1.7, margin: 0,
+                      color: displayBio ? "#2D2D2D" : "#6B6B6B", lineHeight: 1.7, margin: 0,
                     }}>
-                      {bio || "No bio yet."}
+                      {displayBio || "No bio yet."}
                     </p>
                   )}
                 </div>
@@ -1039,9 +982,9 @@ export default function ProfilePage() {
                   ) : (
                     <p style={{
                       fontFamily: "var(--font-roboto)", fontWeight: 400, fontSize: 14,
-                      color: department ? "#2D2D2D" : "#6B6B6B", margin: 0,
+                      color: displayDepartment ? "#2D2D2D" : "#6B6B6B", margin: 0,
                     }}>
-                      {department || "Not specified."}
+                      {displayDepartment || "Not specified."}
                     </p>
                   )}
                 </div>
@@ -1122,7 +1065,6 @@ export default function ProfilePage() {
             {/* ── ACTIVITY ───────────────────────────────────────────────── */}
             {activeTab === "activity" && (
               <div style={{ display: "flex", flexDirection: "column", gap: 28 }}>
-                {/* Stat cards 2x2 */}
                 <div>
                   <SectionLabel>Task Summary</SectionLabel>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
@@ -1133,7 +1075,6 @@ export default function ProfilePage() {
                   </div>
                 </div>
 
-                {/* Recent tasks */}
                 <div>
                   <SectionLabel>Recent Task Activity</SectionLabel>
                   {recentTasks.length === 0 ? (
@@ -1181,7 +1122,6 @@ export default function ProfilePage() {
                   )}
                 </div>
 
-                {/* Literature contributions */}
                 <div>
                   <SectionLabel>Literature Contributions</SectionLabel>
                   <p style={{ fontFamily: "var(--font-roboto)", fontWeight: 400, fontSize: 13, color: "#6B6B6B", margin: 0 }}>
@@ -1189,7 +1129,6 @@ export default function ProfilePage() {
                   </p>
                 </div>
 
-                {/* Journal streak */}
                 <div>
                   <SectionLabel>Journal</SectionLabel>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -1208,19 +1147,16 @@ export default function ProfilePage() {
             {/* ── LAB SETTINGS (PI only) ──────────────────────────────────── */}
             {activeTab === "lab_settings" && isPi && (
               <div style={{ display: "flex", flexDirection: "column", gap: 28 }}>
-                {/* Project name */}
                 <div>
                   <SectionLabel>Project Name</SectionLabel>
                   <FieldInput value={projectName} onChange={setProjectName} placeholder="Project name" />
                 </div>
 
-                {/* Institution */}
                 <div>
                   <SectionLabel>Institution</SectionLabel>
                   <FieldInput value={projectInstitution} onChange={setProjectInstitution} placeholder="Institution name" />
                 </div>
 
-                {/* Research type */}
                 <div>
                   <SectionLabel>Research Type</SectionLabel>
                   <select
@@ -1242,7 +1178,6 @@ export default function ProfilePage() {
                   </select>
                 </div>
 
-                {/* Research participation */}
                 <div>
                   <SectionLabel>Research Participation</SectionLabel>
                   <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -1275,7 +1210,6 @@ export default function ProfilePage() {
                   </p>
                 </div>
 
-                {/* Journal prompt management */}
                 <div>
                   <SectionLabel>Journal Prompts</SectionLabel>
                   <button
@@ -1293,7 +1227,6 @@ export default function ProfilePage() {
                   </button>
                 </div>
 
-                {/* Save lab settings */}
                 <button
                   onClick={handleSaveLabSettings}
                   style={{
@@ -1308,7 +1241,6 @@ export default function ProfilePage() {
                   Save lab settings
                 </button>
 
-                {/* Danger zone */}
                 <div style={{
                   border: "1px solid #C0392B", borderRadius: 10, padding: 16, marginTop: 8,
                 }}>

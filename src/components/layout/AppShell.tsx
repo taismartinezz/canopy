@@ -7,12 +7,9 @@ import {
   LayoutDashboard, CheckSquare, BookOpen, BookMarked, Users,
   Bell, ChevronDown, LogOut, Settings, User as UserIcon, Menu, X,
 } from "lucide-react";
-import {
-  NOTIFICATIONS, PROJECT, CURRENT_USER_ID, getUser,
-  getStoredProject, getStoredUser,
-} from "@/lib/mock-data";
+import { NOTIFICATIONS } from "@/lib/mock-data";
 import type { User } from "@/types";
-import { supabase, isSupabaseConfigured } from "@/lib/supabase";
+import { supabase } from "@/lib/supabase";
 import Toast from "@/components/ui/Toast";
 import Avatar from "@/components/ui/Avatar";
 import CanopyLogo from "@/components/ui/CanopyLogo";
@@ -184,12 +181,11 @@ function NotifPanel({ onClose, userId }: { onClose: () => void; userId: string }
 // ── Profile menu ──────────────────────────────────────────────────────────────
 
 function ProfileMenu({ user, onClose, onSignOut, onNavigateProfile }: {
-  user: ReturnType<typeof getUser>;
+  user: Pick<User, "name" | "email">;
   onClose: () => void;
   onSignOut: () => void;
   onNavigateProfile: () => void;
 }) {
-  if (!user) return null;
   return (
     <div
       className="absolute right-0 top-full mt-2 animate-fade-in"
@@ -240,74 +236,49 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [profileOpen, setProfileOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [authed, setAuthed] = useState(false);
-  const [storedProject, setStoredProject] = useState(getStoredProject);
-  const [currentUser, setCurrentUser] = useState<User>(() =>
-    isSupabaseConfigured
-      ? { id: "", email: "", name: "", role: "researcher", avatarColor: "#B4D4E3", avatarInitials: "" }
-      : getStoredUser()
-  );
+  const [profile, setProfile] = useState<any>(null);
+  const [project, setProject] = useState<any>(null);
   const [team, setTeam] = useState<User[]>([]);
-  const [sidebarUserId, setSidebarUserId] = useState(CURRENT_USER_ID);
   const hasFetched = useRef(false);
 
-  // Auth gate
+  // Auth gate + data load
   useEffect(() => {
-    if (!isSupabaseConfigured) {
-      if (localStorage.getItem("canopy_authed") === "true") { setAuthed(true); }
-      else { router.replace("/login"); }
-      return;
-    }
-
     async function init() {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) { router.replace("/login"); return; }
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) { router.replace("/login"); return; }
 
-        const authUser = session.user;
-        setSidebarUserId(authUser.id);
-
-        const { data: profile, error: profileErr } = await supabase
+        const { data: prof } = await supabase
           .from("user_profiles")
-          .select("name, role, avatar_initials, avatar_color, institution, project_id, projects(name, institution)")
-          .eq("id", authUser.id)
+          .select("*")
+          .eq("id", user.id)
           .maybeSingle();
 
-        if (profileErr) console.error("[AppShell] profile query error:", profileErr);
-        console.log("[AppShell] user_profiles row:", profile, "for", authUser.email);
-        if (!profile) console.error("[AppShell] no user_profiles row for", authUser.email, "— re-run seed or check Supabase Table Editor");
+        console.log("[AppShell] user_profiles row:", prof, "for", user.email);
 
-        setCurrentUser({
-          id: authUser.id,
-          email: authUser.email ?? "",
-          name: (profile?.name as string) ?? "",
-          role: ((profile?.role as User["role"]) ?? "researcher"),
-          avatarColor: (profile?.avatar_color as string) ?? "#B4D4E3",
-          avatarInitials: (profile?.avatar_initials as string) ?? "??",
-          institution: (profile?.institution as string) ?? undefined,
-        });
-        setAuthed(true);
+        const { data: membership } = await supabase
+          .from("team_members")
+          .select("project_id")
+          .eq("user_id", user.id)
+          .maybeSingle();
 
-        const projectId = profile?.project_id as string | undefined;
-        if (projectId) {
-          const proj = Array.isArray(profile?.projects) ? profile?.projects[0] : profile?.projects;
-          if (proj) {
-            setStoredProject((prev) => ({
-              ...prev,
-              id: projectId,
-              name: (proj as Record<string, string>).name ?? prev.name,
-              institution: (proj as Record<string, string>).institution ?? prev.institution,
-            }));
-          }
+        if (membership?.project_id) {
+          const { data: proj } = await supabase
+            .from("projects")
+            .select("*")
+            .eq("id", membership.project_id)
+            .maybeSingle();
+          setProject(proj);
 
           const { data: members } = await supabase
             .from("team_members")
             .select("user_id, role, user_profiles(name, avatar_color, avatar_initials)")
-            .eq("project_id", projectId);
+            .eq("project_id", membership.project_id);
 
           if (members) {
             setTeam(members.map((row) => {
               const profiles = row.user_profiles as unknown as Record<string, string>[] | null;
-              const p = Array.isArray(profiles) ? profiles[0] : null;
+              const p = Array.isArray(profiles) ? profiles[0] : (profiles as Record<string, string> | null);
               return {
                 id: row.user_id as string,
                 name: p?.name ?? "Unknown",
@@ -319,6 +290,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             }));
           }
         }
+
+        setProfile(prof);
+        setAuthed(true);
       } catch (err) {
         console.error("[AppShell] init error:", err);
         router.replace("/login");
@@ -338,7 +312,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const unreadCount = NOTIFICATIONS.filter((n) => !n.read && n.recipientId === CURRENT_USER_ID).length;
+  const unreadCount = NOTIFICATIONS.filter((n) => !n.read).length;
 
   useEffect(() => { setMobileNavOpen(false); setNotifOpen(false); setProfileOpen(false); }, [pathname]);
 
@@ -361,8 +335,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   async function handleSignOut() {
-    if (isSupabaseConfigured) await supabase.auth.signOut();
-    localStorage.removeItem("canopy_authed");
+    await supabase.auth.signOut();
     router.push("/login");
   }
 
@@ -389,8 +362,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         style={{ width: 40, backgroundColor: "var(--color-strip)", borderRight: "1px solid var(--color-border)", zIndex: 10 }}
       >
         <div className="w-8 h-8 flex items-center justify-center mb-1"><CanopyLogo size={28} /></div>
-        <button aria-label={storedProject.name} title={storedProject.name}>
-          <div className="w-9 h-9 rounded-[10px] flex items-center justify-center" style={{ backgroundColor: "var(--color-navy)", color: "#fff", fontSize: 12, fontWeight: 700 }}>{projectInitials(storedProject.name)}</div>
+        <button aria-label={project?.name ?? ""} title={project?.name ?? ""}>
+          <div className="w-9 h-9 rounded-[10px] flex items-center justify-center" style={{ backgroundColor: "var(--color-navy)", color: "#fff", fontSize: 12, fontWeight: 700 }}>{projectInitials(project?.name ?? "")}</div>
         </button>
       </div>
 
@@ -399,7 +372,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         className="hidden md:flex flex-col shrink-0"
         style={{ width: 210, borderRight: "1px solid var(--color-border)" }}
       >
-        <SidebarBody isActive={isActive} team={team} currentUserId={sidebarUserId} />
+        <SidebarBody isActive={isActive} team={team} currentUserId={profile?.id ?? ""} />
       </div>
 
       {/* ── Mobile nav drawer — fixed overlay, slide in/out ── */}
@@ -421,7 +394,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           showCloseButton
           onClose={() => setMobileNavOpen(false)}
           team={team}
-          currentUserId={sidebarUserId}
+          currentUserId={profile?.id ?? ""}
         />
       </div>
 
@@ -454,15 +427,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
           {/* Desktop project name */}
           <span className="hidden md:block" style={{ fontSize: 13, color: "var(--color-secondary)" }}>
-            {storedProject.name}
+            {project?.name ?? ""}
           </span>
 
           <div className="flex items-center gap-2 ml-auto">
             {/* Institution badge — sm and up */}
-            {storedProject.institution && (
+            {project?.institution && (
               <span className="hidden sm:inline-block px-3 py-1 shrink-0"
                 style={{ backgroundColor: "var(--color-navy)", color: "#fff", borderRadius: 20, fontSize: 11, fontWeight: 600, whiteSpace: "nowrap" }}>
-                {storedProject.institution}
+                {project.institution}
               </span>
             )}
 
@@ -477,7 +450,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 <Bell size={18} color="var(--color-body)" />
                 <NotifDot count={unreadCount} />
               </button>
-              {notifOpen && <NotifPanel onClose={() => setNotifOpen(false)} userId={CURRENT_USER_ID} />}
+              {notifOpen && <NotifPanel onClose={() => setNotifOpen(false)} userId={profile?.id ?? ""} />}
             </div>
 
             {/* User avatar */}
@@ -488,12 +461,19 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 style={{ minHeight: 44 }}
                 aria-label="Profile menu"
               >
-                <Avatar user={currentUser} size={28} />
+                <Avatar
+                  user={{
+                    name: profile?.name ?? "",
+                    avatarColor: profile?.avatar_color ?? "#B4D4E3",
+                    avatarInitials: profile?.avatar_initials ?? "??",
+                  }}
+                  size={28}
+                />
                 <ChevronDown size={14} color="var(--color-secondary)" className="hidden sm:block" />
               </button>
               {profileOpen && (
                 <ProfileMenu
-                  user={currentUser}
+                  user={{ name: profile?.name ?? "", email: profile?.email ?? "" }}
                   onClose={() => setProfileOpen(false)}
                   onSignOut={handleSignOut}
                   onNavigateProfile={() => router.push("/profile")}

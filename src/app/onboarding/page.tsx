@@ -386,13 +386,15 @@ async function syncOnboardingToSupabase({
       projectId = created.id as string;
     }
 
-    await supabase.from("user_profiles").upsert({
+    const profilePayload = {
       id: user.id, name: userName, role: userRole,
       institution: resolvedInstitution || null, avatar_initials: avatarInitials,
       project_id: projectId,
       bio: bio || null,
       department: department || null,
-    });
+    };
+    console.log("[syncOnboardingToSupabase] upserting to user_profiles:", profilePayload);
+    await supabase.from("user_profiles").upsert(profilePayload);
 
     await supabase.from("team_members").upsert(
       { project_id: projectId, user_id: user.id, role: userRole },
