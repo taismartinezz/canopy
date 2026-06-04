@@ -236,8 +236,9 @@ export default function LoginPage() {
         : await supabase.auth.signUp({ email, password });
       if (authError) { setError(authError.message); setLoading(false); return; }
 
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { setError("Sign-in succeeded but could not retrieve user."); setLoading(false); return; }
+      const { data: { session } } = await supabase.auth.getSession();
+      const user = session?.user;
+      if (!user) { setError("Sign-in succeeded but session has no user."); setLoading(false); return; }
 
       const { data: member } = await supabase
         .from("team_members").select("id").eq("user_id", user.id).maybeSingle();
