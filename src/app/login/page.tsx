@@ -214,7 +214,6 @@ export default function LoginPage() {
     if (password.length < 6) { setError("Password must be at least 6 characters."); return; }
     setError("");
     setLoading(true);
-    const dest = localStorage.getItem("canopy_project") ? "/" : "/onboarding";
 
     if (isSupabaseConfigured) {
       const { error: authError } = mode === "signin"
@@ -222,16 +221,31 @@ export default function LoginPage() {
         : await supabase.auth.signUp({ email, password });
       setLoading(false);
       if (authError) { setError(authError.message); return; }
-    } else {
-      setLoading(false);
+
+      // Clear any stale data from a previous user's session
+      localStorage.removeItem("canopy_user");
+      localStorage.removeItem("canopy_project");
+      localStorage.removeItem("canopy_authed");
+
+      // Determine destination from Supabase — does this user have a profile+project?
+      const { data: { user } } = await supabase.auth.getUser();
+      const { data: profile } = user
+        ? await supabase.from("user_profiles").select("project_id").eq("id", user.id).single()
+        : { data: null };
+      router.push(profile?.project_id ? "/" : "/onboarding");
+      return;
     }
 
+    setLoading(false);
     localStorage.setItem("canopy_authed", "true");
-    router.push(dest);
+    router.push(localStorage.getItem("canopy_project") ? "/" : "/onboarding");
   }, [email, password, mode, router]);
 
   const handleOAuth = useCallback(async (provider: "github" | "google" | "azure") => {
     if (isSupabaseConfigured) {
+      localStorage.removeItem("canopy_user");
+      localStorage.removeItem("canopy_project");
+      localStorage.removeItem("canopy_authed");
       await supabase.auth.signInWithOAuth({ provider });
       return;
     }
