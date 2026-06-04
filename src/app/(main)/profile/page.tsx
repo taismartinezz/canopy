@@ -457,7 +457,7 @@ export default function ProfilePage() {
           .from("user_profiles")
           .select("name, role, institution, bio, department, avatar_initials")
           .eq("id", user.id)
-          .single()
+          .maybeSingle()
           .then(({ data }) => {
             if (!data) return;
             if (data.name)            setName(data.name as string);

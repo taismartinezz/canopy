@@ -261,7 +261,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           .from("user_profiles")
           .select("name, role, avatar_initials, avatar_color, institution")
           .eq("id", authUser.id)
-          .single()
+          .maybeSingle()
           .then(({ data: profile }) => {
             setCurrentUser({
               id: authUser.id,
@@ -279,7 +279,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           .from("user_profiles")
           .select("project_id, projects(name, institution)")
           .eq("id", authUser.id)
-          .single()
+          .maybeSingle()
           .then(({ data: up }) => {
             if (!up?.project_id) return;
             const proj = Array.isArray(up.projects) ? up.projects[0] : up.projects;

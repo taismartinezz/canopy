@@ -230,7 +230,7 @@ export default function LoginPage() {
       // Determine destination from Supabase — does this user have a profile+project?
       const { data: { user } } = await supabase.auth.getUser();
       const { data: profile } = user
-        ? await supabase.from("user_profiles").select("project_id").eq("id", user.id).single()
+        ? await supabase.from("user_profiles").select("project_id").eq("id", user.id).maybeSingle()
         : { data: null };
       router.push(profile?.project_id ? "/" : "/onboarding");
       return;
