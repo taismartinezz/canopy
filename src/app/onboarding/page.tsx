@@ -342,7 +342,7 @@ async function syncOnboardingToSupabase({
           .select("id")
           .single();
         console.log("[Sync] project result:", created, createErr);
-        if (!created) return null;
+        if (createErr || !created) return `Project creation failed: ${createErr?.message ?? "unknown error"}`;
         projectId = created.id as string;
       }
 
@@ -394,12 +394,12 @@ async function syncOnboardingToSupabase({
       }
     } else {
       // Researcher creating own workspace (no invite code)
-      const { data: created } = await supabase
+      const { data: created, error: createErr2 } = await supabase
         .from("projects")
         .insert({ name: projectName, institution, research_type: researchType, owner_id: user.id })
         .select("id")
         .single();
-      if (!created) return null;
+      if (createErr2 || !created) return `Project creation failed: ${createErr2?.message ?? "unknown error"}`;
       projectId = created.id as string;
     }
 
@@ -411,30 +411,44 @@ async function syncOnboardingToSupabase({
       department: department ?? "",
       avatar_color: "#B4D4E3",
     };
-    console.log("[Sync] upserting profile...", profilePayload);
-    const { error: upsertError } = await supabase.from("user_profiles").upsert(profilePayload);
-    console.log("[Sync] profile upsert result:", upsertError ?? "ok");
-    if (upsertError) return `Profile save failed: ${upsertError.message}`;
+    console.log("[Sync] inserting profile...", profilePayload);
+    const { error: profileError } = await supabase
+      .from("user_profiles")
+      .insert(profilePayload)
+      .select()
+      .maybeSingle()
+      .then(async (res) => {
+        if (res.error?.code === "23505") {
+          // Row exists — update it instead
+          return supabase.from("user_profiles").update(profilePayload).eq("id", user.id);
+        }
+        return res;
+      });
+    console.log("[Sync] profile insert result:", profileError ?? "ok");
+    if (profileError) return `Profile save failed: ${profileError.message}`;
 
-    const { data: verify } = await supabase
+    const { data: profileVerify } = await supabase
       .from("user_profiles")
       .select("*")
       .eq("id", user.id)
       .maybeSingle();
-    console.log("[Sync] verification read:", verify);
+    console.log("[Sync] verification read:", profileVerify);
 
     console.log("[Sync] inserting team_member...");
-    const { data: memberData, error: memberErr } = await supabase.from("team_members").upsert(
-      { project_id: projectId, user_id: user.id, role: userRole },
-      { onConflict: "project_id,user_id" },
-    ).select();
+    const { data: memberData, error: memberErr } = await supabase
+      .from("team_members")
+      .insert({ project_id: projectId, user_id: user.id, role: userRole })
+      .select();
     console.log("[Sync] team_member result:", memberData, memberErr);
-    if (memberErr) return `Team membership save failed: ${memberErr.message}`;
+    if (memberErr && memberErr.code !== "23505") return `Team membership save failed: ${memberErr.message}`;
+
+    const { data: verify } = await supabase.from("team_members").select("*").eq("user_id", user.id);
+    console.log("[Sync] FINAL team_members verification:", verify);
 
     return null;
   } catch (err) {
     console.error("[syncOnboardingToSupabase] unexpected error:", err);
-    return null;
+    return `Unexpected error: ${err instanceof Error ? err.message : String(err)}`;
   }
 }
 
