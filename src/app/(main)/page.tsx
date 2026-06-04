@@ -10,6 +10,7 @@ import {
   EVENTS, ACTIVITY, TASKS, DASHBOARD_POSTS, USERS,
   formatRelativeTime, formatDate, getUser, CURRENT_USER_ID, getStoredProject,
 } from "@/lib/mock-data";
+import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import type { Task, ActivityEvent, CalendarEvent, DashboardPost, TaskStatus } from "@/types";
 import Avatar from "@/components/ui/Avatar";
 import { Plus, ChevronRight, X } from "lucide-react";
@@ -483,12 +484,49 @@ export default function DashboardPage() {
   const [dashPosts, setDashPosts]     = useState<DashboardPost[]>([]);
 
   useEffect(() => {
-    const sp = getStoredProject();
-    console.log("[Canopy] getStoredProject():", sp);
-    console.log("[Canopy] raw localStorage canopy_project:", localStorage.getItem("canopy_project"));
-    setProjectName(sp.name);
+    if (isSupabaseConfigured) {
+      supabase.auth.getUser().then(({ data: { user } }) => {
+        if (!user) return;
+        supabase
+          .from("user_profiles")
+          .select("project_id, projects(name)")
+          .eq("id", user.id)
+          .maybeSingle()
+          .then(({ data: up }) => {
+            if (!up?.project_id) return;
+            const proj = Array.isArray(up.projects) ? up.projects[0] : up.projects;
+            if (proj) setProjectName((proj as Record<string, string>).name ?? "");
 
-    // Only pre-populate with demo data when no real project has been stored
+            supabase
+              .from("tasks")
+              .select("*")
+              .eq("project_id", up.project_id as string)
+              .order("created_at", { ascending: false })
+              .then(({ data, error }) => {
+                if (!error && data) setTasks(data.map((row) => ({
+                  id: row.id as string,
+                  projectId: row.project_id as string,
+                  title: row.title as string,
+                  description: (row.description as string) ?? "",
+                  status: row.status as TaskStatus,
+                  priority: row.priority as Task["priority"],
+                  assigneeIds: (row.assignee_ids as string[]) ?? [],
+                  dueDate: row.due_date as string | undefined,
+                  createdAt: row.created_at as string,
+                  updatedAt: row.updated_at as string,
+                  comments: (row.comments as Task["comments"]) ?? [],
+                  files: (row.files as Task["files"]) ?? [],
+                  links: (row.links as Task["links"]) ?? [],
+                })));
+              });
+          });
+      });
+      return;
+    }
+
+    // Demo mode fallback (no Supabase)
+    const sp = getStoredProject();
+    setProjectName(sp.name);
     if (!localStorage.getItem("canopy_project")) {
       setTasks(TASKS);
       setDashEvents(EVENTS);
