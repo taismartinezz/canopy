@@ -60,7 +60,7 @@ When('I click the password visibility toggle', async () => {
 
 Then('the page should have an h1 heading', async () => {
   const h1 = page.locator('h1').first()
-  assert.ok(await h1.isAttached(), 'Expected an h1 element to be in the DOM')
+  assert.ok((await h1.count()) > 0, 'Expected an h1 element to be in the DOM')
 })
 
 Then('it should be an anchor element with a valid href', async () => {
