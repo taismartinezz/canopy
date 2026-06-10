@@ -325,24 +325,20 @@ async function syncOnboardingToSupabase({
     let resolvedInstitution = institution;
 
     if (userRole === "pi") {
-      console.log("[Sync] checking for existing project for owner:", user.id);
       const { data: existing, error: existingErr } = await supabase
         .from("projects")
         .select("id")
         .eq("owner_id", user.id)
         .maybeSingle();
-      console.log("[Sync] existing project result:", existing, existingErr);
 
       if (existing) {
         projectId = existing.id as string;
       } else {
-        console.log("[Sync] inserting project...");
         const { data: created, error: createErr } = await supabase
           .from("projects")
           .insert({ name: projectName, institution, research_type: researchType, owner_id: user.id })
           .select("id")
           .single();
-        console.log("[Sync] project result:", created, createErr);
         if (createErr || !created) return `Project creation failed: ${createErr?.message ?? "unknown error"}`;
         projectId = created.id as string;
       }
@@ -353,7 +349,6 @@ async function syncOnboardingToSupabase({
           code: inviteCode, project_id: projectId, created_by: user.id,
         });
         if (codeErr) console.error("[Sync] generic invite_code insert error:", codeErr);
-        else console.log("[Sync] generic invite_code saved:", inviteCode);
       }
       // Save one unique code per invited email
       if (inviteEmails && inviteEmails.length > 0) {
@@ -362,20 +357,17 @@ async function syncOnboardingToSupabase({
           const { error: emailCodeErr } = await supabase.from("invite_codes").insert({
             code, project_id: projectId, created_by: user.id,
           });
-          if (emailCodeErr) console.error(`[Sync] invite_code insert error for ${email}:`, emailCodeErr);
-          else console.log(`[Sync] invite_code saved for ${email}:`, code);
+          if (emailCodeErr) console.error("[Sync] invite_code insert error:", emailCodeErr);
         }
       }
     } else if (enteredInviteCode) {
       // Look up the project linked to the invite code
       const normalizedCode = enteredInviteCode.trim().toUpperCase();
-      console.log("[Sync] looking up invite code:", normalizedCode);
       const { data: inviteData, error: inviteErr } = await supabase
         .from("invite_codes")
         .select("project_id, id")
         .eq("code", normalizedCode)
         .maybeSingle();
-      console.log("[Sync] invite_codes lookup:", inviteData, inviteErr);
 
       if (!inviteData?.project_id) {
         return `Invalid invite code. Please check the code and try again.${inviteErr ? ` (${inviteErr.message})` : ""}`;
@@ -412,7 +404,6 @@ async function syncOnboardingToSupabase({
       department: department ?? "",
       avatar_color: "#B4D4E3",
     };
-    console.log("[Sync] inserting profile...", profilePayload);
     const { error: profileError } = await supabase
       .from("user_profiles")
       .insert(profilePayload)
@@ -425,26 +416,13 @@ async function syncOnboardingToSupabase({
         }
         return res;
       });
-    console.log("[Sync] profile insert result:", profileError ?? "ok");
     if (profileError) return `Profile save failed: ${profileError.message}`;
 
-    const { data: profileVerify } = await supabase
-      .from("user_profiles")
-      .select("*")
-      .eq("id", user.id)
-      .maybeSingle();
-    console.log("[Sync] verification read:", profileVerify);
-
-    console.log("[Sync] inserting team_member...");
-    const { data: memberData, error: memberErr } = await supabase
+    const { error: memberErr } = await supabase
       .from("team_members")
       .insert({ project_id: projectId, user_id: user.id, role: userRole })
       .select();
-    console.log("[Sync] team_member result:", memberData, memberErr);
     if (memberErr && memberErr.code !== "23505") return `Team membership save failed: ${memberErr.message}`;
-
-    const { data: verify } = await supabase.from("team_members").select("*").eq("user_id", user.id);
-    console.log("[Sync] FINAL team_members verification:", verify);
 
     return null;
   } catch (err) {
@@ -634,7 +612,6 @@ export default function OnboardingPage() {
     }
 
     // Await Supabase sync so the profile row exists before AppShell loads
-    console.log("[Onboarding] starting sync...");
     if (isSupabaseConfigured) {
       const syncErr = await syncOnboardingToSupabase({
         projectName, institution, researchType,
@@ -645,7 +622,6 @@ export default function OnboardingPage() {
         department: role === "researcher" ? profileDept : undefined,
         inviteEmails: role === "pi" ? inviteEmails : undefined,
       });
-      console.log("[Onboarding] sync result:", syncErr ?? "ok");
       if (syncErr) {
         setSyncError(syncErr);
         setSubmitting(false);
@@ -653,7 +629,6 @@ export default function OnboardingPage() {
       }
     }
 
-    console.log("[Onboarding] navigating to /profile");
     router.push("/profile");
   }
 

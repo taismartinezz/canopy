@@ -497,7 +497,6 @@ export default function TasksPage() {
         supabase.from("tasks").update({ status: targetStatus }).eq("id", activeTaskId)
           .then(({ error }) => {
             if (error) console.error("[Tasks] drag status error:", error);
-            else console.log("[Tasks] drag status saved:", activeTaskId, "→", targetStatus);
           });
       }, 0);
 

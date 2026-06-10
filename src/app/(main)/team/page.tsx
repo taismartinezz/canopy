@@ -349,7 +349,7 @@ export default function TeamPage() {
         const [{ data: memberData }, { data: assigneeRows, error: assigneeError }] = await Promise.all([
           supabase
             .from("team_members")
-            .select("*, user_profiles(name, avatar_color, avatar_initials, institution)")
+            .select("*, user_profiles(name, avatar_color, avatar_initials, avatar_url, institution)")
             .eq("project_id", projectId),
           // Query through task_assignees so we get all rows regardless of tasks RLS
           supabase
@@ -387,6 +387,7 @@ export default function TeamPage() {
               role: row.role as TeamMember["role"],
               avatarColor: profile?.avatar_color ?? "#B4D4E3",
               avatarInitials: profile?.avatar_initials ?? "??",
+              avatarUrl: profile?.avatar_url ?? undefined,
               institution: profile?.institution,
               taskCounts: countMap[uid] ?? { todo: 0, in_progress: 0, in_review: 0, done: 0 },
               weeklyUpdate: undefined,
