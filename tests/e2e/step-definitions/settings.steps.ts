@@ -1,5 +1,5 @@
 import { Given, When, Then, Before, After, setDefaultTimeout } from '@cucumber/cucumber'
-import { chromium, Browser, Page } from 'playwright'
+import { chromium, Browser, Page, Route } from 'playwright'
 import assert from 'node:assert/strict'
 
 setDefaultTimeout(30_000)
@@ -30,9 +30,18 @@ function fakeSession() {
   })
 }
 
+// maybeSingle() sends Accept: application/vnd.pgrst.object+json and expects a
+// single JSON object back. Returning an array makes prof?.role === undefined.
+function respondSmart(route: Route, single: object, array: object[] = [single]) {
+  const accept = route.request().headers()['accept'] ?? ''
+  return route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify(accept.includes('pgrst.object') ? single : array),
+  })
+}
+
 async function setupMocks(role: 'pi' | 'researcher') {
-  // Inject session into localStorage before any page JS runs (Supabase reads
-  // localStorage before making network calls, so page.route for auth is too late)
   await page.addInitScript((session) => {
     const _get = Storage.prototype.getItem
     Storage.prototype.getItem = function (key) {
@@ -41,29 +50,22 @@ async function setupMocks(role: 'pi' | 'researcher') {
     }
   }, fakeSession())
 
+  const profileData = {
+    id: MOCK_USER_ID, name: 'Test User', role,
+    avatar_color: '#B4D4E3', avatar_initials: 'TU',
+    email: MOCK_EMAIL, bio: '',
+  }
+
   await page.route('**/rest/v1/user_profiles**', (route) =>
-    route.fulfill({
-      status: 200, contentType: 'application/json',
-      body: JSON.stringify([{
-        id: MOCK_USER_ID, name: 'Test User', role,
-        avatar_color: '#B4D4E3', avatar_initials: 'TU',
-        email: MOCK_EMAIL, bio: '',
-      }]),
-    })
+    respondSmart(route, profileData)
   )
 
   await page.route('**/rest/v1/team_members**', (route) =>
-    route.fulfill({
-      status: 200, contentType: 'application/json',
-      body: JSON.stringify([{ project_id: 'proj-1', user_id: MOCK_USER_ID, role }]),
-    })
+    respondSmart(route, { project_id: 'proj-1', user_id: MOCK_USER_ID, role })
   )
 
   await page.route('**/rest/v1/projects**', (route) =>
-    route.fulfill({
-      status: 200, contentType: 'application/json',
-      body: JSON.stringify([{ id: 'proj-1', name: 'Lab', institution: 'Uni' }]),
-    })
+    respondSmart(route, { id: 'proj-1', name: 'Lab', institution: 'Uni' })
   )
 
   await page.route('**/rest/v1/invite_codes**', (route) =>
