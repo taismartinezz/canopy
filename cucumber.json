@@ -1,0 +1,8 @@
+{
+  "default": {
+    "paths": ["tests/e2e/features/**/*.feature"],
+    "require": ["tests/e2e/step-definitions/**/*.ts"],
+    "requireModule": ["ts-node/register"],
+    "format": ["progress-bar", "html:tests/e2e/reports/cucumber-report.html"]
+  }
+}

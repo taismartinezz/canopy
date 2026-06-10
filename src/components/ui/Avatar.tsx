@@ -1,3 +1,6 @@
+"use client";
+
+import { useState } from "react";
 import type { User } from "@/types";
 
 interface AvatarProps {
@@ -7,9 +10,10 @@ interface AvatarProps {
 }
 
 export default function Avatar({ user, size = 28, className = "" }: AvatarProps) {
+  const [imgFailed, setImgFailed] = useState(false);
   const fontSize = Math.max(10, Math.round(size * 0.38));
 
-  if (user.avatarUrl) {
+  if (user.avatarUrl && !imgFailed) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
       <img
@@ -17,21 +21,17 @@ export default function Avatar({ user, size = 28, className = "" }: AvatarProps)
         alt={user.name}
         width={size}
         height={size}
+        data-testid="avatar-img"
         className={`rounded-full shrink-0 object-cover ${className}`}
         style={{ width: size, height: size }}
-        onError={(e) => {
-          // Fall back to initials on broken image
-          const el = e.currentTarget;
-          el.style.display = "none";
-          const sibling = el.nextElementSibling as HTMLElement | null;
-          if (sibling) sibling.style.display = "flex";
-        }}
+        onError={() => setImgFailed(true)}
       />
     );
   }
 
   return (
     <div
+      data-testid="avatar-initials"
       className={`flex items-center justify-center rounded-full shrink-0 ${className}`}
       style={{
         width: size,
