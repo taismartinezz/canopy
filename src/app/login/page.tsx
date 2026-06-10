@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Building2 } from "lucide-react";
+import { Building2, Eye, EyeOff } from "lucide-react";
 import CanopyLogo from "@/components/ui/CanopyLogo";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 
@@ -209,6 +209,7 @@ export default function LoginPage() {
   const [forgotEmail, setForgotEmail] = useState("");
   const [forgotSent, setForgotSent] = useState(false);
   const [forgotLoading, setForgotLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const hasFetched = useRef(false);
 
   // Already authed? Route to correct destination.
@@ -510,31 +511,44 @@ export default function LoginPage() {
           onFocus={(e) => { e.currentTarget.style.borderColor = "#1B2E4B"; }}
           onBlur={(e) => { e.currentTarget.style.borderColor = "#DDE1E7"; }}
         />
-        <input
-          type="password"
-          value={password}
-          onChange={(e) => { setPassword(e.target.value); setError(""); }}
-          placeholder="Password"
-          autoComplete={mode === "signin" ? "current-password" : "new-password"}
-          aria-label="Password"
-          style={{
-            display: "block",
-            width: "100%",
-            height: 44,
-            border: "1px solid #DDE1E7",
-            borderRadius: 8,
-            padding: "0 14px",
-            fontFamily: "var(--font-roboto)",
-            fontWeight: 400,
-            fontSize: 14,
-            color: "#2D2D2D",
-            outline: "none",
-            boxSizing: "border-box",
-            marginTop: 10,
-          }}
-          onFocus={(e) => { e.currentTarget.style.borderColor = "#1B2E4B"; }}
-          onBlur={(e) => { e.currentTarget.style.borderColor = "#DDE1E7"; }}
-        />
+        <div style={{ position: "relative", marginTop: 10 }}>
+          <input
+            type={showPassword ? "text" : "password"}
+            value={password}
+            onChange={(e) => { setPassword(e.target.value); setError(""); }}
+            placeholder="Password"
+            autoComplete={mode === "signin" ? "current-password" : "new-password"}
+            aria-label="Password"
+            style={{
+              display: "block",
+              width: "100%",
+              height: 44,
+              border: "1px solid #DDE1E7",
+              borderRadius: 8,
+              padding: "0 44px 0 14px",
+              fontFamily: "var(--font-roboto)",
+              fontWeight: 400,
+              fontSize: 14,
+              color: "#2D2D2D",
+              outline: "none",
+              boxSizing: "border-box",
+            }}
+            onFocus={(e) => { e.currentTarget.style.borderColor = "#1B2E4B"; }}
+            onBlur={(e) => { e.currentTarget.style.borderColor = "#DDE1E7"; }}
+          />
+          <button
+            type="button"
+            onClick={() => setShowPassword((v) => !v)}
+            aria-label={showPassword ? "Hide password" : "Show password"}
+            style={{
+              position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)",
+              background: "none", border: "none", cursor: "pointer", padding: 4,
+              display: "flex", alignItems: "center", color: "#6B6B6B",
+            }}
+          >
+            {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+          </button>
+        </div>
 
         {/* Forgot password — sign-in only */}
         {mode === "signin" && !forgotOpen && (
