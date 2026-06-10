@@ -1,5 +1,5 @@
 import { Given, When, Then, Before, After, setDefaultTimeout } from '@cucumber/cucumber'
-import { chromium, Browser, Page, Route } from 'playwright'
+import { chromium, Browser, Page } from 'playwright'
 import assert from 'node:assert/strict'
 
 setDefaultTimeout(30_000)
@@ -30,53 +30,34 @@ function fakeSession() {
   })
 }
 
-// maybeSingle() sends Accept: application/vnd.pgrst.object+json and expects a
-// single JSON object back. Returning an array makes prof?.role === undefined.
-function respondSmart(route: Route, single: object, array: object[] = [single]) {
-  const accept = route.request().headers()['accept'] ?? ''
-  return route.fulfill({
-    status: 200,
-    contentType: 'application/json',
-    body: JSON.stringify(accept.includes('pgrst.object') ? single : array),
-  })
-}
-
 async function setupMocks(role: 'pi' | 'researcher') {
-  await page.addInitScript((session) => {
-    const _get = Storage.prototype.getItem
-    Storage.prototype.getItem = function (key) {
-      if (typeof key === 'string' && /^sb-.+-auth-token$/.test(key)) return session
-      return _get.call(this, key)
-    }
-  }, fakeSession())
+  const session = fakeSession()
+  const profileData = { id: MOCK_USER_ID, name: 'Test User', role, avatar_color: '#B4D4E3', avatar_initials: 'TU', email: MOCK_EMAIL, bio: '' }
+  const membershipData = { project_id: 'proj-1', user_id: MOCK_USER_ID, role }
+  const projectData = { id: 'proj-1', name: 'Lab', institution: 'Uni' }
+  const inviteCodes = role === 'pi' ? [{ id: 'c1', code: 'CANOPY-TEST', used_by: null }] : []
 
-  const profileData = {
-    id: MOCK_USER_ID, name: 'Test User', role,
-    avatar_color: '#B4D4E3', avatar_initials: 'TU',
-    email: MOCK_EMAIL, bio: '',
-  }
-
-  await page.route('**/rest/v1/user_profiles**', (route) =>
-    respondSmart(route, profileData)
-  )
-
-  await page.route('**/rest/v1/team_members**', (route) =>
-    respondSmart(route, { project_id: 'proj-1', user_id: MOCK_USER_ID, role })
-  )
-
-  await page.route('**/rest/v1/projects**', (route) =>
-    respondSmart(route, { id: 'proj-1', name: 'Lab', institution: 'Uni' })
-  )
-
-  await page.route('**/rest/v1/invite_codes**', (route) =>
-    route.fulfill({
-      status: 200, contentType: 'application/json',
-      body: JSON.stringify(role === 'pi' ? [{ id: 'c1', code: 'CANOPY-TEST', used_by: null }] : []),
-    })
-  )
-
-  await page.route('**/rest/v1/**', (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
+  await page.addInitScript(
+    ({ session, profileData, membershipData, projectData, inviteCodes }) => {
+      const _origGet = Storage.prototype.getItem
+      Storage.prototype.getItem = function (key) {
+        if (typeof key === 'string' && /^sb-.+-auth-token$/.test(key)) return session
+        return _origGet.call(this, key)
+      }
+      const _origFetch = window.fetch
+      const ok = (body: unknown) =>
+        Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+      window.fetch = function (input, init) {
+        const url = typeof input === 'string' ? input : input instanceof URL ? input.href : (input as Request).url
+        if (url.includes('/rest/v1/user_profiles')) return ok([profileData])
+        if (url.includes('/rest/v1/team_members'))  return ok([membershipData])
+        if (url.includes('/rest/v1/projects'))       return ok([projectData])
+        if (url.includes('/rest/v1/invite_codes'))   return ok(inviteCodes)
+        if (url.includes('/rest/v1/'))               return ok([])
+        return _origFetch.call(this, input, init)
+      }
+    },
+    { session, profileData, membershipData, projectData, inviteCodes }
   )
 }
 
