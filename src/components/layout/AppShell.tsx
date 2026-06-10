@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard, CheckSquare, BookOpen, BookMarked, Users,
-  Bell, ChevronDown, LogOut, User as UserIcon, Menu, X,
+  Bell, ChevronDown, LogOut, User as UserIcon, Menu, X, Settings,
 } from "lucide-react";
 import type { User } from "@/types";
 import { supabase } from "@/lib/supabase";
@@ -19,6 +19,7 @@ const NAV_ITEMS = [
   { href: "/journal",    label: "Journal",    icon: BookOpen        },
   { href: "/literature", label: "Literature", icon: BookMarked      },
   { href: "/team",       label: "Team",       icon: Users           },
+  { href: "/settings",   label: "Settings",   icon: Settings        },
 ];
 
 
@@ -187,11 +188,12 @@ function NotifPanel({ onClose, notifications }: { onClose: () => void; notificat
 
 // ── Profile menu ──────────────────────────────────────────────────────────────
 
-function ProfileMenu({ user, onClose, onSignOut, onNavigateProfile }: {
+function ProfileMenu({ user, onClose, onSignOut, onNavigateProfile, onNavigateSettings }: {
   user: Pick<User, "name" | "email">;
   onClose: () => void;
   onSignOut: () => void;
   onNavigateProfile: () => void;
+  onNavigateSettings: () => void;
 }) {
   return (
     <div
@@ -209,6 +211,13 @@ function ProfileMenu({ user, onClose, onSignOut, onNavigateProfile }: {
           style={{ fontSize: 13, color: "var(--color-body)", minHeight: 44 }}
         >
           <UserIcon size={14} /> Profile
+        </button>
+        <button
+          onClick={() => { onNavigateSettings(); onClose(); }}
+          className="w-full flex items-center gap-2.5 px-4 text-left transition-colors hover:bg-[rgba(27,46,75,0.06)]"
+          style={{ fontSize: 13, color: "var(--color-body)", minHeight: 44 }}
+        >
+          <Settings size={14} /> Settings
         </button>
         <div style={{ borderTop: "1px solid var(--color-border)", marginTop: 4, paddingTop: 4 }}>
           <button onClick={onSignOut} className="w-full flex items-center gap-2.5 px-4 text-left transition-colors hover:bg-[rgba(27,46,75,0.06)]" style={{ fontSize: 13, color: "var(--color-error)", minHeight: 44 }}>
@@ -259,7 +268,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           .eq("id", user.id)
           .maybeSingle();
 
-        console.log("[AppShell] user_profiles row:", prof, "for", user.email);
 
         const { data: membership } = await supabase
           .from("team_members")
@@ -277,7 +285,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
           const { data: members } = await supabase
             .from("team_members")
-            .select("*, user_profiles(name, avatar_color, avatar_initials)")
+            .select("*, user_profiles(name, avatar_color, avatar_initials, avatar_url)")
             .eq("project_id", membership.project_id);
 
           if (members) {
@@ -291,6 +299,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 role: row.role as User["role"],
                 avatarColor: p?.avatar_color ?? "#B4D4E3",
                 avatarInitials: p?.avatar_initials ?? "??",
+                avatarUrl: p?.avatar_url ?? undefined,
               };
             }));
           }
@@ -516,6 +525,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                     name: profile?.name ?? "",
                     avatarColor: profile?.avatar_color ?? "#B4D4E3",
                     avatarInitials: profile?.avatar_initials ?? "??",
+                    avatarUrl: profile?.avatar_url ?? undefined,
                   }}
                   size={28}
                 />
@@ -527,6 +537,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                   onClose={() => setProfileOpen(false)}
                   onSignOut={handleSignOut}
                   onNavigateProfile={() => router.push("/profile")}
+                  onNavigateSettings={() => router.push("/settings")}
                 />
               )}
             </div>

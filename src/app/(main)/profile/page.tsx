@@ -406,21 +406,18 @@ export default function ProfilePage() {
       const { data: { session } } = await supabase.auth.getSession();
       const user = session?.user ?? null;
       if (!user) { router.push("/login"); return; }
-      console.log("[Profile] user id:", user?.id);
 
       const { data: prof } = await supabase
         .from("user_profiles")
         .select("*")
         .eq("id", user.id)
         .maybeSingle();
-      console.log("[Profile] user_profiles row:", prof);
 
       const { data: membership } = await supabase
         .from("team_members")
         .select("project_id")
         .eq("user_id", user.id)
         .maybeSingle();
-      console.log("[Profile] membership:", membership);
 
       if (membership?.project_id) {
         const { data: proj } = await supabase
@@ -428,7 +425,6 @@ export default function ProfilePage() {
           .select("*")
           .eq("id", membership.project_id)
           .maybeSingle();
-        console.log("[Profile] project:", proj);
         setProject(proj);
         if (proj) {
           setProjectName((proj.name as string) ?? "");
@@ -439,6 +435,7 @@ export default function ProfilePage() {
       }
 
       setProfile(prof);
+      if (prof?.avatar_url) setPhoto(prof.avatar_url);
       setLoading(false);
     };
     load();
@@ -527,16 +524,43 @@ export default function ProfilePage() {
 
   // ── Handlers ─────────────────────────────────────────────────────────────
 
-  const handlePhotoChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const dataUrl = ev.target?.result as string;
-      setPhoto(dataUrl);
-    };
-    reader.readAsDataURL(file);
     e.target.value = "";
+
+    // Show preview immediately
+    const reader = new FileReader();
+    reader.onload = (ev) => setPhoto(ev.target?.result as string);
+    reader.readAsDataURL(file);
+
+    // Upload to Supabase Storage
+    const { data: { session } } = await supabase.auth.getSession();
+    const user = session?.user ?? null;
+    if (!user) return;
+
+    const ext = file.name.split(".").pop() ?? "jpg";
+    const path = `${user.id}/avatar.${ext}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from("avatars")
+      .upload(path, file, { upsert: true, contentType: file.type });
+
+    if (uploadError) {
+      showToast("Photo preview shown — storage upload failed: " + uploadError.message, "error");
+      return;
+    }
+
+    const { data: urlData } = supabase.storage.from("avatars").getPublicUrl(path);
+    const publicUrl = urlData?.publicUrl;
+    if (!publicUrl) return;
+
+    // Add cache-bust so browser doesn't serve stale image
+    const bustedUrl = publicUrl + "?t=" + Date.now();
+    setPhoto(bustedUrl);
+
+    await supabase.from("user_profiles").update({ avatar_url: publicUrl }).eq("id", user.id);
+    showToast("Profile photo updated.", "success");
   }, []);
 
   const handleRemovePhoto = useCallback(() => {

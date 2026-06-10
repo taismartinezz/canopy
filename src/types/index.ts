@@ -9,6 +9,7 @@ export interface User {
   role: UserRole;
   avatarColor: string;   // CSS hex — pastel
   avatarInitials: string;
+  avatarUrl?: string;    // profile photo URL from Supabase Storage
   institution?: string;
   currentTask?: string;  // public "this week I'm working on..."
 }

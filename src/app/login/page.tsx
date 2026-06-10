@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Building2 } from "lucide-react";
 import CanopyLogo from "@/components/ui/CanopyLogo";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
@@ -37,6 +38,14 @@ function MicrosoftIcon() {
       <path d="M22 2h-9.4v9.4H22V2z"        fill="#7FBA00"/>
       <path d="M11.4 12.6H2V22h9.4v-9.4z"   fill="#00A4EF"/>
       <path d="M22 12.6h-9.4V22H22v-9.4z"   fill="#FFB900"/>
+    </svg>
+  );
+}
+
+function AppleIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
+      <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z" fill="#000000"/>
     </svg>
   );
 }
@@ -196,6 +205,10 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState(true);
+  const [forgotOpen, setForgotOpen] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotSent, setForgotSent] = useState(false);
+  const [forgotLoading, setForgotLoading] = useState(false);
   const hasFetched = useRef(false);
 
   // Already authed? Route to correct destination.
@@ -217,9 +230,7 @@ export default function LoginPage() {
       try {
         const { data: member, error: memberError } = await supabase
           .from("team_members").select("id").eq("user_id", session.user.id).maybeSingle();
-        console.log("[Login] team_members check result:", member, memberError);
         if (memberError) {
-          console.error("[Login] team_members query error — staying on login:", memberError);
           setChecking(false);
           return;
         }
@@ -262,9 +273,7 @@ export default function LoginPage() {
 
       const { data: member, error: memberError } = await supabase
         .from("team_members").select("id").eq("user_id", user.id).maybeSingle();
-      console.log("[Login] team_members check result:", member, memberError);
       if (memberError) {
-        console.error("[Login] team_members query error — staying on login:", memberError);
         setLoading(false);
         return;
       }
@@ -275,7 +284,21 @@ export default function LoginPage() {
     }
   }, [email, password, mode, router]);
 
-  const handleOAuth = useCallback(async (provider: "github" | "google" | "azure") => {
+  const handleForgotPassword = useCallback(async () => {
+    if (!forgotEmail.includes("@")) { setError("Please enter a valid email address."); return; }
+    setForgotLoading(true);
+    setError("");
+    if (isSupabaseConfigured) {
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(forgotEmail, {
+        redirectTo: (typeof window !== "undefined" ? window.location.origin : "") + "/reset-password",
+      });
+      if (resetError) { setError(resetError.message); setForgotLoading(false); return; }
+    }
+    setForgotSent(true);
+    setForgotLoading(false);
+  }, [forgotEmail]);
+
+  const handleOAuth = useCallback(async (provider: "github" | "google" | "apple" | "azure") => {
     if (isSupabaseConfigured) {
       localStorage.removeItem("canopy_user");
       localStorage.removeItem("canopy_project");
@@ -302,6 +325,10 @@ export default function LoginPage() {
         fontFamily: "var(--font-roboto)",
       }}
     >
+      <h1 style={{ position: "absolute", width: 1, height: 1, padding: 0, margin: -1, overflow: "hidden", clip: "rect(0,0,0,0)", whiteSpace: "nowrap", border: 0 }}>
+        {mode === "signin" ? "Sign in to Canopy" : "Create your Canopy account"}
+      </h1>
+
       {/* ── Card ── */}
       <div
         style={{
@@ -328,6 +355,7 @@ export default function LoginPage() {
         >
           <CanopyLogo size={40} />
           <span
+            aria-hidden="true"
             style={{
               fontFamily: "var(--font-lora)",
               fontWeight: 700,
@@ -380,6 +408,13 @@ export default function LoginPage() {
             label="Continue with Google"
             ariaLabel="Sign in with Google"
             onClick={() => handleOAuth("google")}
+          />
+
+          <AuthButton
+            icon={<AppleIcon />}
+            label="Continue with Apple"
+            ariaLabel="Sign in with Apple"
+            onClick={() => handleOAuth("apple")}
           />
 
           <AuthButton
@@ -500,6 +535,64 @@ export default function LoginPage() {
           onFocus={(e) => { e.currentTarget.style.borderColor = "#1B2E4B"; }}
           onBlur={(e) => { e.currentTarget.style.borderColor = "#DDE1E7"; }}
         />
+
+        {/* Forgot password — sign-in only */}
+        {mode === "signin" && !forgotOpen && (
+          <div style={{ textAlign: "right", marginTop: 6 }}>
+            <button
+              type="button"
+              onClick={() => { setForgotOpen(true); setForgotEmail(email); setForgotSent(false); setError(""); }}
+              style={{ background: "none", border: "none", padding: 0, fontFamily: "var(--font-roboto)", fontSize: 12, color: "#1B2E4B", cursor: "pointer", textDecoration: "underline" }}
+            >
+              Forgot password?
+            </button>
+          </div>
+        )}
+
+        {/* Inline forgot-password form */}
+        {forgotOpen && (
+          <div style={{ marginTop: 12, padding: "14px 16px", backgroundColor: "#F6F8FC", borderRadius: 8, border: "1px solid #DDE1E7" }}>
+            {forgotSent ? (
+              <p style={{ fontFamily: "var(--font-roboto)", fontSize: 13, color: "#2E7D52", margin: 0 }}>
+                Check your email for a password reset link.
+              </p>
+            ) : (
+              <>
+                <p style={{ fontFamily: "var(--font-roboto)", fontSize: 13, color: "#2D2D2D", margin: "0 0 10px" }}>
+                  Enter your email and we&apos;ll send a reset link.
+                </p>
+                <input
+                  type="email"
+                  value={forgotEmail}
+                  onChange={(e) => setForgotEmail(e.target.value)}
+                  placeholder="Your email"
+                  aria-label="Email for password reset"
+                  style={{ display: "block", width: "100%", height: 40, border: "1px solid #DDE1E7", borderRadius: 8, padding: "0 12px", fontFamily: "var(--font-roboto)", fontSize: 13, color: "#2D2D2D", outline: "none", boxSizing: "border-box", marginBottom: 8 }}
+                  onFocus={(e) => { e.currentTarget.style.borderColor = "#1B2E4B"; }}
+                  onBlur={(e) => { e.currentTarget.style.borderColor = "#DDE1E7"; }}
+                />
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button
+                    type="button"
+                    onClick={handleForgotPassword}
+                    disabled={forgotLoading}
+                    style={{ flex: 1, height: 38, backgroundColor: "#1B2E4B", color: "#fff", border: "none", borderRadius: 8, fontFamily: "var(--font-roboto)", fontWeight: 700, fontSize: 13, cursor: "pointer" }}
+                  >
+                    {forgotLoading ? "Sending…" : "Send reset link"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setForgotOpen(false); setError(""); }}
+                    style={{ height: 38, padding: "0 14px", backgroundColor: "transparent", color: "#6B6B6B", border: "1px solid #DDE1E7", borderRadius: 8, fontFamily: "var(--font-roboto)", fontSize: 13, cursor: "pointer" }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
         <button
           onClick={handleEmailAuth}
           style={{
@@ -550,14 +643,13 @@ export default function LoginPage() {
           }}
         >
           {mode === "signin" ? "Don't have an account? " : "Already have an account? "}
-          <span
-            onClick={() => { setMode(mode === "signin" ? "signup" : "signin"); setError(""); }}
-            style={{ color: "#1B2E4B", cursor: "pointer" }}
-            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.textDecoration = "underline"; }}
-            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.textDecoration = "none"; }}
+          <a
+            href={mode === "signin" ? "/login?mode=signup" : "/login"}
+            onClick={(e) => { e.preventDefault(); setMode(mode === "signin" ? "signup" : "signin"); setError(""); setForgotOpen(false); }}
+            style={{ color: "#1B2E4B", textDecoration: "underline" }}
           >
             {mode === "signin" ? "Sign up" : "Sign in"}
-          </span>
+          </a>
         </p>
       </div>
 
@@ -571,7 +663,11 @@ export default function LoginPage() {
           marginTop: 20,
         }}
       >
-        By signing in, you agree to Canopy&apos;s privacy-first principles.
+        By signing in, you agree to Canopy&apos;s{" "}
+        <a href="/privacy" target="_blank" rel="noopener noreferrer" style={{ color: "#1B2E4B", textDecoration: "underline" }}>
+          privacy-first principles
+        </a>
+        .
       </p>
 
       {ssoOpen && <InstitutionModal onClose={() => setSsoOpen(false)} />}

@@ -94,8 +94,6 @@ export default function TaskModal({
         priority,
         due_date: dueDate || null,
       };
-      console.log("[TaskModal] insert payload:", payload);
-
       const { data, error: insertError } = await supabase
         .from("tasks")
         .insert(payload)
@@ -110,7 +108,6 @@ export default function TaskModal({
       }
 
       // Insert assignees into task_assignees
-      console.log("[TaskModal] task_assignees insert — task_id:", data.id, "assignee user_ids:", assigneeIds);
       if (assigneeIds.length > 0) {
         const { error: assignError } = await supabase
           .from("task_assignees")
@@ -145,10 +142,8 @@ export default function TaskModal({
           related_id: saved.id,
           read: false,
         }));
-        console.log("[TaskModal] notification payload:", notifs);
         const { error: notifError } = await supabase.from("notifications").insert(notifs);
         if (notifError) console.error("[TaskModal] notification insert error:", notifError);
-        else console.log("[TaskModal] notifications inserted OK");
       }
 
       // Log activity — task created
@@ -204,10 +199,8 @@ export default function TaskModal({
           related_id: task.id,
           read: false,
         }));
-        console.log("[TaskModal] edit — notification payload:", notifs);
         const { error: notifError } = await supabase.from("notifications").insert(notifs);
         if (notifError) console.error("[TaskModal] notification insert error:", notifError);
-        else console.log("[TaskModal] edit notifications inserted OK");
       }
 
       const saved: Task = {
