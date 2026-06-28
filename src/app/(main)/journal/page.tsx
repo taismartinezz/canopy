@@ -164,7 +164,7 @@ function SupportModal({ onClose }: { onClose: () => void }) {
               </div>
             </div>
           </button>
-          <a href="#" className="block px-4 py-3.5 rounded-lg" style={{ backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)", borderRadius: 10, textDecoration: "none" }}>
+          <button className="w-full text-left px-4 py-3.5 rounded-lg" style={{ backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)", borderRadius: 10 }}>
             <div className="flex items-start gap-3">
               <Building2 size={18} color="var(--color-navy)" style={{ marginTop: 2, flexShrink: 0 }} />
               <div>
@@ -172,7 +172,7 @@ function SupportModal({ onClose }: { onClose: () => void }) {
                 <p style={{ fontSize: 12, color: "var(--color-secondary)", marginTop: 3 }}>Check with your institution's counseling services</p>
               </div>
             </div>
-          </a>
+          </button>
           <a href="tel:988" className="block px-4 py-3.5 rounded-lg" style={{ backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)", borderRadius: 10, textDecoration: "none" }}>
             <div className="flex items-start gap-3">
               <Phone size={18} color="var(--color-navy)" style={{ marginTop: 2 }} />
@@ -441,9 +441,12 @@ export default function JournalPage() {
       isDraft: false,
     };
 
+    const { data: { session } } = await supabase.auth.getSession();
+    const resolvedUserId = session?.user?.id ?? authUserId;
+
     const { data, error } = await supabase
       .from("journal_entries")
-      .insert({ user_id: authUserId, content })
+      .insert({ user_id: resolvedUserId, content })
       .select()
       .single();
 
@@ -456,7 +459,7 @@ export default function JournalPage() {
 
     const newEntry: JournalEntry = {
       id: data.id as string,
-      userId: authUserId,
+      userId: resolvedUserId,
       date: todayISO,
       prompts: content.prompts,
       checkin: content.checkin,

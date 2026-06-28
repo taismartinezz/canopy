@@ -9,6 +9,9 @@ export default defineConfig({
     globals: true,
     setupFiles: ['./tests/setup.ts'],
     include: ['tests/unit/**/*.test.{ts,tsx}'],
+    // 'forks' pool (Vitest default) hangs on Node v25 due to worker IPC changes.
+    // 'threads' uses worker_threads without vm isolation — compatible and fast.
+    pool: 'threads',
   },
   resolve: {
     alias: {

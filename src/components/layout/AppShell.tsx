@@ -9,9 +9,11 @@ import {
 } from "lucide-react";
 import type { User } from "@/types";
 import { supabase } from "@/lib/supabase";
+import { useProject } from "@/context/ProjectContext";
 import Toast from "@/components/ui/Toast";
 import Avatar from "@/components/ui/Avatar";
 import CanopyLogo from "@/components/ui/CanopyLogo";
+import ProjectSwitcher from "@/components/projects/ProjectSwitcher";
 
 const NAV_ITEMS = [
   { href: "/",           label: "Dashboard",  icon: LayoutDashboard },
@@ -241,6 +243,7 @@ function projectInitials(name: string): string {
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
+  const { projectId } = useProject();
   const [notifOpen, setNotifOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -252,7 +255,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [unreadCount, setUnreadCount] = useState(0);
   const hasFetched = useRef(false);
 
-  // Auth gate + data load
+  // ── Auth gate + notifications ─────────────────────────────────────────────
   useEffect(() => {
     let notifChannel: ReturnType<typeof supabase.channel> | null = null;
 
@@ -267,43 +270,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           .select("*")
           .eq("id", user.id)
           .maybeSingle();
-
-
-        const { data: membership } = await supabase
-          .from("team_members")
-          .select("project_id")
-          .eq("user_id", user.id)
-          .maybeSingle();
-
-        if (membership?.project_id) {
-          const { data: proj } = await supabase
-            .from("projects")
-            .select("*")
-            .eq("id", membership.project_id)
-            .maybeSingle();
-          setProject(proj);
-
-          const { data: members } = await supabase
-            .from("team_members")
-            .select("*, user_profiles(name, avatar_color, avatar_initials, avatar_url)")
-            .eq("project_id", membership.project_id);
-
-          if (members) {
-            setTeam(members.map((row) => {
-              const profiles = row.user_profiles as unknown as Record<string, string>[] | null;
-              const p = Array.isArray(profiles) ? profiles[0] : (profiles as Record<string, string> | null);
-              return {
-                id: row.user_id as string,
-                name: p?.name ?? "Unknown",
-                email: "",
-                role: row.role as User["role"],
-                avatarColor: p?.avatar_color ?? "#B4D4E3",
-                avatarInitials: p?.avatar_initials ?? "??",
-                avatarUrl: p?.avatar_url ?? undefined,
-              };
-            }));
-          }
-        }
 
         // Fetch notifications
         const { data: notifs, error: notifError } = await supabase
@@ -354,6 +320,45 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // ── Project data + team — driven by projectId from context ────────────────
+  useEffect(() => {
+    if (!projectId) return;
+    let canceled = false;
+
+    async function loadProjectData() {
+      const { data: proj } = await supabase
+        .from("projects")
+        .select("*")
+        .eq("id", projectId)
+        .maybeSingle();
+      if (!canceled) setProject(proj);
+
+      const { data: members } = await supabase
+        .from("team_members")
+        .select("*, user_profiles(name, avatar_color, avatar_initials, avatar_url)")
+        .eq("project_id", projectId);
+
+      if (!canceled && members) {
+        setTeam(members.map((row) => {
+          const profiles = row.user_profiles as unknown as Record<string, string>[] | null;
+          const p = Array.isArray(profiles) ? profiles[0] : (profiles as Record<string, string> | null);
+          return {
+            id: row.user_id as string,
+            name: p?.name ?? "Unknown",
+            email: "",
+            role: row.role as User["role"],
+            avatarColor: p?.avatar_color ?? "#B4D4E3",
+            avatarInitials: p?.avatar_initials ?? "??",
+            avatarUrl: p?.avatar_url ?? undefined,
+          };
+        }));
+      }
+    }
+
+    loadProjectData();
+    return () => { canceled = true; };
+  }, [projectId]);
 
   useEffect(() => { setMobileNavOpen(false); setNotifOpen(false); setProfileOpen(false); }, [pathname]);
 
@@ -467,10 +472,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             </span>
           </div>
 
-          {/* Desktop project name */}
-          <span className="hidden md:block" style={{ fontSize: 13, color: "var(--color-secondary)" }}>
-            {project?.name ?? ""}
-          </span>
+          {/* Desktop: lab name + sub-project switcher */}
+          <div className="hidden md:flex items-center gap-2 min-w-0">
+            {project?.name && (
+              <span style={{ fontSize: 12, color: "var(--color-secondary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 160 }}>
+                {project.name}
+              </span>
+            )}
+            <ProjectSwitcher />
+          </div>
 
           <div className="flex items-center gap-2 ml-auto">
             {/* Institution badge — sm and up */}

@@ -645,11 +645,12 @@ export default function DashboardPage() {
           }));
         }
 
-        // Fetch tasks
+        // Fetch tasks (exclude archived)
         const { data: taskData, error: taskError } = await supabase
           .from("tasks")
           .select("*, task_assignees(user_id)")
           .eq("project_id", pid)
+          .or("archived.is.null,archived.eq.false")
           .order("created_at", { ascending: false });
         if (taskError) console.error("[Dashboard] tasks error:", taskError);
         if (!taskError && taskData) {
@@ -752,14 +753,44 @@ export default function DashboardPage() {
     }
   }, []);
 
+  // Realtime subscription: push new activity_feed rows into state as they arrive
+  useEffect(() => {
+    if (!projectId) return;
+    const channel = supabase
+      .channel(`activity_feed:${projectId}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "activity_feed", filter: `project_id=eq.${projectId}` },
+        (payload) => {
+          setDashActivity((prev) => [payload.new as ActivityRow, ...prev].slice(0, 10));
+        }
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [projectId]);
+
   const today = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
 
   const moveTask = useCallback((taskId: string, status: TaskStatus) => {
-    setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, status } : t)));
+    setTasks((prev) => {
+      const task = prev.find((t) => t.id === taskId);
+      if (task && task.status !== status && projectId && userId) {
+        supabase.from("activity_feed").insert({
+          project_id: projectId,
+          user_id: userId,
+          action_type: "moved",
+          item_name: task.title,
+          item_type: "task",
+          from_status: task.status,
+          to_status: status,
+        }).then(({ error }) => { if (error) console.error("[Dashboard] activity insert error:", error); });
+      }
+      return prev.map((t) => (t.id === taskId ? { ...t, status } : t));
+    });
     setSelectedTask((prev) => (prev?.id === taskId ? { ...prev, status } : prev));
     supabase.from("tasks").update({ status }).eq("id", taskId)
       .then(({ error }) => { if (error) console.error("[Dashboard] moveTask error:", error); });
-  }, []);
+  }, [projectId, userId]);
 
   const addTask = useCallback((task: Task) => {
     setTasks((prev) => [task, ...prev]);

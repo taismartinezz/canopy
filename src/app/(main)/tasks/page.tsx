@@ -435,7 +435,7 @@ export default function TasksPage() {
         .from("tasks")
         .select("*, task_assignees(user_id)")
         .eq("project_id", pid)
-        .eq("archived", false)
+        .or("archived.is.null,archived.eq.false")
         .order("created_at", { ascending: false });
 
       if (error) console.error("[Tasks] fetch error:", error);
