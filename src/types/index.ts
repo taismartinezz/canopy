@@ -16,6 +16,16 @@ export interface User {
 
 // ── Project ───────────────────────────────────────────────────────────────────
 
+export interface SubProject {
+  id: string;
+  projectId: string;     // FK → projects.id (the lab)
+  name: string;
+  description?: string;
+  createdBy?: string;
+  createdAt: string;
+  archived: boolean;
+}
+
 export type ResearchType =
   | "trauma"
   | "oncology"

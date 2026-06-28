@@ -93,6 +93,7 @@ export default function TaskModal({
         status,
         priority,
         due_date: dueDate || null,
+        archived: false,
       };
       const { data, error: insertError } = await supabase
         .from("tasks")

@@ -1,8 +1,7 @@
 import '@testing-library/jest-dom'
 import { vi } from 'vitest'
 
-// ── localStorage stub ─────────────────────────────────────────────────────────
-// jsdom v29 localStorage is not fully implemented in all Vitest envs.
+// localStorage stub — jsdom v29 localStorage is not fully implemented in all Vitest envs.
 
 const storage: Record<string, string> = {}
 
@@ -17,8 +16,6 @@ const localStorageMock = {
 
 vi.stubGlobal('localStorage', localStorageMock)
 
-// ── window.location stub ──────────────────────────────────────────────────────
-Object.defineProperty(window, 'location', {
-  value: { ...window.location, origin: 'http://localhost:3000' },
-  writable: true,
-})
+// window.location: jsdom v29 made this non-configurable (browser-spec compliant).
+// Object.defineProperty throws TypeError — don't redefine it.
+// jsdom already sets location.origin to 'http://localhost', which is sufficient.
