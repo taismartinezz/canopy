@@ -60,6 +60,14 @@ export default function SettingsPage() {
   const [notifTaskAssigned, setNotifTaskAssigned] = useState(true);
   const [notifLabWin, setNotifLabWin] = useState(true);
   const [notifDigest, setNotifDigest] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    function checkWidth() { setIsMobile(window.innerWidth < 600); }
+    checkWidth();
+    window.addEventListener("resize", checkWidth);
+    return () => window.removeEventListener("resize", checkWidth);
+  }, []);
 
   useEffect(() => {
     async function load() {
@@ -139,7 +147,7 @@ export default function SettingsPage() {
   if (loading) return null;
 
   return (
-    <div style={{ maxWidth: 640, margin: "0 auto", padding: "32px 20px", fontFamily: "var(--font-roboto)" }}>
+    <div style={{ maxWidth: 640, margin: "0 auto", padding: isMobile ? "16px" : "32px 20px", fontFamily: "var(--font-roboto)" }}>
       <h1 style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 22, color: "var(--color-navy)", margin: "0 0 24px" }}>
         Settings
       </h1>
@@ -153,7 +161,7 @@ export default function SettingsPage() {
           </h2>
         </div>
         <div style={{ padding: "20px" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 16, marginBottom: 16 }}>
             <div>
               <label style={labelStyle}>Display name</label>
               <input readOnly value={profile?.name ?? ""} style={readonlyInputStyle} aria-label="Display name (read-only)" />
@@ -171,7 +179,7 @@ export default function SettingsPage() {
           )}
           <button
             onClick={() => router.push("/profile")}
-            style={{ height: 38, padding: "0 16px", backgroundColor: "var(--color-navy)", color: "#fff", border: "none", borderRadius: 8, fontFamily: "var(--font-roboto)", fontWeight: 600, fontSize: 13, cursor: "pointer" }}
+            style={{ minHeight: 44, height: 38, padding: "0 16px", backgroundColor: "var(--color-navy)", color: "#fff", border: "none", borderRadius: 8, fontFamily: "var(--font-roboto)", fontWeight: 600, fontSize: 13, cursor: "pointer" }}
             onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "#2E4A6F"; }}
             onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "var(--color-navy)"; }}
           >
@@ -195,7 +203,7 @@ export default function SettingsPage() {
           </div>
           <button
             onClick={handlePasswordReset}
-            style={{ height: 38, padding: "0 16px", backgroundColor: "transparent", color: "var(--color-navy)", border: "1px solid var(--color-border)", borderRadius: 8, fontFamily: "var(--font-roboto)", fontWeight: 600, fontSize: 13, cursor: "pointer" }}
+            style={{ minHeight: 44, height: "auto", padding: "10px 16px", backgroundColor: "transparent", color: "var(--color-navy)", border: "1px solid var(--color-border)", borderRadius: 8, fontFamily: "var(--font-roboto)", fontWeight: 600, fontSize: 13, cursor: "pointer", whiteSpace: isMobile ? "normal" : "nowrap" }}
           >
             Send password reset email
           </button>
@@ -221,30 +229,32 @@ export default function SettingsPage() {
                 const fullLink = `${typeof window !== "undefined" ? window.location.origin : ""}/login?invite=${ic.code}`;
                 const isRevealed = revealedCode === ic.id;
                 return (
-                  <div key={ic.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <div key={ic.id} style={{ display: "flex", flexDirection: isMobile ? "column" : "row", alignItems: isMobile ? "stretch" : "center", gap: 8 }}>
                     <input
                       readOnly
                       value={isRevealed ? fullLink : `${typeof window !== "undefined" ? window.location.origin : "canopy.app"}/login?invite=••••••••`}
                       style={{ ...readonlyInputStyle, flex: 1, fontFamily: "monospace", fontSize: 12 }}
                       aria-label={`Invite link ${ic.code}`}
                     />
-                    <button
-                      onClick={() => setRevealedCode(isRevealed ? null : ic.id)}
-                      style={{ height: 40, padding: "0 10px", display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "transparent", border: "1px solid var(--color-border)", borderRadius: 8, cursor: "pointer", fontSize: 11, fontFamily: "var(--font-roboto)", color: "var(--color-secondary)", whiteSpace: "nowrap" }}
-                      aria-label={isRevealed ? "Hide invite link" : "Reveal invite link"}
-                    >
-                      {isRevealed ? "Hide" : "Reveal"}
-                    </button>
-                    <span style={{ fontSize: 11, color: ic.used_by ? "#2E7D52" : "var(--color-secondary)", whiteSpace: "nowrap" }}>
-                      {ic.used_by ? "Used" : "Active"}
-                    </span>
-                    <button
-                      onClick={() => handleCopyCode(ic.code)}
-                      style={{ height: 40, width: 40, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "transparent", border: "1px solid var(--color-border)", borderRadius: 8, cursor: "pointer" }}
-                      aria-label={`Copy invite link ${ic.code}`}
-                    >
-                      {copiedCode === ic.code ? <Check size={14} color="#2E7D52" /> : <Copy size={14} color="var(--color-secondary)" />}
-                    </button>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                      <button
+                        onClick={() => setRevealedCode(isRevealed ? null : ic.id)}
+                        style={{ minHeight: 44, height: 40, padding: "0 10px", display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "transparent", border: "1px solid var(--color-border)", borderRadius: 8, cursor: "pointer", fontSize: 11, fontFamily: "var(--font-roboto)", color: "var(--color-secondary)", whiteSpace: "nowrap" }}
+                        aria-label={isRevealed ? "Hide invite link" : "Reveal invite link"}
+                      >
+                        {isRevealed ? "Hide" : "Reveal"}
+                      </button>
+                      <span style={{ fontSize: 11, color: ic.used_by ? "#2E7D52" : "var(--color-secondary)", whiteSpace: "nowrap" }}>
+                        {ic.used_by ? "Used" : "Active"}
+                      </span>
+                      <button
+                        onClick={() => handleCopyCode(ic.code)}
+                        style={{ minHeight: 44, height: 40, width: 40, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "transparent", border: "1px solid var(--color-border)", borderRadius: 8, cursor: "pointer" }}
+                        aria-label={`Copy invite link ${ic.code}`}
+                      >
+                        {copiedCode === ic.code ? <Check size={14} color="#2E7D52" /> : <Copy size={14} color="var(--color-secondary)" />}
+                      </button>
+                    </div>
                   </div>
                 );
               })}
@@ -257,7 +267,7 @@ export default function SettingsPage() {
             <button
               onClick={handleGenerateCode}
               disabled={generatingCode}
-              style={{ marginTop: 16, height: 38, padding: "0 16px", display: "flex", alignItems: "center", gap: 6, backgroundColor: "var(--color-navy)", color: "#fff", border: "none", borderRadius: 8, fontFamily: "var(--font-roboto)", fontWeight: 600, fontSize: 13, cursor: "pointer" }}
+              style={{ marginTop: 16, minHeight: 44, height: 38, padding: "0 16px", display: "flex", alignItems: "center", gap: 6, backgroundColor: "var(--color-navy)", color: "#fff", border: "none", borderRadius: 8, fontFamily: "var(--font-roboto)", fontWeight: 600, fontSize: 13, cursor: "pointer" }}
             >
               <RefreshCw size={13} />
               {generatingCode ? "Generating…" : "Generate new invite code"}
@@ -280,7 +290,7 @@ export default function SettingsPage() {
             { id: "notif-win", label: "Lab wins", description: "When a lab win is posted", value: notifLabWin, set: setNotifLabWin },
             { id: "notif-digest", label: "Weekly digest", description: "A weekly summary of lab activity", value: notifDigest, set: setNotifDigest },
           ].map(({ id, label, description, value, set }) => (
-            <label key={id} htmlFor={id} style={{ display: "flex", alignItems: "center", gap: 14, cursor: "pointer" }}>
+            <label key={id} htmlFor={id} style={{ display: "flex", alignItems: "center", gap: 14, cursor: "pointer", minHeight: 44 }}>
               <input
                 type="checkbox"
                 id={id}

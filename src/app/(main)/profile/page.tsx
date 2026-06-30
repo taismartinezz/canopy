@@ -372,6 +372,13 @@ export default function ProfilePage() {
   const [activeTab, setActiveTab] = useState<TabId>("about");
   const [promptModalOpen, setPromptModalOpen] = useState(false);
   const [archiveModalOpen, setArchiveModalOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    function check() { setIsMobile(window.innerWidth < 640); }
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
 
   // ── PI Lab Settings state (initialized from project after load) ──────────
   const [projectName, setProjectName] = useState("");
@@ -755,7 +762,7 @@ export default function ProfilePage() {
   const displayDepartment = profile?.department ?? "";
 
   return (
-    <div style={{ padding: "40px 24px", backgroundColor: "var(--color-canvas)", minHeight: "100%" }}>
+    <div style={{ padding: isMobile ? "16px" : "40px 24px", backgroundColor: "var(--color-canvas)", minHeight: "100%" }}>
       <div style={{ maxWidth: 720, margin: "0 auto" }}>
 
         {/* Back link */}
@@ -778,11 +785,12 @@ export default function ProfilePage() {
         {/* ── Header section ─────────────────────────────────────────────── */}
         <div style={{
           backgroundColor: "#fff", borderRadius: 10, border: "1px solid #DDE1E7",
-          padding: "28px 28px 24px", marginBottom: 24,
-          display: "flex", gap: 28, alignItems: "flex-start",
+          padding: isMobile ? "20px 16px 16px" : "28px 28px 24px", marginBottom: 24,
+          display: "flex", flexDirection: isMobile ? "column" : "row",
+          gap: isMobile ? 16 : 28, alignItems: isMobile ? "center" : "flex-start",
         }}>
           {/* Avatar column */}
-          <div style={{ width: 140, flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
+          <div style={{ width: isMobile ? "auto" : 140, flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
             {photo ? (
               <img
                 src={photo}
@@ -838,9 +846,9 @@ export default function ProfilePage() {
           </div>
 
           {/* Info column */}
-          <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ flex: 1, minWidth: 0, width: isMobile ? "100%" : undefined, textAlign: isMobile ? "center" : undefined }}>
             {/* Name row + edit button */}
-            <div style={{ display: "flex", alignItems: "flex-start", gap: 12, marginBottom: 8 }}>
+            <div style={{ display: "flex", alignItems: "flex-start", gap: 12, marginBottom: 8, justifyContent: isMobile ? "center" : undefined, flexWrap: "wrap" }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 {editingName ? (
                   <input
@@ -966,7 +974,7 @@ export default function ProfilePage() {
           {/* Tab bar */}
           <div style={{
             display: "flex", borderBottom: "1px solid #DDE1E7",
-            paddingLeft: 4,
+            paddingLeft: 4, overflowX: "auto",
           }}>
             {tabs.map((tab) => {
               const active = activeTab === tab.id;
@@ -976,13 +984,13 @@ export default function ProfilePage() {
                   onClick={() => setActiveTab(tab.id)}
                   style={{
                     display: "flex", alignItems: "center", gap: 6,
-                    padding: "0 20px", height: 48, minHeight: 44,
+                    padding: isMobile ? "0 12px" : "0 20px", height: 48, minHeight: 44,
                     background: "none", border: "none", cursor: "pointer",
                     fontFamily: "var(--font-roboto)", fontWeight: active ? 600 : 400,
-                    fontSize: 14, color: active ? "#1B2E4B" : "#6B6B6B",
+                    fontSize: isMobile ? 13 : 14, color: active ? "#1B2E4B" : "#6B6B6B",
                     borderBottom: active ? "2px solid #1B2E4B" : "2px solid transparent",
                     transition: "color 120ms ease, border-color 120ms ease",
-                    marginBottom: -1,
+                    marginBottom: -1, whiteSpace: "nowrap", flexShrink: 0,
                   }}
                 >
                   {tab.id === "lab_settings" && <Settings size={14} />}
@@ -993,7 +1001,7 @@ export default function ProfilePage() {
           </div>
 
           {/* Tab content */}
-          <div style={{ padding: 28 }}>
+          <div style={{ padding: isMobile ? 16 : 28 }}>
 
             {/* ── ABOUT ──────────────────────────────────────────────────── */}
             {activeTab === "about" && (
@@ -1124,6 +1132,7 @@ export default function ProfilePage() {
                       style={{
                         backgroundColor: "#fff", borderRadius: 10, border: "1px solid #DDE1E7",
                         padding: "14px 16px", display: "flex", alignItems: "center", gap: 12,
+                        flexWrap: isMobile ? "wrap" : undefined,
                       }}
                     >
                       <div style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
@@ -1131,7 +1140,7 @@ export default function ProfilePage() {
                       </div>
                       <span style={{
                         fontFamily: "var(--font-roboto)", fontWeight: 600, fontSize: 13,
-                        color: "#2D2D2D", width: 120, flexShrink: 0,
+                        color: "#2D2D2D", width: isMobile ? 88 : 120, flexShrink: 0,
                       }}>
                         {label}
                       </span>
@@ -1142,10 +1151,11 @@ export default function ProfilePage() {
                           onChange={(e) => setDraftLinks((prev) => ({ ...prev, [key]: e.target.value }))}
                           placeholder={placeholder}
                           style={{
-                            flex: 1, height: 36, border: "1px solid #DDE1E7", borderRadius: 8,
+                            flex: 1, minWidth: 0, height: 36, border: "1px solid #DDE1E7", borderRadius: 8,
                             padding: "0 14px", fontFamily: "var(--font-roboto)",
                             fontWeight: 400, fontSize: 13, color: "#2D2D2D",
                             outline: "none", boxSizing: "border-box",
+                            width: isMobile ? "100%" : undefined,
                           }}
                           onFocus={(e) => { e.currentTarget.style.borderColor = "#1B2E4B"; }}
                           onBlur={(e) => { e.currentTarget.style.borderColor = "#DDE1E7"; }}
