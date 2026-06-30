@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  LayoutDashboard, CheckSquare, BookOpen, BookMarked, Users,
+  LayoutDashboard, CheckSquare, BookOpen, BookMarked, Bookmark, Users,
   Bell, ChevronDown, LogOut, User as UserIcon, Menu, X, Settings,
 } from "lucide-react";
 import { computeInitials } from "@/lib/utils";
@@ -14,16 +14,13 @@ import { useProject } from "@/context/ProjectContext";
 import Toast from "@/components/ui/Toast";
 import Avatar from "@/components/ui/Avatar";
 import CanopyLogo from "@/components/ui/CanopyLogo";
-import ProjectSwitcher from "@/components/projects/ProjectSwitcher";
-
 const NAV_ITEMS = [
-  { href: "/",           label: "Dashboard",  icon: LayoutDashboard },
-  { href: "/tasks",      label: "Tasks",      icon: CheckSquare     },
-  { href: "/journal",    label: "Journal",    icon: BookOpen        },
-  { href: "/literature", label: "Literature", icon: BookMarked      },
-  { href: "/team",       label: "Team",       icon: Users           },
-  { href: "/profile",    label: "My Profile", icon: UserIcon        },
-  { href: "/settings",   label: "Settings",   icon: Settings        },
+  { href: "/",            label: "Dashboard",  icon: LayoutDashboard },
+  { href: "/tasks",       label: "Tasks",      icon: CheckSquare     },
+  { href: "/journal",     label: "Journal",    icon: BookOpen        },
+  { href: "/literature",  label: "Literature", icon: BookMarked      },
+  { href: "/bookmarks",   label: "Bookmarks",  icon: Bookmark        },
+  { href: "/team",        label: "Team",       icon: Users           },
 ];
 
 
@@ -497,14 +494,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             </span>
           </div>
 
-          {/* Desktop: lab name + sub-project switcher */}
-          <div className="hidden md:flex items-center gap-2 min-w-0">
+          {/* Desktop: lab name */}
+          <div className="hidden md:flex items-center min-w-0">
             {project?.name && (
-              <span style={{ fontSize: 12, color: "var(--color-secondary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 160 }}>
+              <span style={{ fontSize: 12, color: "var(--color-secondary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 200 }}>
                 {project.name}
               </span>
             )}
-            <ProjectSwitcher />
           </div>
 
           <div className="flex items-center gap-2 ml-auto">

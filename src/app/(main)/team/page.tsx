@@ -288,27 +288,50 @@ export default function TeamPage() {
           }
         }
 
-        if (memberData) {
-          const members: TeamMember[] = memberData.map((row) => {
-            const profiles = row.user_profiles as unknown as Record<string, string>[] | Record<string, string> | null;
-            const profile = Array.isArray(profiles) ? profiles[0] : (profiles as Record<string, string> | null);
-            const uid = row.user_id as string;
-            return {
-              id: uid,
-              name: profile?.name ?? "Unknown",
+        const members: TeamMember[] = (memberData ?? []).map((row) => {
+          const profiles = row.user_profiles as unknown as Record<string, string>[] | Record<string, string> | null;
+          const profile = Array.isArray(profiles) ? profiles[0] : (profiles as Record<string, string> | null);
+          const uid = row.user_id as string;
+          return {
+            id: uid,
+            name: profile?.name ?? "Unknown",
+            email: "",
+            role: row.role as TeamMember["role"],
+            avatarColor: profile?.avatar_color ?? "#B4D4E3",
+            avatarInitials: profile?.avatar_initials ?? "??",
+            avatarUrl: profile?.avatar_url ?? undefined,
+            institution: profile?.institution,
+            taskCounts: countMap[uid] ?? { todo: 0, in_progress: 0, in_review: 0, done: 0 },
+            weeklyUpdate: undefined,
+            weeklyUpdatedAt: undefined,
+          };
+        });
+
+        // Ensure the current user always appears, even if not yet in team_members.
+        if (currentUserId && !members.some((m) => m.id === currentUserId)) {
+          const { data: myProfile } = await supabase
+            .from("user_profiles")
+            .select("name, avatar_color, avatar_initials, avatar_url, institution, role")
+            .eq("id", currentUserId)
+            .maybeSingle();
+          if (myProfile) {
+            members.unshift({
+              id: currentUserId,
+              name: myProfile.name ?? "Unknown",
               email: "",
-              role: row.role as TeamMember["role"],
-              avatarColor: profile?.avatar_color ?? "#B4D4E3",
-              avatarInitials: profile?.avatar_initials ?? "??",
-              avatarUrl: profile?.avatar_url ?? undefined,
-              institution: profile?.institution,
-              taskCounts: countMap[uid] ?? { todo: 0, in_progress: 0, in_review: 0, done: 0 },
+              role: (myProfile.role as TeamMember["role"]) ?? "researcher",
+              avatarColor: myProfile.avatar_color ?? "#B4D4E3",
+              avatarInitials: myProfile.avatar_initials ?? "??",
+              avatarUrl: myProfile.avatar_url ?? undefined,
+              institution: myProfile.institution,
+              taskCounts: countMap[currentUserId] ?? { todo: 0, in_progress: 0, in_review: 0, done: 0 },
               weeklyUpdate: undefined,
               weeklyUpdatedAt: undefined,
-            };
-          });
-          setTeam(members);
+            });
+          }
         }
+
+        setTeam(members);
         setLoading(false);
       });
   }, [currentUserId]);
