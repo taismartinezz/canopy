@@ -555,16 +555,21 @@ export default function ProfilePage() {
     const publicUrl = urlData?.publicUrl;
     if (!publicUrl) return;
 
-    // Add cache-bust so browser doesn't serve stale image
+    // Store a cache-busted URL so all sessions (not just the current one) get the fresh image.
     const bustedUrl = publicUrl + "?t=" + Date.now();
     setPhoto(bustedUrl);
 
-    await supabase.from("user_profiles").update({ avatar_url: publicUrl }).eq("id", user.id);
+    await supabase.from("user_profiles").update({ avatar_url: bustedUrl }).eq("id", user.id);
     showToast("Profile photo updated.", "success");
   }, []);
 
-  const handleRemovePhoto = useCallback(() => {
+  const handleRemovePhoto = useCallback(async () => {
     setPhoto(null);
+    const { data: { session } } = await supabase.auth.getSession();
+    const user = session?.user ?? null;
+    if (user) {
+      await supabase.from("user_profiles").update({ avatar_url: null }).eq("id", user.id);
+    }
   }, []);
 
   const handleSaveName = useCallback(async () => {

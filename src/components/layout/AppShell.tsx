@@ -7,8 +7,9 @@ import {
   LayoutDashboard, CheckSquare, BookOpen, BookMarked, Users,
   Bell, ChevronDown, LogOut, User as UserIcon, Menu, X, Settings,
 } from "lucide-react";
+import { computeInitials } from "@/lib/utils";
 import type { User } from "@/types";
-import { supabase } from "@/lib/supabase";
+import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { useProject } from "@/context/ProjectContext";
 import Toast from "@/components/ui/Toast";
 import Avatar from "@/components/ui/Avatar";
@@ -21,6 +22,7 @@ const NAV_ITEMS = [
   { href: "/journal",    label: "Journal",    icon: BookOpen        },
   { href: "/literature", label: "Literature", icon: BookMarked      },
   { href: "/team",       label: "Team",       icon: Users           },
+  { href: "/profile",    label: "My Profile", icon: UserIcon        },
   { href: "/settings",   label: "Settings",   icon: Settings        },
 ];
 
@@ -260,6 +262,21 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     let notifChannel: ReturnType<typeof supabase.channel> | null = null;
 
     async function init() {
+      // ── Prototype (no Supabase) path ──────────────────────────────────────
+      if (!isSupabaseConfigured) {
+        if (localStorage.getItem("canopy_authed") !== "true") {
+          router.replace("/login");
+          return;
+        }
+        try {
+          const stored = localStorage.getItem("canopy_user");
+          if (stored) setProfile(JSON.parse(stored));
+        } catch { /* use null profile */ }
+        setAuthed(true);
+        return;
+      }
+
+      // ── Supabase path ─────────────────────────────────────────────────────
       try {
         const { data: { session } } = await supabase.auth.getSession();
         const user = session?.user ?? null;
@@ -349,7 +366,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             email: "",
             role: row.role as User["role"],
             avatarColor: p?.avatar_color ?? "#B4D4E3",
-            avatarInitials: p?.avatar_initials ?? "??",
+            avatarInitials: computeInitials(p?.name ?? "") || (p?.avatar_initials ?? "??"),
             avatarUrl: p?.avatar_url ?? undefined,
           };
         }));
@@ -386,8 +403,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     router.push("/login");
   }
 
-  // Don't render anything until auth check completes (prevents content flash)
-  if (!authed) return null;
+  if (!authed) {
+    return (
+      <div className="flex h-full items-center justify-center" style={{ backgroundColor: "var(--color-canvas)" }}>
+        <div style={{ width: 32, height: 32, border: "3px solid var(--color-border)", borderTopColor: "var(--color-navy)", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -534,7 +557,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                   user={{
                     name: profile?.name ?? "",
                     avatarColor: profile?.avatar_color ?? "#B4D4E3",
-                    avatarInitials: profile?.avatar_initials ?? "??",
+                    avatarInitials: computeInitials(profile?.name ?? "") || (profile?.avatar_initials ?? "??"),
                     avatarUrl: profile?.avatar_url ?? undefined,
                   }}
                   size={28}

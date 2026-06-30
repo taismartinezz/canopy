@@ -62,34 +62,38 @@ export default function SettingsPage() {
 
   useEffect(() => {
     async function load() {
-      const { data: { session } } = await supabase.auth.getSession();
-      const user = session?.user ?? null;
-      if (!user) { router.replace("/login"); return; }
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user ?? null;
+        if (!user) { router.replace("/login"); return; }
 
-      const { data: prof } = await supabase
-        .from("user_profiles").select("*").eq("id", user.id).maybeSingle();
-      setProfile(prof ? { ...prof, email: user.email } : { email: user.email });
+        const { data: prof } = await supabase
+          .from("user_profiles").select("*").eq("id", user.id).maybeSingle();
+        setProfile(prof ? { ...prof, email: user.email } : { email: user.email });
 
-      const { data: membership } = await supabase
-        .from("team_members").select("project_id").eq("user_id", user.id).maybeSingle();
+        const { data: membership } = await supabase
+          .from("team_members").select("project_id").eq("user_id", user.id).maybeSingle();
 
-      if (membership?.project_id) {
-        const { data: proj } = await supabase
-          .from("projects").select("*").eq("id", membership.project_id).maybeSingle();
-        setProject(proj);
+        if (membership?.project_id) {
+          const { data: proj } = await supabase
+            .from("projects").select("*").eq("id", membership.project_id).maybeSingle();
+          setProject(proj);
 
-        if (prof?.role === "pi") {
-          const { data: codes } = await supabase
-            .from("invite_codes")
-            .select("id, code, used_by")
-            .eq("created_by", user.id)
-            .order("created_at", { ascending: false })
-            .limit(5);
-          if (codes) setInviteCodes(codes as typeof inviteCodes);
+          if (prof?.role === "pi") {
+            const { data: codes } = await supabase
+              .from("invite_codes")
+              .select("id, code, used_by")
+              .eq("created_by", user.id)
+              .order("created_at", { ascending: false })
+              .limit(5);
+            if (codes) setInviteCodes(codes as typeof inviteCodes);
+          }
         }
+      } catch (err) {
+        console.error("[Settings] load error:", err instanceof Error ? err.message : String(err));
+      } finally {
+        setLoading(false);
       }
-
-      setLoading(false);
     }
     load();
   // eslint-disable-next-line react-hooks/exhaustive-deps

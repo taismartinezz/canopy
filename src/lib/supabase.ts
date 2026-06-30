@@ -1,4 +1,4 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
 const key =
@@ -11,8 +11,15 @@ export const isSupabaseConfigured = !!(
   (process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
 );
 
+// Use a global singleton to prevent duplicate GoTrueClient instances (and the
+// unconditional console.warn they emit, which leaks the storage key prefix).
+const g = globalThis as typeof globalThis & { __canopy_supabase?: SupabaseClient };
+if (!g.__canopy_supabase) {
+  g.__canopy_supabase = createClient(
+    isSupabaseConfigured ? url : "https://placeholder.supabase.co",
+    isSupabaseConfigured ? key : "placeholder",
+    { auth: { debug: false } },
+  );
+}
 
-export const supabase = createClient(
-  isSupabaseConfigured ? url : "https://placeholder.supabase.co",
-  isSupabaseConfigured ? key : "placeholder",
-);
+export const supabase: SupabaseClient = g.__canopy_supabase;

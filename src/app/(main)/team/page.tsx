@@ -5,7 +5,7 @@ import { CURRENT_USER_ID, formatRelativeTime, getStoredUser, getStoredProject } 
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import type { TeamMember, TaskStatus } from "@/types";
 import Avatar from "@/components/ui/Avatar";
-import { Video, Calendar, X, Edit3, Check, Minus } from "lucide-react";
+import { Video, X, Edit3, Check, Minus } from "lucide-react";
 
 // ── Status labels ─────────────────────────────────────────────────────────────
 
@@ -125,13 +125,6 @@ function MemberPanel({ member, onClose }: { member: TeamMember; onClose: () => v
             </div>
           )}
 
-          <div>
-            <p style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-secondary)", marginBottom: 8 }}>Connect</p>
-            <button className="w-full flex items-center gap-3 px-4 py-3 rounded-lg" style={{ backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)", borderRadius: 8, cursor: "pointer", textAlign: "left" }}>
-              <Calendar size={16} color="var(--color-navy)" />
-              <span style={{ fontSize: 13, color: "var(--color-body)", fontWeight: 500 }}>Schedule a meeting with {member.name.split(" ")[0]}</span>
-            </button>
-          </div>
         </div>
       </div>
     </>
@@ -222,86 +215,6 @@ function WeeklyUpdateBar({ current, onSave }: { current?: string; onSave: (v: st
   );
 }
 
-// ── Meeting scheduler ─────────────────────────────────────────────────────────
-
-const SCHEDULE_DAYS = ["Mon Jun 9", "Tue Jun 10", "Wed Jun 11"];
-const SCHEDULE_TIMES = ["10:00 AM", "2:00 PM", "4:00 PM"];
-
-function MeetingScheduler() {
-  const [selectedSlots, setSelectedSlots] = useState<Set<string>>(new Set());
-  const [sent, setSent] = useState(false);
-
-  function toggleSlot(day: string, time: string) {
-    const key = `${day}|${time}`;
-    setSelectedSlots((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) { next.delete(key); } else { next.add(key); }
-      return next;
-    });
-  }
-
-  if (sent) {
-    return (
-      <div className="flex flex-col items-center justify-center py-8 gap-4">
-        <p style={{ fontSize: 14, color: "var(--color-success)", fontWeight: 600 }}>Meeting proposal sent to your team.</p>
-        <button onClick={() => { setSent(false); setSelectedSlots(new Set()); }}
-          style={{ fontSize: 13, color: "var(--color-navy)", background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>
-          Schedule another
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex flex-col md:flex-row items-start gap-4 md:gap-6">
-      <div className="flex-1 w-full">
-        <p style={{ fontSize: 13, color: "var(--color-secondary)", marginBottom: 16 }}>
-          Propose times and invite your team to vote on availability.
-        </p>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          {SCHEDULE_DAYS.map((day) => (
-            <div key={day} className="flex flex-col gap-2" style={{ backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)", borderRadius: 8, padding: 12 }}>
-              <span style={{ fontSize: 12, fontWeight: 600, color: "var(--color-navy)" }}>{day}</span>
-              {SCHEDULE_TIMES.map((time) => {
-                const key = `${day}|${time}`;
-                const selected = selectedSlots.has(key);
-                return (
-                  <button key={time} onClick={() => toggleSlot(day, time)}
-                    style={{
-                      fontSize: 11, fontWeight: selected ? 600 : 400,
-                      color: selected ? "#fff" : "var(--color-secondary)",
-                      padding: "5px 10px", borderRadius: 4,
-                      border: `1px solid ${selected ? "var(--color-navy)" : "var(--color-border)"}`,
-                      backgroundColor: selected ? "var(--color-navy)" : "transparent",
-                      cursor: "pointer", transition: "all 0.15s", fontFamily: "var(--font-roboto)",
-                    }}
-                  >
-                    {time}
-                  </button>
-                );
-              })}
-            </div>
-          ))}
-        </div>
-      </div>
-      <button
-        onClick={() => { if (selectedSlots.size > 0) setSent(true); }}
-        className="w-full md:w-auto"
-        style={{
-          backgroundColor: selectedSlots.size > 0 ? "var(--color-navy)" : "var(--color-border)",
-          color: selectedSlots.size > 0 ? "#fff" : "var(--color-secondary)",
-          fontSize: 12, fontWeight: 700, border: "none", borderRadius: 7, padding: "10px 20px",
-          cursor: selectedSlots.size > 0 ? "pointer" : "default", whiteSpace: "nowrap",
-          alignSelf: "flex-end", minHeight: 44, transition: "background-color 0.15s",
-          fontFamily: "var(--font-roboto)",
-        }}
-      >
-        Send to team
-      </button>
-    </div>
-  );
-}
-
 // ── Team page ─────────────────────────────────────────────────────────────────
 
 export default function TeamPage() {
@@ -346,32 +259,32 @@ export default function TeamPage() {
         const projectId = profileData?.project_id as string | undefined;
         if (!projectId) { setLoading(false); return; }
 
-        const [{ data: memberData }, { data: assigneeRows, error: assigneeError }] = await Promise.all([
+        const [{ data: memberData }, { data: taskRows, error: taskError }] = await Promise.all([
           supabase
             .from("team_members")
             .select("*, user_profiles(name, avatar_color, avatar_initials, avatar_url, institution)")
             .eq("project_id", projectId),
-          // Query through task_assignees so we get all rows regardless of tasks RLS
           supabase
-            .from("task_assignees")
-            .select("user_id, tasks!inner(status, project_id)")
-            .eq("tasks.project_id", projectId),
+            .from("tasks")
+            .select("id, status, task_assignees(user_id)")
+            .eq("project_id", projectId)
+            .or("archived.is.null,archived.eq.false"),
         ]);
 
-        if (assigneeError) console.error("[Team] task count query error:", assigneeError);
+        if (taskError) console.error("[Team] task count query error:", taskError);
 
-        // Build per-user task count map
+        // Build per-user task count map from tasks → task_assignees
         const countMap: Record<string, Record<TaskStatus, number>> = {};
-        if (assigneeRows) {
-          for (const row of assigneeRows) {
-            const uid = row.user_id as string;
+        if (taskRows) {
+          for (const task of taskRows) {
+            const taskStatus = task.status as TaskStatus;
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const taskStatus = ((row.tasks as any)?.status ?? (Array.isArray(row.tasks) ? (row.tasks as any[])[0]?.status : null)) as TaskStatus | null;
-            if (!taskStatus) continue;
-            if (!countMap[uid]) {
-              countMap[uid] = { todo: 0, in_progress: 0, in_review: 0, done: 0 };
+            const assignees = (task.task_assignees as any[]) ?? [];
+            for (const ta of assignees) {
+              const uid = ta.user_id as string;
+              if (!countMap[uid]) countMap[uid] = { todo: 0, in_progress: 0, in_review: 0, done: 0 };
+              countMap[uid][taskStatus] = (countMap[uid][taskStatus] ?? 0) + 1;
             }
-            countMap[uid][taskStatus] = (countMap[uid][taskStatus] ?? 0) + 1;
           }
         }
 
@@ -452,15 +365,6 @@ export default function TeamPage() {
           ))}
         </div>
 
-        {/* Meeting scheduler */}
-        <div className="mt-8">
-          <h2 style={{ fontFamily: "var(--font-lora)", fontWeight: 600, fontSize: 16, color: "var(--color-navy)", marginBottom: 16 }}>
-            Schedule a Team Meeting
-          </h2>
-          <div style={{ backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 10, padding: "24px 28px" }}>
-            <MeetingScheduler />
-          </div>
-        </div>
       </div>
 
       {selectedMember && <MemberPanel member={selectedMember} onClose={closeMemberPanel} />}

@@ -261,12 +261,14 @@ function ProjectForm({
   userName, setUserName,
   showResearchType, researchType, setResearchType,
   roleTitle, setRoleTitle,
+  showName = true,
 }: {
   projectName: string; setProjectName: (v: string) => void;
   institution: string; setInstitution: (v: string) => void;
   userName: string; setUserName: (v: string) => void;
   showResearchType: boolean; researchType?: string; setResearchType?: (v: string) => void;
   roleTitle?: string; setRoleTitle?: (v: string) => void;
+  showName?: boolean;
 }) {
   return (
     <>
@@ -288,9 +290,11 @@ function ProjectForm({
         </Field>
       )}
 
-      <Field label="Your name">
-        <TextInput value={userName} onChange={setUserName} placeholder="Full name" />
-      </Field>
+      {showName && (
+        <Field label="Your name">
+          <TextInput value={userName} onChange={setUserName} placeholder="Full name" />
+        </Field>
+      )}
 
       {setRoleTitle !== undefined && (
         <Field label="Your role title (optional)">
@@ -309,7 +313,8 @@ async function syncOnboardingToSupabase({
 }: {
   projectName: string; institution: string; researchType: string;
   userName: string; userRole: "pi" | "researcher"; inviteCode?: string;
-  enteredInviteCode?: string; bio?: string; department?: string; inviteEmails?: string[];
+  enteredInviteCode?: string; bio?: string; department?: string;
+  inviteEmails?: { email: string; code: string }[];
 }): Promise<string | null> {
   try {
     const { data: { session } } = await supabase.auth.getSession();
@@ -348,16 +353,16 @@ async function syncOnboardingToSupabase({
         const { error: codeErr } = await supabase.from("invite_codes").insert({
           code: inviteCode, project_id: projectId, created_by: user.id,
         });
-        if (codeErr) console.error("[Sync] generic invite_code insert error:", codeErr);
+        if (codeErr) console.error("[Sync] generic invite_code insert error:", codeErr.message, codeErr.code);
       }
       // Save one unique code per invited email
       if (inviteEmails && inviteEmails.length > 0) {
-        for (const email of inviteEmails) {
-          const code = "CANOPY-" + Math.random().toString(36).substring(2, 6).toUpperCase();
+        for (const { email, code } of inviteEmails) {
           const { error: emailCodeErr } = await supabase.from("invite_codes").insert({
-            code, project_id: projectId, created_by: user.id,
+            code, project_id: projectId, created_by: user.id, invited_email: email,
           });
-          if (emailCodeErr) console.error("[Sync] invite_code insert error:", emailCodeErr);
+          // Log only code + message — not the full object, which may echo the inserted row (including email).
+          if (emailCodeErr) console.error("[Sync] invite_code insert error:", emailCodeErr.message, emailCodeErr.code);
         }
       }
     } else if (enteredInviteCode) {
@@ -426,7 +431,7 @@ async function syncOnboardingToSupabase({
 
     return null;
   } catch (err) {
-    console.error("[syncOnboardingToSupabase] unexpected error:", err);
+    console.error("[syncOnboardingToSupabase] unexpected error:", err instanceof Error ? err.message : String(err));
     return `Unexpected error: ${err instanceof Error ? err.message : String(err)}`;
   }
 }
@@ -456,6 +461,8 @@ export default function OnboardingPage() {
   // PI step 3 — invite team
   const [emailInput, setEmailInput] = useState("");
   const [inviteEmails, setInviteEmails] = useState<string[]>([]);
+  const [emailCodes, setEmailCodes] = useState<Record<string, string>>({});
+  const [copiedEmail, setCopiedEmail] = useState<string | null>(null);
   const [generatedCode, setGeneratedCode] = useState("");
   const [copied, setCopied] = useState(false);
 
@@ -534,7 +541,9 @@ export default function OnboardingPage() {
   const handleAddEmail = useCallback(() => {
     const trimmed = emailInput.trim();
     if (trimmed.includes("@") && !inviteEmails.includes(trimmed)) {
+      const code = "CANOPY-" + Math.random().toString(36).substring(2, 6).toUpperCase();
       setInviteEmails((prev) => [...prev, trimmed]);
+      setEmailCodes((prev) => ({ ...prev, [trimmed]: code }));
       setEmailInput("");
     }
   }, [emailInput, inviteEmails]);
@@ -547,8 +556,18 @@ export default function OnboardingPage() {
     } catch { /* ignore */ }
   }, [generatedCode]);
 
+  const handleCopyEmailLink = useCallback(async (email: string) => {
+    const code = emailCodes[email];
+    if (!code) return;
+    try {
+      await navigator.clipboard.writeText(`${window.location.origin}/login?invite=${code}`);
+      setCopiedEmail(email);
+      setTimeout(() => setCopiedEmail(null), 2000);
+    } catch { /* ignore */ }
+  }, [emailCodes]);
+
   async function completeOnboarding() {
-    if (submitting) return;
+    if (submitting || !role) return;
     setSubmitting(true);
 
     const usedInvite = inviteCode.length >= 6;
@@ -611,6 +630,13 @@ export default function OnboardingPage() {
       localStorage.setItem("canopy_invite_code", generatedCode);
     }
 
+    if (role === "pi" && inviteEmails.length > 0) {
+      localStorage.setItem(
+        "canopy_email_invites",
+        JSON.stringify(inviteEmails.map((email) => ({ email, code: emailCodes[email] }))),
+      );
+    }
+
     // Await Supabase sync so the profile row exists before AppShell loads
     if (isSupabaseConfigured) {
       const syncErr = await syncOnboardingToSupabase({
@@ -620,7 +646,7 @@ export default function OnboardingPage() {
         enteredInviteCode: role === "researcher" && inviteCode.length >= 6 ? inviteCode : undefined,
         bio: role === "researcher" ? profileBio : undefined,
         department: role === "researcher" ? profileDept : undefined,
-        inviteEmails: role === "pi" ? inviteEmails : undefined,
+        inviteEmails: role === "pi" ? inviteEmails.map((email) => ({ email, code: emailCodes[email] })) : undefined,
       });
       if (syncErr) {
         setSyncError(syncErr);
@@ -808,58 +834,63 @@ export default function OnboardingPage() {
         <div style={CARD_STYLE}>
           <BackButton onClick={() => setStep(1)} />
           <StepDots current={2} total={3} />
-          <SectionTitle title="Join or create a workspace" />
+          <SectionTitle title="How are you joining Canopy?" />
 
-          {/* Option A: invite code */}
-          <Field label="I have an invite code">
+          {/* Option A: join an existing lab */}
+          <div
+            style={{
+              border: `${inviteCode.length >= 6 ? 2 : 1}px solid ${inviteCode.length >= 6 ? "#1B2E4B" : "#DDE1E7"}`,
+              borderRadius: 10,
+              padding: "20px 20px 16px",
+              marginBottom: 16,
+              backgroundColor: inviteCode.length >= 6 ? "rgba(27,46,75,0.03)" : "#fff",
+              transition: "border-color 150ms ease, background-color 150ms ease",
+            }}
+          >
+            <p style={{ fontFamily: "var(--font-lora)", fontWeight: 600, fontSize: 14, color: "#1B2E4B", margin: "0 0 4px" }}>
+              Join an existing lab
+            </p>
+            <p style={{ fontFamily: "var(--font-roboto)", fontSize: 12, color: "#6B6B6B", margin: "0 0 12px" }}>
+              Your PI shared an invite code or link.
+            </p>
             <TextInput
               value={inviteCode}
               onChange={setInviteCode}
               placeholder="e.g. CANOPY-XXXX"
             />
-          </Field>
+          </div>
 
           {/* Or divider */}
-          <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "24px 0" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "4px 0 16px" }}>
             <div style={{ flex: 1, height: 1, backgroundColor: "#DDE1E7" }} />
-            <span style={{ fontFamily: "var(--font-roboto)", fontSize: 12, color: "#6B6B6B" }}>
-              or
-            </span>
+            <span style={{ fontFamily: "var(--font-roboto)", fontSize: 12, color: "#6B6B6B" }}>or</span>
             <div style={{ flex: 1, height: 1, backgroundColor: "#DDE1E7" }} />
           </div>
 
-          {/* Option B: create workspace */}
-          <p
+          {/* Option B: create own workspace */}
+          <div
             style={{
-              fontFamily: "var(--font-lora)",
-              fontWeight: 600,
-              fontSize: 15,
-              color: "#1B2E4B",
-              marginBottom: 16,
-              marginTop: 0,
+              border: `${resProjectName.trim().length > 0 ? 2 : 1}px solid ${resProjectName.trim().length > 0 ? "#1B2E4B" : "#DDE1E7"}`,
+              borderRadius: 10,
+              padding: "20px 20px 4px",
+              backgroundColor: resProjectName.trim().length > 0 ? "rgba(27,46,75,0.03)" : "#fff",
+              transition: "border-color 150ms ease, background-color 150ms ease",
             }}
           >
-            Create my own workspace
-          </p>
-
-          <ProjectForm
-            projectName={resProjectName} setProjectName={setResProjectName}
-            institution={resInstitution} setInstitution={setResInstitution}
-            userName={resUserName} setUserName={setResUserName}
-            showResearchType={false}
-          />
-
-          <p
-            style={{
-              fontFamily: "var(--font-roboto)",
-              fontSize: 12,
-              color: "#6B6B6B",
-              marginTop: -8,
-              marginBottom: 0,
-            }}
-          >
-            You can invite a PI to take over lab management later.
-          </p>
+            <p style={{ fontFamily: "var(--font-lora)", fontWeight: 600, fontSize: 14, color: "#1B2E4B", margin: "0 0 4px" }}>
+              Create my own workspace
+            </p>
+            <p style={{ fontFamily: "var(--font-roboto)", fontSize: 12, color: "#6B6B6B", margin: "0 0 12px" }}>
+              Start fresh — you can invite collaborators later.
+            </p>
+            <ProjectForm
+              projectName={resProjectName} setProjectName={setResProjectName}
+              institution={resInstitution} setInstitution={setResInstitution}
+              userName={resUserName} setUserName={setResUserName}
+              showResearchType={false}
+              showName={false}
+            />
+          </div>
 
           <NavButton onClick={handleResearcherStep2Continue} disabled={!canContinue}>
             Continue
@@ -920,35 +951,50 @@ export default function OnboardingPage() {
 
           {/* Email chips */}
           {inviteEmails.length > 0 && (
-            <div
-              style={{
-                display: "flex",
-                flexWrap: "wrap",
-                gap: 8,
-                marginBottom: 16,
-              }}
-            >
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 16 }}>
               {inviteEmails.map((email) => (
-                <span
+                <div
                   key={email}
                   style={{
-                    display: "inline-flex",
+                    display: "flex",
                     alignItems: "center",
-                    gap: 6,
-                    padding: "4px 10px",
-                    backgroundColor: "rgba(27,46,75,0.05)",
+                    gap: 8,
+                    padding: "6px 10px",
+                    backgroundColor: "rgba(27,46,75,0.04)",
                     border: "1px solid #DDE1E7",
-                    borderRadius: 20,
+                    borderRadius: 8,
                     fontFamily: "var(--font-roboto)",
                     fontSize: 13,
                     color: "#2D2D2D",
                   }}
                 >
-                  {email}
+                  <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {email}
+                  </span>
                   <button
-                    onClick={() =>
-                      setInviteEmails((prev) => prev.filter((e) => e !== email))
-                    }
+                    onClick={() => handleCopyEmailLink(email)}
+                    aria-label={`Copy invite link for ${email}`}
+                    style={{
+                      flexShrink: 0,
+                      background: "none",
+                      border: "1px solid #DDE1E7",
+                      borderRadius: 6,
+                      cursor: "pointer",
+                      padding: "2px 8px",
+                      fontFamily: "var(--font-roboto)",
+                      fontSize: 11,
+                      fontWeight: 600,
+                      color: copiedEmail === email ? "#2E7D52" : "#1B2E4B",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {copiedEmail === email ? "Copied!" : "Copy link"}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setInviteEmails((prev) => prev.filter((e) => e !== email));
+                      setEmailCodes((prev) => { const next = { ...prev }; delete next[email]; return next; });
+                    }}
                     aria-label={`Remove ${email}`}
                     style={{
                       display: "flex",
@@ -960,11 +1006,12 @@ export default function OnboardingPage() {
                       color: "#6B6B6B",
                       minWidth: 16,
                       minHeight: 16,
+                      flexShrink: 0,
                     }}
                   >
                     <X size={12} />
                   </button>
-                </span>
+                </div>
               ))}
             </div>
           )}

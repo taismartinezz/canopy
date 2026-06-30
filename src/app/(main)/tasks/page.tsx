@@ -11,8 +11,8 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { LayoutGrid, List, Search, Plus, MoreHorizontal, ChevronDown } from "lucide-react";
-import { formatDate } from "@/lib/mock-data";
-import { supabase } from "@/lib/supabase";
+import { formatDate, TASKS as MOCK_TASKS, USERS, getStoredProject } from "@/lib/mock-data";
+import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import type { Task, TaskStatus, TaskPriority, User, UserRole } from "@/types";
 import Avatar from "@/components/ui/Avatar";
 import Toast from "@/components/ui/Toast";
@@ -394,6 +394,16 @@ export default function TasksPage() {
   const [projectId, setProjectId] = useState<string>("");
 
   useEffect(() => {
+    if (!isSupabaseConfigured) {
+      // Demo mode — use mock data
+      const sp = getStoredProject();
+      setProjectId(sp.id);
+      setTeamMembers(USERS);
+      setTasks(MOCK_TASKS);
+      setLoading(false);
+      return;
+    }
+
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       const user = session?.user ?? null;
       if (!user) { setLoading(false); return; }
@@ -460,6 +470,38 @@ export default function TasksPage() {
       setLoading(false);
     });
   }, []);
+
+  // Realtime: reflect task INSERTs/UPDATEs/DELETEs from other users
+  useEffect(() => {
+    if (!projectId || !isSupabaseConfigured) return;
+    const channel = supabase
+      .channel(`tasks:${projectId}`)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "tasks", filter: `project_id=eq.${projectId}` }, (payload) => {
+        const row = payload.new as Record<string, unknown>;
+        if (row.archived) return;
+        setTasks((prev) => {
+          if (prev.find((t) => t.id === row.id)) return prev;
+          return [{
+            id: row.id as string, projectId: row.project_id as string,
+            title: row.title as string, description: (row.description as string) ?? "",
+            status: row.status as TaskStatus, priority: row.priority as Task["priority"],
+            assigneeIds: [], dueDate: row.due_date as string | undefined,
+            createdAt: row.created_at as string, updatedAt: row.updated_at as string,
+            comments: [], files: [], links: [],
+          }, ...prev];
+        });
+      })
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "tasks", filter: `project_id=eq.${projectId}` }, (payload) => {
+        const row = payload.new as Record<string, unknown>;
+        if (row.archived) { setTasks((prev) => prev.filter((t) => t.id !== row.id)); return; }
+        setTasks((prev) => prev.map((t) => t.id === row.id ? { ...t, status: row.status as TaskStatus, priority: row.priority as Task["priority"], title: row.title as string, dueDate: row.due_date as string | undefined } : t));
+      })
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "tasks" }, (payload) => {
+        setTasks((prev) => prev.filter((t) => t.id !== (payload.old as Record<string, unknown>).id));
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [projectId]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
