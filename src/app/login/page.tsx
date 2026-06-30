@@ -210,6 +210,7 @@ export default function LoginPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [nameError, setNameError] = useState("");
   const [emailError, setEmailError] = useState("");
   const [passwordError, setPasswordError] = useState("");
   const [formError, setFormError] = useState("");
@@ -256,8 +257,10 @@ export default function LoginPage() {
   }, []);
 
   const handleEmailAuth = useCallback(async () => {
+    if (mode === "signup" && !name.trim()) { setNameError("Please enter your full name."); return; }
     if (!email.includes("@")) { setEmailError("Please enter a valid email address."); return; }
     if (password.length < 6) { setPasswordError("Password must be at least 6 characters."); return; }
+    setNameError("");
     setEmailError("");
     setPasswordError("");
     setFormError("");
@@ -266,7 +269,8 @@ export default function LoginPage() {
     if (!isSupabaseConfigured) {
       setLoading(false);
       localStorage.setItem("canopy_authed", "true");
-      router.push("/");
+      if (mode === "signup" && name.trim()) localStorage.setItem("canopy_signup_name", name.trim());
+      router.push(localStorage.getItem("canopy_project") ? "/" : "/onboarding");
       return;
     }
 
@@ -281,6 +285,7 @@ export default function LoginPage() {
       if (!user) { setFormError("Sign-in succeeded but session has no user."); setLoading(false); return; }
 
       if (mode === "signup") {
+        if (name.trim()) localStorage.setItem("canopy_signup_name", name.trim());
         router.push("/onboarding");
         return;
       }
@@ -491,31 +496,38 @@ export default function LoginPage() {
           noValidate
         >
         {mode === "signup" && (
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => { setName(e.target.value); setFormError(""); }}
-            placeholder="Full name"
-            autoComplete="name"
-            aria-label="Full name"
-            style={{
-              display: "block",
-              width: "100%",
-              height: 44,
-              border: "1px solid #DDE1E7",
-              borderRadius: 8,
-              padding: "0 14px",
-              fontFamily: "var(--font-roboto)",
-              fontWeight: 400,
-              fontSize: 14,
-              color: "#2D2D2D",
-              outline: "none",
-              boxSizing: "border-box",
-              marginBottom: 10,
-            }}
-            onFocus={(e) => { e.currentTarget.style.borderColor = "#1B2E4B"; }}
-            onBlur={(e) => { e.currentTarget.style.borderColor = "#DDE1E7"; }}
-          />
+          <>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => { setName(e.target.value); setNameError(""); setFormError(""); }}
+              placeholder="Full name"
+              autoComplete="name"
+              aria-label="Full name"
+              style={{
+                display: "block",
+                width: "100%",
+                height: 44,
+                border: `1px solid ${nameError ? "#C0392B" : "#DDE1E7"}`,
+                borderRadius: 8,
+                padding: "0 14px",
+                fontFamily: "var(--font-roboto)",
+                fontWeight: 400,
+                fontSize: 14,
+                color: "#2D2D2D",
+                outline: "none",
+                boxSizing: "border-box",
+                marginBottom: nameError ? 0 : 10,
+              }}
+              onFocus={(e) => { e.currentTarget.style.borderColor = nameError ? "#C0392B" : "#1B2E4B"; }}
+              onBlur={(e) => { e.currentTarget.style.borderColor = nameError ? "#C0392B" : "#DDE1E7"; }}
+            />
+            {nameError && (
+              <p role="alert" style={{ fontFamily: "var(--font-roboto)", fontSize: 12, color: "#C0392B", margin: "4px 0 10px" }}>
+                {nameError}
+              </p>
+            )}
+          </>
         )}
         <input
           type="email"
@@ -657,31 +669,33 @@ export default function LoginPage() {
           </div>
         )}
 
-        <button
-          type="submit"
-          disabled={loading}
-          style={{
-            display: "block",
-            width: "100%",
-            height: 44,
-            minHeight: 44,
-            backgroundColor: loading ? "#B8C4D4" : "#1B2E4B",
-            color: "#ffffff",
-            border: "none",
-            borderRadius: 8,
-            fontFamily: "var(--font-roboto)",
-            fontWeight: 700,
-            fontSize: 13,
-            cursor: loading ? "not-allowed" : "pointer",
-            marginTop: 12,
-            transition: "background-color 150ms ease",
-          }}
-          onMouseEnter={(e) => { if (!loading) (e.currentTarget as HTMLElement).style.backgroundColor = "#2E4A6F"; }}
-          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = loading ? "#B8C4D4" : "#1B2E4B"; }}
-          aria-busy={loading}
-        >
-          {loading ? "Please wait…" : mode === "signin" ? "Continue with email" : "Create account"}
-        </button>
+        {!forgotOpen && (
+          <button
+            type="submit"
+            disabled={loading}
+            style={{
+              display: "block",
+              width: "100%",
+              height: 44,
+              minHeight: 44,
+              backgroundColor: loading ? "#B8C4D4" : "#1B2E4B",
+              color: "#ffffff",
+              border: "none",
+              borderRadius: 8,
+              fontFamily: "var(--font-roboto)",
+              fontWeight: 700,
+              fontSize: 13,
+              cursor: loading ? "not-allowed" : "pointer",
+              marginTop: 12,
+              transition: "background-color 150ms ease",
+            }}
+            onMouseEnter={(e) => { if (!loading) (e.currentTarget as HTMLElement).style.backgroundColor = "#2E4A6F"; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = loading ? "#B8C4D4" : "#1B2E4B"; }}
+            aria-busy={loading}
+          >
+            {loading ? "Please wait…" : mode === "signin" ? "Continue with email" : "Create account"}
+          </button>
+        )}
 
         {formError && (
           <p

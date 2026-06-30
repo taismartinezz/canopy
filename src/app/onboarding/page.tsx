@@ -460,11 +460,13 @@ export default function OnboardingPage() {
 
   // PI step 3 — invite team
   const [emailInput, setEmailInput] = useState("");
+  const [emailInputError, setEmailInputError] = useState("");
   const [inviteEmails, setInviteEmails] = useState<string[]>([]);
   const [emailCodes, setEmailCodes] = useState<Record<string, string>>({});
   const [copiedEmail, setCopiedEmail] = useState<string | null>(null);
   const [generatedCode, setGeneratedCode] = useState("");
   const [copied, setCopied] = useState(false);
+  const [revealLink, setRevealLink] = useState(false);
 
   // Researcher step 3 — profile
   const [profileName, setProfileName] = useState("");
@@ -487,6 +489,12 @@ export default function OnboardingPage() {
         const pendingInvite = localStorage.getItem("pendingInviteCode");
         if (pendingInvite) setInviteCode(pendingInvite);
         if (localStorage.getItem("canopy_project")) { router.replace("/"); return; }
+        const signupName = localStorage.getItem("canopy_signup_name") ?? "";
+        if (signupName) {
+          setPiUserName(signupName);
+          setResUserName(signupName);
+          localStorage.removeItem("canopy_signup_name");
+        }
         setSessionReady(true);
         return;
       }
@@ -497,6 +505,14 @@ export default function OnboardingPage() {
       // Pre-fill invite code if researcher arrived via an invite link
       const pendingInvite = localStorage.getItem("pendingInviteCode");
       if (pendingInvite) setInviteCode(pendingInvite);
+
+      // Pre-fill name from sign-up form
+      const signupName = localStorage.getItem("canopy_signup_name") ?? "";
+      if (signupName) {
+        setPiUserName(signupName);
+        setResUserName(signupName);
+        localStorage.removeItem("canopy_signup_name");
+      }
 
       setSessionReady(true);
     }
@@ -540,12 +556,14 @@ export default function OnboardingPage() {
 
   const handleAddEmail = useCallback(() => {
     const trimmed = emailInput.trim();
-    if (trimmed.includes("@") && !inviteEmails.includes(trimmed)) {
-      const code = "CANOPY-" + Math.random().toString(36).substring(2, 6).toUpperCase();
-      setInviteEmails((prev) => [...prev, trimmed]);
-      setEmailCodes((prev) => ({ ...prev, [trimmed]: code }));
-      setEmailInput("");
-    }
+    if (!trimmed) { setEmailInputError("Please enter an email address."); return; }
+    if (!trimmed.includes("@")) { setEmailInputError("Please enter a valid email address."); return; }
+    if (inviteEmails.includes(trimmed)) { setEmailInputError("This email has already been added."); return; }
+    setEmailInputError("");
+    const code = "CANOPY-" + Math.random().toString(36).substring(2, 6).toUpperCase();
+    setInviteEmails((prev) => [...prev, trimmed]);
+    setEmailCodes((prev) => ({ ...prev, [trimmed]: code }));
+    setEmailInput("");
   }, [emailInput, inviteEmails]);
 
   const handleCopyLink = useCallback(async () => {
@@ -804,7 +822,7 @@ export default function OnboardingPage() {
 
   if (step === 2 && role === "researcher") {
     const inviteValid = inviteCode.length >= 6;
-    const createValid = resProjectName.trim().length > 0;
+    const createValid = resProjectName.trim().length > 0 && resUserName.trim().length > 0;
     const canContinue = inviteValid || createValid;
 
     if (isJoining) {
@@ -913,39 +931,46 @@ export default function OnboardingPage() {
           />
 
           {/* Email add row */}
-          <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-            <input
-              type="email"
-              value={emailInput}
-              onChange={(e) => setEmailInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddEmail(); } }}
-              placeholder="Add email"
-              aria-label="Add team member email"
-              style={{ ...INPUT_STYLE, flex: 1 }}
-              onFocus={(e) => { e.currentTarget.style.borderColor = "#1B2E4B"; }}
-              onBlur={(e) => { e.currentTarget.style.borderColor = "#DDE1E7"; }}
-            />
-            <button
-              onClick={handleAddEmail}
-              style={{
-                height: 44,
-                padding: "0 16px",
-                backgroundColor: "#1B2E4B",
-                color: "#fff",
-                border: "none",
-                borderRadius: 8,
-                fontFamily: "var(--font-roboto)",
-                fontWeight: 600,
-                fontSize: 13,
-                cursor: "pointer",
-                whiteSpace: "nowrap",
-                flexShrink: 0,
-              }}
-              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "#2E4A6F"; }}
-              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "#1B2E4B"; }}
-            >
-              Add
-            </button>
+          <div style={{ marginBottom: emailInputError ? 4 : 12 }}>
+            <div style={{ display: "flex", gap: 8 }}>
+              <input
+                type="email"
+                value={emailInput}
+                onChange={(e) => { setEmailInput(e.target.value); setEmailInputError(""); }}
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddEmail(); } }}
+                placeholder="Add email"
+                aria-label="Add team member email"
+                style={{ ...INPUT_STYLE, flex: 1, borderColor: emailInputError ? "#C0392B" : "#DDE1E7" }}
+                onFocus={(e) => { e.currentTarget.style.borderColor = emailInputError ? "#C0392B" : "#1B2E4B"; }}
+                onBlur={(e) => { e.currentTarget.style.borderColor = emailInputError ? "#C0392B" : "#DDE1E7"; }}
+              />
+              <button
+                onClick={handleAddEmail}
+                style={{
+                  height: 44,
+                  padding: "0 16px",
+                  backgroundColor: "#1B2E4B",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: 8,
+                  fontFamily: "var(--font-roboto)",
+                  fontWeight: 600,
+                  fontSize: 13,
+                  cursor: "pointer",
+                  whiteSpace: "nowrap",
+                  flexShrink: 0,
+                }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "#2E4A6F"; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "#1B2E4B"; }}
+              >
+                Add
+              </button>
+            </div>
+            {emailInputError && (
+              <p role="alert" style={{ fontFamily: "var(--font-roboto)", fontSize: 12, color: "#C0392B", margin: "4px 0 8px" }}>
+                {emailInputError}
+              </p>
+            )}
           </div>
 
           {/* Email chips */}
@@ -1046,18 +1071,28 @@ export default function OnboardingPage() {
           >
             {copied ? "✓ Copied!" : "Copy invite link"}
           </button>
-          <p
-            style={{
-              fontFamily: "var(--font-roboto)",
-              fontSize: 11,
-              color: "#6B6B6B",
-              textAlign: "center",
-              marginTop: 6,
-              marginBottom: 0,
-            }}
-          >
-            {typeof window !== "undefined" ? `${window.location.origin}/login?invite=${generatedCode}` : `/login?invite=${generatedCode}`}
-          </p>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, marginTop: 6 }}>
+            <p
+              style={{
+                fontFamily: "var(--font-roboto)",
+                fontSize: 11,
+                color: "#6B6B6B",
+                margin: 0,
+                letterSpacing: revealLink ? 0 : "0.05em",
+              }}
+            >
+              {revealLink
+                ? (typeof window !== "undefined" ? `${window.location.origin}/login?invite=${generatedCode}` : `/login?invite=${generatedCode}`)
+                : `canopy.app/login?invite=••••••••`}
+            </p>
+            <button
+              type="button"
+              onClick={() => setRevealLink((v) => !v)}
+              style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "var(--font-roboto)", fontSize: 11, color: "#1B2E4B", textDecoration: "underline", padding: 0 }}
+            >
+              {revealLink ? "Hide" : "Reveal"}
+            </button>
+          </div>
 
           <NavButton onClick={completeOnboarding} disabled={submitting}>
             {submitting ? "Saving…" : "Go to my workspace"}

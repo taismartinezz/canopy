@@ -687,7 +687,7 @@ export default function TasksPage() {
         {!loading && view === "board" ? (
           <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
             <div className="overflow-x-auto" style={{ WebkitOverflowScrolling: "touch" }}>
-              <div className="grid gap-4 md:gap-5" style={{ gridTemplateColumns: "repeat(4, minmax(240px, 1fr))", alignItems: "start", minWidth: "min(100%, 960px)" }}>
+              <div className="grid gap-4 md:gap-5" style={{ gridTemplateColumns: "repeat(4, minmax(240px, 1fr))", alignItems: "start", minWidth: 960 }}>
                 {STATUS_ORDER.map((status) => (
                   <KanbanColumn
                     key={status}
