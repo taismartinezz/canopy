@@ -888,7 +888,6 @@ export default function OnboardingPage() {
               institution={resInstitution} setInstitution={setResInstitution}
               userName={resUserName} setUserName={setResUserName}
               showResearchType={false}
-              showName={false}
             />
           </div>
 
