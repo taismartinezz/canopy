@@ -71,6 +71,7 @@ function AuthButton({
 
   return (
     <button
+      type="button"
       onClick={onClick}
       aria-label={ariaLabel}
       onMouseEnter={() => setHovered(true)}
@@ -198,11 +199,21 @@ function InstitutionModal({ onClose }: { onClose: () => void }) {
 export default function LoginPage() {
   const router = useRouter();
   const [ssoOpen, setSsoOpen] = useState(false);
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const [mode, setMode] = useState<"signin" | "signup">(() => {
+    if (typeof window !== "undefined") {
+      return new URLSearchParams(window.location.search).get("mode") === "signup"
+        ? "signup"
+        : "signin";
+    }
+    return "signin";
+  });
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
+  const [emailError, setEmailError] = useState("");
+  const [passwordError, setPasswordError] = useState("");
+  const [formError, setFormError] = useState("");
+  const [forgotError, setForgotError] = useState("");
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState(true);
   const [forgotOpen, setForgotOpen] = useState(false);
@@ -245,9 +256,11 @@ export default function LoginPage() {
   }, []);
 
   const handleEmailAuth = useCallback(async () => {
-    if (!email.includes("@")) { setError("Please enter a valid email address."); return; }
-    if (password.length < 6) { setError("Password must be at least 6 characters."); return; }
-    setError("");
+    if (!email.includes("@")) { setEmailError("Please enter a valid email address."); return; }
+    if (password.length < 6) { setPasswordError("Password must be at least 6 characters."); return; }
+    setEmailError("");
+    setPasswordError("");
+    setFormError("");
     setLoading(true);
 
     if (!isSupabaseConfigured) {
@@ -261,11 +274,11 @@ export default function LoginPage() {
       const { error: authError } = mode === "signin"
         ? await supabase.auth.signInWithPassword({ email, password })
         : await supabase.auth.signUp({ email, password });
-      if (authError) { setError(authError.message); setLoading(false); return; }
+      if (authError) { setFormError(authError.message); setLoading(false); return; }
 
       const { data: { session } } = await supabase.auth.getSession();
       const user = session?.user;
-      if (!user) { setError("Sign-in succeeded but session has no user."); setLoading(false); return; }
+      if (!user) { setFormError("Sign-in succeeded but session has no user."); setLoading(false); return; }
 
       if (mode === "signup") {
         router.push("/onboarding");
@@ -280,20 +293,20 @@ export default function LoginPage() {
       }
       router.push(member ? "/" : "/onboarding");
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "An unexpected error occurred.");
+      setFormError(err instanceof Error ? err.message : "An unexpected error occurred.");
       setLoading(false);
     }
   }, [email, password, mode, router]);
 
   const handleForgotPassword = useCallback(async () => {
-    if (!forgotEmail.includes("@")) { setError("Please enter a valid email address."); return; }
+    if (!forgotEmail.includes("@")) { setForgotError("Please enter a valid email address."); return; }
     setForgotLoading(true);
-    setError("");
+    setForgotError("");
     if (isSupabaseConfigured) {
       const { error: resetError } = await supabase.auth.resetPasswordForEmail(forgotEmail, {
         redirectTo: (typeof window !== "undefined" ? window.location.origin : "") + "/reset-password",
       });
-      if (resetError) { setError(resetError.message); setForgotLoading(false); return; }
+      if (resetError) { setForgotError(resetError.message); setForgotLoading(false); return; }
     }
     setForgotSent(true);
     setForgotLoading(false);
@@ -395,6 +408,20 @@ export default function LoginPage() {
           role="separator"
         />
 
+        {/* Mode heading */}
+        <p
+          style={{
+            fontFamily: "var(--font-lora)",
+            fontWeight: 600,
+            fontSize: 15,
+            color: "#1B2E4B",
+            textAlign: "center",
+            margin: "0 0 16px",
+          }}
+        >
+          {mode === "signin" ? "Sign in" : "Create your account"}
+        </p>
+
         {/* Auth buttons */}
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           <AuthButton
@@ -431,7 +458,6 @@ export default function LoginPage() {
             ariaLabel="Sign in with your institution"
             onClick={() => setSsoOpen(true)}
             muted
-            dashed
           />
         </div>
 
@@ -460,11 +486,15 @@ export default function LoginPage() {
         </div>
 
         {/* Email form */}
+        <form
+          onSubmit={(e) => { e.preventDefault(); handleEmailAuth(); }}
+          noValidate
+        >
         {mode === "signup" && (
           <input
             type="text"
             value={name}
-            onChange={(e) => { setName(e.target.value); setError(""); }}
+            onChange={(e) => { setName(e.target.value); setFormError(""); }}
             placeholder="Full name"
             autoComplete="name"
             aria-label="Full name"
@@ -490,15 +520,15 @@ export default function LoginPage() {
         <input
           type="email"
           value={email}
-          onChange={(e) => { setEmail(e.target.value); setError(""); }}
-          placeholder="Work or university email"
+          onChange={(e) => { setEmail(e.target.value); setEmailError(""); }}
+          placeholder="Email"
           autoComplete="email"
-          aria-label="Work or university email"
+          aria-label="Email"
           style={{
             display: "block",
             width: "100%",
             height: 44,
-            border: "1px solid #DDE1E7",
+            border: `1px solid ${emailError ? "#C0392B" : "#DDE1E7"}`,
             borderRadius: 8,
             padding: "0 14px",
             fontFamily: "var(--font-roboto)",
@@ -508,14 +538,19 @@ export default function LoginPage() {
             outline: "none",
             boxSizing: "border-box",
           }}
-          onFocus={(e) => { e.currentTarget.style.borderColor = "#1B2E4B"; }}
-          onBlur={(e) => { e.currentTarget.style.borderColor = "#DDE1E7"; }}
+          onFocus={(e) => { e.currentTarget.style.borderColor = emailError ? "#C0392B" : "#1B2E4B"; }}
+          onBlur={(e) => { e.currentTarget.style.borderColor = emailError ? "#C0392B" : "#DDE1E7"; }}
         />
+        {emailError && (
+          <p role="alert" style={{ fontFamily: "var(--font-roboto)", fontSize: 12, color: "#C0392B", margin: "4px 0 0" }}>
+            {emailError}
+          </p>
+        )}
         <div style={{ position: "relative", marginTop: 10 }}>
           <input
             type={showPassword ? "text" : "password"}
             value={password}
-            onChange={(e) => { setPassword(e.target.value); setError(""); }}
+            onChange={(e) => { setPassword(e.target.value); setPasswordError(""); }}
             placeholder="Password"
             autoComplete={mode === "signin" ? "current-password" : "new-password"}
             aria-label="Password"
@@ -523,7 +558,7 @@ export default function LoginPage() {
               display: "block",
               width: "100%",
               height: 44,
-              border: "1px solid #DDE1E7",
+              border: `1px solid ${passwordError ? "#C0392B" : "#DDE1E7"}`,
               borderRadius: 8,
               padding: "0 44px 0 14px",
               fontFamily: "var(--font-roboto)",
@@ -533,8 +568,8 @@ export default function LoginPage() {
               outline: "none",
               boxSizing: "border-box",
             }}
-            onFocus={(e) => { e.currentTarget.style.borderColor = "#1B2E4B"; }}
-            onBlur={(e) => { e.currentTarget.style.borderColor = "#DDE1E7"; }}
+            onFocus={(e) => { e.currentTarget.style.borderColor = passwordError ? "#C0392B" : "#1B2E4B"; }}
+            onBlur={(e) => { e.currentTarget.style.borderColor = passwordError ? "#C0392B" : "#DDE1E7"; }}
           />
           <button
             type="button"
@@ -549,13 +584,23 @@ export default function LoginPage() {
             {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
           </button>
         </div>
+        {passwordError && (
+          <p role="alert" style={{ fontFamily: "var(--font-roboto)", fontSize: 12, color: "#C0392B", margin: "4px 0 0" }}>
+            {passwordError}
+          </p>
+        )}
+        {!passwordError && mode === "signup" && (
+          <p style={{ fontFamily: "var(--font-roboto)", fontSize: 12, color: "#6B6B6B", margin: "4px 0 0", lineHeight: 1.5 }}>
+            Use a unique password — your account protects sensitive research data.
+          </p>
+        )}
 
         {/* Forgot password — sign-in only */}
         {mode === "signin" && !forgotOpen && (
           <div style={{ textAlign: "right", marginTop: 6 }}>
             <button
               type="button"
-              onClick={() => { setForgotOpen(true); setForgotEmail(email); setForgotSent(false); setError(""); }}
+              onClick={() => { setForgotOpen(true); setForgotEmail(email); setForgotSent(false); setForgotError(""); setEmailError(""); setPasswordError(""); setFormError(""); }}
               style={{ background: "none", border: "none", padding: 0, fontFamily: "var(--font-roboto)", fontSize: 12, color: "#1B2E4B", cursor: "pointer", textDecoration: "underline" }}
             >
               Forgot password?
@@ -578,13 +623,18 @@ export default function LoginPage() {
                 <input
                   type="email"
                   value={forgotEmail}
-                  onChange={(e) => setForgotEmail(e.target.value)}
+                  onChange={(e) => { setForgotEmail(e.target.value); setForgotError(""); }}
                   placeholder="Your email"
                   aria-label="Email for password reset"
-                  style={{ display: "block", width: "100%", height: 40, border: "1px solid #DDE1E7", borderRadius: 8, padding: "0 12px", fontFamily: "var(--font-roboto)", fontSize: 13, color: "#2D2D2D", outline: "none", boxSizing: "border-box", marginBottom: 8 }}
-                  onFocus={(e) => { e.currentTarget.style.borderColor = "#1B2E4B"; }}
-                  onBlur={(e) => { e.currentTarget.style.borderColor = "#DDE1E7"; }}
+                  style={{ display: "block", width: "100%", height: 40, border: `1px solid ${forgotError ? "#C0392B" : "#DDE1E7"}`, borderRadius: 8, padding: "0 12px", fontFamily: "var(--font-roboto)", fontSize: 13, color: "#2D2D2D", outline: "none", boxSizing: "border-box", marginBottom: forgotError ? 4 : 8 }}
+                  onFocus={(e) => { e.currentTarget.style.borderColor = forgotError ? "#C0392B" : "#1B2E4B"; }}
+                  onBlur={(e) => { e.currentTarget.style.borderColor = forgotError ? "#C0392B" : "#DDE1E7"; }}
                 />
+                {forgotError && (
+                  <p role="alert" style={{ fontFamily: "var(--font-roboto)", fontSize: 12, color: "#C0392B", margin: "0 0 8px" }}>
+                    {forgotError}
+                  </p>
+                )}
                 <div style={{ display: "flex", gap: 8 }}>
                   <button
                     type="button"
@@ -596,7 +646,7 @@ export default function LoginPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => { setForgotOpen(false); setError(""); }}
+                    onClick={() => { setForgotOpen(false); setForgotError(""); setFormError(""); }}
                     style={{ height: 38, padding: "0 14px", backgroundColor: "transparent", color: "#6B6B6B", border: "1px solid #DDE1E7", borderRadius: 8, fontFamily: "var(--font-roboto)", fontSize: 13, cursor: "pointer" }}
                   >
                     Cancel
@@ -608,30 +658,32 @@ export default function LoginPage() {
         )}
 
         <button
-          onClick={handleEmailAuth}
+          type="submit"
+          disabled={loading}
           style={{
             display: "block",
             width: "100%",
             height: 44,
             minHeight: 44,
-            backgroundColor: "#1B2E4B",
+            backgroundColor: loading ? "#B8C4D4" : "#1B2E4B",
             color: "#ffffff",
             border: "none",
             borderRadius: 8,
             fontFamily: "var(--font-roboto)",
             fontWeight: 700,
             fontSize: 13,
-            cursor: "pointer",
+            cursor: loading ? "not-allowed" : "pointer",
             marginTop: 12,
             transition: "background-color 150ms ease",
           }}
-          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "#2E4A6F"; }}
-          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "#1B2E4B"; }}
+          onMouseEnter={(e) => { if (!loading) (e.currentTarget as HTMLElement).style.backgroundColor = "#2E4A6F"; }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = loading ? "#B8C4D4" : "#1B2E4B"; }}
+          aria-busy={loading}
         >
           {loading ? "Please wait…" : mode === "signin" ? "Continue with email" : "Create account"}
         </button>
 
-        {error && (
+        {formError && (
           <p
             role="alert"
             style={{
@@ -642,9 +694,10 @@ export default function LoginPage() {
               margin: "8px 0 0",
             }}
           >
-            {error}
+            {formError}
           </p>
         )}
+        </form>
 
         <p
           style={{
@@ -659,7 +712,7 @@ export default function LoginPage() {
           {mode === "signin" ? "Don't have an account? " : "Already have an account? "}
           <a
             href={mode === "signin" ? "/login?mode=signup" : "/login"}
-            onClick={(e) => { e.preventDefault(); setMode(mode === "signin" ? "signup" : "signin"); setError(""); setForgotOpen(false); }}
+            onClick={(e) => { e.preventDefault(); setMode(mode === "signin" ? "signup" : "signin"); setEmailError(""); setPasswordError(""); setFormError(""); setForgotOpen(false); }}
             style={{ color: "#1B2E4B", textDecoration: "underline" }}
           >
             {mode === "signin" ? "Sign up" : "Sign in"}

@@ -11,6 +11,7 @@ import {
 import type { Task, TaskStatus, TaskPriority, User, TaskComment, TaskFile } from "@/types";
 import Avatar from "@/components/ui/Avatar";
 import { showToast } from "@/components/ui/Toast";
+import { supabase } from "@/lib/supabase";
 
 // ── Shared config ─────────────────────────────────────────────────────────────
 
@@ -270,7 +271,34 @@ export default function TaskDetailPanel({
 
             <div>
               <p style={{ fontSize: 11, fontWeight: 700, color: "var(--color-secondary)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>Priority</p>
-              <PriorityBadge priority={task.priority} />
+              {onUpdateTask ? (
+                <select
+                  value={task.priority}
+                  onChange={(e) => {
+                    const p = e.target.value as TaskPriority;
+                    onUpdateTask({ priority: p });
+                    supabase.from("tasks").update({ priority: p }).eq("id", task.id)
+                      .then(({ error }) => { if (error) console.error("[TaskDetail] priority update error:", error); });
+                  }}
+                  className="cursor-pointer"
+                  style={{
+                    fontSize: 13,
+                    color: PRIORITY_CONFIG[task.priority].color,
+                    backgroundColor: PRIORITY_CONFIG[task.priority].bg,
+                    border: "none",
+                    borderRadius: 5,
+                    padding: "3px 8px",
+                    fontWeight: 600,
+                    fontFamily: "var(--font-roboto)",
+                  }}
+                >
+                  {(["high", "medium", "low"] as TaskPriority[]).map((p) => (
+                    <option key={p} value={p}>{PRIORITY_CONFIG[p].symbol} {PRIORITY_CONFIG[p].label}</option>
+                  ))}
+                </select>
+              ) : (
+                <PriorityBadge priority={task.priority} />
+              )}
             </div>
 
             <div>
@@ -447,7 +475,7 @@ export default function TaskDetailPanel({
                   className="px-3 py-2 flex items-center gap-1.5 rounded-lg transition-opacity disabled:opacity-40"
                   style={{ backgroundColor: "var(--color-navy)", color: "#fff", fontSize: 12, fontWeight: 700, borderRadius: 7, border: "none", cursor: commentText.trim() ? "pointer" : "default", minHeight: 36 }}
                 >
-                  <Send size={13} /> Send
+                  <Send size={13} /> Add
                 </button>
               </div>
             </div>

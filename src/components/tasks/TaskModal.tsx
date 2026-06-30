@@ -5,7 +5,9 @@ import { X } from "lucide-react";
 import type { Task, TaskStatus, TaskPriority, User } from "@/types";
 import Avatar from "@/components/ui/Avatar";
 import { STATUS_CONFIG, STATUS_ORDER } from "@/components/tasks/TaskDetailPanel";
-import { supabase } from "@/lib/supabase";
+import { supabase, isSupabaseConfigured } from "@/lib/supabase";
+import { showToast } from "@/components/ui/Toast";
+import { CURRENT_USER_ID } from "@/lib/mock-data";
 
 // ── Shared input style ────────────────────────────────────────────────────────
 
@@ -80,9 +82,32 @@ export default function TaskModal({
 
     const now = new Date().toISOString();
 
+    // Demo mode — skip Supabase entirely and create a local task
+    if (!isSupabaseConfigured) {
+      const localId = crypto.randomUUID();
+      const saved: Task = {
+        id: localId,
+        projectId: projectId || "p1",
+        title: title.trim(),
+        description: description.trim() || undefined,
+        status,
+        priority,
+        assigneeIds,
+        dueDate: dueDate || undefined,
+        createdAt: now,
+        updatedAt: now,
+        comments: [],
+        files: [],
+        links: [],
+      };
+      onSave(saved);
+      setSaving(false);
+      return;
+    }
+
     // Always resolve userId from session — prop may be empty if parent hasn't loaded yet
     const { data: { session } } = await supabase.auth.getSession();
-    const userId = session?.user?.id ?? currentUserId;
+    const userId = session?.user?.id ?? currentUserId ?? CURRENT_USER_ID;
 
     if (mode === "add") {
       const payload = {
@@ -104,6 +129,7 @@ export default function TaskModal({
       if (insertError) {
         console.error("[TaskModal] insert error:", insertError);
         setError("Failed to save task. Please try again.");
+        showToast("Failed to save task. Please try again.", "error");
         setSaving(false);
         return;
       }
@@ -175,6 +201,7 @@ export default function TaskModal({
       if (updateError) {
         console.error("[TaskModal] update error:", updateError);
         setError("Failed to save changes. Please try again.");
+        showToast("Failed to save changes. Please try again.", "error");
         setSaving(false);
         return;
       }
