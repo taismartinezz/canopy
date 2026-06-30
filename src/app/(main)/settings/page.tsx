@@ -52,6 +52,7 @@ export default function SettingsPage() {
   const [project, setProject] = useState<any>(null);
   const [inviteCodes, setInviteCodes] = useState<{ id: string; code: string; used_by: string | null }[]>([]);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
+  const [revealedCode, setRevealedCode] = useState<string | null>(null);
   const [generatingCode, setGeneratingCode] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -216,26 +217,37 @@ export default function SettingsPage() {
             </p>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {inviteCodes.map((ic) => (
-                <div key={ic.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <input
-                    readOnly
-                    value={`${typeof window !== "undefined" ? window.location.origin : ""}/login?invite=${ic.code}`}
-                    style={{ ...readonlyInputStyle, flex: 1, fontFamily: "monospace", fontSize: 12 }}
-                    aria-label={`Invite link ${ic.code}`}
-                  />
-                  <span style={{ fontSize: 11, color: ic.used_by ? "#2E7D52" : "var(--color-secondary)", whiteSpace: "nowrap" }}>
-                    {ic.used_by ? "Used" : "Active"}
-                  </span>
-                  <button
-                    onClick={() => handleCopyCode(ic.code)}
-                    style={{ height: 40, width: 40, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "transparent", border: "1px solid var(--color-border)", borderRadius: 8, cursor: "pointer" }}
-                    aria-label={`Copy invite link ${ic.code}`}
-                  >
-                    {copiedCode === ic.code ? <Check size={14} color="#2E7D52" /> : <Copy size={14} color="var(--color-secondary)" />}
-                  </button>
-                </div>
-              ))}
+              {inviteCodes.map((ic) => {
+                const fullLink = `${typeof window !== "undefined" ? window.location.origin : ""}/login?invite=${ic.code}`;
+                const isRevealed = revealedCode === ic.id;
+                return (
+                  <div key={ic.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <input
+                      readOnly
+                      value={isRevealed ? fullLink : `${typeof window !== "undefined" ? window.location.origin : "canopy.app"}/login?invite=••••••••`}
+                      style={{ ...readonlyInputStyle, flex: 1, fontFamily: "monospace", fontSize: 12 }}
+                      aria-label={`Invite link ${ic.code}`}
+                    />
+                    <button
+                      onClick={() => setRevealedCode(isRevealed ? null : ic.id)}
+                      style={{ height: 40, padding: "0 10px", display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "transparent", border: "1px solid var(--color-border)", borderRadius: 8, cursor: "pointer", fontSize: 11, fontFamily: "var(--font-roboto)", color: "var(--color-secondary)", whiteSpace: "nowrap" }}
+                      aria-label={isRevealed ? "Hide invite link" : "Reveal invite link"}
+                    >
+                      {isRevealed ? "Hide" : "Reveal"}
+                    </button>
+                    <span style={{ fontSize: 11, color: ic.used_by ? "#2E7D52" : "var(--color-secondary)", whiteSpace: "nowrap" }}>
+                      {ic.used_by ? "Used" : "Active"}
+                    </span>
+                    <button
+                      onClick={() => handleCopyCode(ic.code)}
+                      style={{ height: 40, width: 40, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "transparent", border: "1px solid var(--color-border)", borderRadius: 8, cursor: "pointer" }}
+                      aria-label={`Copy invite link ${ic.code}`}
+                    >
+                      {copiedCode === ic.code ? <Check size={14} color="#2E7D52" /> : <Copy size={14} color="var(--color-secondary)" />}
+                    </button>
+                  </div>
+                );
+              })}
 
               {inviteCodes.length === 0 && (
                 <p style={{ fontSize: 13, color: "var(--color-secondary)" }}>No invite codes yet. Generate one below.</p>

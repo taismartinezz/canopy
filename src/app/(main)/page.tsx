@@ -67,6 +67,7 @@ function UpcomingWidget({
   const [title, setTitle]   = useState("");
   const [date, setDate]     = useState("");
   const [time, setTime]     = useState("");
+  const [addError, setAddError] = useState("");
 
   // Sync if parent provides new events (Supabase fetch resolves after mount)
   useEffect(() => { setEvents(initialEvents); }, [initialEvents]);
@@ -77,7 +78,9 @@ function UpcomingWidget({
     .slice(0, 5);
 
   async function handleAdd() {
-    if (!title.trim() || !date) return;
+    if (!title.trim()) { setAddError("Please enter an event title."); return; }
+    if (!date) { setAddError("Please select a date."); return; }
+    setAddError("");
 
     if (projectId) {
       const { data, error } = await supabase
@@ -104,7 +107,7 @@ function UpcomingWidget({
         { id: crypto.randomUUID(), title: title.trim(), date, time: time || undefined, projectId },
       ]);
     }
-    setTitle(""); setDate(""); setTime("");
+    setTitle(""); setDate(""); setTime(""); setAddError("");
     setShowForm(false);
   }
 
@@ -145,17 +148,22 @@ function UpcomingWidget({
             <input
               autoFocus
               value={title}
-              onChange={(e) => setTitle(e.target.value)}
+              onChange={(e) => { setTitle(e.target.value); setAddError(""); }}
               placeholder="Event title"
-              style={{ ...inlineInputStyle, width: "100%" }}
+              style={{ ...inlineInputStyle, width: "100%", borderColor: addError && !title.trim() ? "var(--color-error)" : undefined }}
               onFocus={(e) => { e.currentTarget.style.borderColor = "var(--color-navy)"; }}
-              onBlur={(e)  => { e.currentTarget.style.borderColor = "var(--color-border)"; }}
+              onBlur={(e)  => { e.currentTarget.style.borderColor = addError && !title.trim() ? "var(--color-error)" : "var(--color-border)"; }}
             />
+            {addError && (
+              <p role="alert" style={{ fontSize: 11, color: "var(--color-error)", margin: "2px 0 0", fontFamily: "var(--font-roboto)" }}>
+                {addError}
+              </p>
+            )}
             <div className="flex gap-2">
               <input
                 type="date"
                 value={date}
-                onChange={(e) => setDate(e.target.value)}
+                onChange={(e) => { setDate(e.target.value); setAddError(""); }}
                 style={{ ...inlineInputStyle, flex: 1 }}
               />
               <input
@@ -173,7 +181,7 @@ function UpcomingWidget({
                 Add
               </button>
               <button
-                onClick={() => { setShowForm(false); setTitle(""); setDate(""); setTime(""); }}
+                onClick={() => { setShowForm(false); setTitle(""); setDate(""); setTime(""); setAddError(""); }}
                 style={{ fontSize: 12, color: "var(--color-secondary)", background: "none", border: "none", cursor: "pointer" }}
               >
                 Cancel

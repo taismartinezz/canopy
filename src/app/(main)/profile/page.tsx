@@ -47,14 +47,6 @@ const PROMPT_CATEGORY_LABELS: Record<PromptCategory, string> = {
   boundaries_workload: "Boundaries & Workload",
   looking_forward: "Looking Forward",
 };
-const RESEARCH_TYPE_OPTIONS = [
-  { value: "trauma", label: "Trauma" },
-  { value: "oncology", label: "Oncology" },
-  { value: "conflict_zone", label: "Conflict Zone" },
-  { value: "forensic", label: "Forensic" },
-  { value: "crisis_response", label: "Crisis Response" },
-  { value: "other", label: "Other" },
-];
 const RESEARCH_PARTICIPATION_OPTIONS = [
   { value: "both_publications", label: "Participate in both publications" },
   { value: "wellbeing_only", label: "Well-being research only" },
@@ -362,6 +354,7 @@ export default function ProfilePage() {
   const [draftBio, setDraftBio] = useState("");
   const [draftInterests, setDraftInterests] = useState<string[]>([]);
   const [draftDepartment, setDraftDepartment] = useState("");
+  const [draftInstitution, setDraftInstitution] = useState("");
   const [draftLinks, setDraftLinks] = useState<LinkFields>(EMPTY_LINKS);
   const [interestInput, setInterestInput] = useState("");
 
@@ -597,22 +590,37 @@ export default function ProfilePage() {
 
   const handleSaveInstitution = useCallback(async () => {
     const trimmed = institutionInput.trim();
-    if (trimmed && project?.id) {
-      const { data: updatedProj } = await supabase
-        .from("projects")
-        .update({ institution: trimmed })
-        .eq("id", project.id)
-        .select("*")
-        .maybeSingle();
-      if (updatedProj) setProject(updatedProj);
+    if (trimmed) {
+      if (profile?.role === "pi" && project?.id) {
+        const { data: updatedProj } = await supabase
+          .from("projects")
+          .update({ institution: trimmed })
+          .eq("id", project.id)
+          .select("*")
+          .maybeSingle();
+        if (updatedProj) setProject(updatedProj);
+      } else {
+        const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user ?? null;
+        if (user) {
+          const { data: updatedProf } = await supabase
+            .from("user_profiles")
+            .update({ institution: trimmed })
+            .eq("id", user.id)
+            .select("*")
+            .maybeSingle();
+          if (updatedProf) setProfile(updatedProf);
+        }
+      }
     }
     setEditingInstitution(false);
-  }, [institutionInput, project]);
+  }, [institutionInput, profile?.role, project]);
 
   const handleEnterEditMode = useCallback(() => {
     setDraftBio(profile?.bio ?? "");
     setDraftInterests([...interests]);
     setDraftDepartment(profile?.department ?? "");
+    setDraftInstitution(profile?.institution ?? "");
     setDraftLinks({ ...links });
     setEditMode(true);
   }, [profile, interests, links]);
@@ -624,9 +632,14 @@ export default function ProfilePage() {
     const { data: { session } } = await supabase.auth.getSession();
     const user = session?.user ?? null;
     if (user) {
+      const updatePayload: Record<string, string | null> = {
+        bio: draftBio || null,
+        department: draftDepartment || null,
+      };
+      if (profile?.role !== "pi") updatePayload.institution = draftInstitution || null;
       const { data: updated } = await supabase
         .from("user_profiles")
-        .update({ bio: draftBio || null, department: draftDepartment || null })
+        .update(updatePayload)
         .eq("id", user.id)
         .select("*")
         .maybeSingle();
@@ -636,7 +649,7 @@ export default function ProfilePage() {
     setEditMode(false);
     setInterestInput("");
     showToast("Profile updated.", "success");
-  }, [draftBio, draftDepartment, draftInterests, draftLinks]);
+  }, [draftBio, draftDepartment, draftInstitution, draftInterests, draftLinks, profile?.role]);
 
   const handleCancelEdit = useCallback(() => {
     setEditMode(false);
@@ -737,7 +750,7 @@ export default function ProfilePage() {
   const displayName = profile?.name ?? "";
   const displayInitials = profile?.avatar_initials ?? "??";
   const displayAvatarColor = profile?.avatar_color ?? "#B4D4E3";
-  const displayInstitution = project?.institution ?? "";
+  const displayInstitution = isPi ? (project?.institution ?? "") : (profile?.institution ?? "");
   const displayBio = profile?.bio ?? "";
   const displayDepartment = profile?.department ?? "";
 
@@ -747,7 +760,7 @@ export default function ProfilePage() {
 
         {/* Back link */}
         <button
-          onClick={() => router.back()}
+          onClick={() => router.push("/")}
           style={{
             display: "inline-flex", alignItems: "center", gap: 6,
             background: "none", border: "none", cursor: "pointer",
@@ -1069,6 +1082,27 @@ export default function ProfilePage() {
                   )}
                 </div>
 
+                {/* Institution (researchers only — PIs edit this via the inline header or Lab Settings) */}
+                {!isPi && (
+                  <div>
+                    <SectionLabel>Institution</SectionLabel>
+                    {editMode ? (
+                      <FieldInput
+                        value={draftInstitution}
+                        onChange={setDraftInstitution}
+                        placeholder="e.g. Northwestern University"
+                      />
+                    ) : (
+                      <p style={{
+                        fontFamily: "var(--font-roboto)", fontWeight: 400, fontSize: 14,
+                        color: displayInstitution ? "#2D2D2D" : "#6B6B6B", margin: 0,
+                      }}>
+                        {displayInstitution || "Not specified."}
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 {/* Member since */}
                 <div>
                   <SectionLabel>Member since</SectionLabel>
@@ -1239,23 +1273,11 @@ export default function ProfilePage() {
 
                 <div>
                   <SectionLabel>Research Type</SectionLabel>
-                  <select
+                  <FieldInput
                     value={researchType}
-                    onChange={(e) => setResearchType(e.target.value)}
-                    style={{
-                      height: 40, border: "1px solid #DDE1E7", borderRadius: 8,
-                      padding: "0 14px", fontFamily: "var(--font-roboto)",
-                      fontWeight: 400, fontSize: 14, color: "#2D2D2D",
-                      outline: "none", backgroundColor: "#fff", cursor: "pointer",
-                      minWidth: 200,
-                    }}
-                    onFocus={(e) => { e.currentTarget.style.borderColor = "#1B2E4B"; }}
-                    onBlur={(e) => { e.currentTarget.style.borderColor = "#DDE1E7"; }}
-                  >
-                    {RESEARCH_TYPE_OPTIONS.map((opt) => (
-                      <option key={opt.value} value={opt.value}>{opt.label}</option>
-                    ))}
-                  </select>
+                    onChange={setResearchType}
+                    placeholder="e.g. Trauma, Oncology, Veteran PTSD"
+                  />
                 </div>
 
                 <div>

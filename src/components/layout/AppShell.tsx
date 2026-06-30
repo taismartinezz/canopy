@@ -429,18 +429,20 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       {/* ── Layer 1: 40px icon strip — desktop only ── */}
       <div
         className="hidden md:flex flex-col items-center pt-3 pb-3 gap-3 shrink-0"
-        style={{ width: 40, backgroundColor: "var(--color-strip)", borderRight: "1px solid var(--color-border)", zIndex: 10 }}
+        style={{ width: 40, backgroundColor: "var(--color-strip)", borderRight: "1px solid var(--color-border)", position: "relative", zIndex: 35 }}
       >
         <div className="w-8 h-8 flex items-center justify-center mb-1"><CanopyLogo size={28} /></div>
-        <button aria-label={project?.name ?? ""} title={project?.name ?? ""}>
-          <div className="w-9 h-9 rounded-[10px] flex items-center justify-center" style={{ backgroundColor: "var(--color-navy)", color: "#fff", fontSize: 12, fontWeight: 700 }}>{projectInitials(project?.name ?? "")}</div>
+        <button aria-label={profile?.name ?? "Your profile"} title={profile?.name ?? "Your profile"}>
+          <div className="w-9 h-9 rounded-[10px] flex items-center justify-center" style={{ backgroundColor: "var(--color-navy)", color: "#fff", fontSize: 12, fontWeight: 700 }}>
+            {computeInitials(profile?.name ?? "") || (profile?.avatar_initials ?? "??")}
+          </div>
         </button>
       </div>
 
       {/* ── Layer 2: Nav sidebar — static on desktop, hidden on mobile ── */}
       <div
         className="hidden md:flex flex-col shrink-0"
-        style={{ width: 210, borderRight: "1px solid var(--color-border)" }}
+        style={{ width: 210, borderRight: "1px solid var(--color-border)", position: "relative", zIndex: 35 }}
       >
         <SidebarBody isActive={isActive} team={team} currentUserId={profile?.id ?? ""} />
       </div>

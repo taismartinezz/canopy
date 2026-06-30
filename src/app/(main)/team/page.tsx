@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { CURRENT_USER_ID, formatRelativeTime, getStoredUser, getStoredProject } from "@/lib/mock-data";
+import { CURRENT_USER_ID, TEAM_MEMBERS, formatRelativeTime, getStoredUser, getStoredProject } from "@/lib/mock-data";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import type { TeamMember, TaskStatus } from "@/types";
 import Avatar from "@/components/ui/Avatar";
@@ -238,7 +238,7 @@ export default function TeamPage() {
     setIsPi(su.role === "pi");
     setStoredProjectName(sp.name);
 
-    if (!isSupabaseConfigured) { setLoading(false); return; }
+    if (!isSupabaseConfigured) { setTeam(TEAM_MEMBERS); setLoading(false); return; }
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) setCurrentUserId(session.user.id);
