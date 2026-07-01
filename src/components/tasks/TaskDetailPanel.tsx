@@ -298,15 +298,18 @@ export default function TaskDetailPanel({
                       Duplicate task
                     </button>
                     {onDeleteTask && (
-                      <button
-                        onClick={() => { setMenuOpen(false); onDeleteTask(task.id); onClose(); }}
-                        className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-[rgba(27,46,75,0.06)] transition-colors"
-                        style={{ fontSize: 13, color: "var(--color-error)", border: "none", background: "none", cursor: "pointer", textAlign: "left", fontFamily: "var(--font-roboto)" }}
-                        role="menuitem"
-                      >
-                        <Trash2 size={14} color="var(--color-error)" />
-                        Delete task
-                      </button>
+                      <>
+                        <div style={{ height: 1, backgroundColor: "var(--color-border)", margin: "4px 0" }} />
+                        <button
+                          onClick={() => { setMenuOpen(false); onDeleteTask(task.id); onClose(); }}
+                          className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-[rgba(27,46,75,0.06)] transition-colors"
+                          style={{ fontSize: 13, color: "var(--color-error)", border: "none", background: "none", cursor: "pointer", textAlign: "left", fontFamily: "var(--font-roboto)" }}
+                          role="menuitem"
+                        >
+                          <Trash2 size={14} color="var(--color-error)" />
+                          Delete task
+                        </button>
+                      </>
                     )}
                   </div>
                 )}
