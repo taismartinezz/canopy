@@ -32,14 +32,14 @@ const TYPE_CONFIG: Record<BookmarkType, {
   color: string;
   bg: string;
 }> = {
-  doc:      { label: "Docs",      badge: "doc",      icon: FileText,     color: "#60A5FA", bg: "rgba(96,165,250,0.18)" },
-  paper:    { label: "Papers",    badge: "paper",    icon: BookOpen,     color: "#FB923C", bg: "rgba(251,146,60,0.18)" },
-  protocol: { label: "Protocols", badge: "protocol", icon: ClipboardList, color: "#A78BFA", bg: "rgba(167,139,250,0.18)" },
-  supplies: { label: "Supplies",  badge: "supplier", icon: FlaskConical, color: "#34D399", bg: "rgba(52,211,153,0.18)" },
-  code:     { label: "Code",      badge: "code",     icon: Code2,        color: "#94A3B8", bg: "rgba(148,163,184,0.18)" },
-  video:    { label: "Videos",    badge: "video",    icon: Play,         color: "#F87171", bg: "rgba(248,113,113,0.18)" },
-  sheet:    { label: "Sheets",    badge: "sheet",    icon: Table,        color: "#4ADE80", bg: "rgba(74,222,128,0.18)" },
-  link:     { label: "Links",     badge: "link",     icon: Link2,        color: "#9CA3AF", bg: "rgba(156,163,175,0.18)" },
+  doc:      { label: "Docs",      badge: "doc",      icon: FileText,     color: "#2563EB", bg: "rgba(37,99,235,0.10)" },
+  paper:    { label: "Papers",    badge: "paper",    icon: BookOpen,     color: "#B45309", bg: "rgba(180,83,9,0.10)" },
+  protocol: { label: "Protocols", badge: "protocol", icon: ClipboardList, color: "#6D28D9", bg: "rgba(109,40,217,0.10)" },
+  supplies: { label: "Supplies",  badge: "supplier", icon: FlaskConical, color: "#0D7A5F", bg: "rgba(13,122,95,0.10)" },
+  code:     { label: "Code",      badge: "code",     icon: Code2,        color: "#334155", bg: "rgba(51,65,85,0.10)" },
+  video:    { label: "Videos",    badge: "video",    icon: Play,         color: "#B91C1C", bg: "rgba(185,28,28,0.10)" },
+  sheet:    { label: "Sheets",    badge: "sheet",    icon: Table,        color: "#15803D", bg: "rgba(21,128,61,0.10)" },
+  link:     { label: "Links",     badge: "link",     icon: Link2,        color: "#475569", bg: "rgba(71,85,105,0.10)" },
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -146,9 +146,9 @@ function SidebarRow({
         border: "none",
         cursor: "pointer",
         backgroundColor: active
-          ? "rgba(255,255,255,0.14)"
+          ? "rgba(27,46,75,0.10)"
           : hovered
-          ? "rgba(255,255,255,0.07)"
+          ? "rgba(27,46,75,0.05)"
           : "transparent",
         marginBottom: 2,
         transition: "background-color 120ms ease",
@@ -159,7 +159,7 @@ function SidebarRow({
         width: 28,
         height: 28,
         borderRadius: 6,
-        backgroundColor: active && typeBg ? typeBg : "rgba(255,255,255,0.08)",
+        backgroundColor: active && typeBg ? typeBg : "rgba(27,46,75,0.06)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -171,7 +171,7 @@ function SidebarRow({
       <span style={{
         flex: 1,
         fontSize: 13,
-        color: active ? "#fff" : "rgba(255,255,255,0.72)",
+        color: active ? "var(--color-navy)" : "var(--color-secondary)",
         fontWeight: active ? 600 : 400,
         whiteSpace: "nowrap",
         overflow: "hidden",
@@ -183,8 +183,8 @@ function SidebarRow({
       <span style={{
         fontSize: 11,
         fontWeight: 600,
-        color: active ? "rgba(255,255,255,0.85)" : "rgba(255,255,255,0.38)",
-        backgroundColor: active ? "rgba(255,255,255,0.16)" : "rgba(255,255,255,0.07)",
+        color: active ? "var(--color-navy)" : "var(--color-secondary)",
+        backgroundColor: active ? "rgba(27,46,75,0.12)" : "rgba(27,46,75,0.06)",
         borderRadius: 10,
         padding: "1px 7px",
         flexShrink: 0,
@@ -331,14 +331,14 @@ function BookmarkCard({ bm, canDelete, onDelete }: {
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
-        backgroundColor: "#162235",
-        border: `1px solid ${hovered ? "rgba(255,255,255,0.13)" : "rgba(255,255,255,0.07)"}`,
+        backgroundColor: "var(--color-surface)",
+        border: `1px solid ${hovered ? "#C0CBD8" : "var(--color-border)"}`,
         borderRadius: 10,
         padding: 16,
         display: "flex",
         flexDirection: "column",
         minHeight: 148,
-        boxShadow: hovered ? "0 6px 20px rgba(0,0,0,0.28)" : "none",
+        boxShadow: hovered ? "var(--shadow-card)" : "none",
         transition: "border-color 150ms ease, box-shadow 150ms ease",
       }}
     >
@@ -379,7 +379,7 @@ function BookmarkCard({ bm, canDelete, onDelete }: {
         style={{
           fontSize: 13,
           fontWeight: 700,
-          color: "#F1F5F9",
+          color: "var(--color-body)",
           textDecoration: "none",
           lineHeight: 1.45,
           display: "-webkit-box",
@@ -395,7 +395,7 @@ function BookmarkCard({ bm, canDelete, onDelete }: {
       {/* Domain */}
       <p style={{
         fontSize: 11,
-        color: "rgba(255,255,255,0.33)",
+        color: "var(--color-secondary)",
         marginBottom: 0,
         overflow: "hidden",
         textOverflow: "ellipsis",
@@ -409,7 +409,7 @@ function BookmarkCard({ bm, canDelete, onDelete }: {
 
       {/* Bottom row: contributor · time + actions */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 14 }}>
-        <span style={{ fontSize: 11, color: "rgba(255,255,255,0.38)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0, paddingRight: 8 }}>
+        <span style={{ fontSize: 11, color: "var(--color-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0, paddingRight: 8 }}>
           {bm.adder_name ?? "Unknown"} · {relTime(bm.added_at)}
         </span>
         <div style={{ display: "flex", alignItems: "center", gap: 2, flexShrink: 0 }}>
@@ -417,9 +417,9 @@ function BookmarkCard({ bm, canDelete, onDelete }: {
             href={bm.url}
             target="_blank"
             rel="noopener noreferrer"
-            style={{ width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 6, color: "rgba(255,255,255,0.35)", textDecoration: "none", transition: "background-color 120ms ease, color 120ms ease" }}
-            onMouseEnter={(e) => { const el = e.currentTarget as HTMLElement; el.style.color = "rgba(255,255,255,0.8)"; el.style.backgroundColor = "rgba(255,255,255,0.08)"; }}
-            onMouseLeave={(e) => { const el = e.currentTarget as HTMLElement; el.style.color = "rgba(255,255,255,0.35)"; el.style.backgroundColor = "transparent"; }}
+            style={{ width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 6, color: "var(--color-secondary)", textDecoration: "none", transition: "background-color 120ms ease, color 120ms ease" }}
+            onMouseEnter={(e) => { const el = e.currentTarget as HTMLElement; el.style.color = "var(--color-navy)"; el.style.backgroundColor = "rgba(27,46,75,0.06)"; }}
+            onMouseLeave={(e) => { const el = e.currentTarget as HTMLElement; el.style.color = "var(--color-secondary)"; el.style.backgroundColor = "transparent"; }}
             aria-label="Open link"
           >
             <ExternalLink size={12} />
@@ -428,9 +428,9 @@ function BookmarkCard({ bm, canDelete, onDelete }: {
             <button
               onClick={handleDelete}
               disabled={deleting}
-              style={{ width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 6, border: "none", background: "none", cursor: deleting ? "not-allowed" : "pointer", color: "rgba(255,255,255,0.3)", transition: "background-color 120ms ease, color 120ms ease" }}
-              onMouseEnter={(e) => { const el = e.currentTarget as HTMLElement; el.style.color = "#F87171"; el.style.backgroundColor = "rgba(248,113,113,0.12)"; }}
-              onMouseLeave={(e) => { const el = e.currentTarget as HTMLElement; el.style.color = "rgba(255,255,255,0.3)"; el.style.backgroundColor = "transparent"; }}
+              style={{ width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 6, border: "none", background: "none", cursor: deleting ? "not-allowed" : "pointer", color: "var(--color-secondary)", transition: "background-color 120ms ease, color 120ms ease" }}
+              onMouseEnter={(e) => { const el = e.currentTarget as HTMLElement; el.style.color = "var(--color-error)"; el.style.backgroundColor = "rgba(192,57,43,0.08)"; }}
+              onMouseLeave={(e) => { const el = e.currentTarget as HTMLElement; el.style.color = "var(--color-secondary)"; el.style.backgroundColor = "transparent"; }}
               aria-label="Delete bookmark"
             >
               <Trash2 size={12} />
@@ -573,11 +573,11 @@ export default function BookmarksPage() {
       <div style={{
         width: 220,
         flexShrink: 0,
-        backgroundColor: "#1B2E4B",
+        backgroundColor: "var(--color-sidebar)",
         display: "flex",
         flexDirection: "column",
         overflowY: "auto",
-        borderRight: "1px solid rgba(255,255,255,0.06)",
+        borderRight: "1px solid var(--color-border)",
       }}>
         {/* Sidebar header */}
         <div style={{ padding: "24px 16px 14px" }}>
@@ -585,7 +585,7 @@ export default function BookmarksPage() {
             fontFamily: "var(--font-lora)",
             fontWeight: 700,
             fontSize: 16,
-            color: "#fff",
+            color: "var(--color-navy)",
             margin: 0,
             letterSpacing: "-0.01em",
           }}>
@@ -594,13 +594,13 @@ export default function BookmarksPage() {
         </div>
 
         {/* Thin divider */}
-        <div style={{ height: 1, backgroundColor: "rgba(255,255,255,0.08)", marginBottom: 8, marginLeft: 16, marginRight: 16 }} />
+        <div style={{ height: 1, backgroundColor: "var(--color-border)", marginBottom: 8, marginLeft: 16, marginRight: 16 }} />
 
         {/* Category list */}
         <nav style={{ padding: "0 8px 16px", flex: 1 }} aria-label="Filter bookmarks by type">
           {/* All */}
           <SidebarRow
-            icon={<Bookmark size={14} color={activeCategory === "all" ? "rgba(255,255,255,0.9)" : "rgba(255,255,255,0.6)"} />}
+            icon={<Bookmark size={14} color={activeCategory === "all" ? "var(--color-navy)" : "var(--color-secondary)"} />}
             label="All"
             count={bookmarks.length}
             active={activeCategory === "all"}
@@ -615,7 +615,7 @@ export default function BookmarksPage() {
             return (
               <SidebarRow
                 key={type}
-                icon={<Icon size={14} color={active ? cfg.color : "rgba(255,255,255,0.55)"} />}
+                icon={<Icon size={14} color={active ? cfg.color : "var(--color-secondary)"} />}
                 label={cfg.label}
                 count={count}
                 active={active}
