@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard, CheckSquare, BookOpen, BookMarked, Bookmark, Users,
-  Bell, ChevronDown, LogOut, User as UserIcon, Menu, X, Settings,
+  Bell, ChevronDown, LogOut, User as UserIcon, Menu, X, Settings, CalendarDays,
 } from "lucide-react";
 import { computeInitials } from "@/lib/utils";
 import type { User } from "@/types";
@@ -17,6 +17,7 @@ import CanopyLogo from "@/components/ui/CanopyLogo";
 const NAV_ITEMS = [
   { href: "/",            label: "Dashboard",  icon: LayoutDashboard },
   { href: "/tasks",       label: "Tasks",      icon: CheckSquare     },
+  { href: "/scheduling",  label: "Scheduling", icon: CalendarDays    },
   { href: "/journal",     label: "Journal",    icon: BookOpen        },
   { href: "/literature",  label: "Literature", icon: BookMarked      },
   { href: "/bookmarks",   label: "Bookmarks",  icon: Bookmark        },
