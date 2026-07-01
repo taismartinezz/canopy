@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import {
   X, Send, Paperclip, Download, Trash2, FileText, File, Image, Table,
-  ExternalLink, Plus,
+  ExternalLink, Plus, Copy, MoreHorizontal,
 } from "lucide-react";
 import {
   CURRENT_USER_ID, formatRelativeTime, formatDate, formatFileSize, getUser,
@@ -108,6 +108,7 @@ export default function TaskDetailPanel({
   onUpdateStatus,
   onUpdateTask,
   onDeleteTask,
+  onDuplicateTask,
   teamMembers = [],
   currentUserId = "",
 }: {
@@ -116,6 +117,7 @@ export default function TaskDetailPanel({
   onUpdateStatus: (status: TaskStatus) => void;
   onUpdateTask?: (updates: Partial<Task>) => void;
   onDeleteTask?: (taskId: string) => void;
+  onDuplicateTask?: (task: Task) => void;
   teamMembers?: User[];
   currentUserId?: string;
 }) {
@@ -123,7 +125,8 @@ export default function TaskDetailPanel({
   const [commentText, setCommentText] = useState("");
   const [isMobile, setIsMobile] = useState(false);
   const [addAssigneeOpen, setAddAssigneeOpen] = useState(false);
-  const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   // Local copies — initialized from task, mutated locally & pushed to parent
   const [localComments, setLocalComments] = useState<TaskComment[]>(task.comments);
@@ -155,6 +158,17 @@ export default function TaskDetailPanel({
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    function handleOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleOutside);
+    return () => document.removeEventListener("mousedown", handleOutside);
+  }, [menuOpen]);
 
   // ── Comment actions ───────────────────────────────────────────────────────
 
@@ -248,9 +262,64 @@ export default function TaskDetailPanel({
                 {task.title}
               </h2>
             </div>
-            <button onClick={onClose} className="flex items-center justify-center rounded-lg hover:bg-[rgba(27,46,75,0.06)] transition-colors shrink-0" style={{ width: 44, height: 44 }} aria-label="Close panel">
-              <X size={18} color="var(--color-secondary)" />
-            </button>
+            <div className="flex items-center gap-0.5 shrink-0">
+              {/* ⋯ overflow menu */}
+              <div className="relative" ref={menuRef}>
+                <button
+                  onClick={() => setMenuOpen((o) => !o)}
+                  className="flex items-center justify-center rounded-lg hover:bg-[rgba(27,46,75,0.06)] transition-colors"
+                  style={{ width: 44, height: 44 }}
+                  aria-label="More options"
+                  aria-haspopup="true"
+                  aria-expanded={menuOpen}
+                >
+                  <MoreHorizontal size={18} color="var(--color-secondary)" />
+                </button>
+                {menuOpen && (
+                  <div
+                    className="absolute right-0 top-12 z-50 animate-fade-in"
+                    style={{ width: 192, backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 8, boxShadow: "var(--shadow-card)", padding: "4px 0" }}
+                    role="menu"
+                  >
+                    <button
+                      onClick={() => {
+                        setMenuOpen(false);
+                        if (onDuplicateTask) {
+                          onDuplicateTask(task);
+                        } else {
+                          showToast("Duplicate task coming soon.", "info");
+                        }
+                      }}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-[rgba(27,46,75,0.06)] transition-colors"
+                      style={{ fontSize: 13, color: "var(--color-body)", border: "none", background: "none", cursor: "pointer", textAlign: "left", fontFamily: "var(--font-roboto)" }}
+                      role="menuitem"
+                    >
+                      <Copy size={14} color="var(--color-secondary)" />
+                      Duplicate task
+                    </button>
+                    {onDeleteTask && (
+                      <button
+                        onClick={() => { setMenuOpen(false); onDeleteTask(task.id); onClose(); }}
+                        className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-[rgba(27,46,75,0.06)] transition-colors"
+                        style={{ fontSize: 13, color: "var(--color-error)", border: "none", background: "none", cursor: "pointer", textAlign: "left", fontFamily: "var(--font-roboto)" }}
+                        role="menuitem"
+                      >
+                        <Trash2 size={14} color="var(--color-error)" />
+                        Delete task
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+              <button
+                onClick={onClose}
+                className="flex items-center justify-center rounded-lg hover:bg-[rgba(27,46,75,0.06)] transition-colors"
+                style={{ width: 44, height: 44 }}
+                aria-label="Close panel"
+              >
+                <X size={18} color="var(--color-secondary)" />
+              </button>
+            </div>
           </div>
 
           {/* 2×2 metadata grid */}
@@ -534,39 +603,6 @@ export default function TaskDetailPanel({
           )}
         </div>
 
-        {/* Delete task */}
-        {onDeleteTask && (
-          <div className="px-6 py-3" style={{ borderTop: "1px solid var(--color-border)" }}>
-            {!deleteConfirm ? (
-              <button
-                onClick={() => setDeleteConfirm(true)}
-                style={{ fontSize: 12, color: "var(--color-error)", background: "none", border: "none", cursor: "pointer", padding: 0 }}
-              >
-                Delete task
-              </button>
-            ) : (
-              <div className="flex items-center gap-3 flex-wrap">
-                <p style={{ fontSize: 12, color: "var(--color-body)", margin: 0 }}>
-                  Delete this task? This cannot be undone.
-                </p>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setDeleteConfirm(false)}
-                    style={{ fontSize: 12, fontWeight: 600, color: "var(--color-secondary)", background: "none", border: "1px solid var(--color-border)", borderRadius: 5, padding: "4px 12px", cursor: "pointer" }}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={() => { onDeleteTask(task.id); onClose(); }}
-                    style={{ fontSize: 12, fontWeight: 700, color: "#fff", backgroundColor: "var(--color-error)", border: "none", borderRadius: 5, padding: "4px 12px", cursor: "pointer" }}
-                  >
-                    Confirm
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
       </div>
     </>
   );
