@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import {
   DndContext, DragEndEvent, DragOverlay, DragStartEvent,
   PointerSensor, useSensor, useSensors, closestCorners,
@@ -49,7 +50,25 @@ function TaskCard({
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [menuAnchor, setMenuAnchor] = useState<DOMRect | null>(null);
+  const menuBtnRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: task.id });
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    function handleOutside(e: MouseEvent) {
+      if (
+        menuRef.current && !menuRef.current.contains(e.target as Node) &&
+        menuBtnRef.current && !menuBtnRef.current.contains(e.target as Node)
+      ) {
+        setMenuOpen(false);
+        setDeleteConfirm(false);
+      }
+    }
+    document.addEventListener("mousedown", handleOutside);
+    return () => document.removeEventListener("mousedown", handleOutside);
+  }, [menuOpen]);
 
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
@@ -101,7 +120,14 @@ function TaskCard({
 
       {/* ⋯ menu button */}
       <button
-        onClick={(e) => { e.stopPropagation(); setMenuOpen(!menuOpen); setDeleteConfirm(false); }}
+        ref={menuBtnRef}
+        onClick={(e) => {
+          e.stopPropagation();
+          const rect = menuBtnRef.current?.getBoundingClientRect() ?? null;
+          setMenuAnchor(rect);
+          setMenuOpen((o) => !o);
+          setDeleteConfirm(false);
+        }}
         className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity w-6 h-6 flex items-center justify-center rounded"
         style={{ backgroundColor: "rgba(255,255,255,0.9)" }}
         aria-label="Task options"
@@ -109,63 +135,74 @@ function TaskCard({
         <MoreHorizontal size={14} color="var(--color-secondary)" />
       </button>
 
-      {menuOpen && !deleteConfirm && (
+      {menuOpen && menuAnchor && createPortal(
         <div
-          className="absolute right-0 top-8 z-20 animate-fade-in"
-          style={{ width: 180, backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 8, boxShadow: "var(--shadow-card)" }}
+          ref={menuRef}
+          className="animate-fade-in"
+          style={{
+            position: "fixed",
+            top: menuAnchor.bottom + 4,
+            right: Math.max(8, window.innerWidth - menuAnchor.right),
+            zIndex: 9999,
+            width: deleteConfirm ? 200 : 180,
+            backgroundColor: "var(--color-surface)",
+            border: "1px solid var(--color-border)",
+            borderRadius: 8,
+            boxShadow: "0 4px 16px rgba(27,46,75,0.12)",
+            ...(deleteConfirm ? { padding: "12px 12px 10px" } : {}),
+          }}
           onClick={(e) => e.stopPropagation()}
         >
-          <div style={{ borderBottom: "1px solid var(--color-border)", paddingBottom: 4, paddingTop: 4 }}>
-            {otherStatuses.map((s) => (
+          {!deleteConfirm ? (
+            <>
+              <div style={{ borderBottom: "1px solid var(--color-border)", paddingBottom: 4, paddingTop: 4 }}>
+                {otherStatuses.map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => { onMoveStatus(s); setMenuOpen(false); }}
+                    className="w-full text-left px-3 py-2 hover:bg-[rgba(27,46,75,0.06)] transition-colors"
+                    style={{ fontSize: 12, color: "var(--color-body)", minHeight: 36, border: "none", background: "none", cursor: "pointer", display: "block", width: "100%", textAlign: "left" }}
+                  >
+                    Move to {STATUS_CONFIG[s].label}
+                  </button>
+                ))}
+              </div>
               <button
-                key={s}
-                onClick={() => { onMoveStatus(s); setMenuOpen(false); }}
+                onClick={() => { setMenuOpen(false); onEdit(); }}
                 className="w-full text-left px-3 py-2 hover:bg-[rgba(27,46,75,0.06)] transition-colors"
-                style={{ fontSize: 12, color: "var(--color-body)", minHeight: 36 }}
+                style={{ fontSize: 12, color: "var(--color-body)", minHeight: 36, border: "none", background: "none", cursor: "pointer", display: "block", width: "100%", textAlign: "left" }}
               >
-                Move to {STATUS_CONFIG[s].label}
+                Edit task
               </button>
-            ))}
-          </div>
-          <button
-            onClick={() => { setMenuOpen(false); onEdit(); }}
-            className="w-full text-left px-3 py-2 hover:bg-[rgba(27,46,75,0.06)] transition-colors"
-            style={{ fontSize: 12, color: "var(--color-body)", minHeight: 36 }}
-          >
-            Edit task
-          </button>
-          <button
-            onClick={() => { setDeleteConfirm(true); }}
-            className="w-full text-left px-3 py-2 hover:bg-[rgba(27,46,75,0.06)] transition-colors"
-            style={{ fontSize: 12, color: "var(--color-error)", minHeight: 36 }}
-          >
-            Delete task
-          </button>
-        </div>
-      )}
-
-      {deleteConfirm && (
-        <div
-          className="absolute right-0 top-8 z-20 animate-fade-in"
-          style={{ width: 200, backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 8, boxShadow: "var(--shadow-card)", padding: "12px 12px 10px" }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <p style={{ fontSize: 12, color: "var(--color-body)", marginBottom: 10 }}>Delete this task?</p>
-          <div className="flex gap-2">
-            <button
-              onClick={() => { setDeleteConfirm(false); setMenuOpen(false); }}
-              style={{ flex: 1, fontSize: 12, padding: "5px 0", border: "1px solid var(--color-border)", borderRadius: 5, backgroundColor: "transparent", cursor: "pointer", color: "var(--color-body)" }}
-            >
-              Cancel
-            </button>
-            <button
-              onClick={() => { onDelete(); setDeleteConfirm(false); setMenuOpen(false); }}
-              style={{ flex: 1, fontSize: 12, padding: "5px 0", border: "none", borderRadius: 5, backgroundColor: "var(--color-error)", color: "#fff", cursor: "pointer", fontWeight: 700 }}
-            >
-              Delete
-            </button>
-          </div>
-        </div>
+              <button
+                onClick={() => setDeleteConfirm(true)}
+                className="w-full text-left px-3 py-2 hover:bg-[rgba(27,46,75,0.06)] transition-colors"
+                style={{ fontSize: 12, color: "var(--color-error)", minHeight: 36, border: "none", background: "none", cursor: "pointer", display: "block", width: "100%", textAlign: "left" }}
+              >
+                Delete task
+              </button>
+            </>
+          ) : (
+            <>
+              <p style={{ fontSize: 12, color: "var(--color-body)", marginBottom: 10 }}>Delete this task?</p>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  onClick={() => { setDeleteConfirm(false); setMenuOpen(false); }}
+                  style={{ flex: 1, fontSize: 12, padding: "5px 0", border: "1px solid var(--color-border)", borderRadius: 5, backgroundColor: "transparent", cursor: "pointer", color: "var(--color-body)" }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => { onDelete(); setDeleteConfirm(false); setMenuOpen(false); }}
+                  style={{ flex: 1, fontSize: 12, padding: "5px 0", border: "none", borderRadius: 5, backgroundColor: "var(--color-error)", color: "#fff", cursor: "pointer", fontWeight: 700 }}
+                >
+                  Delete
+                </button>
+              </div>
+            </>
+          )}
+        </div>,
+        document.body
       )}
     </div>
   );
