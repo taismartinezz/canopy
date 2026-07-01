@@ -2,6 +2,7 @@ import type {
   User, Project, Task, JournalEntry, JournalPrompt, CheckinQuestion,
   LiteratureItem, LiteratureCollection, TeamMember, ActivityEvent,
   CalendarEvent, DashboardPost, Notification,
+  WeeklyAvailability, MeetingProposal, ScheduleEvent, Reminder,
 } from "@/types";
 
 // ── Users ─────────────────────────────────────────────────────────────────────
@@ -746,6 +747,198 @@ export const NOTIFICATIONS: Notification[] = [
     read: true,
     createdAt: new Date(Date.now() - 1000 * 60 * 60 * 36).toISOString(),
     linkTo: "/journal",
+  },
+  {
+    id: "n4",
+    type: "meeting_proposed",
+    recipientId: "u1",
+    message: "Dr. Yara Osei proposed a meeting: Consent Form Review — Jul 8 at 10:00 AM",
+    read: false,
+    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 3).toISOString(),
+    linkTo: "/scheduling",
+  },
+];
+
+// ── Scheduling ────────────────────────────────────────────────────────────────
+// Slot key: "${day}-${slot}" — day 0=Mon..4=Fri, slot 0=9:00..15=4:30pm (30-min steps)
+
+function genSlots(days: number[], ...ranges: [number, number][]): string[] {
+  const out: string[] = [];
+  for (const d of days)
+    for (const [a, b] of ranges)
+      for (let s = a; s <= b; s++) out.push(`${d}-${s}`);
+  return out;
+}
+
+export const AVAILABILITIES: WeeklyAvailability[] = [
+  {
+    userId: "u0",
+    projectId: "p1",
+    // Mon-Fri: 10am-12pm (slots 2-5), 2pm-4pm (slots 10-13)
+    slots: genSlots([0, 1, 2, 3, 4], [2, 5], [10, 13]),
+    updatedAt: "2026-06-30T09:00:00Z",
+  },
+  {
+    userId: "u1",
+    projectId: "p1",
+    // Mon-Fri: 9am-11am (slots 0-3), 1pm-5pm (slots 8-15)
+    slots: genSlots([0, 1, 2, 3, 4], [0, 3], [8, 15]),
+    updatedAt: "2026-06-29T14:00:00Z",
+  },
+  {
+    userId: "u2",
+    projectId: "p1",
+    // Mon-Thu: 10am-5pm (slots 2-15)
+    slots: genSlots([0, 1, 2, 3], [2, 15]),
+    updatedAt: "2026-06-28T11:00:00Z",
+  },
+  {
+    userId: "u3",
+    projectId: "p1",
+    // Tue-Thu: 9am-12pm (slots 0-5), 3pm-5pm (slots 12-15)
+    slots: genSlots([1, 2, 3], [0, 5], [12, 15]),
+    updatedAt: "2026-06-27T16:00:00Z",
+  },
+  {
+    userId: "u4",
+    projectId: "p1",
+    // Mon-Wed: 10am-3pm (slots 2-11)
+    slots: genSlots([0, 1, 2], [2, 11]),
+    updatedAt: "2026-06-30T08:30:00Z",
+  },
+];
+
+export const MEETING_PROPOSALS: MeetingProposal[] = [
+  {
+    id: "mp1",
+    projectId: "p1",
+    proposerId: "u0",
+    title: "Consent Form Review",
+    description: "Quick review of the updated consent form language before it goes to IRB.",
+    proposedDate: "2026-07-08",
+    proposedTime: "10:00",
+    durationMinutes: 30,
+    inviteeIds: ["u1", "u2"],
+    responses: [
+      { userId: "u1", status: "accepted", respondedAt: "2026-07-01T10:00:00Z" },
+      { userId: "u2", status: "pending" },
+    ],
+    createdAt: "2026-07-01T09:00:00Z",
+  },
+  {
+    id: "mp2",
+    projectId: "p1",
+    proposerId: "u1",
+    title: "Phase 2 Kickoff",
+    description: "Align on goals, timeline, and task assignments for Phase 2 of the study.",
+    proposedDate: "2026-07-10",
+    proposedTime: "14:00",
+    durationMinutes: 60,
+    inviteeIds: ["u0", "u3", "u4"],
+    responses: [
+      { userId: "u0", status: "pending" },
+      { userId: "u3", status: "pending" },
+      { userId: "u4", status: "accepted", respondedAt: "2026-07-01T11:00:00Z" },
+    ],
+    createdAt: "2026-07-01T08:00:00Z",
+  },
+  {
+    id: "mp3",
+    projectId: "p1",
+    proposerId: "u0",
+    title: "Quick 1:1 Check-in",
+    proposedDate: "2026-07-07",
+    proposedTime: "11:00",
+    durationMinutes: 30,
+    inviteeIds: ["u1"],
+    responses: [
+      { userId: "u1", status: "accepted", respondedAt: "2026-06-30T15:00:00Z" },
+    ],
+    createdAt: "2026-06-30T14:00:00Z",
+  },
+];
+
+export const SCHEDULE_EVENTS: ScheduleEvent[] = [
+  {
+    id: "se1",
+    projectId: "p1",
+    title: "Weekly Lab Meeting",
+    date: "2026-07-07",
+    time: "10:00",
+    endTime: "11:00",
+    scope: "lab",
+    createdBy: "u0",
+    description: "Standing weekly team sync.",
+  },
+  {
+    id: "se2",
+    projectId: "p1",
+    title: "Team Lunch",
+    date: "2026-07-14",
+    time: "12:00",
+    endTime: "13:00",
+    scope: "lab",
+    createdBy: "u0",
+  },
+  {
+    id: "se3",
+    projectId: "p1",
+    title: "IRB Amendment Deadline",
+    date: "2026-07-15",
+    scope: "lab",
+    createdBy: "u0",
+    description: "Submit updated protocol to IRB.",
+  },
+  {
+    id: "se4",
+    projectId: "p1",
+    title: "Qualitative Coding Session",
+    date: "2026-07-09",
+    time: "14:00",
+    endTime: "16:00",
+    scope: "lab",
+    createdBy: "u1",
+    description: "Group session to work through flagged transcripts.",
+  },
+  {
+    id: "se5",
+    projectId: "p1",
+    title: "Doctor Appointment",
+    date: "2026-07-09",
+    time: "15:30",
+    scope: "personal",
+    createdBy: "u1",
+  },
+  {
+    id: "se6",
+    projectId: "p1",
+    title: "Therapy",
+    date: "2026-07-11",
+    time: "09:00",
+    scope: "personal",
+    createdBy: "u1",
+  },
+];
+
+export const REMINDERS: Reminder[] = [
+  {
+    id: "rem1",
+    userId: "u1",
+    title: "Submit IRB amendment",
+    dueAt: "2026-07-10T09:00:00Z",
+    emailEnabled: true,
+    sent: false,
+    createdAt: "2026-07-01T08:00:00Z",
+  },
+  {
+    id: "rem2",
+    userId: "u1",
+    title: "Review consent form draft",
+    dueAt: "2026-07-07T08:00:00Z",
+    linkedTaskId: "t1",
+    emailEnabled: false,
+    sent: false,
+    createdAt: "2026-06-30T12:00:00Z",
   },
 ];
 

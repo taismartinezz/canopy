@@ -7,7 +7,7 @@ import {
   useDraggable, useDroppable,
 } from "@dnd-kit/core";
 import {
-  TASKS, DASHBOARD_POSTS,
+  TASKS, DASHBOARD_POSTS, SCHEDULE_EVENTS,
   formatRelativeTime, formatDate, getUser, CURRENT_USER_ID, getStoredProject,
 } from "@/lib/mock-data";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
@@ -116,13 +116,22 @@ function UpcomingWidget({
       <CardHeader
         title="Upcoming"
         action={
-          <button
-            onClick={() => setShowForm((s) => !s)}
-            className="flex items-center gap-1 transition-opacity hover:opacity-70"
-            style={{ fontSize: 12, color: "var(--color-navy)", fontWeight: 600 }}
-          >
-            <Plus size={13} /> Add event
-          </button>
+          <div className="flex items-center gap-3">
+            <Link
+              href="/scheduling"
+              style={{ fontSize: 12, color: "var(--color-secondary)", textDecoration: "none", display: "flex", alignItems: "center", gap: 3 }}
+              className="transition-opacity hover:opacity-70"
+            >
+              See all <ChevronRight size={11} />
+            </Link>
+            <button
+              onClick={() => setShowForm((s) => !s)}
+              className="flex items-center gap-1 transition-opacity hover:opacity-70"
+              style={{ fontSize: 12, color: "var(--color-navy)", fontWeight: 600 }}
+            >
+              <Plus size={13} /> Add event
+            </button>
+          </div>
         }
       />
       <div className="px-5 py-3 space-y-3">
@@ -758,6 +767,12 @@ export default function DashboardPage() {
     if (!localStorage.getItem("canopy_project")) {
       setTasks(TASKS);
       setDashPosts(DASHBOARD_POSTS);
+      // Seed upcoming with lab schedule events
+      setDashEvents(
+        SCHEDULE_EVENTS
+          .filter((e) => e.scope === "lab")
+          .map((e) => ({ id: e.id, title: e.title, date: e.date, time: e.time, projectId: e.projectId }))
+      );
     }
   }, []);
 
