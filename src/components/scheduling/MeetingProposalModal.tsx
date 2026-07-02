@@ -196,7 +196,12 @@ export default function MeetingProposalModal({ currentUserId, teamMembers, onSub
             <label style={{ fontSize: 12, fontWeight: 600, color: "var(--color-secondary)", display: "block", marginBottom: 5, letterSpacing: "0.03em" }}>
               INVITE
             </label>
-            <div className="space-y-1">
+            {invitableMembers.length === 0 ? (
+              <p style={{ fontSize: 13, color: "var(--color-secondary)", padding: "8px 0" }}>
+                No teammates yet — invite someone to your lab first.
+              </p>
+            ) : null}
+          <div className="space-y-1">
               {invitableMembers.map((member) => {
                 const isChecked = invitees.includes(member.id);
                 return (
@@ -288,15 +293,16 @@ export default function MeetingProposalModal({ currentUserId, teamMembers, onSub
           </button>
           <button
             onClick={handleSubmit}
+            disabled={invitableMembers.length === 0}
             style={{
-              backgroundColor: "var(--color-navy)",
+              backgroundColor: invitableMembers.length === 0 ? "var(--color-border)" : "var(--color-navy)",
               color: "#fff",
               border: "none",
               borderRadius: 7,
               fontSize: 13,
               fontWeight: 600,
               padding: "8px 20px",
-              cursor: "pointer",
+              cursor: invitableMembers.length === 0 ? "not-allowed" : "pointer",
               fontFamily: "var(--font-roboto)",
             }}
           >

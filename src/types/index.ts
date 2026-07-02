@@ -297,14 +297,21 @@ export interface ScheduleEvent {
   description?: string;
 }
 
+export type ReminderPriority = "low" | "medium" | "high";
+export type ReminderRecurrence = "daily" | "weekly" | "monthly";
+
 export interface Reminder {
   id: string;
   userId: string;
   title: string;
-  dueAt: string;           // ISO datetime
+  dueAt?: string;           // ISO datetime — optional (untimed reminders allowed)
   linkedTaskId?: string;
   linkedEventId?: string;
   emailEnabled: boolean;
   sent: boolean;
+  completed: boolean;
+  completedAt?: string;
+  priority?: ReminderPriority;
+  recurrence?: ReminderRecurrence;
   createdAt: string;
 }
