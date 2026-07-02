@@ -924,6 +924,7 @@ export const REMINDERS: Reminder[] = [
   {
     id: "rem1",
     userId: "u1",
+    scope: "personal" as const,
     title: "Submit IRB amendment",
     dueAt: "2026-07-10T09:00:00Z",
     emailEnabled: true,
@@ -934,6 +935,7 @@ export const REMINDERS: Reminder[] = [
   {
     id: "rem2",
     userId: "u1",
+    scope: "personal" as const,
     title: "Review consent form draft",
     dueAt: "2026-07-07T08:00:00Z",
     linkedTaskId: "t1",
