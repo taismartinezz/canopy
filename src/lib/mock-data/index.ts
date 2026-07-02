@@ -928,6 +928,7 @@ export const REMINDERS: Reminder[] = [
     dueAt: "2026-07-10T09:00:00Z",
     emailEnabled: true,
     sent: false,
+    completed: false,
     createdAt: "2026-07-01T08:00:00Z",
   },
   {
@@ -938,6 +939,7 @@ export const REMINDERS: Reminder[] = [
     linkedTaskId: "t1",
     emailEnabled: false,
     sent: false,
+    completed: false,
     createdAt: "2026-06-30T12:00:00Z",
   },
 ];

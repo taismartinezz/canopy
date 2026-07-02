@@ -234,3 +234,121 @@ create policy "project members can manage literature" on literature_items
   ) with check (
     auth.uid() = added_by
   );
+
+-- ── Scheduling: User Availability ────────────────────────────────────────────
+-- Stores each member's weekly availability as an array of "day-slot" keys.
+-- Only free/busy is shared — no event content is stored here.
+
+create table if not exists user_availability (
+  id          uuid primary key default gen_random_uuid(),
+  project_id  uuid not null references projects(id) on delete cascade,
+  user_id     uuid not null references auth.users(id) on delete cascade,
+  slots       text[] not null default '{}',
+  updated_at  timestamptz not null default now(),
+  unique (project_id, user_id)
+);
+
+alter table user_availability enable row level security;
+
+create policy "project members can read availability" on user_availability
+  for select using (
+    exists (select 1 from team_members tm where tm.project_id = user_availability.project_id and tm.user_id = auth.uid())
+  );
+
+create policy "user can upsert own availability" on user_availability
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- ── Scheduling: Meeting Proposals ─────────────────────────────────────────────
+
+create table if not exists meeting_proposals (
+  id               uuid primary key default gen_random_uuid(),
+  project_id       uuid not null references projects(id) on delete cascade,
+  proposer_id      uuid not null references auth.users(id),
+  title            text not null,
+  description      text,
+  proposed_date    date not null,
+  proposed_time    time not null,
+  duration_minutes int not null default 30,
+  invitee_ids      uuid[] not null default '{}',
+  responses        jsonb not null default '[]',
+  created_at       timestamptz not null default now()
+);
+
+alter table meeting_proposals enable row level security;
+
+create policy "project members can read proposals" on meeting_proposals
+  for select using (
+    exists (select 1 from team_members tm where tm.project_id = meeting_proposals.project_id and tm.user_id = auth.uid())
+  );
+
+create policy "project members can insert proposals" on meeting_proposals
+  for insert with check (
+    auth.uid() = proposer_id and
+    exists (select 1 from team_members tm where tm.project_id = meeting_proposals.project_id and tm.user_id = auth.uid())
+  );
+
+create policy "project members can update proposal responses" on meeting_proposals
+  for update using (
+    exists (select 1 from team_members tm where tm.project_id = meeting_proposals.project_id and tm.user_id = auth.uid())
+  );
+
+-- ── Scheduling: Schedule Events ───────────────────────────────────────────────
+-- Lab-wide events are visible to all project members.
+-- Personal events are visible only to their creator.
+
+create table if not exists schedule_events (
+  id          uuid primary key default gen_random_uuid(),
+  project_id  uuid not null references projects(id) on delete cascade,
+  title       text not null,
+  date        date not null,
+  time        time,
+  end_time    time,
+  scope       text not null check (scope in ('lab', 'personal')) default 'lab',
+  created_by  uuid not null references auth.users(id),
+  description text,
+  created_at  timestamptz not null default now()
+);
+
+alter table schedule_events enable row level security;
+
+create policy "members can read lab events and own personal events" on schedule_events
+  for select using (
+    (scope = 'lab' and exists (
+      select 1 from team_members tm where tm.project_id = schedule_events.project_id and tm.user_id = auth.uid()
+    ))
+    or (scope = 'personal' and auth.uid() = created_by)
+  );
+
+create policy "project members can insert events" on schedule_events
+  for insert with check (
+    auth.uid() = created_by and
+    exists (select 1 from team_members tm where tm.project_id = schedule_events.project_id and tm.user_id = auth.uid())
+  );
+
+create policy "creator can delete own events" on schedule_events
+  for delete using (auth.uid() = created_by);
+
+-- ── Scheduling: Reminders ─────────────────────────────────────────────────────
+-- Private to each user — no one else can read or modify them.
+
+create table if not exists reminders (
+  id              uuid primary key default gen_random_uuid(),
+  user_id         uuid not null references auth.users(id) on delete cascade,
+  project_id      uuid references projects(id) on delete cascade,
+  title           text not null,
+  due_at          timestamptz,
+  linked_task_id  uuid,
+  linked_event_id uuid,
+  email_enabled   boolean not null default false,
+  sent            boolean not null default false,
+  completed       boolean not null default false,
+  completed_at    timestamptz,
+  priority        text check (priority in ('low', 'medium', 'high')),
+  recurrence      text check (recurrence in ('daily', 'weekly', 'monthly')),
+  created_at      timestamptz not null default now()
+);
+
+alter table reminders enable row level security;
+
+create policy "user owns reminders" on reminders
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
