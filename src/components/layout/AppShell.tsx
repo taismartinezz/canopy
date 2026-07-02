@@ -115,11 +115,8 @@ function SidebarBody({
         })}
       </nav>
 
-      {/* Team section */}
-      <div className="px-3 py-3 shrink-0" style={{ borderTop: "1px solid var(--color-border)" }}>
-        <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--color-secondary)", paddingBottom: 8, paddingLeft: 4 }}>
-          Team
-        </p>
+      {/* Team member list */}
+      <div className="px-3 py-3 shrink-0">
         <div className="max-h-48 overflow-y-auto space-y-0.5">
           {team.length === 0 && (
             <p style={{ fontSize: 12, color: "var(--color-secondary)", padding: "2px 4px" }}>No teammates yet.</p>

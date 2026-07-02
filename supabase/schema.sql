@@ -335,6 +335,7 @@ create table if not exists reminders (
   id              uuid primary key default gen_random_uuid(),
   user_id         uuid not null references auth.users(id) on delete cascade,
   project_id      uuid references projects(id) on delete cascade,
+  scope           text not null check (scope in ('personal', 'lab')) default 'personal',
   title           text not null,
   due_at          timestamptz,
   linked_task_id  uuid,
@@ -350,5 +351,27 @@ create table if not exists reminders (
 
 alter table reminders enable row level security;
 
-create policy "user owns reminders" on reminders
-  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+-- Personal: own only. Lab: all project members can read + mark done; only creator can delete.
+create policy "reminders select" on reminders
+  for select using (
+    auth.uid() = user_id
+    or (scope = 'lab' and exists (
+      select 1 from team_members tm
+      where tm.project_id = reminders.project_id and tm.user_id = auth.uid()
+    ))
+  );
+
+create policy "reminders insert" on reminders
+  for insert with check (auth.uid() = user_id);
+
+create policy "reminders update" on reminders
+  for update using (
+    auth.uid() = user_id
+    or (scope = 'lab' and exists (
+      select 1 from team_members tm
+      where tm.project_id = reminders.project_id and tm.user_id = auth.uid()
+    ))
+  );
+
+create policy "reminders delete" on reminders
+  for delete using (auth.uid() = user_id);

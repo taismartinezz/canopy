@@ -299,12 +299,15 @@ export interface ScheduleEvent {
 
 export type ReminderPriority = "low" | "medium" | "high";
 export type ReminderRecurrence = "daily" | "weekly" | "monthly";
+export type ReminderScope = "personal" | "lab";
 
 export interface Reminder {
   id: string;
-  userId: string;
+  userId: string;         // creator
+  projectId?: string;     // required when scope = "lab"
+  scope?: ReminderScope;  // defaults to "personal"
   title: string;
-  dueAt?: string;           // ISO datetime — optional (untimed reminders allowed)
+  dueAt?: string;         // ISO datetime — optional (untimed reminders allowed)
   linkedTaskId?: string;
   linkedEventId?: string;
   emailEnabled: boolean;
