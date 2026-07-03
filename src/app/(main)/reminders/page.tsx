@@ -16,12 +16,12 @@ const PRIORITY_MARKS: Record<ReminderPriority, string> = { high: "!!!", medium: 
 const PRIORITY_RANK: Record<string, number> = { high: 0, medium: 1, low: 2 };
 
 const LIST_COLORS: Record<ListType, string> = {
-  today:     "#3478F6",
-  scheduled: "#FF3B30",
-  priority:  "#FF9500",
-  all:       "#636366",
-  personal:  "#5856D6",
-  lab:       "#1B2E4B",
+  today:     "#1B2E4B",  // navy
+  scheduled: "#A0622A",  // warning
+  priority:  "#C0392B",  // error
+  all:       "#64748B",  // slate
+  personal:  "#2E7D52",  // success
+  lab:       "#2E4A6F",  // navy-hover
 };
 
 const LIST_LABELS: Record<ListType, string> = {
@@ -89,6 +89,16 @@ function isOverdue(iso?: string): boolean {
   return !!iso && new Date(iso) < new Date();
 }
 
+function isoToLocalDate(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function isoToLocalTime(iso: string): string {
+  const d = new Date(iso);
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
 function getDefaultScope(list: ListType): ReminderScope {
   return list === "lab" ? "lab" : "personal";
 }
@@ -100,7 +110,7 @@ function CompletionCircle({ completing, disabled, color, onClick }: {
 }) {
   return (
     <button
-      onClick={onClick}
+      onClick={e => { e.stopPropagation(); onClick(); }}
       disabled={disabled}
       aria-label="Mark complete"
       style={{
@@ -128,9 +138,9 @@ function CompletionCircle({ completing, disabled, color, onClick }: {
 
 // ── ReminderRow ───────────────────────────────────────────────────────────────
 
-function ReminderRow({ reminder, currentUserId, teamMembers, onComplete, onDelete }: {
+function ReminderRow({ reminder, currentUserId, teamMembers, onComplete, onDelete, onEdit }: {
   reminder: Reminder; currentUserId: string; teamMembers: User[];
-  onComplete: (id: string) => void; onDelete: (id: string) => void;
+  onComplete: (id: string) => void; onDelete: (id: string) => void; onEdit: () => void;
 }) {
   const [completing, setCompleting] = useState(false);
   const [hovered, setHovered] = useState(false);
@@ -159,11 +169,12 @@ function ReminderRow({ reminder, currentUserId, teamMembers, onComplete, onDelet
       <div
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
+        onClick={onEdit}
         style={{
           display: "flex", alignItems: "flex-start", gap: 12,
           padding: "10px 16px", borderBottom: "1px solid var(--color-border)",
           backgroundColor: hovered ? "rgba(0,0,0,0.02)" : "transparent",
-          transition: "background-color 0.1s", minHeight: 44,
+          transition: "background-color 0.1s", minHeight: 44, cursor: "text",
         }}
       >
         <CompletionCircle completing={completing} disabled={!canCheck} color={circleColor} onClick={handleCheck} />
@@ -197,7 +208,7 @@ function ReminderRow({ reminder, currentUserId, teamMembers, onComplete, onDelet
           {creator && <Avatar user={creator} size={18} />}
           {isCreator && hovered && (
             <button
-              onClick={() => onDelete(reminder.id)}
+              onClick={e => { e.stopPropagation(); onDelete(reminder.id); }}
               aria-label="Delete"
               style={{ background: "none", border: "none", cursor: "pointer", padding: 2, display: "flex", opacity: 0.45 }}
               onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.opacity = "1"; }}
@@ -208,6 +219,119 @@ function ReminderRow({ reminder, currentUserId, teamMembers, onComplete, onDelet
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+// ── ReminderEditRow ───────────────────────────────────────────────────────────
+
+function ReminderEditRow({ reminder, onSave, onCancel }: {
+  reminder: Reminder;
+  onSave: (id: string, updates: { title: string; priority?: ReminderPriority; dueAt?: string }) => void;
+  onCancel: () => void;
+}) {
+  const [title, setTitle] = useState(reminder.title);
+  const [priority, setPriority] = useState<ReminderPriority | undefined>(reminder.priority);
+  const [date, setDate] = useState(reminder.dueAt ? isoToLocalDate(reminder.dueAt) : "");
+  const [time, setTime] = useState(reminder.dueAt ? isoToLocalTime(reminder.dueAt) : "");
+  const [showDate, setShowDate] = useState(!!reminder.dueAt);
+  const inputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => { inputRef.current?.focus(); inputRef.current?.select(); }, []);
+
+  const circleColor = reminder.scope === "lab" ? LIST_COLORS.lab : LIST_COLORS.personal;
+
+  function save() {
+    if (!title.trim()) return;
+    const dueAt = date ? new Date(time ? `${date}T${time}` : `${date}T09:00`).toISOString() : undefined;
+    onSave(reminder.id, { title: title.trim(), priority, dueAt });
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (e.key === "Enter") save();
+    if (e.key === "Escape") onCancel();
+  }
+
+  return (
+    <div style={{ borderBottom: "1px solid var(--color-border)", backgroundColor: "rgba(0,0,0,0.015)" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 16px 6px" }}>
+        <div style={{ width: 22, height: 22, borderRadius: "50%", flexShrink: 0, border: `2px solid ${circleColor}`, opacity: 0.45 }} />
+        <input
+          ref={inputRef}
+          value={title}
+          onChange={e => setTitle(e.target.value)}
+          onKeyDown={handleKeyDown}
+          style={{ flex: 1, border: "none", outline: "none", fontSize: 15, fontFamily: "var(--font-roboto)", backgroundColor: "transparent", color: "var(--color-body)" }}
+        />
+      </div>
+
+      <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "0 16px 11px 50px", flexWrap: "wrap" }}>
+        {(["low", "medium", "high"] as ReminderPriority[]).map(p => {
+          const active = priority === p;
+          return (
+            <button key={p} onClick={() => setPriority(active ? undefined : p)} style={{
+              height: 26, paddingInline: 10, borderRadius: 20, border: "1.5px solid",
+              borderColor: active ? "var(--color-navy)" : "var(--color-border)",
+              backgroundColor: active ? "rgba(27,46,75,0.08)" : "transparent",
+              color: active ? "var(--color-navy)" : "var(--color-secondary)",
+              fontSize: 12, fontWeight: 800, cursor: "pointer", fontFamily: "var(--font-roboto)", letterSpacing: "-0.5px",
+            }}>
+              {PRIORITY_MARKS[p]}
+            </button>
+          );
+        })}
+
+        <div style={{ width: 1, height: 16, backgroundColor: "var(--color-border)" }} />
+
+        <button onClick={() => setShowDate(v => !v)} style={{
+          height: 26, paddingInline: 10, borderRadius: 20, border: "1.5px solid",
+          borderColor: date ? "var(--color-navy)" : "var(--color-border)",
+          backgroundColor: date ? "rgba(27,46,75,0.08)" : "transparent",
+          color: date ? "var(--color-navy)" : "var(--color-secondary)",
+          fontSize: 12, cursor: "pointer", fontFamily: "var(--font-roboto)",
+          display: "flex", alignItems: "center", gap: 4,
+        }}>
+          <CalendarDays size={11} />
+          {date || "Date"}
+        </button>
+
+        {date && (
+          <button onClick={() => { setDate(""); setTime(""); }} style={{
+            height: 26, paddingInline: 8, borderRadius: 20, border: "1.5px solid var(--color-border)",
+            background: "transparent", color: "var(--color-secondary)",
+            fontSize: 11, cursor: "pointer", fontFamily: "var(--font-roboto)",
+          }}>
+            Clear date
+          </button>
+        )}
+
+        <div style={{ flex: 1 }} />
+
+        <button onClick={onCancel} style={{ fontSize: 12, color: "var(--color-secondary)", background: "none", border: "none", cursor: "pointer", padding: "0 4px" }}>
+          Cancel
+        </button>
+        <button
+          onClick={save}
+          disabled={!title.trim()}
+          style={{
+            height: 26, paddingInline: 12, borderRadius: 7, border: "none",
+            backgroundColor: title.trim() ? "var(--color-navy)" : "var(--color-border)",
+            color: title.trim() ? "#fff" : "var(--color-secondary)",
+            fontSize: 12, fontWeight: 700, cursor: title.trim() ? "pointer" : "default",
+            fontFamily: "var(--font-roboto)", transition: "background-color 0.1s",
+          }}
+        >
+          Done
+        </button>
+      </div>
+
+      {showDate && (
+        <div style={{ display: "flex", gap: 8, padding: "0 16px 11px 50px" }}>
+          <input type="date" value={date} onChange={e => setDate(e.target.value)}
+            style={{ height: 30, border: "1px solid var(--color-border)", borderRadius: 6, padding: "0 8px", fontSize: 12, fontFamily: "var(--font-roboto)", backgroundColor: "var(--color-canvas)", color: "var(--color-body)", outline: "none" }} />
+          <input type="time" value={time} onChange={e => setTime(e.target.value)}
+            style={{ height: 30, border: "1px solid var(--color-border)", borderRadius: 6, padding: "0 8px", fontSize: 12, width: 100, fontFamily: "var(--font-roboto)", backgroundColor: "var(--color-canvas)", color: "var(--color-body)", outline: "none" }} />
+        </div>
+      )}
     </div>
   );
 }
@@ -483,6 +607,7 @@ export default function RemindersPage() {
   const [loading, setLoading] = useState(true);
   const [selectedList, setSelectedList] = useState<ListType>("all");
   const [isAdding, setIsAdding] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [pendingUndo, setPendingUndo] = useState<PendingUndo | null>(null);
 
   useEffect(() => {
@@ -623,9 +748,23 @@ export default function RemindersPage() {
     commitDelete(id);
   }
 
+  async function handleUpdate(id: string, updates: { title: string; priority?: ReminderPriority; dueAt?: string }) {
+    setReminders(prev => sortReminders(prev.map(r => r.id === id ? { ...r, ...updates } : r)));
+    setEditingId(null);
+    if (isSupabaseConfigured) {
+      const { error } = await supabase.from("reminders").update({
+        title: updates.title,
+        priority: updates.priority ?? null,
+        due_at: updates.dueAt ?? null,
+      }).eq("id", id);
+      if (error) console.error("[Reminders] update:", error);
+    }
+  }
+
   function handleListSelect(list: ListType) {
     setSelectedList(list);
     setIsAdding(false);
+    setEditingId(null);
   }
 
   const active = reminders.filter(r => !r.completed);
@@ -690,14 +829,24 @@ export default function RemindersPage() {
                 borderRadius: 12, overflow: "hidden",
               }}>
                 {visible.map(reminder => (
-                  <ReminderRow
-                    key={reminder.id}
-                    reminder={reminder}
-                    currentUserId={currentUserId}
-                    teamMembers={teamMembers}
-                    onComplete={handleComplete}
-                    onDelete={handleDelete}
-                  />
+                  editingId === reminder.id ? (
+                    <ReminderEditRow
+                      key={reminder.id}
+                      reminder={reminder}
+                      onSave={handleUpdate}
+                      onCancel={() => setEditingId(null)}
+                    />
+                  ) : (
+                    <ReminderRow
+                      key={reminder.id}
+                      reminder={reminder}
+                      currentUserId={currentUserId}
+                      teamMembers={teamMembers}
+                      onComplete={handleComplete}
+                      onDelete={handleDelete}
+                      onEdit={() => setEditingId(reminder.id)}
+                    />
+                  )
                 ))}
 
                 {isAdding ? (
