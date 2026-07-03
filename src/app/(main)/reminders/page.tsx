@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useMemo } from "react";
-import { Plus, Check, Sun, CalendarDays, List, Trash2 } from "lucide-react";
+import { Plus, Check, Sun, CalendarDays, List, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { useProject } from "@/context/ProjectContext";
 import Avatar from "@/components/ui/Avatar";
@@ -232,76 +232,83 @@ function ReminderEditRow({ reminder, onSave, onCancel }: {
 }) {
   const [title, setTitle] = useState(reminder.title);
   const [priority, setPriority] = useState<ReminderPriority | undefined>(reminder.priority);
-  const [date, setDate] = useState(reminder.dueAt ? isoToLocalDate(reminder.dueAt) : "");
-  const [time, setTime] = useState(reminder.dueAt ? isoToLocalTime(reminder.dueAt) : "");
-  const [showDate, setShowDate] = useState(!!reminder.dueAt);
+  const [selDate, setSelDate] = useState<string | undefined>(reminder.dueAt ? isoToLocalDate(reminder.dueAt) : undefined);
+  const [selTime, setSelTime] = useState(reminder.dueAt ? isoToLocalTime(reminder.dueAt) : "");
+  const [showCal, setShowCal] = useState(false);
+  const [calPos, setCalPos] = useState<{ top: number; left: number } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const rowRef = useRef<HTMLDivElement>(null);
+  const dateButtonRef = useRef<HTMLButtonElement>(null);
+  const accentColor = reminder.scope === "lab" ? LIST_COLORS.lab : LIST_COLORS.personal;
+  const circleColor = accentColor;
   useEffect(() => { inputRef.current?.focus(); inputRef.current?.select(); }, []);
-
-  const circleColor = reminder.scope === "lab" ? LIST_COLORS.lab : LIST_COLORS.personal;
 
   function save() {
     if (!title.trim()) return;
-    const dueAt = date ? new Date(time ? `${date}T${time}` : `${date}T09:00`).toISOString() : undefined;
+    const dueAt = selDate ? makeDueAt(selDate, selTime) : undefined;
     onSave(reminder.id, { title: title.trim(), priority, dueAt });
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {
-    if (e.key === "Enter") save();
-    if (e.key === "Escape") onCancel();
+    if (e.key === "Enter") { e.preventDefault(); save(); }
+    if (e.key === "Escape") {
+      if (showCal) { setShowCal(false); return; }
+      onCancel();
+    }
   }
 
+  function handleContainerBlur(e: React.FocusEvent<HTMLDivElement>) {
+    if (rowRef.current?.contains(e.relatedTarget as Node)) return;
+    if (showCal) { setShowCal(false); return; }
+    onCancel();
+  }
+
+  function openCal() {
+    if (!dateButtonRef.current) return;
+    const r = dateButtonRef.current.getBoundingClientRect();
+    setCalPos({ top: r.bottom + 6, left: r.left });
+    setShowCal(v => !v);
+  }
+
+  const pillBase = (active: boolean, color: string): React.CSSProperties => ({
+    height: 26, paddingInline: 10, borderRadius: 20, border: "1.5px solid",
+    borderColor: active ? color : "var(--color-border)",
+    backgroundColor: active ? `${color}18` : "transparent",
+    color: active ? color : "var(--color-secondary)",
+    fontSize: 12, cursor: "pointer", fontFamily: "var(--font-roboto)",
+  });
+
   return (
-    <div style={{ borderBottom: "1px solid var(--color-border)", backgroundColor: "rgba(0,0,0,0.015)" }}>
+    <div ref={rowRef} onBlur={handleContainerBlur}
+      style={{ borderBottom: "1px solid var(--color-border)", backgroundColor: `${accentColor}07` }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 16px 6px" }}>
-        <div style={{ width: 22, height: 22, borderRadius: "50%", flexShrink: 0, border: `2px solid ${circleColor}`, opacity: 0.45 }} />
-        <input
-          ref={inputRef}
-          value={title}
-          onChange={e => setTitle(e.target.value)}
-          onKeyDown={handleKeyDown}
-          style={{ flex: 1, border: "none", outline: "none", fontSize: 15, fontFamily: "var(--font-roboto)", backgroundColor: "transparent", color: "var(--color-body)" }}
-        />
+        <div style={{ width: 22, height: 22, borderRadius: "50%", flexShrink: 0, border: `2px solid ${circleColor}`, opacity: 0.4 }} />
+        <input ref={inputRef} value={title} onChange={e => setTitle(e.target.value)} onKeyDown={handleKeyDown}
+          style={{ flex: 1, border: "none", outline: "none", fontSize: 15, fontFamily: "var(--font-roboto)", backgroundColor: "transparent", color: "var(--color-body)" }} />
       </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "0 16px 11px 50px", flexWrap: "wrap" }}>
-        {(["low", "medium", "high"] as ReminderPriority[]).map(p => {
-          const active = priority === p;
-          return (
-            <button key={p} onClick={() => setPriority(active ? undefined : p)} style={{
-              height: 26, paddingInline: 10, borderRadius: 20, border: "1.5px solid",
-              borderColor: active ? "var(--color-navy)" : "var(--color-border)",
-              backgroundColor: active ? "rgba(27,46,75,0.08)" : "transparent",
-              color: active ? "var(--color-navy)" : "var(--color-secondary)",
-              fontSize: 12, fontWeight: 800, cursor: "pointer", fontFamily: "var(--font-roboto)", letterSpacing: "-0.5px",
-            }}>
-              {PRIORITY_MARKS[p]}
-            </button>
-          );
-        })}
+        {(["low", "medium", "high"] as ReminderPriority[]).map(p => (
+          <button key={p} onClick={() => setPriority(priority === p ? undefined : p)}
+            style={{ ...pillBase(priority === p, accentColor), fontWeight: 800, letterSpacing: "-0.5px" }}>
+            {PRIORITY_MARKS[p]}
+          </button>
+        ))}
 
         <div style={{ width: 1, height: 16, backgroundColor: "var(--color-border)" }} />
 
-        <button onClick={() => setShowDate(v => !v)} style={{
-          height: 26, paddingInline: 10, borderRadius: 20, border: "1.5px solid",
-          borderColor: date ? "var(--color-navy)" : "var(--color-border)",
-          backgroundColor: date ? "rgba(27,46,75,0.08)" : "transparent",
-          color: date ? "var(--color-navy)" : "var(--color-secondary)",
-          fontSize: 12, cursor: "pointer", fontFamily: "var(--font-roboto)",
-          display: "flex", alignItems: "center", gap: 4,
-        }}>
+        <button ref={dateButtonRef} onClick={openCal}
+          style={{ ...pillBase(!!selDate, accentColor), display: "flex", alignItems: "center", gap: 4 }}>
           <CalendarDays size={11} />
-          {date || "Date"}
+          {selDate ? formatDateLabel(selDate) : "Date"}
         </button>
 
-        {date && (
-          <button onClick={() => { setDate(""); setTime(""); }} style={{
-            height: 26, paddingInline: 8, borderRadius: 20, border: "1.5px solid var(--color-border)",
-            background: "transparent", color: "var(--color-secondary)",
-            fontSize: 11, cursor: "pointer", fontFamily: "var(--font-roboto)",
-          }}>
-            Clear date
-          </button>
+        {selDate && (
+          <input type="time" value={selTime} onChange={e => setSelTime(e.target.value)} style={{
+            height: 26, paddingInline: 10, borderRadius: 20, border: "1.5px solid var(--color-border)",
+            fontSize: 12, fontFamily: "var(--font-roboto)", backgroundColor: "transparent",
+            color: "var(--color-body)", outline: "none", cursor: "pointer",
+          }} />
         )}
 
         <div style={{ flex: 1 }} />
@@ -309,72 +316,234 @@ function ReminderEditRow({ reminder, onSave, onCancel }: {
         <button onClick={onCancel} style={{ fontSize: 12, color: "var(--color-secondary)", background: "none", border: "none", cursor: "pointer", padding: "0 4px" }}>
           Cancel
         </button>
-        <button
-          onClick={save}
-          disabled={!title.trim()}
-          style={{
-            height: 26, paddingInline: 12, borderRadius: 7, border: "none",
-            backgroundColor: title.trim() ? "var(--color-navy)" : "var(--color-border)",
-            color: title.trim() ? "#fff" : "var(--color-secondary)",
-            fontSize: 12, fontWeight: 700, cursor: title.trim() ? "pointer" : "default",
-            fontFamily: "var(--font-roboto)", transition: "background-color 0.1s",
-          }}
-        >
+        <button onClick={save} disabled={!title.trim()} style={{
+          height: 26, paddingInline: 12, borderRadius: 7, border: "none",
+          backgroundColor: title.trim() ? accentColor : "var(--color-border)",
+          color: title.trim() ? "#fff" : "var(--color-secondary)",
+          fontSize: 12, fontWeight: 700, cursor: title.trim() ? "pointer" : "default",
+          fontFamily: "var(--font-roboto)", transition: "background-color 0.1s",
+        }}>
           Done
         </button>
       </div>
 
-      {showDate && (
-        <div style={{ display: "flex", gap: 8, padding: "0 16px 11px 50px" }}>
-          <input type="date" value={date} onChange={e => setDate(e.target.value)}
-            style={{ height: 30, border: "1px solid var(--color-border)", borderRadius: 6, padding: "0 8px", fontSize: 12, fontFamily: "var(--font-roboto)", backgroundColor: "var(--color-canvas)", color: "var(--color-body)", outline: "none" }} />
-          <input type="time" value={time} onChange={e => setTime(e.target.value)}
-            style={{ height: 30, border: "1px solid var(--color-border)", borderRadius: 6, padding: "0 8px", fontSize: 12, width: 100, fontFamily: "var(--font-roboto)", backgroundColor: "var(--color-canvas)", color: "var(--color-body)", outline: "none" }} />
-        </div>
+      {showCal && calPos && (
+        <CalendarPicker
+          value={selDate}
+          accentColor={accentColor}
+          pos={calPos}
+          onSelect={date => { setSelDate(date); setShowCal(false); setTimeout(() => inputRef.current?.focus(), 0); }}
+          onClear={() => { setSelDate(undefined); setSelTime(""); setShowCal(false); setTimeout(() => inputRef.current?.focus(), 0); }}
+          onClose={() => { setShowCal(false); setTimeout(() => inputRef.current?.focus(), 0); }}
+        />
       )}
+    </div>
+  );
+}
+
+// ── CalendarPicker ────────────────────────────────────────────────────────────
+
+const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+const DAY_LETTERS = ["S","M","T","W","T","F","S"];
+
+function CalendarPicker({ value, accentColor, pos, onSelect, onClear, onClose }: {
+  value: string | undefined;       // "YYYY-MM-DD"
+  accentColor: string;
+  pos: { top: number; left: number };
+  onSelect: (date: string) => void;
+  onClear: () => void;
+  onClose: () => void;
+}) {
+  const todayDate = new Date();
+  todayDate.setHours(0, 0, 0, 0);
+  const todayStr = isoToLocalDate(todayDate.toISOString());
+
+  const [cursor, setCursor] = useState(() => {
+    if (value) { const d = new Date(value + "T00:00"); return { year: d.getFullYear(), month: d.getMonth() }; }
+    return { year: todayDate.getFullYear(), month: todayDate.getMonth() };
+  });
+
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    function down(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    }
+    document.addEventListener("mousedown", down);
+    return () => document.removeEventListener("mousedown", down);
+  }, [onClose]);
+
+  function prevMonth() { setCursor(p => p.month === 0 ? { year: p.year - 1, month: 11 } : { ...p, month: p.month - 1 }); }
+  function nextMonth() { setCursor(p => p.month === 11 ? { year: p.year + 1, month: 0 } : { ...p, month: p.month + 1 }); }
+
+  const daysInMonth = new Date(cursor.year, cursor.month + 1, 0).getDate();
+  const firstDow = new Date(cursor.year, cursor.month, 1).getDay();
+
+  function ds(day: number) {
+    return `${cursor.year}-${String(cursor.month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  }
+
+  const btnBase: React.CSSProperties = { background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" };
+
+  return (
+    <div ref={ref} style={{
+      position: "fixed", top: pos.top, left: pos.left, zIndex: 400,
+      width: 244, backgroundColor: "var(--color-surface)",
+      border: "1px solid var(--color-border)", borderRadius: 16,
+      boxShadow: "0 8px 32px rgba(0,0,0,0.14)", padding: "14px 12px 10px",
+      fontFamily: "var(--font-roboto)",
+    }}>
+      {/* Month nav */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+        <button onClick={prevMonth} style={{ ...btnBase, width: 28, height: 28, borderRadius: 8 }}
+          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = "var(--color-canvas)"; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = "transparent"; }}>
+          <ChevronLeft size={14} color="var(--color-secondary)" />
+        </button>
+        <span style={{ fontSize: 13, fontWeight: 600, color: "var(--color-body)" }}>
+          {MONTH_NAMES[cursor.month]} {cursor.year}
+        </span>
+        <button onClick={nextMonth} style={{ ...btnBase, width: 28, height: 28, borderRadius: 8 }}
+          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = "var(--color-canvas)"; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = "transparent"; }}>
+          <ChevronRight size={14} color="var(--color-secondary)" />
+        </button>
+      </div>
+
+      {/* Weekday letters */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", marginBottom: 4 }}>
+        {DAY_LETTERS.map((l, i) => (
+          <div key={i} style={{ textAlign: "center", fontSize: 10, fontWeight: 700, color: "var(--color-secondary)", paddingBlock: 3, letterSpacing: "0.02em" }}>{l}</div>
+        ))}
+      </div>
+
+      {/* Day cells */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 1 }}>
+        {Array.from({ length: firstDow }, (_, i) => <div key={`e${i}`} />)}
+        {Array.from({ length: daysInMonth }, (_, i) => {
+          const day = i + 1;
+          const d = ds(day);
+          const isToday = d === todayStr;
+          const isSel = d === value;
+          return (
+            <button key={day} onClick={() => onSelect(d)}
+              style={{
+                width: 30, height: 30, borderRadius: "50%", margin: "0 auto", display: "flex",
+                alignItems: "center", justifyContent: "center",
+                border: isToday && !isSel ? `1.5px solid ${accentColor}55` : "1.5px solid transparent",
+                backgroundColor: isSel ? accentColor : "transparent",
+                color: isSel ? "#fff" : isToday ? accentColor : "var(--color-body)",
+                fontSize: 12, fontWeight: isSel || isToday ? 600 : 400,
+                cursor: "pointer", transition: "background-color 0.1s",
+              }}
+              onMouseEnter={e => { if (!isSel) (e.currentTarget as HTMLButtonElement).style.backgroundColor = `${accentColor}20`; }}
+              onMouseLeave={e => { if (!isSel) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "transparent"; }}
+            >
+              {day}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Footer shortcuts */}
+      <div style={{ display: "flex", justifyContent: "space-between", marginTop: 10, paddingTop: 8, borderTop: "1px solid var(--color-border)" }}>
+        <button onClick={onClear} style={{ ...btnBase, fontSize: 12, color: "var(--color-secondary)", padding: "4px 6px", borderRadius: 6 }}
+          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = "var(--color-body)"; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = "var(--color-secondary)"; }}>
+          Clear
+        </button>
+        <button onClick={() => onSelect(todayStr)} style={{ ...btnBase, fontSize: 12, fontWeight: 600, color: accentColor, padding: "4px 6px", borderRadius: 6 }}
+          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = `${accentColor}12`; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = "transparent"; }}>
+          Today
+        </button>
+      </div>
     </div>
   );
 }
 
 // ── InlineAddRow ──────────────────────────────────────────────────────────────
 
-const dateInputStyle: React.CSSProperties = {
-  height: 30, border: "1px solid var(--color-border)", borderRadius: 6,
-  padding: "0 8px", fontSize: 12, fontFamily: "var(--font-roboto)",
-  backgroundColor: "var(--color-canvas)", color: "var(--color-body)", outline: "none",
-};
+function formatDateLabel(date: string): string {
+  const d = new Date(date + "T00:00");
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1);
+  if (d.toDateString() === today.toDateString()) return "Today";
+  if (d.toDateString() === tomorrow.toDateString()) return "Tomorrow";
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
 
-function InlineAddRow({ defaultScope, onAdd, onCancel }: {
+function makeDueAt(date: string, time: string): string {
+  return new Date(time ? `${date}T${time}` : `${date}T09:00`).toISOString();
+}
+
+function InlineAddRow({ defaultScope, accentColor, onAdd, onClose }: {
   defaultScope: ReminderScope;
+  accentColor: string;
   onAdd: (title: string, scope: ReminderScope, priority?: ReminderPriority, dueAt?: string) => void;
-  onCancel: () => void;
+  onClose: () => void;
 }) {
   const [title, setTitle] = useState("");
   const [scope, setScope] = useState<ReminderScope>(defaultScope);
   const [priority, setPriority] = useState<ReminderPriority | undefined>();
-  const [date, setDate] = useState("");
-  const [time, setTime] = useState("");
-  const [showDate, setShowDate] = useState(false);
+  const [selDate, setSelDate] = useState<string | undefined>();
+  const [selTime, setSelTime] = useState("");
+  const [showCal, setShowCal] = useState(false);
+  const [calPos, setCalPos] = useState<{ top: number; left: number } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  useEffect(() => { inputRef.current?.focus(); }, []);
-
+  const rowRef = useRef<HTMLDivElement>(null);
+  const dateButtonRef = useRef<HTMLButtonElement>(null);
   const circleColor = scope === "lab" ? LIST_COLORS.lab : LIST_COLORS.personal;
 
-  function submit() {
-    if (!title.trim()) { onCancel(); return; }
-    const dueAt = date ? new Date(time ? `${date}T${time}` : `${date}T09:00`).toISOString() : undefined;
-    onAdd(title.trim(), scope, priority, dueAt);
+  useEffect(() => { inputRef.current?.focus(); }, []);
+
+  function buildDueAt() {
+    return selDate ? makeDueAt(selDate, selTime) : undefined;
   }
 
-  function handleKeyDown(e: React.KeyboardEvent) {
-    if (e.key === "Enter") submit();
-    if (e.key === "Escape") onCancel();
+  function commit() {
+    if (!title.trim()) return;
+    onAdd(title.trim(), scope, priority, buildDueAt());
+    setTitle(""); setPriority(undefined); setSelDate(undefined); setSelTime(""); setShowCal(false);
+    setTimeout(() => inputRef.current?.focus(), 0);
   }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter") { e.preventDefault(); commit(); }
+    if (e.key === "Escape") {
+      if (showCal) { setShowCal(false); return; }
+      if (title) { setTitle(""); } else { onClose(); }
+    }
+  }
+
+  function handleContainerBlur(e: React.FocusEvent<HTMLDivElement>) {
+    if (rowRef.current?.contains(e.relatedTarget as Node)) return;
+    if (showCal) { setShowCal(false); return; }
+    if (title.trim()) { onAdd(title.trim(), scope, priority, buildDueAt()); }
+    onClose();
+  }
+
+  function openCal() {
+    if (!dateButtonRef.current) return;
+    const r = dateButtonRef.current.getBoundingClientRect();
+    setCalPos({ top: r.bottom + 6, left: r.left });
+    setShowCal(v => !v);
+  }
+
+  const pillBase = (active: boolean, color: string): React.CSSProperties => ({
+    height: 26, paddingInline: 10, borderRadius: 20, border: "1.5px solid",
+    borderColor: active ? color : "var(--color-border)",
+    backgroundColor: active ? `${color}18` : "transparent",
+    color: active ? color : "var(--color-secondary)",
+    fontSize: 12, cursor: "pointer", fontFamily: "var(--font-roboto)",
+  });
 
   return (
-    <div style={{ borderTop: "1px solid var(--color-border)", backgroundColor: "rgba(0,0,0,0.015)" }}>
+    <div ref={rowRef} onBlur={handleContainerBlur}
+      style={{ borderTop: "1px solid var(--color-border)", backgroundColor: `${accentColor}07` }}>
+
+      {/* Title row */}
       <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 16px 6px" }}>
-        <div style={{ width: 22, height: 22, borderRadius: "50%", flexShrink: 0, border: `2px solid ${circleColor}`, opacity: 0.45 }} />
+        <div style={{ width: 22, height: 22, borderRadius: "50%", flexShrink: 0, border: `2px solid ${circleColor}`, opacity: 0.4 }} />
         <input
           ref={inputRef}
           value={title}
@@ -387,78 +556,50 @@ function InlineAddRow({ defaultScope, onAdd, onCancel }: {
 
       {/* Toolbar */}
       <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "0 16px 11px 50px", flexWrap: "wrap" }}>
-        {(["personal", "lab"] as ReminderScope[]).map(s => {
-          const active = scope === s;
-          const c = LIST_COLORS[s];
-          return (
-            <button key={s} onClick={() => setScope(s)} style={{
-              height: 26, paddingInline: 10, borderRadius: 20, border: "1.5px solid",
-              borderColor: active ? c : "var(--color-border)",
-              backgroundColor: active ? `${c}18` : "transparent",
-              color: active ? c : "var(--color-secondary)",
-              fontSize: 12, fontWeight: active ? 700 : 400, cursor: "pointer", fontFamily: "var(--font-roboto)",
-            }}>
-              {s === "personal" ? "Personal" : "Lab"}
-            </button>
-          );
-        })}
+        {(["personal", "lab"] as ReminderScope[]).map(s => (
+          <button key={s} onClick={() => setScope(s)} style={{ ...pillBase(scope === s, LIST_COLORS[s]), fontWeight: scope === s ? 700 : 400 }}>
+            {s === "personal" ? "Personal" : "Lab"}
+          </button>
+        ))}
 
         <div style={{ width: 1, height: 16, backgroundColor: "var(--color-border)" }} />
 
-        {(["low", "medium", "high"] as ReminderPriority[]).map(p => {
-          const active = priority === p;
-          return (
-            <button key={p} onClick={() => setPriority(active ? undefined : p)} style={{
-              height: 26, paddingInline: 10, borderRadius: 20, border: "1.5px solid",
-              borderColor: active ? "var(--color-navy)" : "var(--color-border)",
-              backgroundColor: active ? "rgba(27,46,75,0.08)" : "transparent",
-              color: active ? "var(--color-navy)" : "var(--color-secondary)",
-              fontSize: 12, fontWeight: 800, cursor: "pointer", fontFamily: "var(--font-roboto)", letterSpacing: "-0.5px",
-            }}>
-              {PRIORITY_MARKS[p]}
-            </button>
-          );
-        })}
+        {(["low", "medium", "high"] as ReminderPriority[]).map(p => (
+          <button key={p} onClick={() => setPriority(priority === p ? undefined : p)}
+            style={{ ...pillBase(priority === p, accentColor), fontWeight: 800, letterSpacing: "-0.5px" }}>
+            {PRIORITY_MARKS[p]}
+          </button>
+        ))}
 
         <div style={{ width: 1, height: 16, backgroundColor: "var(--color-border)" }} />
 
-        <button onClick={() => setShowDate(v => !v)} style={{
-          height: 26, paddingInline: 10, borderRadius: 20, border: "1.5px solid",
-          borderColor: date ? "var(--color-navy)" : "var(--color-border)",
-          backgroundColor: date ? "rgba(27,46,75,0.08)" : "transparent",
-          color: date ? "var(--color-navy)" : "var(--color-secondary)",
-          fontSize: 12, cursor: "pointer", fontFamily: "var(--font-roboto)",
-          display: "flex", alignItems: "center", gap: 4,
-        }}>
+        {/* Date picker button */}
+        <button ref={dateButtonRef} onClick={openCal}
+          style={{ ...pillBase(!!selDate, accentColor), display: "flex", alignItems: "center", gap: 4 }}>
           <CalendarDays size={11} />
-          {date || "Date"}
+          {selDate ? formatDateLabel(selDate) : "Date"}
         </button>
 
-        <div style={{ flex: 1 }} />
-
-        <button onClick={onCancel} style={{ fontSize: 12, color: "var(--color-secondary)", background: "none", border: "none", cursor: "pointer", padding: "0 4px" }}>
-          Cancel
-        </button>
-        <button
-          onClick={submit}
-          disabled={!title.trim()}
-          style={{
-            height: 26, paddingInline: 12, borderRadius: 7, border: "none",
-            backgroundColor: title.trim() ? "var(--color-navy)" : "var(--color-border)",
-            color: title.trim() ? "#fff" : "var(--color-secondary)",
-            fontSize: 12, fontWeight: 700, cursor: title.trim() ? "pointer" : "default",
-            fontFamily: "var(--font-roboto)", transition: "background-color 0.1s",
-          }}
-        >
-          Add
-        </button>
+        {/* Time input — only shown once a date is picked */}
+        {selDate && (
+          <input type="time" value={selTime} onChange={e => setSelTime(e.target.value)} style={{
+            height: 26, paddingInline: 10, borderRadius: 20, border: "1.5px solid var(--color-border)",
+            fontSize: 12, fontFamily: "var(--font-roboto)", backgroundColor: "transparent",
+            color: "var(--color-body)", outline: "none", cursor: "pointer",
+          }} />
+        )}
       </div>
 
-      {showDate && (
-        <div style={{ display: "flex", gap: 8, padding: "0 16px 11px 50px" }}>
-          <input type="date" value={date} onChange={e => setDate(e.target.value)} style={dateInputStyle} />
-          <input type="time" value={time} onChange={e => setTime(e.target.value)} style={{ ...dateInputStyle, width: 100 }} />
-        </div>
+      {/* Custom calendar (fixed-positioned, still a DOM child so blur detection works) */}
+      {showCal && calPos && (
+        <CalendarPicker
+          value={selDate}
+          accentColor={accentColor}
+          pos={calPos}
+          onSelect={date => { setSelDate(date); setShowCal(false); setTimeout(() => inputRef.current?.focus(), 0); }}
+          onClear={() => { setSelDate(undefined); setSelTime(""); setShowCal(false); setTimeout(() => inputRef.current?.focus(), 0); }}
+          onClose={() => { setShowCal(false); setTimeout(() => inputRef.current?.focus(), 0); }}
+        />
       )}
     </div>
   );
@@ -723,7 +864,7 @@ export default function RemindersPage() {
       createdAt: new Date().toISOString(),
     };
     setReminders(prev => sortReminders([newReminder, ...prev]));
-    setIsAdding(false);
+    // don't close — InlineAddRow resets itself for keep-adding behavior
 
     if (isSupabaseConfigured && currentUserId) {
       const { data, error } = await supabase
@@ -852,8 +993,9 @@ export default function RemindersPage() {
                 {isAdding ? (
                   <InlineAddRow
                     defaultScope={getDefaultScope(selectedList)}
+                    accentColor={panelColor}
                     onAdd={handleAdd}
-                    onCancel={() => setIsAdding(false)}
+                    onClose={() => setIsAdding(false)}
                   />
                 ) : (
                   <button
