@@ -1,37 +1,24 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Plus, Check, Trash2, X } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { Plus, Check, Trash2, X, Flag } from "lucide-react";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { useProject } from "@/context/ProjectContext";
 import Avatar from "@/components/ui/Avatar";
 import ClientOnly from "@/components/ui/ClientOnly";
-import type { Reminder, ReminderScope, User } from "@/types";
+import type { Reminder, ReminderScope, ReminderPriority, User } from "@/types";
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── Priority config ───────────────────────────────────────────────────────────
 
-function formatDueDate(iso: string): string {
-  const d = new Date(iso);
-  const now = new Date();
-  const todayStr = now.toDateString();
-  const tmrw = new Date(now);
-  tmrw.setDate(tmrw.getDate() + 1);
-  const timeStr = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
-  if (d.toDateString() === todayStr) return `Today, ${timeStr}`;
-  if (d.toDateString() === tmrw.toDateString()) return `Tomorrow, ${timeStr}`;
-  const daysDiff = Math.round((d.getTime() - now.getTime()) / 86400000);
-  if (daysDiff > 0 && daysDiff < 7) {
-    return d.toLocaleDateString("en-US", { weekday: "short" }) + `, ${timeStr}`;
-  }
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-}
+const PRIORITY_CONFIG: Record<ReminderPriority, { label: string; color: string }> = {
+  high:   { label: "High",   color: "#EF4444" },
+  medium: { label: "Medium", color: "#F97316" },
+  low:    { label: "Low",    color: "var(--color-secondary)" },
+};
 
-function isOverdue(iso?: string): boolean {
-  if (!iso) return false;
-  return new Date(iso) < new Date();
-}
+const PRIORITY_RANK: Record<string, number> = { high: 0, medium: 1, low: 2 };
 
-// ── Scope visual config ───────────────────────────────────────────────────────
+// ── Scope config ──────────────────────────────────────────────────────────────
 
 const SCOPE_CONFIG: Record<ReminderScope, { label: string; border: string; badgeBg: string; badgeText: string }> = {
   personal: {
@@ -48,49 +35,196 @@ const SCOPE_CONFIG: Record<ReminderScope, { label: string; border: string; badge
   },
 };
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function formatDueDate(iso: string): string {
+  const d = new Date(iso);
+  const now = new Date();
+  const tmrw = new Date(now);
+  tmrw.setDate(tmrw.getDate() + 1);
+  const timeStr = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  if (d.toDateString() === now.toDateString()) return `Today, ${timeStr}`;
+  if (d.toDateString() === tmrw.toDateString()) return `Tomorrow, ${timeStr}`;
+  const daysDiff = Math.round((d.getTime() - now.getTime()) / 86400000);
+  if (daysDiff > 0 && daysDiff < 7) {
+    return d.toLocaleDateString("en-US", { weekday: "short" }) + `, ${timeStr}`;
+  }
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function isOverdue(iso?: string): boolean {
+  if (!iso) return false;
+  return new Date(iso) < new Date();
+}
+
+function sortReminders(list: Reminder[]): Reminder[] {
+  return [...list].sort((a, b) => {
+    const pa = PRIORITY_RANK[a.priority ?? "low"] ?? 2;
+    const pb = PRIORITY_RANK[b.priority ?? "low"] ?? 2;
+    if (pa !== pb) return pa - pb;
+    if (!a.dueAt && !b.dueAt) return 0;
+    if (!a.dueAt) return 1;
+    if (!b.dueAt) return -1;
+    return new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime();
+  });
+}
+
+// ── Flag button with priority picker ─────────────────────────────────────────
+
+function FlagButton({
+  priority,
+  canEdit,
+  onChange,
+}: {
+  priority?: ReminderPriority;
+  canEdit: boolean;
+  onChange: (p: ReminderPriority | undefined) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [open]);
+
+  const flagColor = priority ? PRIORITY_CONFIG[priority].color : "var(--color-border)";
+  const flagFilled = priority === "high" || priority === "medium";
+
+  return (
+    <div ref={ref} style={{ position: "relative", flexShrink: 0 }}>
+      <button
+        onClick={canEdit ? () => setOpen((o) => !o) : undefined}
+        aria-label={`Flag: ${priority ?? "none"}`}
+        style={{
+          background: "none",
+          border: "none",
+          cursor: canEdit ? "pointer" : "default",
+          padding: "2px 3px",
+          display: "flex",
+          alignItems: "center",
+        }}
+      >
+        <Flag
+          size={13}
+          color={flagColor}
+          fill={flagFilled ? flagColor : "none"}
+          strokeWidth={flagFilled ? 0 : 1.75}
+        />
+      </button>
+
+      {open && (
+        <div
+          style={{
+            position: "absolute",
+            left: 0,
+            top: "calc(100% + 4px)",
+            backgroundColor: "var(--color-surface)",
+            border: "1px solid var(--color-border)",
+            borderRadius: 8,
+            boxShadow: "0 4px 16px rgba(0,0,0,0.12)",
+            zIndex: 60,
+            minWidth: 118,
+            overflow: "hidden",
+          }}
+        >
+          {(["high", "medium", "low"] as ReminderPriority[]).map((p) => {
+            const cfg = PRIORITY_CONFIG[p];
+            return (
+              <button
+                key={p}
+                onClick={() => { onChange(p); setOpen(false); }}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  width: "100%",
+                  padding: "8px 12px",
+                  background: priority === p ? "rgba(27,46,75,0.05)" : "none",
+                  border: "none",
+                  cursor: "pointer",
+                  fontSize: 13,
+                  color: "var(--color-body)",
+                  fontFamily: "var(--font-roboto)",
+                  textAlign: "left",
+                }}
+              >
+                <Flag size={11} color={cfg.color} fill={p !== "low" ? cfg.color : "none"} strokeWidth={p === "low" ? 1.75 : 0} />
+                {cfg.label}
+              </button>
+            );
+          })}
+          {priority && (
+            <button
+              onClick={() => { onChange(undefined); setOpen(false); }}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                width: "100%",
+                padding: "7px 12px",
+                background: "none",
+                border: "none",
+                borderTop: "1px solid var(--color-border)",
+                cursor: "pointer",
+                fontSize: 12,
+                color: "var(--color-secondary)",
+                fontFamily: "var(--font-roboto)",
+              }}
+            >
+              <X size={11} /> Remove flag
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Completion circle ─────────────────────────────────────────────────────────
 
 function CompletionCircle({
   disabled,
-  done,
   completing,
   onClick,
 }: {
   disabled: boolean;
-  done: boolean;
   completing: boolean;
   onClick: () => void;
 }) {
-  const filled = done || completing;
   return (
     <button
       onClick={onClick}
       disabled={disabled}
-      aria-label={done ? "Completed" : "Mark as complete"}
+      aria-label="Mark as complete"
       style={{
         width: 20,
         height: 20,
         borderRadius: "50%",
-        border: `2px solid ${filled ? "var(--color-navy)" : "var(--color-border)"}`,
-        backgroundColor: filled ? "var(--color-navy)" : "transparent",
+        border: `2px solid ${completing ? "var(--color-navy)" : "var(--color-border)"}`,
+        backgroundColor: completing ? "var(--color-navy)" : "transparent",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
         cursor: disabled ? "default" : "pointer",
         flexShrink: 0,
-        transition: "background-color 0.15s, border-color 0.15s",
-        opacity: disabled ? 0.4 : 1,
+        transition: "background-color 0.12s, border-color 0.12s",
+        opacity: disabled ? 0.35 : 1,
       }}
       onMouseEnter={(e) => {
-        if (!filled && !disabled)
+        if (!completing && !disabled)
           (e.currentTarget as HTMLButtonElement).style.backgroundColor = "rgba(27,46,75,0.12)";
       }}
       onMouseLeave={(e) => {
-        if (!filled && !disabled)
+        if (!completing && !disabled)
           (e.currentTarget as HTMLButtonElement).style.backgroundColor = "transparent";
       }}
     >
-      {filled && <Check size={10} color="#fff" strokeWidth={3} />}
+      {completing && <Check size={10} color="#fff" strokeWidth={3} />}
     </button>
   );
 }
@@ -103,125 +237,139 @@ function ReminderRow({
   teamMembers,
   onComplete,
   onDelete,
-  done,
+  onPriorityChange,
 }: {
   reminder: Reminder;
   currentUserId: string;
   teamMembers: User[];
   onComplete: (id: string) => void;
   onDelete: (id: string) => void;
-  done: boolean;
+  onPriorityChange: (id: string, p: ReminderPriority | undefined) => void;
 }) {
   const [completing, setCompleting] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current); }, []);
+
   const scope = reminder.scope ?? "personal";
   const cfg = SCOPE_CONFIG[scope];
-  const overdue = !done && isOverdue(reminder.dueAt);
+  const overdue = isOverdue(reminder.dueAt);
   const isCreator = reminder.userId === currentUserId;
   const canCheck = scope === "lab" || isCreator;
   const creator = scope === "lab" ? teamMembers.find((m) => m.id === reminder.userId) : undefined;
 
-  function handleComplete() {
-    if (!canCheck || done) return;
+  function handleCheck() {
+    if (!canCheck || completing) return;
     setCompleting(true);
-    setTimeout(() => onComplete(reminder.id), 360);
+    timerRef.current = setTimeout(() => onComplete(reminder.id), 340);
   }
 
   return (
     <div
       style={{
+        maxHeight: completing ? 0 : 120,
         opacity: completing ? 0 : 1,
-        transition: "opacity 0.36s ease",
-        borderBottom: "1px solid var(--color-border)",
-        borderLeft: `3px solid ${cfg.border}`,
-        display: "flex",
-        alignItems: "center",
-        gap: 10,
-        padding: "10px 14px 10px 12px",
-        minHeight: 46,
+        overflow: "hidden",
+        transform: completing ? "translateY(-3px)" : "translateY(0)",
+        transition: completing
+          ? "opacity 0.22s ease, max-height 0.38s ease 0.08s, transform 0.22s ease"
+          : "none",
+        pointerEvents: completing ? "none" : undefined,
       }}
     >
-      <CompletionCircle
-        disabled={!canCheck || done}
-        done={done}
-        completing={completing}
-        onClick={handleComplete}
-      />
-
-      {/* Title */}
-      <span
+      <div
         style={{
-          flex: 1,
-          fontSize: 14,
-          color: done ? "var(--color-secondary)" : "var(--color-body)",
-          textDecoration: done ? "line-through" : "none",
-          lineHeight: 1.4,
-          fontFamily: "var(--font-roboto)",
-          minWidth: 0,
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap",
+          borderBottom: "1px solid var(--color-border)",
+          borderLeft: `3px solid ${cfg.border}`,
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          padding: "10px 14px 10px 11px",
+          minHeight: 46,
         }}
       >
-        {reminder.title}
-      </span>
+        <CompletionCircle
+          disabled={!canCheck}
+          completing={completing}
+          onClick={handleCheck}
+        />
 
-      {/* Trailing meta */}
-      <div className="flex items-center gap-2 shrink-0">
-        {/* Scope badge */}
+        {/* Flag */}
+        <FlagButton
+          priority={reminder.priority}
+          canEdit={isCreator}
+          onChange={(p) => onPriorityChange(reminder.id, p)}
+        />
+
+        {/* Title */}
         <span
           style={{
-            fontSize: 10,
-            fontWeight: 600,
-            letterSpacing: "0.03em",
-            padding: "2px 7px",
-            borderRadius: 20,
-            backgroundColor: cfg.badgeBg,
-            color: cfg.badgeText,
+            flex: 1,
+            fontSize: 14,
+            color: "var(--color-body)",
+            lineHeight: 1.4,
+            fontFamily: "var(--font-roboto)",
+            minWidth: 0,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
             whiteSpace: "nowrap",
           }}
         >
-          {cfg.label}
+          {reminder.title}
         </span>
 
-        {/* Lab: creator avatar */}
-        {creator && !done && (
-          <Avatar user={creator} size={18} />
-        )}
-
-        {/* Due date */}
-        {reminder.dueAt && (
+        {/* Trailing meta */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
           <span
             style={{
-              fontSize: 11,
-              color: overdue ? "var(--color-error)" : "var(--color-secondary)",
-              fontWeight: overdue ? 600 : 400,
+              fontSize: 10,
+              fontWeight: 600,
+              letterSpacing: "0.03em",
+              padding: "2px 7px",
+              borderRadius: 20,
+              backgroundColor: cfg.badgeBg,
+              color: cfg.badgeText,
               whiteSpace: "nowrap",
             }}
           >
-            {formatDueDate(reminder.dueAt)}
+            {cfg.label}
           </span>
-        )}
 
-        {/* Delete — creator only */}
-        {isCreator && !done && (
-          <button
-            onClick={() => onDelete(reminder.id)}
-            aria-label="Delete reminder"
-            style={{
-              background: "none",
-              border: "none",
-              cursor: "pointer",
-              padding: 2,
-              display: "flex",
-              opacity: 0.4,
-              flexShrink: 0,
-            }}
-            onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.opacity = "1"; }}
-            onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.opacity = "0.4"; }}
-          >
-            <Trash2 size={13} color="var(--color-secondary)" />
-          </button>
-        )}
+          {creator && <Avatar user={creator} size={18} />}
+
+          {reminder.dueAt && (
+            <span
+              style={{
+                fontSize: 11,
+                color: overdue ? "var(--color-error)" : "var(--color-secondary)",
+                fontWeight: overdue ? 600 : 400,
+                whiteSpace: "nowrap",
+              }}
+            >
+              {formatDueDate(reminder.dueAt)}
+            </span>
+          )}
+
+          {isCreator && (
+            <button
+              onClick={() => onDelete(reminder.id)}
+              aria-label="Delete reminder"
+              style={{
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                padding: 2,
+                display: "flex",
+                opacity: 0.35,
+                flexShrink: 0,
+              }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.opacity = "1"; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.opacity = "0.35"; }}
+            >
+              <Trash2 size={13} color="var(--color-secondary)" />
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -246,25 +394,23 @@ function AddReminderForm({
   onAdd,
   onClose,
 }: {
-  onAdd: (title: string, scope: ReminderScope, dueAt?: string) => void;
+  onAdd: (title: string, scope: ReminderScope, priority?: ReminderPriority, dueAt?: string) => void;
   onClose: () => void;
 }) {
   const [title, setTitle] = useState("");
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
   const [scope, setScope] = useState<ReminderScope>("personal");
+  const [priority, setPriority] = useState<ReminderPriority | undefined>();
   const [error, setError] = useState("");
 
   function handleSubmit() {
     if (!title.trim()) { setError("Please enter a title."); return; }
     let dueAt: string | undefined;
     if (date) {
-      const base = time ? `${date}T${time}` : `${date}T09:00`;
-      dueAt = new Date(base).toISOString();
+      dueAt = new Date(time ? `${date}T${time}` : `${date}T09:00`).toISOString();
     }
-    onAdd(title.trim(), scope, dueAt);
-    setTitle(""); setDate(""); setTime(""); setScope("personal"); setError("");
-    onClose();
+    onAdd(title.trim(), scope, priority, dueAt);
   }
 
   return (
@@ -275,14 +421,14 @@ function AddReminderForm({
         border: "1px solid var(--color-border)",
         borderRadius: 10,
         padding: "16px 16px 14px",
-        boxShadow: "0 2px 8px rgba(27,46,75,0.08)",
+        boxShadow: "0 2px 10px rgba(27,46,75,0.08)",
       }}
     >
-      {/* Scope toggle */}
-      <div className="flex gap-1.5">
+      {/* Scope + Priority row */}
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
         {(["personal", "lab"] as ReminderScope[]).map((s) => {
           const active = scope === s;
-          const cfg = SCOPE_CONFIG[s];
+          const c = SCOPE_CONFIG[s];
           return (
             <button
               key={s}
@@ -292,15 +438,53 @@ function AddReminderForm({
                 paddingInline: 12,
                 borderRadius: 20,
                 border: "1.5px solid",
-                borderColor: active ? cfg.border : "var(--color-border)",
-                backgroundColor: active ? cfg.badgeBg : "transparent",
-                color: active ? cfg.badgeText : "var(--color-secondary)",
+                borderColor: active ? c.border : "var(--color-border)",
+                backgroundColor: active ? c.badgeBg : "transparent",
+                color: active ? c.badgeText : "var(--color-secondary)",
                 fontSize: 12,
                 fontWeight: active ? 700 : 400,
                 cursor: "pointer",
                 fontFamily: "var(--font-roboto)",
               }}
             >
+              {c.label}
+            </button>
+          );
+        })}
+
+        <div style={{ width: 1, height: 18, backgroundColor: "var(--color-border)", margin: "0 2px" }} />
+
+        {(["high", "medium", "low"] as ReminderPriority[]).map((p) => {
+          const cfg = PRIORITY_CONFIG[p];
+          const active = priority === p;
+          return (
+            <button
+              key={p}
+              onClick={() => setPriority(active ? undefined : p)}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 4,
+                height: 28,
+                paddingInline: 10,
+                borderRadius: 20,
+                border: "1.5px solid",
+                borderColor: active ? cfg.color : "var(--color-border)",
+                backgroundColor: active ? `${cfg.color}18` : "transparent",
+                color: active ? cfg.color : "var(--color-secondary)",
+                fontSize: 12,
+                fontWeight: active ? 700 : 400,
+                cursor: "pointer",
+                fontFamily: "var(--font-roboto)",
+              }}
+              title={cfg.label}
+            >
+              <Flag
+                size={11}
+                color={active ? cfg.color : "var(--color-secondary)"}
+                fill={active && p !== "low" ? cfg.color : "none"}
+                strokeWidth={active && p !== "low" ? 0 : 1.75}
+              />
               {cfg.label}
             </button>
           );
@@ -319,8 +503,8 @@ function AddReminderForm({
         onBlur={(e) => { e.currentTarget.style.borderColor = "var(--color-border)"; }}
       />
 
-      {/* Due date + time */}
-      <div className="flex gap-2">
+      {/* Date + time */}
+      <div style={{ display: "flex", gap: 8 }}>
         <input
           type="date"
           value={date}
@@ -337,7 +521,7 @@ function AddReminderForm({
 
       {error && <p style={{ fontSize: 11, color: "var(--color-error)", margin: 0 }}>{error}</p>}
 
-      <div className="flex items-center gap-2">
+      <div style={{ display: "flex", gap: 8 }}>
         <button
           onClick={handleSubmit}
           style={{
@@ -366,7 +550,71 @@ function AddReminderForm({
   );
 }
 
+// ── Undo toast ────────────────────────────────────────────────────────────────
+
+function UndoToast({ title, onUndo }: { title: string; onUndo: () => void }) {
+  return (
+    <>
+      <style>{`
+        @keyframes toastIn {
+          from { opacity: 0; transform: translateX(-50%) translateY(10px); }
+          to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+        }
+      `}</style>
+      <div
+        role="status"
+        aria-live="polite"
+        style={{
+          position: "fixed",
+          bottom: 28,
+          left: "50%",
+          transform: "translateX(-50%)",
+          backgroundColor: "#1B2E4B",
+          color: "#fff",
+          borderRadius: 10,
+          padding: "10px 16px",
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          boxShadow: "0 4px 20px rgba(0,0,0,0.22)",
+          zIndex: 200,
+          fontSize: 13,
+          fontFamily: "var(--font-roboto)",
+          whiteSpace: "nowrap",
+          animation: "toastIn 0.18s ease",
+        }}
+      >
+        <Check size={13} color="rgba(255,255,255,0.7)" />
+        <span style={{ color: "rgba(255,255,255,0.85)", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis" }}>
+          {title}
+        </span>
+        <button
+          onClick={onUndo}
+          style={{
+            background: "rgba(255,255,255,0.18)",
+            border: "none",
+            borderRadius: 6,
+            padding: "4px 10px",
+            color: "#fff",
+            fontWeight: 700,
+            fontSize: 12,
+            cursor: "pointer",
+            fontFamily: "var(--font-roboto)",
+          }}
+        >
+          Undo
+        </button>
+      </div>
+    </>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
+
+interface PendingUndo {
+  reminder: Reminder;
+  timerId: ReturnType<typeof setTimeout>;
+}
 
 export default function RemindersPage() {
   const { projectId, isLoading: projectLoading } = useProject();
@@ -375,8 +623,9 @@ export default function RemindersPage() {
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [pendingUndo, setPendingUndo] = useState<PendingUndo | null>(null);
 
-  // Resolve userId (demo or Supabase)
+  // Resolve userId
   useEffect(() => {
     if (!isSupabaseConfigured) {
       try {
@@ -390,7 +639,7 @@ export default function RemindersPage() {
     });
   }, []);
 
-  // Fetch reminders + team members once auth + project resolved
+  // Fetch reminders + team
   useEffect(() => {
     if (!currentUserId) return;
     if (isSupabaseConfigured && projectLoading) return;
@@ -399,12 +648,10 @@ export default function RemindersPage() {
       setLoading(true);
 
       if (!isSupabaseConfigured) {
-        // Demo: empty list (no static mock data)
         setLoading(false);
         return;
       }
 
-      // Team members (for creator display on lab reminders)
       if (projectId) {
         const { data: members } = await supabase
           .from("team_members")
@@ -432,42 +679,33 @@ export default function RemindersPage() {
         }
       }
 
-      // Fetch: personal reminders (mine) + lab reminders (project)
-      let query = supabase
+      const filter = projectId
+        ? `and(scope.eq.personal,user_id.eq.${currentUserId}),and(scope.eq.lab,project_id.eq.${projectId})`
+        : `scope.eq.personal,user_id.eq.${currentUserId}`;
+
+      const { data, error } = await supabase
         .from("reminders")
         .select("*")
-        .or(
-          projectId
-            ? `and(scope.eq.personal,user_id.eq.${currentUserId}),and(scope.eq.lab,project_id.eq.${projectId})`
-            : `scope.eq.personal,user_id.eq.${currentUserId}`
-        )
+        .or(filter)
+        .eq("completed", false)
         .order("due_at", { ascending: true, nullsFirst: false });
 
-      // Also fetch recently completed (last 7 days)
-      const weekAgo = new Date();
-      weekAgo.setDate(weekAgo.getDate() - 7);
-
-      // We'll fetch both active and recently completed in one query, filter client-side
-      const { data, error } = await query;
-
-      if (error) { console.error("[Reminders] fetch:", error); setLoading(false); return; }
-
+      if (error) { console.error("[Reminders] fetch:", error); }
       if (data) {
         setReminders(
           data.map((row) => ({
             id: row.id as string,
             userId: row.user_id as string,
             projectId: (row.project_id as string) ?? undefined,
-            scope: ((row.scope as ReminderScope) ?? "personal"),
+            scope: (row.scope as ReminderScope) ?? "personal",
             title: row.title as string,
             dueAt: (row.due_at as string) ?? undefined,
             linkedTaskId: (row.linked_task_id as string) ?? undefined,
             linkedEventId: (row.linked_event_id as string) ?? undefined,
-            emailEnabled: row.email_enabled as boolean,
-            sent: row.sent as boolean,
-            completed: (row.completed as boolean) ?? false,
-            completedAt: (row.completed_at as string) ?? undefined,
-            priority: (row.priority as Reminder["priority"]) ?? undefined,
+            emailEnabled: (row.email_enabled as boolean) ?? false,
+            sent: (row.sent as boolean) ?? false,
+            completed: false,
+            priority: (row.priority as ReminderPriority) ?? undefined,
             recurrence: (row.recurrence as Reminder["recurrence"]) ?? undefined,
             createdAt: row.created_at as string,
           }))
@@ -480,25 +718,49 @@ export default function RemindersPage() {
     load();
   }, [currentUserId, projectId, projectLoading]);
 
-  // Sort: active by dueAt (nulls last), then done by completedAt desc
-  const active = reminders
-    .filter((r) => !r.completed)
-    .sort((a, b) => {
-      if (!a.dueAt && !b.dueAt) return 0;
-      if (!a.dueAt) return 1;
-      if (!b.dueAt) return -1;
-      return new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime();
-    });
+  // Commit to DB (delete permanently)
+  function commitDelete(id: string) {
+    if (isSupabaseConfigured) {
+      supabase.from("reminders").delete().eq("id", id)
+        .then(({ error }) => { if (error) console.error("[Reminders] delete:", error); });
+    }
+  }
 
-  // Show recently completed (last 7 days, max 5)
-  const weekAgo = new Date();
-  weekAgo.setDate(weekAgo.getDate() - 7);
-  const done = reminders
-    .filter((r) => r.completed && r.completedAt && new Date(r.completedAt) > weekAgo)
-    .sort((a, b) => new Date(b.completedAt!).getTime() - new Date(a.completedAt!).getTime())
-    .slice(0, 5);
+  function handleComplete(id: string) {
+    const reminder = reminders.find((r) => r.id === id);
+    if (!reminder) return;
 
-  async function handleAdd(title: string, scope: ReminderScope, dueAt?: string) {
+    // Commit any previous undo immediately before starting a new one
+    if (pendingUndo) {
+      clearTimeout(pendingUndo.timerId);
+      commitDelete(pendingUndo.reminder.id);
+    }
+
+    // Remove from list
+    setReminders((prev) => prev.filter((r) => r.id !== id));
+
+    // 4s undo window — then permanently delete from DB
+    const timerId = setTimeout(() => {
+      commitDelete(id);
+      setPendingUndo(null);
+    }, 4000);
+
+    setPendingUndo({ reminder, timerId });
+  }
+
+  function handleUndo() {
+    if (!pendingUndo) return;
+    clearTimeout(pendingUndo.timerId);
+    setReminders((prev) => sortReminders([pendingUndo!.reminder, ...prev]));
+    setPendingUndo(null);
+  }
+
+  async function handleAdd(
+    title: string,
+    scope: ReminderScope,
+    priority?: ReminderPriority,
+    dueAt?: string
+  ) {
     const tempId = crypto.randomUUID();
     const newReminder: Reminder = {
       id: tempId,
@@ -506,13 +768,15 @@ export default function RemindersPage() {
       projectId: scope === "lab" ? (projectId ?? undefined) : undefined,
       scope,
       title,
+      priority,
       dueAt,
       emailEnabled: false,
       sent: false,
       completed: false,
       createdAt: new Date().toISOString(),
     };
-    setReminders((prev) => [newReminder, ...prev]);
+    setReminders((prev) => sortReminders([newReminder, ...prev]));
+    setShowForm(false);
 
     if (isSupabaseConfigured && currentUserId) {
       const { data, error } = await supabase
@@ -522,6 +786,7 @@ export default function RemindersPage() {
           project_id: scope === "lab" ? (projectId ?? null) : null,
           scope,
           title,
+          priority: priority ?? null,
           due_at: dueAt ?? null,
           email_enabled: false,
           sent: false,
@@ -539,66 +804,56 @@ export default function RemindersPage() {
     }
   }
 
-  function handleComplete(id: string) {
-    const now = new Date().toISOString();
+  function handleDelete(id: string) {
+    setReminders((prev) => prev.filter((r) => r.id !== id));
+    commitDelete(id);
+  }
+
+  function handlePriorityChange(id: string, priority: ReminderPriority | undefined) {
     setReminders((prev) =>
-      prev.map((r) => r.id === id ? { ...r, completed: true, completedAt: now } : r)
+      sortReminders(prev.map((r) => r.id === id ? { ...r, priority } : r))
     );
     if (isSupabaseConfigured) {
       supabase.from("reminders")
-        .update({ completed: true, completed_at: now })
+        .update({ priority: priority ?? null })
         .eq("id", id)
-        .then(({ error }) => { if (error) console.error("[Reminders] complete:", error); });
-    }
-  }
-
-  function handleDelete(id: string) {
-    setReminders((prev) => prev.filter((r) => r.id !== id));
-    if (isSupabaseConfigured) {
-      supabase.from("reminders").delete().eq("id", id)
-        .then(({ error }) => { if (error) console.error("[Reminders] delete:", error); });
+        .then(({ error }) => { if (error) console.error("[Reminders] priority:", error); });
     }
   }
 
   if (loading || (isSupabaseConfigured && projectLoading)) {
     return (
-      <div className="flex h-full items-center justify-center" style={{ backgroundColor: "var(--color-canvas)" }}>
+      <div style={{ display: "flex", height: "100%", alignItems: "center", justifyContent: "center", backgroundColor: "var(--color-canvas)" }}>
         <div style={{ width: 28, height: 28, border: "3px solid var(--color-border)", borderTopColor: "var(--color-navy)", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
     );
   }
 
-  const hasAny = active.length > 0 || done.length > 0;
+  const sorted = sortReminders(reminders.filter((r) => !r.completed));
 
   return (
     <ClientOnly>
-      <div className="px-4 md:px-8 py-6 mx-auto" style={{ maxWidth: 620 }}>
+      <div style={{ padding: "24px 32px", maxWidth: 620, margin: "0 auto" }}>
 
         {/* Header */}
-        <div className="flex items-center justify-between mb-6">
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
           <div>
-            <h1
-              style={{
-                fontFamily: "var(--font-lora)",
-                fontWeight: 700,
-                fontSize: 22,
-                color: "var(--color-navy)",
-                margin: 0,
-              }}
-            >
+            <h1 style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 22, color: "var(--color-navy)", margin: 0 }}>
               Reminders
             </h1>
             <p style={{ fontSize: 13, color: "var(--color-secondary)", marginTop: 3 }}>
-              {active.length === 0 ? "Nothing pending." : `${active.length} active`}
+              {sorted.length === 0 ? "Nothing pending." : `${sorted.length} active`}
             </p>
           </div>
 
-          {!showForm && (
+          {!showForm ? (
             <button
               onClick={() => setShowForm(true)}
-              className="flex items-center gap-1.5"
               style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
                 height: 36,
                 paddingInline: 14,
                 backgroundColor: "var(--color-navy)",
@@ -613,9 +868,7 @@ export default function RemindersPage() {
             >
               <Plus size={14} /> Add Reminder
             </button>
-          )}
-
-          {showForm && (
+          ) : (
             <button
               onClick={() => setShowForm(false)}
               style={{ background: "none", border: "none", cursor: "pointer", padding: 4, display: "flex" }}
@@ -628,16 +881,21 @@ export default function RemindersPage() {
 
         {/* Add form */}
         {showForm && (
-          <div className="mb-5">
+          <div style={{ marginBottom: 20 }}>
             <AddReminderForm onAdd={handleAdd} onClose={() => setShowForm(false)} />
           </div>
         )}
 
         {/* Empty state */}
-        {!hasAny && (
+        {sorted.length === 0 && (
           <div
-            className="flex flex-col items-center justify-center py-16 text-center"
             style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: "64px 0",
+              textAlign: "center",
               backgroundColor: "var(--color-surface)",
               border: "1px solid var(--color-border)",
               borderRadius: 10,
@@ -653,8 +911,8 @@ export default function RemindersPage() {
           </div>
         )}
 
-        {/* Reminder list */}
-        {hasAny && (
+        {/* List */}
+        {sorted.length > 0 && (
           <div
             style={{
               backgroundColor: "var(--color-surface)",
@@ -663,7 +921,7 @@ export default function RemindersPage() {
               overflow: "hidden",
             }}
           >
-            {active.map((reminder) => (
+            {sorted.map((reminder) => (
               <ReminderRow
                 key={reminder.id}
                 reminder={reminder}
@@ -671,45 +929,34 @@ export default function RemindersPage() {
                 teamMembers={teamMembers}
                 onComplete={handleComplete}
                 onDelete={handleDelete}
-                done={false}
+                onPriorityChange={handlePriorityChange}
               />
             ))}
-
-            {/* Done section — at the bottom */}
-            {done.length > 0 && (
-              <>
-                {active.length > 0 && (
-                  <div style={{ height: 1, backgroundColor: "var(--color-border)", opacity: 0.5 }} />
-                )}
-                {done.map((reminder) => (
-                  <ReminderRow
-                    key={reminder.id}
-                    reminder={reminder}
-                    currentUserId={currentUserId}
-                    teamMembers={teamMembers}
-                    onComplete={handleComplete}
-                    onDelete={handleDelete}
-                    done
-                  />
-                ))}
-              </>
-            )}
           </div>
         )}
 
         {/* Scope legend */}
-        <div className="flex items-center gap-4 mt-4 px-1 flex-wrap">
+        <div style={{ display: "flex", alignItems: "center", gap: 16, marginTop: 16, flexWrap: "wrap" }}>
           {(["personal", "lab"] as ReminderScope[]).map((s) => {
-            const cfg = SCOPE_CONFIG[s];
+            const c = SCOPE_CONFIG[s];
             return (
-              <span key={s} className="flex items-center gap-1.5" style={{ fontSize: 11, color: "var(--color-secondary)" }}>
-                <span style={{ display: "inline-block", width: 3, height: 12, borderRadius: 2, backgroundColor: cfg.border }} />
-                {cfg.label}
+              <span key={s} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--color-secondary)" }}>
+                <span style={{ display: "inline-block", width: 3, height: 12, borderRadius: 2, backgroundColor: c.border }} />
+                {c.label}
               </span>
             );
           })}
+          <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--color-secondary)" }}>
+            <Flag size={10} color="#EF4444" fill="#EF4444" strokeWidth={0} />
+            High priority
+          </span>
         </div>
       </div>
+
+      {/* Undo toast */}
+      {pendingUndo && (
+        <UndoToast title={pendingUndo.reminder.title} onUndo={handleUndo} />
+      )}
     </ClientOnly>
   );
 }

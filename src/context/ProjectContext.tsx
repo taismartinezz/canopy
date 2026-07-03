@@ -59,15 +59,26 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
         const userId = session?.user?.id;
         if (!userId) { setIsLoading(false); return; }
 
-        // ── 1. Lab-level project_id from team_members ──────────────────────
+        // ── 1. Lab-level project_id — try team_members first, then user_profiles ─
         const { data: membership } = await supabase
           .from("team_members")
           .select("project_id")
           .eq("user_id", userId)
           .maybeSingle();
 
-        if (!membership?.project_id) { setIsLoading(false); return; }
-        const pid = membership.project_id as string;
+        let pid = (membership?.project_id as string) ?? null;
+
+        if (!pid) {
+          // Fallback: user may be in user_profiles but not yet in team_members
+          const { data: prof } = await supabase
+            .from("user_profiles")
+            .select("project_id")
+            .eq("id", userId)
+            .maybeSingle();
+          pid = (prof?.project_id as string) ?? null;
+        }
+
+        if (!pid) { setIsLoading(false); return; }
         setProjectId(pid);
 
         // ── 2. Sub-projects this user is a member of ───────────────────────

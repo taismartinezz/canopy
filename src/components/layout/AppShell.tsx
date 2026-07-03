@@ -266,7 +266,19 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         }
         try {
           const stored = localStorage.getItem("canopy_user");
-          if (stored) setProfile(JSON.parse(stored));
+          if (stored) {
+            const u = JSON.parse(stored);
+            setProfile(u);
+            // Show the current user as their own team member in demo mode
+            setTeam([{
+              id: u.id ?? "demo",
+              name: u.name ?? "You",
+              email: u.email ?? "",
+              role: (u.role ?? "researcher") as User["role"],
+              avatarColor: u.avatarColor ?? "#B4D4E3",
+              avatarInitials: computeInitials(u.name ?? "") || (u.avatarInitials ?? "??"),
+            }]);
+          }
         } catch { /* use null profile */ }
         setAuthed(true);
         return;
@@ -347,13 +359,16 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         .maybeSingle();
       if (!canceled) setProject(proj);
 
+      const { data: { session } } = await supabase.auth.getSession();
+      const currentUserId = session?.user?.id ?? null;
+
       const { data: members } = await supabase
         .from("team_members")
         .select("*, user_profiles(name, avatar_color, avatar_initials, avatar_url)")
         .eq("project_id", projectId);
 
-      if (!canceled && members) {
-        setTeam(members.map((row) => {
+      if (!canceled) {
+        const mapped: User[] = (members ?? []).map((row) => {
           const profiles = row.user_profiles as unknown as Record<string, string>[] | null;
           const p = Array.isArray(profiles) ? profiles[0] : (profiles as Record<string, string> | null);
           return {
@@ -365,7 +380,30 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             avatarInitials: computeInitials(p?.name ?? "") || (p?.avatar_initials ?? "??"),
             avatarUrl: p?.avatar_url ?? undefined,
           };
-        }));
+        });
+
+        // Guarantee the current user always appears, even if missing from team_members
+        if (currentUserId && !mapped.some((m) => m.id === currentUserId)) {
+          const { data: myProf } = await supabase
+            .from("user_profiles")
+            .select("name, role, avatar_color, avatar_initials, avatar_url")
+            .eq("id", currentUserId)
+            .maybeSingle();
+          if (myProf && !canceled) {
+            const name = (myProf.name as string) ?? "You";
+            mapped.unshift({
+              id: currentUserId,
+              name,
+              email: "",
+              role: (myProf.role as User["role"]) ?? "researcher",
+              avatarColor: (myProf.avatar_color as string) ?? "#B4D4E3",
+              avatarInitials: computeInitials(name) || ((myProf.avatar_initials as string) ?? "??"),
+              avatarUrl: (myProf.avatar_url as string) ?? undefined,
+            });
+          }
+        }
+
+        setTeam(mapped);
       }
     }
 
