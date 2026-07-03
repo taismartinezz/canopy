@@ -5,7 +5,8 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard, CheckSquare, BookOpen, BookMarked, Bookmark, Users,
-  Bell, ChevronDown, LogOut, User as UserIcon, Menu, X, Settings, CalendarDays, CircleCheck,
+  Bell, ChevronDown, ChevronLeft, ChevronRight, LogOut, User as UserIcon,
+  Menu, X, Settings, CalendarDays, CircleCheck,
 } from "lucide-react";
 import { computeInitials } from "@/lib/utils";
 import type { User } from "@/types";
@@ -56,6 +57,9 @@ function SidebarBody({
   onClose,
   team,
   currentUserId,
+  collapsed = false,
+  onCollapse,
+  onExpand,
 }: {
   isActive: (href: string) => boolean;
   onLinkClick?: () => void;
@@ -63,24 +67,88 @@ function SidebarBody({
   onClose?: () => void;
   team: User[];
   currentUserId: string;
+  collapsed?: boolean;
+  onCollapse?: () => void;
+  onExpand?: () => void;
 }) {
+  // ── Collapsed: icon-only rail ───────────────────────────────────────────────
+  if (collapsed) {
+    return (
+      <div className="flex flex-col h-full items-center" style={{ backgroundColor: "var(--color-sidebar)" }}>
+        <div className="flex items-center justify-center py-2.5" style={{ borderBottom: "1px solid var(--color-border)", width: "100%" }}>
+          <button
+            onClick={onExpand}
+            className="flex items-center justify-center rounded-lg transition-colors hover:bg-[rgba(27,46,75,0.06)]"
+            style={{ width: 36, height: 36 }}
+            title="Expand sidebar"
+            aria-label="Expand sidebar"
+          >
+            <ChevronRight size={15} color="var(--color-secondary)" />
+          </button>
+        </div>
+        <nav className="flex-1 flex flex-col items-center px-1.5 py-2 gap-0.5 overflow-y-auto" aria-label="Main navigation">
+          {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
+            const active = isActive(href);
+            return (
+              <Link
+                key={href}
+                href={href}
+                onClick={onLinkClick}
+                title={label}
+                aria-label={label}
+                className="flex items-center justify-center rounded-lg"
+                style={{
+                  width: 36,
+                  height: 36,
+                  backgroundColor: active ? "var(--color-navy)" : "transparent",
+                  color: active ? "#fff" : "var(--color-body)",
+                  textDecoration: "none",
+                  transition: "background-color 0.12s",
+                }}
+                aria-current={active ? "page" : undefined}
+                onMouseEnter={(e) => { if (!active) (e.currentTarget as HTMLElement).style.backgroundColor = "rgba(27,46,75,0.06)"; }}
+                onMouseLeave={(e) => { if (!active) (e.currentTarget as HTMLElement).style.backgroundColor = active ? "var(--color-navy)" : "transparent"; }}
+              >
+                <Icon size={17} strokeWidth={active ? 2.5 : 2} />
+              </Link>
+            );
+          })}
+        </nav>
+      </div>
+    );
+  }
+
+  // ── Expanded: full sidebar ──────────────────────────────────────────────────
   return (
     <div className="flex flex-col h-full" style={{ backgroundColor: "var(--color-sidebar)" }}>
-      {/* Wordmark row */}
+      {/* Wordmark row — collapse button appears on sidebar hover */}
       <div className="flex items-center justify-between px-4 pt-4 pb-3">
         <span style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 18, color: "var(--color-navy)" }}>
           Canopy
         </span>
-        {showCloseButton && (
-          <button
-            onClick={onClose}
-            className="flex items-center justify-center rounded-lg transition-colors hover:bg-[rgba(27,46,75,0.06)]"
-            style={{ width: 44, height: 44 }}
-            aria-label="Close navigation"
-          >
-            <X size={18} color="var(--color-secondary)" />
-          </button>
-        )}
+        <div className="flex items-center gap-1">
+          {onCollapse && (
+            <button
+              onClick={onCollapse}
+              className="opacity-0 group-hover/sidenav:opacity-100 transition-opacity flex items-center justify-center rounded-lg hover:bg-[rgba(27,46,75,0.06)]"
+              style={{ width: 32, height: 32 }}
+              title="Collapse sidebar"
+              aria-label="Collapse sidebar"
+            >
+              <ChevronLeft size={15} color="var(--color-secondary)" />
+            </button>
+          )}
+          {showCloseButton && (
+            <button
+              onClick={onClose}
+              className="flex items-center justify-center rounded-lg transition-colors hover:bg-[rgba(27,46,75,0.06)]"
+              style={{ width: 44, height: 44 }}
+              aria-label="Close navigation"
+            >
+              <X size={18} color="var(--color-secondary)" />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Nav items */}
@@ -242,6 +310,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { projectId } = useProject();
+  const [navCollapsed, setNavCollapsed] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -411,6 +480,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     return () => { canceled = true; };
   }, [projectId]);
 
+  useEffect(() => {
+    setNavCollapsed(localStorage.getItem("canopy_nav_collapsed") === "true");
+  }, []);
+
   useEffect(() => { setMobileNavOpen(false); setNotifOpen(false); setProfileOpen(false); }, [pathname]);
 
   useEffect(() => {
@@ -473,12 +546,25 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </button>
       </div>
 
-      {/* ── Layer 2: Nav sidebar — static on desktop, hidden on mobile ── */}
+      {/* ── Layer 2: Nav sidebar — animates between 52px rail and 210px full ── */}
       <div
-        className="hidden md:flex flex-col shrink-0"
-        style={{ width: 210, borderRight: "1px solid var(--color-border)", position: "relative", zIndex: 35 }}
+        className="hidden md:flex flex-col shrink-0 overflow-hidden group/sidenav"
+        style={{
+          width: navCollapsed ? 52 : 210,
+          borderRight: "1px solid var(--color-border)",
+          position: "relative",
+          zIndex: 35,
+          transition: "width 200ms ease",
+        }}
       >
-        <SidebarBody isActive={isActive} team={team} currentUserId={profile?.id ?? ""} />
+        <SidebarBody
+          isActive={isActive}
+          team={team}
+          currentUserId={profile?.id ?? ""}
+          collapsed={navCollapsed}
+          onCollapse={() => { setNavCollapsed(true); localStorage.setItem("canopy_nav_collapsed", "true"); }}
+          onExpand={() => { setNavCollapsed(false); localStorage.setItem("canopy_nav_collapsed", "false"); }}
+        />
       </div>
 
       {/* ── Mobile nav drawer — fixed overlay, slide in/out ── */}

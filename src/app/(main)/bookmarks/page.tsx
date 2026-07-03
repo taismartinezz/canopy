@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import {
   Plus, ExternalLink, Trash2, Bookmark, X, Check,
   FileText, BookOpen, FlaskConical, ClipboardList, Link2, Code2, Play, Table,
+  ChevronLeft, ChevronRight,
 } from "lucide-react";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { useProject } from "@/context/ProjectContext";
@@ -451,6 +452,7 @@ export default function BookmarksPage() {
   const [showForm, setShowForm] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [activeCategory, setActiveCategory] = useState<FilterCategory>("all");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   useEffect(() => {
     if (!isSupabaseConfigured) {
@@ -569,18 +571,22 @@ export default function BookmarksPage() {
   return (
     <div style={{ display: "flex", height: "100%", overflow: "hidden", fontFamily: "var(--font-roboto)" }}>
 
-      {/* ── Left sidebar ────────────────────────────────────────────────────── */}
-      <div style={{
-        width: 220,
-        flexShrink: 0,
-        backgroundColor: "var(--color-sidebar)",
-        display: "flex",
-        flexDirection: "column",
-        overflowY: "auto",
-        borderRight: "1px solid var(--color-border)",
-      }}>
+      {/* ── Left sidebar — desktop only, animated ───────────────────────────── */}
+      <div
+        className="hidden md:flex group/bkpanel"
+        style={{
+          width: sidebarCollapsed ? 0 : 220,
+          flexShrink: 0,
+          backgroundColor: "var(--color-sidebar)",
+          flexDirection: "column",
+          overflowY: "auto",
+          borderRight: sidebarCollapsed ? "none" : "1px solid var(--color-border)",
+          overflow: "hidden",
+          transition: "width 200ms ease",
+        }}
+      >
         {/* Sidebar header */}
-        <div style={{ padding: "24px 16px 14px" }}>
+        <div style={{ padding: "24px 16px 14px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <h2 style={{
             fontFamily: "var(--font-lora)",
             fontWeight: 700,
@@ -591,13 +597,22 @@ export default function BookmarksPage() {
           }}>
             Bookmarks
           </h2>
+          <button
+            onClick={() => setSidebarCollapsed(true)}
+            className="opacity-0 group-hover/bkpanel:opacity-100 transition-opacity flex items-center justify-center rounded-lg hover:bg-[rgba(27,46,75,0.06)]"
+            style={{ width: 32, height: 32, border: "none", background: "none", cursor: "pointer", flexShrink: 0 }}
+            title="Collapse sidebar"
+            aria-label="Collapse sidebar"
+          >
+            <ChevronLeft size={15} color="var(--color-secondary)" />
+          </button>
         </div>
 
         {/* Thin divider */}
         <div style={{ height: 1, backgroundColor: "var(--color-border)", marginBottom: 8, marginLeft: 16, marginRight: 16 }} />
 
         {/* Category list */}
-        <nav style={{ padding: "0 8px 16px", flex: 1 }} aria-label="Filter bookmarks by type">
+        <nav style={{ padding: "0 8px 16px", flex: 1, minWidth: 220 }} aria-label="Filter bookmarks by type">
           {/* All */}
           <SidebarRow
             icon={<Bookmark size={14} color={activeCategory === "all" ? "var(--color-navy)" : "var(--color-secondary)"} />}
@@ -627,8 +642,50 @@ export default function BookmarksPage() {
         </nav>
       </div>
 
+      {/* Peek strip — desktop only, when sidebar is collapsed */}
+      {sidebarCollapsed && (
+        <button
+          className="hidden md:flex shrink-0 items-center justify-center transition-colors hover:bg-[rgba(27,46,75,0.04)]"
+          style={{ width: 16, border: "none", borderRight: "1px solid var(--color-border)", backgroundColor: "var(--color-sidebar)", cursor: "pointer", padding: 0 }}
+          onClick={() => setSidebarCollapsed(false)}
+          title="Expand sidebar"
+          aria-label="Expand sidebar"
+        >
+          <ChevronRight size={10} color="var(--color-secondary)" />
+        </button>
+      )}
+
       {/* ── Right content area ───────────────────────────────────────────────── */}
       <div style={{ flex: 1, overflowY: "auto", backgroundColor: "var(--color-canvas)" }}>
+
+        {/* Mobile category filter row — replaces sidebar on small screens */}
+        <div className="md:hidden flex items-center gap-2 px-4 pt-4 pb-2 overflow-x-auto" style={{ borderBottom: "1px solid var(--color-border)", scrollbarWidth: "none" }}>
+          {[{ type: "all" as FilterCategory, label: "All", count: bookmarks.length }, ...categoryCounts.map(({ type, count }) => ({ type: type as FilterCategory, label: TYPE_CONFIG[type].label, count }))].map(({ type, label, count }) => {
+            const active = activeCategory === type;
+            const cfg = type !== "all" ? TYPE_CONFIG[type as BookmarkType] : null;
+            return (
+              <button
+                key={type}
+                onClick={() => setActiveCategory(type)}
+                style={{
+                  flexShrink: 0,
+                  fontSize: 12,
+                  fontWeight: active ? 700 : 500,
+                  padding: "5px 12px",
+                  borderRadius: 20,
+                  border: `1px solid ${active ? (cfg?.color ?? "var(--color-navy)") : "var(--color-border)"}`,
+                  backgroundColor: active ? (cfg?.bg ?? "rgba(27,46,75,0.08)") : "transparent",
+                  color: active ? (cfg?.color ?? "var(--color-navy)") : "var(--color-secondary)",
+                  cursor: "pointer",
+                  whiteSpace: "nowrap",
+                  fontFamily: "var(--font-roboto)",
+                }}
+              >
+                {label} {count}
+              </button>
+            );
+          })}
+        </div>
         <div style={{ padding: "28px 28px 40px" }}>
 
           {/* Content header */}

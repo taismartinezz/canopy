@@ -1,12 +1,39 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import {
   CHECKIN_QUESTIONS, CHECKIN_LABELS, CHECKIN_COLORS,
 } from "@/lib/mock-data";
 import { supabase } from "@/lib/supabase";
-import type { JournalEntry, CheckinResponse, PromptCategory } from "@/types";
-import { Lock, Mic, MicOff, HelpingHand, Search, Plus, X, Phone, ChevronLeft, Users, Building2 } from "lucide-react";
+import type { JournalEntry, CheckinResponse } from "@/types";
+import {
+  Lock, Mic, MicOff, HelpingHand, Search, Plus, X, Phone,
+  ChevronLeft, ChevronRight, Users, Building2, Loader2, CalendarDays, ChevronDown,
+} from "lucide-react";
+
+// SpeechRecognition types (not yet in all TypeScript DOM lib versions)
+interface SpeechRecognitionEvent extends Event {
+  readonly resultIndex: number;
+  readonly results: SpeechRecognitionResultList;
+}
+
+interface ISpeechRecognition extends EventTarget {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  onresult: ((event: SpeechRecognitionEvent) => void) | null;
+  onend: (() => void) | null;
+  onerror: (() => void) | null;
+  start(): void;
+  stop(): void;
+}
+
+declare global {
+  interface Window {
+    SpeechRecognition: new () => ISpeechRecognition;
+    webkitSpeechRecognition: new () => ISpeechRecognition;
+  }
+}
 
 // ── Preset prompts for the picker ─────────────────────────────────────────────
 
@@ -35,25 +62,44 @@ function formatFullDate(isoDate: string) {
 
 function getTodayISO() { return new Date().toISOString().split("T")[0]; }
 
-const DRAFT_KEY    = "canopy_journal_draft";
-const DISMISS_KEY  = "canopy_prompt_dismissed";
+// Returns "Monday, July 14" style label for 7 days after lastDate
+function nextCheckinDay(lastDate: string) {
+  const d = new Date(lastDate + "T00:00:00");
+  d.setDate(d.getDate() + 7);
+  return d.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+}
 
-const CATEGORY_LABELS: Record<PromptCategory, string> = {
-  emotional_processing: "Emotional Processing",
-  research_reflection:  "Research Reflection",
-  team_support:         "Team & Support",
-  boundaries_workload:  "Boundaries & Workload",
-  looking_forward:      "Looking Forward",
-};
+const DRAFT_KEY = "canopy_journal_draft";
 
 // ── Prompt card ───────────────────────────────────────────────────────────────
 
-function PromptCard({ number, promptText, response, onResponseChange }: {
-  number: number; promptText: string; response: string; onResponseChange: (v: string) => void;
+function PromptCard({
+  number, promptText, response, onResponseChange, readOnly = false,
+}: {
+  number: number;
+  promptText: string;
+  response: string;
+  onResponseChange: (v: string) => void;
+  readOnly?: boolean;
 }) {
-  const [isRecording, setIsRecording] = useState(false);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [isRecording, setIsRecording]               = useState(false);
+  const [hasSpeechSupport, setHasSpeechSupport] = useState<boolean | null>(null);
+  const [interimText, setInterimText]         = useState("");
+  const [grammarState, setGrammarState]       = useState<"idle" | "loading" | "preview">("idle");
+  const [correctedText, setCorrectedText]     = useState("");
+  const [originalText, setOriginalText]       = useState("");
 
+  const textareaRef          = useRef<HTMLTextAreaElement>(null);
+  const recognitionRef       = useRef<ISpeechRecognition | null>(null);
+  const baseResponseRef      = useRef("");   // response at time recording started
+  const sessionTranscriptRef = useRef("");   // finals accumulated this session
+
+  // Detect Web Speech API support client-side only (null = not yet checked)
+  useEffect(() => {
+    setHasSpeechSupport(!!(window.SpeechRecognition || window.webkitSpeechRecognition));
+  }, []);
+
+  // Auto-resize textarea
   useEffect(() => {
     const el = textareaRef.current;
     if (!el) return;
@@ -61,8 +107,85 @@ function PromptCard({ number, promptText, response, onResponseChange }: {
     el.style.height = `${Math.max(96, el.scrollHeight)}px`;
   }, [response]);
 
+  // Stop recognition when component unmounts
+  useEffect(() => {
+    return () => { recognitionRef.current?.stop(); };
+  }, []);
+
+  function startRecording() {
+    if (readOnly) return;
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) return;
+
+    const recognition = new SR();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = "en-US";
+
+    // Snapshot current text so we can append to it
+    baseResponseRef.current = response;
+    sessionTranscriptRef.current = "";
+
+    recognition.onresult = (event) => {
+      let interim = "";
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        if (event.results[i].isFinal) {
+          sessionTranscriptRef.current += event.results[i][0].transcript + " ";
+        } else {
+          interim += event.results[i][0].transcript;
+        }
+      }
+      const base      = baseResponseRef.current;
+      const finalPart = sessionTranscriptRef.current.trimEnd();
+      const combined  = base + (base && finalPart ? " " : "") + finalPart;
+      onResponseChange(combined.trim());
+      setInterimText(interim);
+    };
+
+    recognition.onend = () => {
+      setIsRecording(false);
+      setInterimText("");
+    };
+
+    recognition.onerror = () => {
+      setIsRecording(false);
+      setInterimText("");
+    };
+
+    recognitionRef.current = recognition;
+    recognition.start();
+    setIsRecording(true);
+  }
+
+  function stopRecording() {
+    recognitionRef.current?.stop();
+    recognitionRef.current = null;
+    setIsRecording(false);
+    setInterimText("");
+  }
+
+  async function handleFixGrammar() {
+    if (!response.trim() || grammarState === "loading") return;
+    setOriginalText(response);
+    setGrammarState("loading");
+    try {
+      const res = await fetch("/api/fix-grammar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: response }),
+      });
+      if (!res.ok) throw new Error("failed");
+      const { corrected } = (await res.json()) as { corrected: string };
+      setCorrectedText(corrected);
+      setGrammarState("preview");
+    } catch {
+      setGrammarState("idle");
+    }
+  }
+
   return (
     <div style={{ backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 10, overflow: "hidden" }}>
+      {/* Header row */}
       <div className="flex items-center justify-between px-4 md:px-5 py-4" style={{ borderBottom: "1px solid var(--color-border)" }}>
         <div className="flex items-center gap-3 flex-1 min-w-0">
           <span className="flex items-center justify-center rounded-full shrink-0" style={{ width: 28, height: 28, backgroundColor: "var(--color-navy)", color: "#fff", fontSize: 12, fontWeight: 700 }}>
@@ -72,25 +195,106 @@ function PromptCard({ number, promptText, response, onResponseChange }: {
             {promptText}
           </span>
         </div>
-        <button
-          onClick={() => setIsRecording(!isRecording)}
-          className="relative shrink-0 flex items-center justify-center rounded-full transition-all ml-3"
-          style={{ width: 44, height: 44, backgroundColor: isRecording ? "#C0392B" : "var(--color-navy)", color: "#fff", border: "none", cursor: "pointer" }}
-          aria-label={isRecording ? "Stop recording" : "Voice input"}
-        >
-          {isRecording ? (
-            <><MicOff size={14} /><span className="absolute inset-0 rounded-full animate-pulse-ring" style={{ border: "2px solid #C0392B" }} /></>
-          ) : <Mic size={14} />}
-        </button>
+        {/* Mic button — functional, disabled-with-tooltip, or hidden while SSR */}
+        {!readOnly && hasSpeechSupport === true && (
+          <button
+            onClick={isRecording ? stopRecording : startRecording}
+            className="relative shrink-0 flex items-center justify-center rounded-full transition-all ml-3"
+            style={{ width: 44, height: 44, backgroundColor: isRecording ? "#C0392B" : "var(--color-navy)", color: "#fff", border: "none", cursor: "pointer" }}
+            aria-label={isRecording ? "Stop recording" : "Voice input"}
+          >
+            {isRecording ? (
+              <>
+                <MicOff size={14} />
+                <span className="absolute inset-0 rounded-full animate-pulse-ring" style={{ border: "2px solid #C0392B" }} />
+              </>
+            ) : (
+              <Mic size={14} />
+            )}
+          </button>
+        )}
+        {!readOnly && hasSpeechSupport === false && (
+          <button
+            disabled
+            title="Voice input isn't supported in this browser — try Chrome"
+            aria-label="Voice input isn't supported in this browser — try Chrome"
+            className="shrink-0 flex items-center justify-center rounded-full ml-3"
+            style={{ width: 44, height: 44, backgroundColor: "var(--color-border)", color: "var(--color-secondary)", border: "none", cursor: "not-allowed", opacity: 0.6 }}
+          >
+            <Mic size={14} />
+          </button>
+        )}
       </div>
+
+      {/* Body */}
       <div className="px-4 md:px-5 py-4">
         <textarea
           ref={textareaRef}
           value={response}
-          onChange={(e) => onResponseChange(e.target.value)}
-          placeholder="Take a moment. There's no right answer here."
+          onChange={(e) => { if (!readOnly) onResponseChange(e.target.value); }}
+          readOnly={readOnly}
+          placeholder={readOnly ? "" : "Take a moment. There's no right answer here."}
           style={{ width: "100%", fontSize: 14, color: "var(--color-body)", fontFamily: "var(--font-roboto)", lineHeight: 1.65, backgroundColor: "transparent", border: "none", outline: "none", resize: "none", minHeight: 96, caretColor: "var(--color-navy)" }}
         />
+
+        {/* Listening indicator + interim transcript */}
+        {isRecording && (
+          <div className="flex items-start gap-2 mt-1 flex-wrap">
+            <div className="flex items-center gap-1.5 shrink-0">
+              <span className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: "#C0392B", flexShrink: 0 }} />
+              <span style={{ fontSize: 11, color: "var(--color-secondary)" }}>Listening...</span>
+            </div>
+            {interimText && (
+              <span style={{ fontSize: 13, color: "var(--color-secondary)", fontStyle: "italic", lineHeight: 1.5 }}>
+                {interimText}
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Fix grammar button — visible when there's text, not reading, not in preview */}
+        {!readOnly && response.trim() && grammarState !== "preview" && (
+          <button
+            onClick={handleFixGrammar}
+            disabled={grammarState === "loading"}
+            className="flex items-center gap-1.5 mt-3 transition-opacity hover:opacity-70"
+            style={{ fontSize: 12, color: "var(--color-secondary)", border: "1px solid var(--color-border)", borderRadius: 6, padding: "5px 10px", backgroundColor: "transparent", cursor: grammarState === "loading" ? "default" : "pointer", fontFamily: "var(--font-roboto)" }}
+          >
+            {grammarState === "loading" ? (
+              <><Loader2 size={12} className="animate-spin" /> Fixing...</>
+            ) : (
+              <>✦ Fix grammar</>
+            )}
+          </button>
+        )}
+
+        {/* Grammar diff preview */}
+        {grammarState === "preview" && (
+          <div style={{ marginTop: 12, borderRadius: 8, border: "1px solid var(--color-border)", overflow: "hidden" }}>
+            <div style={{ padding: "10px 14px", backgroundColor: "#FFF5F5", borderBottom: "1px solid var(--color-border)" }}>
+              <span style={{ fontSize: 11, fontWeight: 600, color: "#C0392B", display: "block", marginBottom: 4 }}>Original</span>
+              <span style={{ fontSize: 13, color: "#C0392B", textDecoration: "line-through", lineHeight: 1.6 }}>{originalText}</span>
+            </div>
+            <div style={{ padding: "10px 14px", borderBottom: "1px solid var(--color-border)" }}>
+              <span style={{ fontSize: 11, fontWeight: 600, color: "#2E7D52", display: "block", marginBottom: 4 }}>Corrected</span>
+              <span style={{ fontSize: 13, color: "#2E7D52", lineHeight: 1.6 }}>{correctedText}</span>
+            </div>
+            <div className="flex gap-2 justify-end" style={{ padding: "8px 14px", backgroundColor: "var(--color-canvas)" }}>
+              <button
+                onClick={() => setGrammarState("idle")}
+                style={{ fontSize: 12, color: "var(--color-secondary)", border: "1px solid var(--color-border)", borderRadius: 6, padding: "5px 12px", backgroundColor: "transparent", cursor: "pointer", fontFamily: "var(--font-roboto)" }}
+              >
+                Discard
+              </button>
+              <button
+                onClick={() => { onResponseChange(correctedText); setGrammarState("idle"); }}
+                style={{ fontSize: 12, fontWeight: 700, color: "#fff", backgroundColor: "var(--color-success)", border: "none", borderRadius: 6, padding: "5px 12px", cursor: "pointer", fontFamily: "var(--font-roboto)" }}
+              >
+                Accept
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -253,12 +457,13 @@ function PromptPicker({ usedTexts, onSelect, onClose }: {
 // ── Left panel ────────────────────────────────────────────────────────────────
 
 function JournalSidebarContent({
-  search, setSearch, groupedEntries, selectedEntryId, onSelectEntry, showClose, onClose,
+  search, setSearch, groupedEntries, selectedEntryId, onSelectEntry, showClose, onClose, onCollapse,
 }: {
   search: string; setSearch: (v: string) => void;
   groupedEntries: { today: JournalEntry[]; earlier: JournalEntry[]; older: JournalEntry[] };
   selectedEntryId: string | "new"; onSelectEntry: (id: string | "new") => void;
   showClose?: boolean; onClose?: () => void;
+  onCollapse?: () => void;
 }) {
   return (
     <div className="flex flex-col h-full" style={{ backgroundColor: "var(--color-surface)" }}>
@@ -269,11 +474,24 @@ function JournalSidebarContent({
             {new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
           </p>
         </div>
-        {showClose && (
-          <button onClick={onClose} className="flex items-center justify-center rounded-lg hover:bg-[rgba(27,46,75,0.06)]" style={{ width: 44, height: 44 }} aria-label="Close entries">
-            <X size={16} color="var(--color-secondary)" />
-          </button>
-        )}
+        <div className="flex items-center gap-1">
+          {onCollapse && (
+            <button
+              onClick={onCollapse}
+              className="opacity-0 group-hover/jlist:opacity-100 transition-opacity flex items-center justify-center rounded-lg hover:bg-[rgba(27,46,75,0.06)]"
+              style={{ width: 32, height: 32 }}
+              title="Collapse entry list"
+              aria-label="Collapse entry list"
+            >
+              <ChevronLeft size={15} color="var(--color-secondary)" />
+            </button>
+          )}
+          {showClose && (
+            <button onClick={onClose} className="flex items-center justify-center rounded-lg hover:bg-[rgba(27,46,75,0.06)]" style={{ width: 44, height: 44 }} aria-label="Close entries">
+              <X size={16} color="var(--color-secondary)" />
+            </button>
+          )}
+        </div>
       </div>
       <div className="px-3 py-3" style={{ borderBottom: "1px solid var(--color-border)" }}>
         <button
@@ -342,11 +560,13 @@ export default function JournalPage() {
   const [loadingEntries, setLoadingEntries] = useState(true);
   const [authUserId, setAuthUserId]         = useState("local");
   const [selectedEntryId, setSelectedEntryId] = useState<string | "new">("new");
-  // New prompt state
+  // New entry state
   const [defaultResponse, setDefaultResponse] = useState("");
   const [addedPrompts, setAddedPrompts]     = useState<AddedPrompt[]>([]);
   const [promptPickerOpen, setPromptPickerOpen] = useState(false);
   const [checkinResponses, setCheckinResponses] = useState<CheckinResponse[]>([]);
+  const [checkinExpanded, setCheckinExpanded]   = useState(false);
+  const [listCollapsed, setListCollapsed]       = useState(false);
   const [supportOpen, setSupportOpen]       = useState(false);
   const [search, setSearch]                 = useState("");
   const [entryListOpen, setEntryListOpen]   = useState(false);
@@ -356,11 +576,32 @@ export default function JournalPage() {
   const checkinTotal    = CHECKIN_QUESTIONS.length;
   const checkinAnswered = checkinResponses.length;
 
+  // ── Weekly check-in cadence ───────────────────────────────────────────────
+  // Derive last completion from journal_entries (newest entry with non-empty checkin)
+  const lastCheckinDate = useMemo<string | null>(() => {
+    for (const entry of entries) { // sorted newest-first
+      if (entry.checkin.length > 0) return entry.date;
+    }
+    return null;
+  }, [entries]);
+
+  const daysSinceLastCheckin = useMemo(() => {
+    if (!lastCheckinDate) return Infinity;
+    const last  = new Date(lastCheckinDate + "T00:00:00");
+    const today = new Date(todayISO + "T00:00:00");
+    return Math.floor((today.getTime() - last.getTime()) / (1000 * 60 * 60 * 24));
+  }, [lastCheckinDate, todayISO]);
+
+  const isCheckinDue   = daysSinceLastCheckin >= 7;
+  const showFullCheckin = isCheckinDue || checkinExpanded;
+
+  // ─────────────────────────────────────────────────────────────────────────
+
   const filteredEntries = entries.filter((e) =>
     !search || e.prompts.some((p) => p.response.toLowerCase().includes(search.toLowerCase()))
   );
 
-  const now = new Date();
+  const now     = new Date();
   const weekAgo = new Date(now); weekAgo.setDate(now.getDate() - 7);
 
   const groupedEntries = {
@@ -396,6 +637,7 @@ export default function JournalPage() {
     setDefaultResponse("");
     setAddedPrompts([]);
     setCheckinResponses([]);
+    setCheckinExpanded(false);
     setSelectedEntryId("new");
     setSaveMsg(null);
     localStorage.removeItem(DRAFT_KEY);
@@ -527,8 +769,15 @@ export default function JournalPage() {
         <div className="fixed inset-0 z-20 md:hidden" style={{ backgroundColor: "rgba(0,0,0,0.3)" }} onClick={() => setEntryListOpen(false)} aria-hidden="true" />
       )}
 
-      {/* Desktop sidebar */}
-      <div className="hidden md:flex flex-col shrink-0" style={{ width: 230, borderRight: "1px solid var(--color-border)" }}>
+      {/* Desktop sidebar — animates to 0 in focus mode */}
+      <div
+        className="hidden md:flex flex-col shrink-0 overflow-hidden group/jlist"
+        style={{
+          width: listCollapsed ? 0 : 230,
+          borderRight: listCollapsed ? "none" : "1px solid var(--color-border)",
+          transition: "width 200ms ease",
+        }}
+      >
         <JournalSidebarContent
           search={search} setSearch={setSearch}
           groupedEntries={groupedEntries}
@@ -536,10 +785,24 @@ export default function JournalPage() {
           onSelectEntry={(id) => {
             if (id === "new") { handleNewEntry(); } else { handleSelectEntry(id); }
           }}
+          onCollapse={() => setListCollapsed(true)}
         />
       </div>
 
-      {/* Mobile drawer */}
+      {/* Peek strip — appears at left edge of writing area when list is collapsed */}
+      {listCollapsed && (
+        <button
+          className="hidden md:flex shrink-0 items-center justify-center transition-colors hover:bg-[rgba(27,46,75,0.04)]"
+          style={{ width: 16, border: "none", borderRight: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", cursor: "pointer", padding: 0 }}
+          onClick={() => setListCollapsed(false)}
+          title="Expand entry list"
+          aria-label="Expand entry list"
+        >
+          <ChevronRight size={10} color="var(--color-secondary)" />
+        </button>
+      )}
+
+      {/* Mobile drawer — unchanged */}
       <div className="md:hidden fixed top-0 left-0 h-full z-30" style={{ width: 280, transform: entryListOpen ? "translateX(0)" : "translateX(-100%)", transition: "transform 0.22s ease-out", borderRight: "1px solid var(--color-border)" }} aria-hidden={!entryListOpen}>
         <JournalSidebarContent
           search={search} setSearch={setSearch}
@@ -585,11 +848,10 @@ export default function JournalPage() {
             <div className="space-y-4">
               {isViewingEntry && viewedEntry ? (
                 viewedEntry.prompts.map((pr, i) => (
-                  <PromptCard key={pr.promptId} number={i + 1} promptText={pr.promptText} response={pr.response} onResponseChange={() => {}} />
+                  <PromptCard key={pr.promptId} number={i + 1} promptText={pr.promptText} response={pr.response} onResponseChange={() => {}} readOnly />
                 ))
               ) : (
                 <>
-                  {/* Default prompt */}
                   <PromptCard
                     number={1}
                     promptText={DEFAULT_PROMPT}
@@ -597,7 +859,6 @@ export default function JournalPage() {
                     onResponseChange={setDefaultResponse}
                   />
 
-                  {/* User-added prompts */}
                   {addedPrompts.map((p, i) => (
                     <div key={p.id} className="relative">
                       <PromptCard
@@ -617,7 +878,6 @@ export default function JournalPage() {
                     </div>
                   ))}
 
-                  {/* Add a prompt button */}
                   {addedPrompts.length < PRESET_PROMPTS.length && (
                     <div className="relative" style={{ display: "inline-block" }}>
                       <button
@@ -648,28 +908,80 @@ export default function JournalPage() {
 
           {/* Weekly check-in */}
           <div className="mb-8">
-            <div className="flex items-start justify-between gap-3 mb-4">
-              <div>
-                <h2 style={{ fontFamily: "var(--font-lora)", fontWeight: 600, fontSize: 16, color: "var(--color-body)", margin: 0 }}>Weekly Check-in</h2>
-                <p style={{ fontSize: 12, color: "var(--color-secondary)", marginTop: 4, lineHeight: 1.4 }}>Takes under 2 minutes. Responses are private.</p>
-              </div>
-              <span style={{ fontSize: 11, fontWeight: 600, color: "var(--color-secondary)", whiteSpace: "nowrap", paddingTop: 2 }}>
-                {isViewingEntry && viewedEntry ? viewedEntry.checkin.length : checkinAnswered} / {checkinTotal} answered
-              </span>
-            </div>
-            <div className="space-y-3">
-              {CHECKIN_QUESTIONS.map((q) => {
-                const existing = isViewingEntry && viewedEntry
-                  ? viewedEntry.checkin.find((r) => r.questionId === q.id)
-                  : checkinResponses.find((r) => r.questionId === q.id);
-                return (
-                  <CheckinCard key={q.id} question={q} response={existing} onScore={(score) => {
-                    if (isViewingEntry) return;
-                    setCheckinResponses((prev) => [...prev.filter((r) => r.questionId !== q.id), { questionId: q.id, score }]);
-                  }} />
-                );
-              })}
-            </div>
+            {isViewingEntry && viewedEntry ? (
+              // Past entry: only render if that entry had check-in data
+              viewedEntry.checkin.length > 0 ? (
+                <>
+                  <div className="flex items-start justify-between gap-3 mb-4">
+                    <div>
+                      <h2 style={{ fontFamily: "var(--font-lora)", fontWeight: 600, fontSize: 16, color: "var(--color-body)", margin: 0 }}>Weekly Check-in</h2>
+                      <p style={{ fontSize: 12, color: "var(--color-secondary)", marginTop: 4, lineHeight: 1.4 }}>Responses are private.</p>
+                    </div>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: "var(--color-secondary)", whiteSpace: "nowrap", paddingTop: 2 }}>
+                      {viewedEntry.checkin.length} / {checkinTotal} answered
+                    </span>
+                  </div>
+                  <div className="space-y-3">
+                    {CHECKIN_QUESTIONS.map((q) => {
+                      const existing = viewedEntry.checkin.find((r) => r.questionId === q.id);
+                      return <CheckinCard key={q.id} question={q} response={existing} onScore={() => {}} />;
+                    })}
+                  </div>
+                </>
+              ) : null
+            ) : (
+              // New entry — apply 7-day cadence
+              showFullCheckin ? (
+                <>
+                  <div className="flex items-start justify-between gap-3 mb-4">
+                    <div>
+                      <h2 style={{ fontFamily: "var(--font-lora)", fontWeight: 600, fontSize: 16, color: "var(--color-body)", margin: 0 }}>Weekly Check-in</h2>
+                      <p style={{ fontSize: 12, color: "var(--color-secondary)", marginTop: 4, lineHeight: 1.4 }}>Takes under 2 minutes. Responses are private.</p>
+                    </div>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: "var(--color-secondary)", whiteSpace: "nowrap", paddingTop: 2 }}>
+                      {checkinAnswered} / {checkinTotal} answered
+                    </span>
+                  </div>
+                  <div className="space-y-3">
+                    {CHECKIN_QUESTIONS.map((q) => {
+                      const existing = checkinResponses.find((r) => r.questionId === q.id);
+                      return (
+                        <CheckinCard key={q.id} question={q} response={existing} onScore={(score) => {
+                          setCheckinResponses((prev) => [
+                            ...prev.filter((r) => r.questionId !== q.id),
+                            { questionId: q.id, score },
+                          ]);
+                        }} />
+                      );
+                    })}
+                  </div>
+                  {/* Collapse link when user manually expanded a not-yet-due check-in */}
+                  {!isCheckinDue && checkinExpanded && (
+                    <button
+                      onClick={() => setCheckinExpanded(false)}
+                      style={{ marginTop: 12, fontSize: 12, color: "var(--color-secondary)", border: "none", background: "none", cursor: "pointer", padding: 0, textDecoration: "underline", fontFamily: "var(--font-roboto)" }}
+                    >
+                      Collapse
+                    </button>
+                  )}
+                </>
+              ) : (
+                // Pill/banner when check-in is not yet due
+                <button
+                  onClick={() => setCheckinExpanded(true)}
+                  className="w-full flex items-center gap-3 text-left transition-colors hover:bg-[rgba(27,46,75,0.03)]"
+                  style={{ padding: "10px 14px", borderRadius: 8, border: "1px dashed var(--color-border)", backgroundColor: "var(--color-canvas)", cursor: "pointer", fontFamily: "var(--font-roboto)" }}
+                >
+                  <CalendarDays size={14} color="var(--color-secondary)" style={{ flexShrink: 0 }} />
+                  <span style={{ fontSize: 12, color: "var(--color-secondary)", flex: 1, lineHeight: 1.45 }}>
+                    {lastCheckinDate
+                      ? `Weekly check-in available on ${nextCheckinDay(lastCheckinDate)} · You last completed it ${daysSinceLastCheckin} day${daysSinceLastCheckin === 1 ? "" : "s"} ago`
+                      : "Weekly check-in · Start your first check-in"}
+                  </span>
+                  <ChevronDown size={13} color="var(--color-secondary)" style={{ flexShrink: 0 }} />
+                </button>
+              )
+            )}
           </div>
         </div>
 

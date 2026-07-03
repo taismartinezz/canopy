@@ -8,7 +8,7 @@ import { supabase } from "@/lib/supabase";
 import type { LiteratureItem, ReadStatus, LiteratureType, LibraryScope, LiteratureFile } from "@/types";
 import {
   Plus, Search, Download, FileText, File, X,
-  Tag, Star, ExternalLink, Copy, Check, ChevronLeft,
+  Tag, Star, ExternalLink, Copy, Check, ChevronLeft, ChevronRight,
   Book, BarChart2, GraduationCap,
   Library, ClipboardList, Brain, Microscope, Heart,
 } from "lucide-react";
@@ -265,7 +265,7 @@ function AddItemModal({
 
 function CollectionsSidebar({
   scope, setScope, activeCollection, setActiveCollection, allTags, activeTag, setActiveTag, items,
-  showClose, onClose, onAddItem,
+  showClose, onClose, onAddItem, onCollapse,
 }: {
   scope: LibraryScope; setScope: (s: LibraryScope) => void;
   activeCollection: string; setActiveCollection: (id: string) => void;
@@ -273,6 +273,7 @@ function CollectionsSidebar({
   items: LiteratureItem[];
   showClose?: boolean; onClose?: () => void;
   onAddItem: () => void;
+  onCollapse?: () => void;
 }) {
   const totalRead   = items.filter((i) => i.status === "read").length;
   const totalUnread = items.filter((i) => i.status === "unread").length;
@@ -282,6 +283,17 @@ function CollectionsSidebar({
       <div className="flex items-center justify-between px-4 pt-4 pb-3" style={{ borderBottom: "1px solid var(--color-border)" }}>
         <h2 style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 16, color: "var(--color-navy)", margin: 0 }}>Literature</h2>
         <div className="flex items-center gap-1">
+          {onCollapse && (
+            <button
+              onClick={onCollapse}
+              className="opacity-0 group-hover/litpanel:opacity-100 transition-opacity flex items-center justify-center rounded-lg hover:bg-[rgba(27,46,75,0.06)]"
+              style={{ width: 32, height: 32 }}
+              title="Collapse panel"
+              aria-label="Collapse panel"
+            >
+              <ChevronLeft size={15} color="var(--color-secondary)" />
+            </button>
+          )}
           {showClose && <button onClick={onClose} className="flex items-center justify-center rounded-lg hover:bg-[rgba(27,46,75,0.06)]" style={{ width: 44, height: 44 }} aria-label="Close"><X size={16} color="var(--color-secondary)" /></button>}
           <button onClick={onAddItem} className="flex items-center justify-center rounded-lg hover:bg-[rgba(27,46,75,0.06)]" style={{ width: 44, height: 44 }} aria-label="Add item">
             <Plus size={14} color="var(--color-navy)" />
@@ -659,6 +671,7 @@ export default function LiteraturePage() {
   const [statusFilter, setStatusFilter] = useState<ReadStatus | "all">("all");
   const [activeTag, setActiveTag]       = useState<string | null>(null);
   const [collectionsOpen, setCollectionsOpen] = useState(false);
+  const [panelCollapsed, setPanelCollapsed] = useState(false);
   const [isMobile, setIsMobile]         = useState(false);
   const [addItemOpen, setAddItemOpen]   = useState(false);
   const [projectId, setProjectId]       = useState("");
@@ -763,15 +776,36 @@ export default function LiteraturePage() {
         <div className="fixed inset-0 z-20 md:hidden" style={{ backgroundColor: "rgba(0,0,0,0.3)" }} onClick={() => setCollectionsOpen(false)} aria-hidden="true" />
       )}
 
-      {/* Left panel */}
-      <div className="hidden md:flex flex-col shrink-0" style={{ width: 220, borderRight: "1px solid var(--color-border)" }}>
+      {/* Left panel — animates to 0 when collapsed */}
+      <div
+        className="hidden md:flex flex-col shrink-0 overflow-hidden group/litpanel"
+        style={{
+          width: panelCollapsed ? 0 : 220,
+          borderRight: panelCollapsed ? "none" : "1px solid var(--color-border)",
+          transition: "width 200ms ease",
+        }}
+      >
         <CollectionsSidebar
           scope={scope} setScope={setScope}
           activeCollection={activeCollection} setActiveCollection={setActiveCollection}
           allTags={allTags} activeTag={activeTag} setActiveTag={setActiveTag}
           items={scopedItems} onAddItem={() => setAddItemOpen(true)}
+          onCollapse={() => setPanelCollapsed(true)}
         />
       </div>
+
+      {/* Peek strip — desktop only, when panel is collapsed */}
+      {panelCollapsed && (
+        <button
+          className="hidden md:flex shrink-0 items-center justify-center transition-colors hover:bg-[rgba(27,46,75,0.04)]"
+          style={{ width: 16, border: "none", borderRight: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", cursor: "pointer", padding: 0 }}
+          onClick={() => setPanelCollapsed(false)}
+          title="Expand collections panel"
+          aria-label="Expand collections panel"
+        >
+          <ChevronRight size={10} color="var(--color-secondary)" />
+        </button>
+      )}
 
       {/* Mobile collections drawer */}
       <div className="md:hidden fixed top-0 left-0 h-full z-30"
