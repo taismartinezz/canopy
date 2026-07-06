@@ -16,7 +16,7 @@ import { formatDate, TASKS as MOCK_TASKS, USERS, getStoredProject } from "@/lib/
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import type { Task, TaskStatus, TaskPriority, User, UserRole } from "@/types";
 import Avatar from "@/components/ui/Avatar";
-import Toast from "@/components/ui/Toast";
+import Toast, { showToast } from "@/components/ui/Toast";
 import TaskDetailPanel, {
   STATUS_CONFIG, STATUS_ORDER, PriorityBadge, AssigneeStack,
 } from "@/components/tasks/TaskDetailPanel";
@@ -619,7 +619,13 @@ export default function TasksPage() {
     if (updates.files       !== undefined) db.files        = updates.files;
     if (Object.keys(db).length > 0)
       supabase.from("tasks").update(db).eq("id", taskId)
-        .then(({ error }) => { if (error) console.error("[Tasks] update error:", error); });
+        .then(({ error }) => {
+          if (error) {
+            console.error("[Tasks] update error:", error);
+            if (updates.files !== undefined)
+              showToast(`File save failed: ${error.message}`, "error");
+          }
+        });
   }, []);
 
   const addTask = useCallback((task: Task) => {

@@ -18,9 +18,9 @@ import CanopyLogo from "@/components/ui/CanopyLogo";
 const NAV_ITEMS = [
   { href: "/",            label: "Dashboard",  icon: LayoutDashboard },
   { href: "/tasks",       label: "Tasks",      icon: CheckSquare     },
+  { href: "/journal",     label: "Journal",    icon: BookOpen        },
   { href: "/reminders",   label: "Reminders",  icon: CircleCheck     },
   { href: "/scheduling",  label: "Scheduling", icon: CalendarDays    },
-  { href: "/journal",     label: "Journal",    icon: BookOpen        },
   { href: "/literature",  label: "Literature", icon: BookMarked      },
   { href: "/bookmarks",   label: "Bookmarks",  icon: Bookmark        },
   { href: "/team",        label: "Team",       icon: Users           },

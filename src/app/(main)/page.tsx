@@ -36,10 +36,17 @@ function Card({ children, className = "" }: { children: React.ReactNode; classNa
   );
 }
 
-function CardHeader({ title, action }: { title: string; action?: React.ReactNode }) {
+function CardHeader({ title, action, onTitleClick }: { title: string; action?: React.ReactNode; onTitleClick?: () => void }) {
   return (
     <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: "1px solid var(--color-border)" }}>
-      <h2 style={{ fontFamily: "var(--font-lora)", fontWeight: 600, fontSize: 15, color: "var(--color-navy)", margin: 0 }}>{title}</h2>
+      {onTitleClick ? (
+        <button onClick={onTitleClick} className="hover:opacity-70 transition-opacity"
+          style={{ fontFamily: "var(--font-lora)", fontWeight: 600, fontSize: 15, color: "var(--color-navy)", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+          {title}
+        </button>
+      ) : (
+        <h2 style={{ fontFamily: "var(--font-lora)", fontWeight: 600, fontSize: 15, color: "var(--color-navy)", margin: 0 }}>{title}</h2>
+      )}
       {action}
     </div>
   );
@@ -64,6 +71,7 @@ function UpcomingWidget({
 }) {
   const [events, setEvents] = useState<CalendarEvent[]>(initialEvents);
   const [showForm, setShowForm] = useState(false);
+  const [showAll, setShowAll] = useState(false);
   const [title, setTitle]   = useState("");
   const [date, setDate]     = useState("");
   const [time, setTime]     = useState("");
@@ -72,10 +80,11 @@ function UpcomingWidget({
   // Sync if parent provides new events (Supabase fetch resolves after mount)
   useEffect(() => { setEvents(initialEvents); }, [initialEvents]);
 
-  const upcoming = events
+  const allUpcoming = events
     .filter((e) => new Date(e.date) >= new Date(new Date().toDateString()))
-    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-    .slice(0, 5);
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  const upcoming = showAll ? allUpcoming : allUpcoming.slice(0, 5);
+  const hasMoreUpcoming = allUpcoming.length > 5;
 
   async function handleAdd() {
     if (!title.trim()) { setAddError("Please enter an event title."); return; }
@@ -115,6 +124,7 @@ function UpcomingWidget({
     <Card>
       <CardHeader
         title="Upcoming"
+        onTitleClick={hasMoreUpcoming ? () => setShowAll(v => !v) : undefined}
         action={
           <div className="flex items-center gap-3">
             <Link
@@ -236,6 +246,10 @@ function activitySuffix(row: ActivityRow): string | null {
 // ── Team activity widget ──────────────────────────────────────────────────────
 
 function TeamActivityWidget({ rows, teamMembers }: { rows: ActivityRow[]; teamMembers: User[] }) {
+  const [showAll, setShowAll] = useState(false);
+  const displayed = showAll ? rows : rows.slice(0, 5);
+  const hasMore = rows.length > 5;
+
   if (rows.length === 0) {
     return (
       <Card>
@@ -248,14 +262,14 @@ function TeamActivityWidget({ rows, teamMembers }: { rows: ActivityRow[]; teamMe
   }
   return (
     <Card>
-      <CardHeader title="Team Activity" />
+      <CardHeader title="Team Activity" onTitleClick={hasMore ? () => setShowAll(v => !v) : undefined} />
       <div>
-        {rows.map((row, i) => {
+        {displayed.map((row, i) => {
           const actor = teamMembers.find((u) => u.id === row.user_id);
           const name = actor?.name.split(" ")[0] ?? "Someone";
           const suffix = activitySuffix(row);
           return (
-            <div key={row.id} className="flex items-start gap-3 px-5 py-3" style={{ borderBottom: i < rows.length - 1 ? "1px solid var(--color-border)" : undefined }}>
+            <div key={row.id} className="flex items-start gap-3 px-5 py-3" style={{ borderBottom: i < displayed.length - 1 ? "1px solid var(--color-border)" : undefined }}>
               {actor && <Avatar user={actor} size={26} className="mt-0.5 shrink-0" />}
               <div className="flex-1 min-w-0">
                 <p style={{ fontSize: 13, color: "var(--color-body)", lineHeight: 1.4 }}>
@@ -490,11 +504,14 @@ function PostsCard({
 }) {
   const [posts, setPosts] = useState<DashboardPost[]>(initialPosts);
   const [showForm, setShowForm] = useState(false);
+  const [showAll, setShowAll] = useState(false);
   const [content, setContent] = useState("");
 
   useEffect(() => { setPosts(initialPosts); }, [initialPosts]);
 
   const filtered = posts.filter((p) => p.type === type);
+  const displayed = showAll ? filtered : filtered.slice(0, 5);
+  const hasMore = filtered.length > 5;
 
   const table = type === "lab_win" ? "lab_wins" : "opportunities";
 
@@ -542,6 +559,7 @@ function PostsCard({
     <Card>
       <CardHeader
         title={title}
+        onTitleClick={hasMore ? () => setShowAll(v => !v) : undefined}
         action={
           <button
             onClick={() => setShowForm((s) => !s)}
@@ -556,7 +574,7 @@ function PostsCard({
         {filtered.length === 0 && !showForm && (
           <p style={{ color: "var(--color-secondary)", fontSize: 13 }}>Nothing posted yet. Add the first one.</p>
         )}
-        {filtered.map((post) => {
+        {displayed.map((post) => {
           const author = teamMembers.find((u) => u.id === post.authorId) ?? getUser(post.authorId);
           return (
             <div key={post.id} className="flex gap-3">
