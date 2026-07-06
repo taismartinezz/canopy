@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import {
   Calendar, Users, Send, Clock, Check, X, Plus,
-  Lock, Trash2, ChevronLeft, ChevronRight,
+  Lock, Trash2, ChevronLeft, ChevronRight, AlertCircle,
 } from "lucide-react";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { computeInitials } from "@/lib/utils";
@@ -106,16 +106,96 @@ function EmptyState({ icon: Icon, heading, body, action }: {
 
 // ── Tab: Calendar ─────────────────────────────────────────────────────────────
 
+type CalView = "day" | "week" | "month" | "year";
+
+const HOUR_H = 56;
+const DAY_START_H = 7;
+const DAY_END_H = 22;
+const TOTAL_HOURS = DAY_END_H - DAY_START_H;
 const MONTH_NAMES_CAL = ["January","February","March","April","May","June","July","August","September","October","November","December"];
-const DAY_HEADERS = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+const DAY_HDR = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+
+interface CalEvent {
+  id: string;
+  title: string;
+  date: string;
+  startMin: number | null;
+  endMin: number | null;
+  color: string;
+  bgColor: string;
+  type: "lab" | "personal" | "meeting";
+  isScheduleEvent: boolean;
+  ownerId: string;
+}
+
+interface LayoutEvent extends CalEvent {
+  col: number;
+  totalCols: number;
+}
+
+function toCalEvents(events: ScheduleEvent[], proposals: MeetingProposal[]): CalEvent[] {
+  const result: CalEvent[] = [];
+  for (const e of events) {
+    let startMin: number | null = null;
+    let endMin: number | null = null;
+    if (e.time) {
+      const [h, m] = e.time.split(":").map(Number);
+      startMin = h * 60 + m;
+      endMin = startMin + 60;
+    }
+    result.push({
+      id: e.id, title: e.title, date: e.date, startMin, endMin,
+      color: e.scope === "lab" ? "#1B2E4B" : "#5B7A99",
+      bgColor: e.scope === "lab" ? "rgba(27,46,75,0.10)" : "rgba(91,122,153,0.10)",
+      type: e.scope === "personal" ? "personal" : "lab",
+      isScheduleEvent: true, ownerId: e.createdBy,
+    });
+  }
+  for (const p of proposals) {
+    if (!p.proposedTime) continue;
+    const [h, m] = p.proposedTime.split(":").map(Number);
+    const startMin = h * 60 + m;
+    result.push({
+      id: p.id, title: p.title, date: p.proposedDate, startMin, endMin: startMin + p.durationMinutes,
+      color: "#2E7D52", bgColor: "rgba(46,125,82,0.10)",
+      type: "meeting", isScheduleEvent: false, ownerId: p.proposerId,
+    });
+  }
+  return result;
+}
+
+function layoutDayEvents(dayEvents: CalEvent[]): LayoutEvent[] {
+  const timed = dayEvents.filter(e => e.startMin !== null).sort((a, b) => a.startMin! - b.startMin!);
+  if (timed.length === 0) return [];
+  const colEnds: number[] = [];
+  const assigned = timed.map(ev => {
+    let c = 0;
+    while (c < colEnds.length && colEnds[c] > ev.startMin!) c++;
+    colEnds[c] = ev.endMin!;
+    return c;
+  });
+  const maxCols = Math.max(...assigned) + 1;
+  return timed.map((ev, i) => ({ ...ev, col: assigned[i], totalCols: maxCols }));
+}
+
+function makeDateStr(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function addDays(d: Date, n: number): Date {
+  const r = new Date(d); r.setDate(r.getDate() + n); return r;
+}
+
+function getWeekStart(d: Date): Date {
+  const r = new Date(d); r.setDate(r.getDate() - r.getDay()); return r;
+}
+
+function minToTimeStr(min: number): string {
+  return `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
+}
 
 function CalendarTab({
-  events,
-  proposals,
-  currentUserId,
-  projectId,
-  onAddEvent,
-  onDeleteEvent,
+  events, proposals, currentUserId, projectId, onAddEvent, onDeleteEvent,
 }: {
   events: ScheduleEvent[];
   proposals: MeetingProposal[];
@@ -125,303 +205,388 @@ function CalendarTab({
   onDeleteEvent: (id: string) => void;
 }) {
   const today = new Date();
-  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  const todayStr = makeDateStr(today);
 
-  const [calYear, setCalYear] = useState(today.getFullYear());
-  const [calMonth, setCalMonth] = useState(today.getMonth());
-  const [selectedDay, setSelectedDay] = useState<string | null>(todayStr);
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [addTitle, setAddTitle] = useState("");
-  const [addTime, setAddTime] = useState("");
-  const [addScope, setAddScope] = useState<"lab" | "personal">("lab");
-  const [addError, setAddError] = useState("");
+  const [view, setView] = useState<CalView>("week");
+  const [anchor, setAnchor] = useState(() => new Date());
+  const [showForm, setShowForm] = useState(false);
+  const [formDate, setFormDate] = useState("");
+  const [formTitle, setFormTitle] = useState("");
+  const [formTime, setFormTime] = useState("");
+  const [formScope, setFormScope] = useState<"lab" | "personal">("lab");
+  const [formError, setFormError] = useState("");
+  const [detailEvent, setDetailEvent] = useState<CalEvent | null>(null);
   const [showTP, setShowTP] = useState(false);
   const [tpPos, setTpPos] = useState<{ top: number; left: number } | null>(null);
   const timeBtnRef = useRef<HTMLButtonElement>(null);
 
-  const firstDayOfMonth = new Date(calYear, calMonth, 1);
-  const startOffset = firstDayOfMonth.getDay();
-  const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
-  const totalCells = Math.ceil((startOffset + daysInMonth) / 7) * 7;
+  const calEvents = useMemo(() => toCalEvents(events, proposals), [events, proposals]);
 
-  function dayStr(d: number): string {
-    return `${calYear}-${String(calMonth + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  function navigate(dir: 1 | -1) {
+    const d = new Date(anchor);
+    if (view === "day") d.setDate(d.getDate() + dir);
+    else if (view === "week") d.setDate(d.getDate() + dir * 7);
+    else if (view === "month") d.setMonth(d.getMonth() + dir);
+    else d.setFullYear(d.getFullYear() + dir);
+    setAnchor(d);
   }
 
-  function prevMonth() {
-    if (calMonth === 0) { setCalYear(y => y - 1); setCalMonth(11); }
-    else setCalMonth(m => m - 1);
+  function headerLabel(): string {
+    if (view === "day")
+      return anchor.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+    if (view === "week") {
+      const ws = getWeekStart(anchor);
+      const we = addDays(ws, 6);
+      if (ws.getMonth() === we.getMonth())
+        return `${ws.toLocaleDateString("en-US", { month: "long" })} ${ws.getDate()}–${we.getDate()}, ${ws.getFullYear()}`;
+      return `${ws.toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${we.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`;
+    }
+    if (view === "month")
+      return anchor.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+    return String(anchor.getFullYear());
   }
-  function nextMonth() {
-    if (calMonth === 11) { setCalYear(y => y + 1); setCalMonth(0); }
-    else setCalMonth(m => m + 1);
+
+  function openAdd(date: string, startMin?: number) {
+    setFormDate(date);
+    setFormTime(startMin != null ? minToTimeStr(startMin) : "");
+    setFormTitle(""); setFormScope("lab"); setFormError("");
+    setShowForm(true); setDetailEvent(null);
   }
 
-  const eventsByDay = useMemo(() => {
-    const map: Record<string, ScheduleEvent[]> = {};
-    events.forEach(e => { (map[e.date] ??= []).push(e); });
-    return map;
-  }, [events]);
-
-  const meetingsByDay = useMemo(() => {
-    const map: Record<string, MeetingProposal[]> = {};
-    proposals.forEach(p => { (map[p.proposedDate] ??= []).push(p); });
-    return map;
-  }, [proposals]);
-
-  const selectedEvents = selectedDay ? (eventsByDay[selectedDay] ?? []) : [];
-  const selectedMeetings = selectedDay ? (meetingsByDay[selectedDay] ?? []) : [];
-
-  function handleAddEvent() {
-    if (!addTitle.trim()) { setAddError("Enter a title."); return; }
-    if (!selectedDay) return;
-    onAddEvent({ projectId, title: addTitle.trim(), date: selectedDay, time: addTime || undefined, scope: addScope, createdBy: currentUserId });
-    setAddTitle(""); setAddTime(""); setAddScope("lab"); setAddError(""); setShowAddForm(false);
+  function handleAdd() {
+    if (!formTitle.trim()) { setFormError("Enter a title."); return; }
+    onAddEvent({ projectId, title: formTitle.trim(), date: formDate, time: formTime || undefined, scope: formScope, createdBy: currentUserId });
+    setShowForm(false);
   }
 
   const inputStyle: React.CSSProperties = {
     height: 36, border: "1px solid var(--color-border)", borderRadius: 6,
     padding: "0 10px", fontSize: 13, fontFamily: "var(--font-roboto)",
-    backgroundColor: "var(--color-canvas)", color: "var(--color-body)",
-    outline: "none", boxSizing: "border-box",
+    backgroundColor: "var(--color-canvas)", color: "var(--color-body)", outline: "none", boxSizing: "border-box",
   };
+
+  // ── Render helpers ────────────────────────────────────────────────────────
+
+  function renderEventBlock(ev: LayoutEvent) {
+    const clampedStart = Math.max(ev.startMin!, DAY_START_H * 60);
+    const clampedEnd = Math.min(ev.endMin!, DAY_END_H * 60);
+    if (clampedStart >= DAY_END_H * 60 || clampedEnd <= DAY_START_H * 60) return null;
+    const top = (clampedStart - DAY_START_H * 60) / 60 * HOUR_H;
+    const height = Math.max((clampedEnd - clampedStart) / 60 * HOUR_H, 20);
+    const widthPct = 100 / ev.totalCols;
+    const leftPct = ev.col * widthPct;
+    return (
+      <div
+        key={ev.id}
+        onClick={e => { e.stopPropagation(); setDetailEvent(ev); setShowForm(false); }}
+        style={{
+          position: "absolute", top, height,
+          width: `calc(${widthPct}% - 2px)`,
+          left: `calc(${leftPct}% + 1px)`,
+          backgroundColor: ev.bgColor, borderLeft: `3px solid ${ev.color}`,
+          borderRadius: 4, padding: "2px 5px", overflow: "hidden",
+          cursor: "pointer", zIndex: 1, boxSizing: "border-box",
+        }}
+      >
+        <p style={{ fontSize: 10, fontWeight: 600, color: ev.color, margin: 0, lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {ev.title}
+        </p>
+        {height >= 38 && (
+          <p style={{ fontSize: 9, color: ev.color, margin: 0, opacity: 0.7 }}>
+            {formatTimeDisplay(minToTimeStr(ev.startMin!))}
+          </p>
+        )}
+      </div>
+    );
+  }
+
+  function renderTimeGrid(days: Date[]) {
+    const hours = Array.from({ length: TOTAL_HOURS }, (_, i) => DAY_START_H + i);
+    const totalHeight = TOTAL_HOURS * HOUR_H;
+    return (
+      <div style={{ display: "flex", overflowY: "auto", maxHeight: 580 }}>
+        <div style={{ width: 50, flexShrink: 0 }}>
+          <div style={{ height: 1 }} />
+          {hours.map(h => (
+            <div key={h} style={{ height: HOUR_H, display: "flex", alignItems: "flex-start", justifyContent: "flex-end", paddingRight: 8, paddingTop: 3 }}>
+              <span style={{ fontSize: 10, color: "var(--color-secondary)", whiteSpace: "nowrap" }}>
+                {h === 12 ? "12 PM" : h > 12 ? `${h - 12} PM` : `${h} AM`}
+              </span>
+            </div>
+          ))}
+        </div>
+        <div style={{ flex: 1, display: "grid", gridTemplateColumns: `repeat(${days.length}, 1fr)`, borderLeft: "1px solid var(--color-border)" }}>
+          {days.map(day => {
+            const ds = makeDateStr(day);
+            const isToday = ds === todayStr;
+            const laidOut = layoutDayEvents(calEvents.filter(e => e.date === ds));
+            return (
+              <div key={ds} style={{ position: "relative", height: totalHeight, borderRight: "1px solid var(--color-border)", backgroundColor: isToday ? "rgba(27,46,75,0.015)" : "transparent" }}>
+                {hours.map(h => (
+                  <div
+                    key={h}
+                    onClick={() => openAdd(ds, h * 60)}
+                    style={{ position: "absolute", top: (h - DAY_START_H) * HOUR_H, left: 0, right: 0, height: HOUR_H, borderTop: "1px solid var(--color-border)", cursor: "pointer" }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.backgroundColor = "rgba(27,46,75,0.04)"; }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.backgroundColor = "transparent"; }}
+                  />
+                ))}
+                {isToday && (() => {
+                  const now = new Date();
+                  const nowMin = now.getHours() * 60 + now.getMinutes();
+                  if (nowMin < DAY_START_H * 60 || nowMin > DAY_END_H * 60) return null;
+                  const nowTop = (nowMin - DAY_START_H * 60) / 60 * HOUR_H;
+                  return <div style={{ position: "absolute", top: nowTop, left: 0, right: 0, height: 2, backgroundColor: "#C0392B", zIndex: 2, pointerEvents: "none" }} />;
+                })()}
+                {laidOut.map(ev => renderEventBlock(ev))}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  function renderWeekView() {
+    const ws = getWeekStart(anchor);
+    const days = Array.from({ length: 7 }, (_, i) => addDays(ws, i));
+    return (
+      <>
+        <div style={{ display: "grid", gridTemplateColumns: "50px repeat(7, 1fr)", borderBottom: "1px solid var(--color-border)" }}>
+          <div />
+          {days.map(day => {
+            const ds = makeDateStr(day);
+            const isToday = ds === todayStr;
+            return (
+              <div key={ds} style={{ padding: "6px 0", textAlign: "center", borderLeft: "1px solid var(--color-border)" }}>
+                <div style={{ fontSize: 10, color: "var(--color-secondary)", fontWeight: 700, letterSpacing: "0.05em" }}>{DAY_HDR[day.getDay()]}</div>
+                <div style={{ fontSize: 18, fontWeight: 700, width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center", margin: "2px auto 0", borderRadius: "50%", backgroundColor: isToday ? "var(--color-navy)" : "transparent", color: isToday ? "#fff" : "var(--color-body)" }}>
+                  {day.getDate()}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        {renderTimeGrid(days)}
+      </>
+    );
+  }
+
+  function renderDayView() {
+    return (
+      <>
+        <div style={{ display: "grid", gridTemplateColumns: "50px 1fr", borderBottom: "1px solid var(--color-border)" }}>
+          <div />
+          <div style={{ padding: "6px 16px", borderLeft: "1px solid var(--color-border)" }}>
+            <div style={{ fontSize: 10, color: "var(--color-secondary)", fontWeight: 700, letterSpacing: "0.05em" }}>{DAY_HDR[anchor.getDay()]}</div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: makeDateStr(anchor) === todayStr ? "var(--color-navy)" : "var(--color-body)" }}>{anchor.getDate()}</div>
+          </div>
+        </div>
+        {renderTimeGrid([anchor])}
+      </>
+    );
+  }
+
+  function renderMonthView() {
+    const year = anchor.getFullYear();
+    const month = anchor.getMonth();
+    const startOffset = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const totalCells = Math.ceil((startOffset + daysInMonth) / 7) * 7;
+    const MAX_CHIPS = 3;
+    return (
+      <>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", borderBottom: "1px solid var(--color-border)" }}>
+          {DAY_HDR.map(d => (
+            <div key={d} style={{ textAlign: "center", padding: "8px 0", fontSize: 10, fontWeight: 700, color: "var(--color-secondary)", letterSpacing: "0.06em" }}>{d}</div>
+          ))}
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)" }}>
+          {Array.from({ length: totalCells }, (_, i) => {
+            const dayNum = i - startOffset + 1;
+            const inMonth = dayNum >= 1 && dayNum <= daysInMonth;
+            const ds = inMonth ? `${year}-${String(month + 1).padStart(2, "0")}-${String(dayNum).padStart(2, "0")}` : null;
+            const isToday = ds === todayStr;
+            const dayEvents = ds ? calEvents.filter(e => e.date === ds) : [];
+            const overflow = Math.max(0, dayEvents.length - MAX_CHIPS);
+            return (
+              <div
+                key={i}
+                onClick={() => { if (ds) openAdd(ds); }}
+                style={{ minHeight: 88, borderRight: "1px solid var(--color-border)", borderBottom: "1px solid var(--color-border)", padding: 4, backgroundColor: inMonth ? "transparent" : "rgba(27,46,75,0.015)", cursor: inMonth ? "pointer" : "default" }}
+                onMouseEnter={e => { if (inMonth) (e.currentTarget as HTMLDivElement).style.backgroundColor = "rgba(27,46,75,0.03)"; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.backgroundColor = inMonth ? "transparent" : "rgba(27,46,75,0.015)"; }}
+              >
+                {inMonth && (
+                  <>
+                    <div style={{ fontSize: 12, fontWeight: isToday ? 700 : 400, width: 22, height: 22, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "50%", backgroundColor: isToday ? "var(--color-navy)" : "transparent", color: isToday ? "#fff" : "var(--color-body)", marginBottom: 2 }}>
+                      {dayNum}
+                    </div>
+                    {dayEvents.slice(0, MAX_CHIPS).map(ev => (
+                      <div key={ev.id} onClick={e => { e.stopPropagation(); setDetailEvent(ev); setShowForm(false); }}
+                        style={{ fontSize: 10, fontWeight: 600, color: ev.color, backgroundColor: ev.bgColor, borderRadius: 3, padding: "1px 4px", marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "pointer" }}>
+                        {ev.startMin != null && `${Math.floor(ev.startMin / 60) % 12 || 12}:${String(ev.startMin % 60).padStart(2, "0")} `}{ev.title}
+                      </div>
+                    ))}
+                    {overflow > 0 && <div style={{ fontSize: 10, color: "var(--color-secondary)", paddingLeft: 2 }}>+{overflow} more</div>}
+                  </>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </>
+    );
+  }
+
+  function renderYearView() {
+    const year = anchor.getFullYear();
+    return (
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
+        {MONTH_NAMES_CAL.map((name, mi) => {
+          const startOff = new Date(year, mi, 1).getDay();
+          const dim = new Date(year, mi + 1, 0).getDate();
+          const cells = Math.ceil((startOff + dim) / 7) * 7;
+          return (
+            <div key={mi}
+              onClick={() => { const d = new Date(anchor); d.setMonth(mi); setAnchor(d); setView("month"); }}
+              style={{ cursor: "pointer", border: "1px solid var(--color-border)", borderRadius: 8, padding: "8px 8px 6px", backgroundColor: "var(--color-canvas)" }}
+              onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.borderColor = "var(--color-navy)"; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.borderColor = "var(--color-border)"; }}
+            >
+              <p style={{ fontSize: 11, fontWeight: 700, color: "var(--color-navy)", margin: "0 0 5px 0" }}>{name}</p>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)" }}>
+                {"SMTWTFS".split("").map((d, i) => (
+                  <div key={i} style={{ fontSize: 6.5, color: "var(--color-secondary)", textAlign: "center", fontWeight: 700, paddingBottom: 1 }}>{d}</div>
+                ))}
+                {Array.from({ length: cells }, (_, i) => {
+                  const dn = i - startOff + 1;
+                  const inM = dn >= 1 && dn <= dim;
+                  const ds = inM ? `${year}-${String(mi + 1).padStart(2, "0")}-${String(dn).padStart(2, "0")}` : null;
+                  const isToday = ds === todayStr;
+                  const hasEv = ds ? calEvents.some(e => e.date === ds) : false;
+                  return (
+                    <div key={i} style={{ fontSize: 7, textAlign: "center", lineHeight: "13px", borderRadius: 2, color: isToday ? "#fff" : inM ? "var(--color-body)" : "transparent", backgroundColor: isToday ? "var(--color-navy)" : hasEv ? "rgba(27,46,75,0.12)" : "transparent" }}>
+                      {inM ? dn : ""}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
       <Card>
-        {/* Month navigation */}
-        <div className="flex items-center justify-between px-5 py-3" style={{ borderBottom: "1px solid var(--color-border)" }}>
-          <button onClick={prevMonth} style={{ background: "none", border: "none", cursor: "pointer", padding: 6, color: "var(--color-secondary)", borderRadius: 6 }}>
-            <ChevronLeft size={15} />
-          </button>
-          <h3 style={{ fontFamily: "var(--font-lora)", fontWeight: 600, fontSize: 15, color: "var(--color-navy)", margin: 0 }}>
-            {MONTH_NAMES_CAL[calMonth]} {calYear}
-          </h3>
-          <button onClick={nextMonth} style={{ background: "none", border: "none", cursor: "pointer", padding: 6, color: "var(--color-secondary)", borderRadius: 6 }}>
-            <ChevronRight size={15} />
-          </button>
-        </div>
-
-        <div className="p-4">
-          {/* Day-of-week headers */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", marginBottom: 4 }}>
-            {DAY_HEADERS.map(d => (
-              <div key={d} style={{ textAlign: "center", fontSize: 11, fontWeight: 700, color: "var(--color-secondary)", padding: "4px 0", letterSpacing: "0.05em" }}>
-                {d}
-              </div>
-            ))}
+        {/* Toolbar */}
+        <div className="flex items-center justify-between px-5 py-3 flex-wrap gap-2" style={{ borderBottom: "1px solid var(--color-border)" }}>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setAnchor(new Date())}
+              style={{ height: 30, paddingInline: 12, border: "1px solid var(--color-border)", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer", backgroundColor: "var(--color-canvas)", color: "var(--color-body)", fontFamily: "var(--font-roboto)" }}>
+              Today
+            </button>
+            <div className="flex">
+              <button onClick={() => navigate(-1)} style={{ background: "none", border: "1px solid var(--color-border)", cursor: "pointer", padding: "4px 7px", borderRadius: "6px 0 0 6px", color: "var(--color-secondary)" }}>
+                <ChevronLeft size={13} />
+              </button>
+              <button onClick={() => navigate(1)} style={{ background: "none", border: "1px solid var(--color-border)", borderLeft: "none", cursor: "pointer", padding: "4px 7px", borderRadius: "0 6px 6px 0", color: "var(--color-secondary)" }}>
+                <ChevronRight size={13} />
+              </button>
+            </div>
+            <span style={{ fontFamily: "var(--font-lora)", fontWeight: 600, fontSize: 15, color: "var(--color-navy)" }}>
+              {headerLabel()}
+            </span>
           </div>
-
-          {/* Day cells */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2 }}>
-            {Array.from({ length: totalCells }, (_, i) => {
-              const dayNum = i - startOffset + 1;
-              const inMonth = dayNum >= 1 && dayNum <= daysInMonth;
-              const ds = inMonth ? dayStr(dayNum) : null;
-              const isToday = ds === todayStr;
-              const isSelected = ds === selectedDay;
-              const dayEvents = ds ? (eventsByDay[ds] ?? []) : [];
-              const dayMeetings = ds ? (meetingsByDay[ds] ?? []) : [];
-              const hasItems = dayEvents.length > 0 || dayMeetings.length > 0;
-
+          <div className="flex" style={{ backgroundColor: "rgba(27,46,75,0.06)", borderRadius: 7, padding: 2 }}>
+            {(["Day", "Week", "Month", "Year"] as const).map(v => {
+              const id = v.toLowerCase() as CalView;
+              const active = view === id;
               return (
-                <button
-                  key={i}
-                  onClick={() => {
-                    if (!ds) return;
-                    setSelectedDay(s => s === ds ? null : ds);
-                    setShowAddForm(false);
-                  }}
-                  disabled={!inMonth}
-                  style={{
-                    minHeight: 50,
-                    padding: "4px 3px 3px",
-                    border: isToday && !isSelected ? "1.5px solid var(--color-navy)" : "1px solid transparent",
-                    borderRadius: 7,
-                    backgroundColor: isSelected ? "var(--color-navy)" : "transparent",
-                    cursor: inMonth ? "pointer" : "default",
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    gap: 3,
-                    transition: "background-color 0.1s",
-                  }}
-                >
-                  <span style={{
-                    fontSize: 12,
-                    fontWeight: isToday ? 700 : 400,
-                    color: isSelected ? "#fff" : inMonth ? "var(--color-body)" : "transparent",
-                    lineHeight: 1,
-                  }}>
-                    {inMonth ? dayNum : ""}
-                  </span>
-                  {inMonth && hasItems && (
-                    <div style={{ display: "flex", gap: 2, flexWrap: "wrap", justifyContent: "center" }}>
-                      {dayEvents.slice(0, 2).map((ev, idx) => (
-                        <span key={idx} style={{
-                          width: 5, height: 5, borderRadius: "50%",
-                          backgroundColor: isSelected
-                            ? "rgba(255,255,255,0.75)"
-                            : ev.scope === "lab" ? "var(--color-navy)" : "rgba(27,46,75,0.35)",
-                        }} />
-                      ))}
-                      {dayMeetings.slice(0, 1).map((_, idx) => (
-                        <span key={`m${idx}`} style={{
-                          width: 5, height: 5, borderRadius: "50%",
-                          backgroundColor: isSelected ? "rgba(255,255,255,0.6)" : "#2E7D52",
-                        }} />
-                      ))}
-                    </div>
-                  )}
+                <button key={v} onClick={() => setView(id)}
+                  style={{ padding: "4px 10px", borderRadius: 5, border: "none", cursor: "pointer", fontSize: 12, fontWeight: active ? 600 : 400, fontFamily: "var(--font-roboto)", backgroundColor: active ? "#fff" : "transparent", color: active ? "var(--color-navy)" : "var(--color-secondary)", boxShadow: active ? "0 1px 3px rgba(27,46,75,0.10)" : "none" }}>
+                  {v}
                 </button>
               );
             })}
           </div>
-
-          {/* Legend */}
-          <div className="flex gap-4 mt-3 pt-3" style={{ borderTop: "1px solid var(--color-border)" }}>
-            {[
-              { color: "var(--color-navy)", label: "Lab event" },
-              { color: "rgba(27,46,75,0.35)", label: "Personal" },
-              { color: "#2E7D52", label: "Meeting" },
-            ].map(({ color, label }) => (
-              <div key={label} className="flex items-center gap-1.5">
-                <span style={{ width: 7, height: 7, borderRadius: "50%", backgroundColor: color, display: "inline-block", flexShrink: 0 }} />
-                <span style={{ fontSize: 11, color: "var(--color-secondary)" }}>{label}</span>
-              </div>
-            ))}
-          </div>
         </div>
+
+        {view === "week" && renderWeekView()}
+        {view === "day" && renderDayView()}
+        {view === "month" && renderMonthView()}
+        {view === "year" && <div className="p-4">{renderYearView()}</div>}
       </Card>
 
-      {/* Day detail panel */}
-      {selectedDay && (
+      {/* Add event form */}
+      {showForm && (
         <Card>
-          <div className="flex items-center justify-between px-5 py-3" style={{ borderBottom: "1px solid var(--color-border)" }}>
-            <h3 style={{ fontFamily: "var(--font-lora)", fontWeight: 600, fontSize: 14, color: "var(--color-navy)", margin: 0 }}>
-              {new Date(selectedDay + "T12:00:00").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
-            </h3>
-            <button
-              onClick={() => { setShowAddForm(s => !s); setAddError(""); }}
-              className="flex items-center gap-1"
-              style={{ fontSize: 12, fontWeight: 600, color: "var(--color-navy)", background: "none", border: "none", cursor: "pointer" }}
-            >
-              <Plus size={13} /> Add event
-            </button>
+          <SectionHeader
+            title={formDate ? `New event · ${new Date(formDate + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}` : "New event"}
+            action={<button onClick={() => setShowForm(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-secondary)", padding: 4 }}><X size={14} /></button>}
+          />
+          <div className="px-5 py-4 space-y-3">
+            <div className="flex gap-1.5">
+              {(["lab", "personal"] as const).map(s => (
+                <button key={s} onClick={() => setFormScope(s)} style={{ height: 27, paddingInline: 12, borderRadius: 20, border: `1.5px solid ${formScope === s ? "var(--color-navy)" : "var(--color-border)"}`, backgroundColor: formScope === s ? "var(--color-navy)" : "transparent", color: formScope === s ? "#fff" : "var(--color-secondary)", fontSize: 12, fontWeight: formScope === s ? 600 : 400, cursor: "pointer", fontFamily: "var(--font-roboto)" }}>
+                  {s === "lab" ? "Lab (visible to all)" : "Personal (only me)"}
+                </button>
+              ))}
+            </div>
+            <input autoFocus value={formTitle} onChange={e => { setFormTitle(e.target.value); setFormError(""); }} placeholder="Event title" style={{ ...inputStyle, width: "100%" }} onFocus={e => { e.currentTarget.style.borderColor = "var(--color-navy)"; }} onBlur={e => { e.currentTarget.style.borderColor = "var(--color-border)"; }} />
+            <div className="flex items-center gap-2">
+              <button ref={timeBtnRef} onClick={() => { if (!timeBtnRef.current) return; const r = timeBtnRef.current.getBoundingClientRect(); setTpPos({ top: r.bottom + 6, left: r.left }); setShowTP(v => !v); }} style={{ ...inputStyle, display: "flex", alignItems: "center", gap: 6, cursor: "pointer", color: formTime ? "var(--color-body)" : "var(--color-secondary)", width: "auto", padding: "0 10px" }}>
+                {formTime ? formatTimeDisplay(formTime) : "+ time"}
+              </button>
+              {formTime && <button onClick={() => setFormTime("")} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11, color: "var(--color-secondary)" }}>clear</button>}
+            </div>
+            {showTP && tpPos && <TimePicker value={formTime || "09:00"} accentColor="#1B2E4B" pos={tpPos} onChange={t => setFormTime(t)} onClear={() => { setFormTime(""); setShowTP(false); }} onClose={() => setShowTP(false)} />}
+            {formError && <p style={{ fontSize: 11, color: "var(--color-error)", margin: 0 }}>{formError}</p>}
+            <div className="flex gap-2">
+              <button onClick={handleAdd} style={{ height: 32, paddingInline: 16, backgroundColor: "var(--color-navy)", color: "#fff", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Add</button>
+              <button onClick={() => setShowForm(false)} style={{ height: 32, paddingInline: 12, background: "none", border: "none", fontSize: 12, color: "var(--color-secondary)", cursor: "pointer" }}>Cancel</button>
+            </div>
           </div>
-
-          {/* Inline add form */}
-          {showAddForm && (
-            <div className="px-5 py-3 space-y-3" style={{ borderBottom: "1px solid var(--color-border)", backgroundColor: "rgba(27,46,75,0.02)" }}>
-              <div className="flex gap-1.5">
-                {(["lab", "personal"] as const).map(s => (
-                  <button key={s} onClick={() => setAddScope(s)} style={{
-                    height: 27, paddingInline: 12, borderRadius: 20,
-                    border: `1.5px solid ${addScope === s ? "var(--color-navy)" : "var(--color-border)"}`,
-                    backgroundColor: addScope === s ? "var(--color-navy)" : "transparent",
-                    color: addScope === s ? "#fff" : "var(--color-secondary)",
-                    fontSize: 12, fontWeight: addScope === s ? 600 : 400, cursor: "pointer", fontFamily: "var(--font-roboto)",
-                  }}>
-                    {s === "lab" ? "Lab (visible to all)" : "Personal (only me)"}
-                  </button>
-                ))}
-              </div>
-              <input
-                autoFocus
-                value={addTitle}
-                onChange={e => { setAddTitle(e.target.value); setAddError(""); }}
-                placeholder="Event title"
-                style={{ ...inputStyle, width: "100%" }}
-                onFocus={e => { e.currentTarget.style.borderColor = "var(--color-navy)"; }}
-                onBlur={e => { e.currentTarget.style.borderColor = "var(--color-border)"; }}
-              />
-              <div className="flex items-center gap-2">
-                <button
-                  ref={timeBtnRef}
-                  onClick={() => {
-                    if (!timeBtnRef.current) return;
-                    const r = timeBtnRef.current.getBoundingClientRect();
-                    setTpPos({ top: r.bottom + 6, left: r.left });
-                    setShowTP(v => !v);
-                  }}
-                  style={{ ...inputStyle, display: "flex", alignItems: "center", gap: 6, cursor: "pointer", color: addTime ? "var(--color-body)" : "var(--color-secondary)", width: "auto", padding: "0 10px" }}
-                >
-                  {addTime ? formatTimeDisplay(addTime) : "+ time"}
-                </button>
-                {addTime && (
-                  <button onClick={() => setAddTime("")} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11, color: "var(--color-secondary)" }}>
-                    clear
-                  </button>
-                )}
-              </div>
-              {showTP && tpPos && (
-                <TimePicker value={addTime || "09:00"} accentColor="#1B2E4B" pos={tpPos}
-                  onChange={t => setAddTime(t)}
-                  onClear={() => { setAddTime(""); setShowTP(false); }}
-                  onClose={() => setShowTP(false)} />
-              )}
-              {addError && <p style={{ fontSize: 11, color: "var(--color-error)", margin: 0 }}>{addError}</p>}
-              <div className="flex gap-2">
-                <button onClick={handleAddEvent} style={{ height: 32, paddingInline: 16, backgroundColor: "var(--color-navy)", color: "#fff", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
-                  Add
-                </button>
-                <button onClick={() => { setShowAddForm(false); setAddError(""); }} style={{ height: 32, paddingInline: 12, background: "none", border: "none", fontSize: 12, color: "var(--color-secondary)", cursor: "pointer" }}>
-                  Cancel
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Events + meetings list */}
-          {selectedEvents.length === 0 && selectedMeetings.length === 0 && !showAddForm ? (
-            <EmptyState icon={Calendar} heading="Nothing scheduled" body="Add a lab or personal event for this day." />
-          ) : (
-            <div>
-              {selectedMeetings.map(p => (
-                <div key={p.id} className="flex items-center gap-3 px-5 py-3" style={{ borderBottom: "1px solid var(--color-border)" }}>
-                  <span style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: "#2E7D52", flexShrink: 0 }} />
-                  <div className="flex-1 min-w-0">
-                    <p style={{ fontSize: 13, fontWeight: 500, color: "var(--color-body)", margin: 0 }}>{p.title}</p>
-                    <p style={{ fontSize: 11, color: "var(--color-secondary)", margin: 0 }}>
-                      {p.proposedTime
-                        ? new Date(`2000-01-01T${p.proposedTime}`).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
-                        : ""}{p.proposedTime ? " · " : ""}
-                      {formatDuration(p.durationMinutes)}
-                    </p>
-                  </div>
-                </div>
-              ))}
-              {selectedEvents.map(event => (
-                <div key={event.id} className="flex items-center gap-3 px-5 py-3" style={{ borderBottom: "1px solid var(--color-border)" }}>
-                  <span style={{
-                    width: 8, height: 8, borderRadius: "50%", flexShrink: 0,
-                    backgroundColor: event.scope === "lab" ? "var(--color-navy)" : "rgba(27,46,75,0.35)",
-                  }} />
-                  <div className="flex-1 min-w-0">
-                    <p style={{ fontSize: 13, fontWeight: 500, color: "var(--color-body)", margin: 0 }}>{event.title}</p>
-                    {event.time && (
-                      <p style={{ fontSize: 11, color: "var(--color-secondary)", margin: 0 }}>
-                        {new Date(`2000-01-01T${event.time}`).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
-                      </p>
-                    )}
-                  </div>
-                  {event.scope === "personal" && <Lock size={11} style={{ color: "var(--color-secondary)", flexShrink: 0 }} />}
-                  {event.createdBy === currentUserId && (
-                    <button
-                      onClick={() => onDeleteEvent(event.id)}
-                      style={{ background: "none", border: "none", cursor: "pointer", padding: 4, opacity: 0.5, flexShrink: 0 }}
-                      onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.opacity = "1"; }}
-                      onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.opacity = "0.5"; }}
-                    >
-                      <Trash2 size={13} color="var(--color-secondary)" />
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
         </Card>
       )}
+
+      {/* Event detail */}
+      {detailEvent && !showForm && (
+        <Card>
+          <div className="px-5 py-4">
+            <div className="flex items-start justify-between gap-3 mb-2">
+              <div className="flex items-center gap-2">
+                <span style={{ width: 9, height: 9, borderRadius: "50%", backgroundColor: detailEvent.color, display: "inline-block", flexShrink: 0 }} />
+                <p style={{ fontSize: 14, fontWeight: 600, color: "var(--color-body)", margin: 0 }}>{detailEvent.title}</p>
+              </div>
+              <button onClick={() => setDetailEvent(null)} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, color: "var(--color-secondary)", flexShrink: 0 }}><X size={13} /></button>
+            </div>
+            <p style={{ fontSize: 12, color: "var(--color-secondary)", margin: "0 0 6px 19px" }}>
+              {new Date(detailEvent.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
+              {detailEvent.startMin != null && ` · ${formatTimeDisplay(minToTimeStr(detailEvent.startMin))}`}
+              {detailEvent.type === "meeting" && detailEvent.endMin != null && ` · ${formatDuration(detailEvent.endMin - detailEvent.startMin!)}`}
+            </p>
+            {detailEvent.isScheduleEvent && detailEvent.ownerId === currentUserId && (
+              <button onClick={() => { onDeleteEvent(detailEvent.id); setDetailEvent(null); }} className="flex items-center gap-1.5" style={{ marginLeft: 15, fontSize: 12, color: "var(--color-error)", background: "none", border: "none", cursor: "pointer" }}>
+                <Trash2 size={12} /> Delete event
+              </button>
+            )}
+          </div>
+        </Card>
+      )}
+
+      {/* Legend */}
+      <div className="flex gap-5">
+        {[{ color: "#1B2E4B", label: "Lab event" }, { color: "#5B7A99", label: "Personal" }, { color: "#2E7D52", label: "Meeting" }].map(({ color, label }) => (
+          <div key={label} className="flex items-center gap-1.5">
+            <span style={{ width: 7, height: 7, borderRadius: "50%", backgroundColor: color, display: "inline-block" }} />
+            <span style={{ fontSize: 11, color: "var(--color-secondary)" }}>{label}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -436,12 +601,16 @@ function AvailabilityTab({
   allAvailabilities,
   teamMembers,
   currentUserId,
+  googleConnected,
+  onToggleGoogle,
 }: {
   savedSlots: string[];
   onSave: (slots: string[]) => void;
   allAvailabilities: WeeklyAvailability[];
   teamMembers: User[];
   currentUserId: string;
+  googleConnected: boolean;
+  onToggleGoogle: () => void;
 }) {
   const [scope, setScope] = useState<AvailScope>("mine");
   const [selectedIds, setSelectedIds] = useState<string[]>(() => teamMembers.map(m => m.id));
@@ -526,38 +695,81 @@ function AvailabilityTab({
       )}
 
       {scope === "mine" ? (
-        <Card>
-          <SectionHeader
-            title="My Weekly Availability"
-            action={
-              <div className="flex items-center gap-2">
-                {saved && <span style={{ fontSize: 12, color: "var(--color-success)", fontWeight: 600 }}>✓ Saved</span>}
-                <button
-                  onClick={handleSave}
-                  disabled={!hasChanges}
-                  style={{
-                    backgroundColor: hasChanges ? "var(--color-navy)" : "transparent",
-                    color: hasChanges ? "#fff" : "var(--color-secondary)",
-                    border: hasChanges ? "none" : "1px solid var(--color-border)",
-                    borderRadius: 7, fontSize: 12, fontWeight: 600, padding: "6px 14px",
-                    cursor: hasChanges ? "pointer" : "not-allowed", fontFamily: "var(--font-roboto)",
-                  }}
-                >
-                  Save Changes
-                </button>
+        <div className="grid gap-4 lg:grid-cols-[1fr_280px]">
+          <Card>
+            <SectionHeader
+              title="My Weekly Availability"
+              action={
+                <div className="flex items-center gap-2">
+                  {saved && <span style={{ fontSize: 12, color: "var(--color-success)", fontWeight: 600 }}>✓ Saved</span>}
+                  <button
+                    onClick={handleSave}
+                    disabled={!hasChanges}
+                    style={{
+                      backgroundColor: hasChanges ? "var(--color-navy)" : "transparent",
+                      color: hasChanges ? "#fff" : "var(--color-secondary)",
+                      border: hasChanges ? "none" : "1px solid var(--color-border)",
+                      borderRadius: 7, fontSize: 12, fontWeight: 600, padding: "6px 14px",
+                      cursor: hasChanges ? "pointer" : "not-allowed", fontFamily: "var(--font-roboto)",
+                    }}
+                  >
+                    Save Changes
+                  </button>
+                </div>
+              }
+            />
+            <div className="p-5">
+              <div className="flex items-start gap-2 mb-4 px-3 py-2 rounded-lg" style={{ backgroundColor: "rgba(27,46,75,0.05)", border: "1px solid rgba(27,46,75,0.10)" }}>
+                <Lock size={13} style={{ marginTop: 2, color: "var(--color-navy)", flexShrink: 0 }} />
+                <p style={{ fontSize: 12, color: "var(--color-body)", margin: 0, lineHeight: 1.5 }}>
+                  Team members see only the aggregate overlap — not your individual schedule details.
+                </p>
               </div>
-            }
-          />
-          <div className="p-5">
-            <div className="flex items-start gap-2 mb-4 px-3 py-2 rounded-lg" style={{ backgroundColor: "rgba(27,46,75,0.05)", border: "1px solid rgba(27,46,75,0.10)" }}>
-              <Lock size={13} style={{ marginTop: 2, color: "var(--color-navy)", flexShrink: 0 }} />
-              <p style={{ fontSize: 12, color: "var(--color-body)", margin: 0, lineHeight: 1.5 }}>
-                Team members see only the aggregate overlap — not your individual schedule details.
+              <AvailabilityGrid slots={slots} onChange={setSlots} />
+            </div>
+          </Card>
+
+          {/* Google Calendar Sync */}
+          <Card>
+            <SectionHeader title="Google Calendar" />
+            <div className="px-5 py-4 space-y-3">
+              <div
+                className="flex items-start gap-2 p-3 rounded-lg"
+                style={{
+                  backgroundColor: googleConnected ? "rgba(46,125,82,0.07)" : "rgba(27,46,75,0.04)",
+                  border: "1px solid",
+                  borderColor: googleConnected ? "rgba(46,125,82,0.25)" : "var(--color-border)",
+                }}
+              >
+                {googleConnected ? (
+                  <Check size={13} style={{ color: "#2E7D52", marginTop: 2, flexShrink: 0 }} />
+                ) : (
+                  <AlertCircle size={13} style={{ color: "var(--color-secondary)", marginTop: 2, flexShrink: 0 }} />
+                )}
+                <p style={{ fontSize: 12, color: "var(--color-body)", margin: 0, lineHeight: 1.5 }}>
+                  {googleConnected
+                    ? "Connected — free/busy syncs automatically. No event details are visible to anyone."
+                    : "Not connected. Connect to sync your free/busy status automatically."}
+                </p>
+              </div>
+              <button
+                onClick={onToggleGoogle}
+                className="w-full flex items-center justify-center gap-2"
+                style={{
+                  height: 38, border: "1px solid var(--color-border)", borderRadius: 7,
+                  fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "var(--font-roboto)",
+                  backgroundColor: googleConnected ? "transparent" : "var(--color-navy)",
+                  color: googleConnected ? "var(--color-error)" : "#fff",
+                }}
+              >
+                {googleConnected ? "Disconnect Calendar" : "Connect Google Calendar"}
+              </button>
+              <p style={{ fontSize: 11, color: "var(--color-secondary)", lineHeight: 1.5 }}>
+                Only free/busy status is used. Event titles, descriptions, and attendees are never read or shared.
               </p>
             </div>
-            <AvailabilityGrid slots={slots} onChange={setSlots} />
-          </div>
-        </Card>
+          </Card>
+        </div>
       ) : (
         <Card>
           <SectionHeader title={overlapTitle} />
@@ -621,9 +833,7 @@ function MeetingsTab({
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
             <p style={{ fontSize: 14, fontWeight: 600, color: "var(--color-body)", margin: 0 }}>{p.title}</p>
-            {p.description && (
-              <p style={{ fontSize: 12, color: "var(--color-secondary)", marginTop: 2 }}>{p.description}</p>
-            )}
+            {p.description && <p style={{ fontSize: 12, color: "var(--color-secondary)", marginTop: 2 }}>{p.description}</p>}
             <div className="flex items-center gap-3 mt-2 flex-wrap">
               <span className="flex items-center gap-1" style={{ fontSize: 12, color: "var(--color-body)" }}>
                 <Calendar size={11} style={{ color: "var(--color-navy)" }} />
@@ -640,18 +850,12 @@ function MeetingsTab({
             </div>
           </div>
           {!needsResponse && (
-            <span style={{
-              fontSize: 11, fontWeight: 600, flexShrink: 0,
-              color: isIncoming ? c.text : "var(--color-secondary)",
-              backgroundColor: isIncoming ? c.bg : "rgba(27,46,75,0.06)",
-              borderRadius: 12, padding: "2px 8px",
-            }}>
+            <span style={{ fontSize: 11, fontWeight: 600, flexShrink: 0, color: isIncoming ? c.text : "var(--color-secondary)", backgroundColor: isIncoming ? c.bg : "rgba(27,46,75,0.06)", borderRadius: 12, padding: "2px 8px" }}>
               {isIncoming ? STATUS_LABELS[myStatus as MeetingResponseStatus] : "Proposed"}
             </span>
           )}
         </div>
 
-        {/* Invitee response chips for proposals I created */}
         {!isIncoming && p.inviteeIds.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-2">
             {p.inviteeIds.map(id => {
@@ -663,9 +867,7 @@ function MeetingsTab({
               return (
                 <div key={id} className="flex items-center gap-1.5 px-2 py-1 rounded-lg" style={{ backgroundColor: rc.bg }}>
                   <Avatar user={u} size={16} />
-                  <span style={{ fontSize: 11, fontWeight: 600, color: rc.text }}>
-                    {u.name.split(" ")[0]}: {STATUS_LABELS[status]}
-                  </span>
+                  <span style={{ fontSize: 11, fontWeight: 600, color: rc.text }}>{u.name.split(" ")[0]}: {STATUS_LABELS[status]}</span>
                 </div>
               );
             })}
@@ -674,18 +876,12 @@ function MeetingsTab({
 
         {needsResponse && (
           <div className="flex gap-2 mt-3">
-            <button
-              onClick={() => onRespond(p.id, "accepted")}
-              className="flex items-center gap-1.5"
-              style={{ height: 32, paddingInline: 14, backgroundColor: "var(--color-navy)", color: "#fff", border: "none", borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "var(--font-roboto)" }}
-            >
+            <button onClick={() => onRespond(p.id, "accepted")} className="flex items-center gap-1.5"
+              style={{ height: 32, paddingInline: 14, backgroundColor: "var(--color-navy)", color: "#fff", border: "none", borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "var(--font-roboto)" }}>
               <Check size={12} /> Accept
             </button>
-            <button
-              onClick={() => onRespond(p.id, "declined")}
-              className="flex items-center gap-1.5"
-              style={{ height: 32, paddingInline: 14, backgroundColor: "transparent", color: "var(--color-error)", border: "1px solid var(--color-error)", borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "var(--font-roboto)" }}
-            >
+            <button onClick={() => onRespond(p.id, "declined")} className="flex items-center gap-1.5"
+              style={{ height: 32, paddingInline: 14, backgroundColor: "transparent", color: "var(--color-error)", border: "1px solid var(--color-error)", borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "var(--font-roboto)" }}>
               <X size={12} /> Decline
             </button>
           </div>
@@ -700,25 +896,16 @@ function MeetingsTab({
         <SectionHeader
           title="Upcoming Meetings"
           action={
-            <button
-              onClick={onPropose}
-              className="flex items-center gap-1.5"
-              style={{ height: 32, paddingInline: 14, backgroundColor: "var(--color-navy)", color: "#fff", border: "none", borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "var(--font-roboto)" }}
-            >
+            <button onClick={onPropose} className="flex items-center gap-1.5"
+              style={{ height: 32, paddingInline: 14, backgroundColor: "var(--color-navy)", color: "#fff", border: "none", borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "var(--font-roboto)" }}>
               <Plus size={13} /> Propose
             </button>
           }
         />
         {upcoming.length === 0 ? (
-          <EmptyState
-            icon={Send}
-            heading="No upcoming meetings"
+          <EmptyState icon={Send} heading="No upcoming meetings"
             body="Propose a time with your lab members — everyone can accept or decline."
-            action={
-              <button onClick={onPropose} style={{ fontSize: 13, fontWeight: 600, color: "var(--color-navy)", background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>
-                Propose a meeting
-              </button>
-            }
+            action={<button onClick={onPropose} style={{ fontSize: 13, fontWeight: 600, color: "var(--color-navy)", background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>Propose a meeting</button>}
           />
         ) : (
           upcoming.map(p => <ProposalRow key={p.id} p={p} />)
@@ -740,14 +927,15 @@ function MeetingsTab({
 type Tab = "calendar" | "availability" | "meetings";
 
 const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
-  { id: "calendar",     label: "Calendar",          icon: Calendar },
-  { id: "availability", label: "Availability",      icon: Users    },
-  { id: "meetings",     label: "Meetings",           icon: Send     },
+  { id: "calendar",     label: "Calendar",     icon: Calendar },
+  { id: "availability", label: "Availability", icon: Users    },
+  { id: "meetings",     label: "Meetings",     icon: Send     },
 ];
 
 export default function SchedulingPage() {
   const [tab, setTab] = useState<Tab>("calendar");
   const [showProposalModal, setShowProposalModal] = useState(false);
+  const [googleConnected, setGoogleConnected] = useState(false);
   const [loading, setLoading] = useState(true);
 
   // Resolved from auth
@@ -1046,7 +1234,6 @@ export default function SchedulingPage() {
   return (
     <ClientOnly>
       <div className="px-4 md:px-8 py-6 max-w-5xl mx-auto">
-        {/* Page header */}
         <div className="mb-6">
           <h1 style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 22, color: "var(--color-navy)", margin: 0 }}>
             Scheduling
@@ -1086,7 +1273,6 @@ export default function SchedulingPage() {
           })}
         </div>
 
-        {/* Tab content */}
         {tab === "calendar" && (
           <CalendarTab
             events={events}
@@ -1104,6 +1290,8 @@ export default function SchedulingPage() {
             allAvailabilities={allAvailabilities}
             teamMembers={teamMembers}
             currentUserId={currentUserId}
+            googleConnected={googleConnected}
+            onToggleGoogle={() => setGoogleConnected(c => !c)}
           />
         )}
         {tab === "meetings" && (
