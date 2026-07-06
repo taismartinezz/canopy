@@ -103,6 +103,16 @@ function filterReminders(list: ListType, all: Reminder[]): Reminder[] {
   }
 }
 
+// Split reminders into two buckets for the Today smart list
+function groupToday(reminders: Reminder[]): { overdue: Reminder[]; today: Reminder[] } {
+  const todayMs = todayStart().getTime();
+  const tomorrowMs = tomorrowStart().getTime();
+  return {
+    overdue: reminders.filter(r => r.dueAt && new Date(r.dueAt).getTime() < todayMs),
+    today:   reminders.filter(r => { const ms = r.dueAt ? new Date(r.dueAt).getTime() : -1; return ms >= todayMs && ms < tomorrowMs; }),
+  };
+}
+
 function groupScheduled(reminders: Reminder[]): Array<{ label: string; sortKey: number; isPastDue: boolean; items: Reminder[] }> {
   const today = todayStart(); const tomorrow = tomorrowStart();
   const groups = new Map<string, { label: string; sortKey: number; isPastDue: boolean; items: Reminder[] }>();
@@ -331,13 +341,14 @@ function CompletionCircle({ completing, color, onClick }: { completing: boolean;
 
 interface ReminderRowProps {
   reminder: Reminder; currentUserId: string; teamMembers: User[]; isDraggable: boolean;
+  showScopeHint?: boolean;
   onComplete: (id: string) => void; onDelete: (id: string) => void; onEdit: () => void;
   onDragStart?: () => void; onDragEnd?: () => void;
   onDragOver?: (e: React.DragEvent) => void; onDrop?: (e: React.DragEvent) => void;
   isDragging?: boolean;
 }
 
-function ReminderRow({ reminder, currentUserId, teamMembers, isDraggable, onComplete, onDelete, onEdit, onDragStart, onDragEnd, onDragOver, onDrop, isDragging }: ReminderRowProps) {
+function ReminderRow({ reminder, currentUserId, teamMembers, isDraggable, showScopeHint, onComplete, onDelete, onEdit, onDragStart, onDragEnd, onDragOver, onDrop, isDragging }: ReminderRowProps) {
   const [completing, setCompleting] = useState(false);
   const [hovered, setHovered] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -373,6 +384,9 @@ function ReminderRow({ reminder, currentUserId, teamMembers, isDraggable, onComp
         <CompletionCircle completing={completing} color={circleColor} onClick={handleCheck} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 5, flexWrap: "wrap" }}>
+            {showScopeHint && (
+              <span style={{ width: 7, height: 7, borderRadius: "50%", flexShrink: 0, backgroundColor: reminder.scope === "lab" ? LIST_COLORS.lab : LIST_COLORS.personal, opacity: 0.65, display: "inline-block" }} />
+            )}
             {reminder.priority && (
               <span style={{ fontSize: 11, fontWeight: 800, color: LIST_COLORS.personal, letterSpacing: "-0.5px", flexShrink: 0, userSelect: "none" }}>
                 {PRIORITY_MARKS[reminder.priority]}
@@ -426,6 +440,7 @@ function CompletedReminderRow({ reminder, currentUserId, onUncomplete }: {
 interface DragListProps {
   items: Reminder[]; isDraggable: boolean; accentColor: string;
   currentUserId: string; teamMembers: User[]; editingId: string | null;
+  showScopeHint?: boolean;
   onComplete: (id: string) => void; onDelete: (id: string) => void;
   onEdit: (id: string) => void;
   onSave: (id: string, u: UpdatePayload) => void;
@@ -434,7 +449,7 @@ interface DragListProps {
   projectId?: string;
 }
 
-function DraggableList({ items, isDraggable, accentColor, currentUserId, teamMembers, editingId, onComplete, onDelete, onEdit, onSave, onCancelEdit, onReorder, projectId }: DragListProps) {
+function DraggableList({ items, isDraggable, accentColor, currentUserId, teamMembers, editingId, showScopeHint, onComplete, onDelete, onEdit, onSave, onCancelEdit, onReorder, projectId }: DragListProps) {
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dropBeforeId, setDropBeforeId] = useState<string | "end" | null>(null);
 
@@ -462,6 +477,7 @@ function DraggableList({ items, isDraggable, accentColor, currentUserId, teamMem
             <ReminderRow
               reminder={r} currentUserId={currentUserId} teamMembers={teamMembers}
               isDraggable={isDraggable} isDragging={draggingId === r.id}
+              showScopeHint={showScopeHint}
               onComplete={onComplete} onDelete={onDelete} onEdit={() => onEdit(r.id)}
               onDragStart={() => setDraggingId(r.id)}
               onDragEnd={() => { setDraggingId(null); setDropBeforeId(null); }}
@@ -669,16 +685,18 @@ function MyListRow({ id, count, selected, onClick }: { id: "personal"|"lab"; cou
 }
 
 function LeftPanel({ selected, activeReminders, onSelect }: { selected: ListType; activeReminders: Reminder[]; onSelect: (l: ListType) => void }) {
-  const tomorrow = tomorrowStart();
-  const counts = useMemo(() => ({
-    today:     activeReminders.filter(r => r.dueAt && new Date(r.dueAt) < tomorrow).length,
-    scheduled: activeReminders.filter(r => !!r.dueAt).length,
-    priority:  activeReminders.filter(r => !!r.priority).length,
-    all:       activeReminders.length,
-    personal:  activeReminders.filter(r => r.scope === "personal").length,
-    lab:       activeReminders.filter(r => r.scope === "lab").length,
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [activeReminders]);
+  const counts = useMemo(() => {
+    // Compute the boundary fresh inside the memo so it reflects the actual current day
+    const tomorrow = tomorrowStart();
+    return {
+      today:     activeReminders.filter(r => r.dueAt && new Date(r.dueAt) < tomorrow).length,
+      scheduled: activeReminders.filter(r => !!r.dueAt).length,
+      priority:  activeReminders.filter(r => !!r.priority).length,
+      all:       activeReminders.length,
+      personal:  activeReminders.filter(r => r.scope === "personal").length,
+      lab:       activeReminders.filter(r => r.scope === "lab").length,
+    };
+  }, [activeReminders]);
   return (
     <div style={{ width: 240, flexShrink: 0, padding: "20px 16px", overflowY: "auto", borderRight: "1px solid var(--color-border)", backgroundColor: "var(--color-canvas)", height: "100%", boxSizing: "border-box" }}>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 24 }}>
@@ -709,13 +727,14 @@ interface CardProps {
   onToggleAdd: () => void; onToggleCompleted: () => void; onUncomplete: (id: string) => void;
   onReorder: (fromId: string, beforeId: string | "end", items: Reminder[]) => void;
   hideAddRow?: boolean;
+  showScopeHint?: boolean;
 }
 
 function ReminderCard(props: CardProps) {
-  const { items, completedItems, showCompleted, isDraggable, accentColor, currentUserId, teamMembers, editingId, isAdding, selectedList, projectId, onComplete, onDelete, onEdit, onSave, onCancelEdit, onAdd, onToggleAdd, onToggleCompleted, onUncomplete, onReorder, hideAddRow } = props;
+  const { items, completedItems, showCompleted, isDraggable, accentColor, currentUserId, teamMembers, editingId, isAdding, selectedList, projectId, showScopeHint, onComplete, onDelete, onEdit, onSave, onCancelEdit, onAdd, onToggleAdd, onToggleCompleted, onUncomplete, onReorder, hideAddRow } = props;
   return (
     <div style={{ backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 12, overflow: "hidden" }}>
-      <DraggableList items={items} isDraggable={isDraggable} accentColor={accentColor} currentUserId={currentUserId} teamMembers={teamMembers} editingId={editingId} onComplete={onComplete} onDelete={onDelete} onEdit={onEdit} onSave={onSave} onCancelEdit={onCancelEdit} onReorder={onReorder} projectId={projectId} />
+      <DraggableList items={items} isDraggable={isDraggable} accentColor={accentColor} currentUserId={currentUserId} teamMembers={teamMembers} editingId={editingId} showScopeHint={showScopeHint} onComplete={onComplete} onDelete={onDelete} onEdit={onEdit} onSave={onSave} onCancelEdit={onCancelEdit} onReorder={onReorder} projectId={projectId} />
 
       {!hideAddRow && (
         isAdding ? (
@@ -768,6 +787,66 @@ function ScheduledView(props: CardProps) {
           </div>
         </div>
       ))}
+
+      <div style={{ margin: "0 24px 24px" }}>
+        <div style={{ backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 12, overflow: "hidden" }}>
+          {isAdding ? (
+            <InlineAddRow defaultScope={getDefaultScope(props.selectedList)} accentColor={accentColor} teamMembers={props.teamMembers} onAdd={props.onAdd} onClose={onToggleAdd} />
+          ) : (
+            <button onClick={onToggleAdd}
+              style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "10px 16px", background: "none", border: "none", cursor: "pointer", fontSize: 14, fontFamily: "var(--font-roboto)" }}
+              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = "rgba(0,0,0,0.02)"; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = "transparent"; }}>
+              <Plus size={15} color={accentColor} />
+              <span style={{ color: accentColor, fontWeight: 500 }}>New Reminder</span>
+            </button>
+          )}
+          {completedItems.length > 0 && (
+            <div style={{ borderTop: "1px solid var(--color-border)" }}>
+              <button onClick={onToggleCompleted} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "9px 16px", background: "none", border: "none", cursor: "pointer" }}>
+                <span style={{ fontSize: 13, color: "var(--color-secondary)", fontFamily: "var(--font-roboto)" }}>{completedItems.length} Completed</span>
+                <span style={{ fontSize: 12, fontWeight: 600, color: accentColor, fontFamily: "var(--font-roboto)" }}>{showCompleted ? "Hide" : "Show"}</span>
+              </button>
+              {showCompleted && completedItems.map(r => <CompletedReminderRow key={r.id} reminder={r} currentUserId={currentUserId} onUncomplete={onUncomplete} />)}
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ── TodayView — two fixed sections: Overdue + Today ───────────────────────────
+
+function TodayView(props: CardProps) {
+  const { overdue, today } = useMemo(() => groupToday(props.items), [props.items]);
+  const { accentColor, isAdding, onToggleAdd, completedItems, showCompleted, onToggleCompleted, onUncomplete, currentUserId } = props;
+
+  const sectionLabel = (text: string) => (
+    <div style={{ padding: "0 24px 6px" }}>
+      <span style={{ fontSize: 12, fontWeight: 700, color: "var(--color-secondary)", letterSpacing: "0.04em", textTransform: "uppercase", fontFamily: "var(--font-roboto)" }}>{text}</span>
+    </div>
+  );
+
+  return (
+    <>
+      {overdue.length > 0 && (
+        <div style={{ marginBottom: 20 }}>
+          {sectionLabel("Overdue")}
+          <div style={{ margin: "0 24px" }}>
+            <ReminderCard {...props} items={overdue} completedItems={[]} showCompleted={false}
+              isDraggable={false} hideAddRow={true} onToggleCompleted={() => {}} onUncomplete={() => {}} />
+          </div>
+        </div>
+      )}
+
+      <div style={{ marginBottom: 20 }}>
+        {sectionLabel("Today")}
+        <div style={{ margin: "0 24px" }}>
+          <ReminderCard {...props} items={today} completedItems={[]} showCompleted={false}
+            isDraggable={false} hideAddRow={true} onToggleCompleted={() => {}} onUncomplete={() => {}} />
+        </div>
+      </div>
 
       <div style={{ margin: "0 24px 24px" }}>
         <div style={{ backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 12, overflow: "hidden" }}>
@@ -989,7 +1068,6 @@ export default function RemindersPage() {
   const panelColor = LIST_COLORS[selectedList];
   const panelLabel = LIST_LABELS[selectedList];
   const isDraggable = DRAGGABLE_LISTS.includes(selectedList);
-  const isGrouped = selectedList === "scheduled" || selectedList === "today";
 
   if (loading || (isSupabaseConfigured && projectLoading)) {
     return (
@@ -1005,6 +1083,7 @@ export default function RemindersPage() {
     isDraggable, accentColor: panelColor,
     currentUserId, teamMembers, editingId, isAdding, selectedList,
     projectId: projectId ?? undefined,
+    showScopeHint: !DRAGGABLE_LISTS.includes(selectedList),
     onComplete: handleComplete, onDelete: handleDelete, onEdit: setEditingId,
     onSave: handleUpdate, onCancelEdit: () => setEditingId(null),
     onAdd: handleAdd, onToggleAdd: () => setIsAdding(v => !v),
@@ -1034,7 +1113,13 @@ export default function RemindersPage() {
           </div>
 
           <div style={{ flex: 1, overflowY: "auto" }}>
-            {isGrouped ? (
+            {selectedList === "today" ? (
+              visible.length > 0 || isAdding || completedVisible.length > 0 ? (
+                <TodayView {...cardProps} />
+              ) : (
+                <EmptyState panelColor={panelColor} onAdd={() => setIsAdding(true)} />
+              )
+            ) : selectedList === "scheduled" ? (
               visible.length > 0 || isAdding || completedVisible.length > 0 ? (
                 <ScheduledView {...cardProps} />
               ) : (
