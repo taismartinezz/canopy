@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useRef, useMemo, Fragment } from "react";
 import { Plus, Check, CalendarDays, List, Trash2, ChevronLeft, ChevronRight, Clock, GripVertical, Users, User as UserIcon } from "lucide-react";
+import { DndContext, DragOverlay, useDraggable, useDroppable, PointerSensor, KeyboardSensor, useSensor, useSensors } from "@dnd-kit/core";
+import type { DragEndEvent } from "@dnd-kit/core";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { useProject } from "@/context/ProjectContext";
 import Avatar from "@/components/ui/Avatar";
@@ -405,7 +407,7 @@ function ReminderRow({ reminder, currentUserId, teamMembers, isDraggable, showSc
       style={{ maxHeight: completing ? 0 : 120, opacity: completing ? 0 : isDragging ? 0.4 : 1, overflow: "hidden", transform: completing ? "translateY(-2px)" : "none", transition: completing ? "opacity 0.2s, max-height 0.35s ease 0.06s, transform 0.2s" : "none", pointerEvents: completing ? "none" : undefined }}
     >
       <div onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)} onClick={onEdit}
-        style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 16px 10px 12px", borderBottom: "1px solid var(--color-border)", minHeight: 44, backgroundColor: hovered ? "rgba(0,0,0,0.02)" : "transparent", transition: "background-color 0.1s", cursor: "text" }}>
+        style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "7px 16px 7px 12px", borderBottom: "1px solid var(--color-border)", backgroundColor: hovered ? "rgba(0,0,0,0.02)" : "transparent", transition: "background-color 0.1s", cursor: "text" }}>
         {/* Drag handle — only shows when draggable and hovered */}
         <div style={{ width: 16, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", paddingTop: 2, opacity: isDraggable && hovered ? 0.4 : 0, cursor: "grab", transition: "opacity 0.12s" }}>
           <GripVertical size={14} color="var(--color-secondary)" />
@@ -454,7 +456,7 @@ function CompletedReminderRow({ reminder, currentUserId, onUncomplete }: {
   const canRestore = reminder.scope === "lab" ? true : reminder.userId === currentUserId;
   const circleColor = reminder.scope === "lab" ? LIST_COLORS.lab : LIST_COLORS.personal;
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 16px", borderBottom: "1px solid var(--color-border)", opacity: 0.5 }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "6px 16px", borderBottom: "1px solid var(--color-border)", opacity: 0.5 }}>
       <button onClick={() => canRestore && onUncomplete(reminder.id)} disabled={!canRestore} aria-label="Restore reminder"
         style={{ width: 22, height: 22, borderRadius: "50%", flexShrink: 0, border: `2px solid ${circleColor}`, backgroundColor: circleColor, display: "flex", alignItems: "center", justifyContent: "center", cursor: canRestore ? "pointer" : "default" }}>
         <Check size={11} color="#fff" strokeWidth={3} />
@@ -702,10 +704,9 @@ function LeftPanel({ selected, activeReminders, onSelect, collapsed, onToggleCol
   collapsed: boolean; onToggleCollapse: () => void;
 }) {
   const counts = useMemo(() => ({
-    all:       activeReminders.length,
-    scheduled: activeReminders.filter(r => !!r.dueAt).length,
-    lab:       activeReminders.filter(r => r.scope === "lab").length,
-    personal:  activeReminders.filter(r => r.scope === "personal").length,
+    all:      activeReminders.length,
+    lab:      activeReminders.filter(r => r.scope === "lab").length,
+    personal: activeReminders.filter(r => r.scope === "personal").length,
   }), [activeReminders]);
 
   return (
@@ -720,10 +721,11 @@ function LeftPanel({ selected, activeReminders, onSelect, collapsed, onToggleCol
       </div>
       <div style={{ opacity: collapsed ? 0 : 1, transition: "opacity 0.12s", pointerEvents: collapsed ? "none" : undefined, padding: "0 12px 20px" }}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-          <SmartListCard id="all"       count={counts.all}       icon={<List size={20} />}        selected={selected === "all"}       onClick={() => onSelect("all")} />
-          <SmartListCard id="scheduled" count={counts.scheduled} icon={<CalendarDays size={20} />} selected={selected === "scheduled"} onClick={() => onSelect("scheduled")} />
-          <SmartListCard id="lab"       count={counts.lab}       icon={<Users size={20} />}        selected={selected === "lab"}       onClick={() => onSelect("lab")} />
-          <SmartListCard id="personal"  count={counts.personal}  icon={<UserIcon size={20} />}     selected={selected === "personal"}  onClick={() => onSelect("personal")} />
+          <div style={{ gridColumn: "1 / -1" }}>
+            <SmartListCard id="all" count={counts.all} icon={<List size={20} />} selected={selected === "all"} onClick={() => onSelect("all")} />
+          </div>
+          <SmartListCard id="personal" count={counts.personal} icon={<UserIcon size={20} />} selected={selected === "personal"} onClick={() => onSelect("personal")} />
+          <SmartListCard id="lab"      count={counts.lab}      icon={<Users size={20} />}   selected={selected === "lab"}      onClick={() => onSelect("lab")} />
         </div>
       </div>
     </div>
@@ -742,6 +744,7 @@ interface CardProps {
   onAdd: (title: string, scope: ReminderScope, priority?: ReminderPriority, dueAt?: string, assigneeId?: string) => void;
   onToggleAdd: () => void; onToggleCompleted: () => void; onUncomplete: (id: string) => void;
   onReorder: (fromId: string, beforeId: string | "end", items: Reminder[]) => void;
+  onReschedule?: (id: string, newDueAt: string | null) => void;
   hideAddRow?: boolean;
   showScopeHint?: boolean;
 }
@@ -781,73 +784,149 @@ function ReminderCard(props: CardProps) {
   );
 }
 
-// ── GroupedView — unified date-grouped layout for all 4 list types ────────────
+// ── Drag-to-reschedule components ────────────────────────────────────────────
+
+interface SecItem {
+  key: string; label: string; sortKey?: number;
+  items: Reminder[]; isSub?: boolean;
+  isPastDueHeader?: boolean; dateMs?: number; isNoDate?: boolean;
+}
+
+function DroppableZone({ id, isOver, accentColor, children }: { id: string; isOver: boolean; accentColor: string; children: React.ReactNode }) {
+  const { setNodeRef } = useDroppable({ id });
+  return (
+    <div ref={setNodeRef} style={{
+      backgroundColor: isOver ? `${accentColor}14` : "transparent",
+      borderRadius: 4, transition: "background-color 0.15s",
+    }}>
+      {children}
+    </div>
+  );
+}
+
+function DndReminderRow({ reminder, ...rowProps }: { reminder: Reminder } & Omit<ReminderRowProps, "onDragStart" | "onDragEnd" | "onDragOver" | "onDrop" | "isDragging" | "isDraggable">) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: reminder.id });
+  return (
+    <div ref={setNodeRef} {...attributes} {...listeners} style={{ opacity: isDragging ? 0.25 : 1, touchAction: "none" }}>
+      <ReminderRow {...rowProps} reminder={reminder} isDraggable={false} isDragging={isDragging} />
+    </div>
+  );
+}
+
+// ── GroupedView — Apple-density date-grouped layout with reschedule drag ──────
 
 function GroupedView({ includeNoDate, ...props }: CardProps & { includeNoDate: boolean }) {
   const groups = useMemo(() => groupByDate(props.items), [props.items]);
+  const sections = useMemo<SecItem[]>(() => {
+    const r: SecItem[] = [];
+    if (groups.pastDue.length > 0) {
+      r.push({ key: "past-due-hdr", label: "Past Due", items: [], isPastDueHeader: true });
+      groups.pastDue.forEach(dg => r.push({ key: `pd-${dg.sortKey}`, label: dg.label, sortKey: dg.sortKey, items: dg.items, isSub: true, dateMs: dg.sortKey }));
+    }
+    if (groups.today.length > 0) r.push({ key: "today", label: "Today", items: groups.today, dateMs: todayStart().getTime() });
+    if (groups.tomorrow.length > 0) r.push({ key: "tomorrow", label: "Tomorrow", items: groups.tomorrow, dateMs: tomorrowStart().getTime() });
+    groups.future.forEach(dg => r.push({ key: `fut-${dg.sortKey}`, label: dg.label, sortKey: dg.sortKey, items: dg.items, dateMs: dg.sortKey }));
+    if (includeNoDate && groups.noDate.length > 0) r.push({ key: "no-date", label: "No Date", items: groups.noDate, isNoDate: true });
+    return r;
+  }, [groups, includeNoDate]);
+
   const { accentColor, isAdding, onToggleAdd, completedItems, showCompleted, onToggleCompleted, onUncomplete, currentUserId } = props;
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [overId, setOverId] = useState<string | null>(null);
 
-  const hdrStyle: React.CSSProperties = { fontSize: 12, fontWeight: 700, color: "var(--color-secondary)", letterSpacing: "0.04em", textTransform: "uppercase", fontFamily: "var(--font-roboto)" };
-  const subStyle: React.CSSProperties = { fontSize: 11, fontWeight: 600, color: "var(--color-secondary)", opacity: 0.7, fontFamily: "var(--font-roboto)" };
+  const activeReminder = useMemo(
+    () => activeId ? [...props.items, ...props.completedItems].find(r => r.id === activeId) ?? null : null,
+    [activeId, props.items, props.completedItems]
+  );
 
-  function GroupCard({ items }: { items: Reminder[] }) {
-    return (
-      <div style={{ margin: "0 24px" }}>
-        <ReminderCard {...props} items={items} completedItems={[]} showCompleted={false}
-          isDraggable={false} hideAddRow={true} onToggleCompleted={() => {}} onUncomplete={() => {}} />
-      </div>
-    );
+  const prefersReducedMotion = typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor)
+  );
+
+  function handleDragEnd(event: DragEndEvent) {
+    setActiveId(null); setOverId(null);
+    const { active, over } = event;
+    if (!over || !props.onReschedule) return;
+    const reminderId = String(active.id);
+    const target = sections.find(s => s.key === String(over.id) && !s.isPastDueHeader);
+    if (!target) return;
+    const reminder = [...props.items, ...props.completedItems].find(r => r.id === reminderId);
+    if (!reminder) return;
+
+    let newDueAt: string | null;
+    if (target.isNoDate) {
+      newDueAt = null;
+    } else {
+      const d = new Date(target.dateMs!);
+      let h = 9, m = 0;
+      if (reminder.dueAt && hasExplicitTime(reminder.dueAt)) {
+        const ex = new Date(reminder.dueAt); h = ex.getHours(); m = ex.getMinutes();
+      }
+      const yy = d.getFullYear();
+      const mo = String(d.getMonth() + 1).padStart(2, "0");
+      const dd = String(d.getDate()).padStart(2, "0");
+      const hh = String(h).padStart(2, "0");
+      const mi = String(m).padStart(2, "0");
+      newDueAt = new Date(`${yy}-${mo}-${dd}T${hh}:${mi}`).toISOString();
+    }
+    props.onReschedule(reminderId, newDueAt);
+  }
+
+  const hdrStyle: React.CSSProperties = {
+    fontSize: 11, fontWeight: 700, color: "var(--color-secondary)",
+    letterSpacing: "0.07em", textTransform: "uppercase", fontFamily: "var(--font-roboto)"
+  };
+  const subStyle: React.CSSProperties = {
+    fontSize: 11, fontWeight: 500, color: "var(--color-secondary)", opacity: 0.65, fontFamily: "var(--font-roboto)"
+  };
+
+  function renderRows(items: Reminder[]) {
+    return items.map(r => (
+      <Fragment key={r.id}>
+        {props.editingId === r.id ? (
+          <ReminderEditRow reminder={r} teamMembers={props.teamMembers} currentUserId={props.currentUserId} projectId={props.projectId} onSave={props.onSave} onCancel={props.onCancelEdit} />
+        ) : (
+          <DndReminderRow reminder={r} currentUserId={props.currentUserId} teamMembers={props.teamMembers} showScopeHint={props.showScopeHint} onComplete={props.onComplete} onDelete={props.onDelete} onEdit={() => props.onEdit(r.id)} />
+        )}
+      </Fragment>
+    ));
   }
 
   return (
-    <>
-      {groups.pastDue.length > 0 && (
-        <div style={{ marginBottom: 20 }}>
-          <div style={{ padding: "0 24px 6px" }}><span style={hdrStyle}>Past Due</span></div>
-          {groups.pastDue.map(dg => (
-            <div key={dg.sortKey} style={{ marginBottom: 6 }}>
-              <div style={{ padding: "0 24px 4px 32px" }}><span style={subStyle}>{dg.label}</span></div>
-              <GroupCard items={dg.items} />
+    <DndContext sensors={sensors}
+      onDragStart={e => setActiveId(String(e.active.id))}
+      onDragOver={e => setOverId(e.over ? String(e.over.id) : null)}
+      onDragEnd={handleDragEnd}
+      onDragCancel={() => { setActiveId(null); setOverId(null); }}>
+
+      <div style={{ paddingBottom: 24 }}>
+        {sections.map((sec, idx) => (
+          <Fragment key={sec.key}>
+            <div style={{
+              paddingTop: idx === 0 ? 10 : (sec.isSub ? 8 : 14),
+              paddingBottom: 3,
+              paddingLeft: sec.isSub ? 24 : 16,
+              paddingRight: 16,
+            }}>
+              <span style={sec.isSub ? subStyle : hdrStyle}>{sec.label}</span>
             </div>
-          ))}
-        </div>
-      )}
+            {!sec.isPastDueHeader && (
+              <DroppableZone id={sec.key} isOver={!!activeId && overId === sec.key} accentColor={accentColor}>
+                {renderRows(sec.items)}
+              </DroppableZone>
+            )}
+          </Fragment>
+        ))}
 
-      {groups.today.length > 0 && (
-        <div style={{ marginBottom: 20 }}>
-          <div style={{ padding: "0 24px 6px" }}><span style={hdrStyle}>Today</span></div>
-          <GroupCard items={groups.today} />
-        </div>
-      )}
-
-      {groups.tomorrow.length > 0 && (
-        <div style={{ marginBottom: 20 }}>
-          <div style={{ padding: "0 24px 6px" }}><span style={hdrStyle}>Tomorrow</span></div>
-          <GroupCard items={groups.tomorrow} />
-        </div>
-      )}
-
-      {groups.future.map(dg => (
-        <div key={dg.sortKey} style={{ marginBottom: 20 }}>
-          <div style={{ padding: "0 24px 6px" }}><span style={hdrStyle}>{dg.label}</span></div>
-          <GroupCard items={dg.items} />
-        </div>
-      ))}
-
-      {includeNoDate && groups.noDate.length > 0 && (
-        <div style={{ marginBottom: 20 }}>
-          <div style={{ padding: "0 24px 6px" }}><span style={hdrStyle}>No Date</span></div>
-          <GroupCard items={groups.noDate} />
-        </div>
-      )}
-
-      <div style={{ margin: "0 24px 24px" }}>
-        <div style={{ backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 12, overflow: "hidden" }}>
+        <div>
           {isAdding ? (
             <InlineAddRow defaultScope={getDefaultScope(props.selectedList)} accentColor={accentColor} teamMembers={props.teamMembers} onAdd={props.onAdd} onClose={onToggleAdd} />
           ) : (
             <button onClick={onToggleAdd}
-              style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "10px 16px", background: "none", border: "none", cursor: "pointer", fontSize: 14, fontFamily: "var(--font-roboto)" }}
+              style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "9px 16px", background: "none", border: "none", borderTop: sections.length > 0 ? "1px solid var(--color-border)" : "none", cursor: "pointer", fontSize: 14, fontFamily: "var(--font-roboto)" }}
               onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = "rgba(0,0,0,0.02)"; }}
               onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = "transparent"; }}>
               <Plus size={15} color={accentColor} />
@@ -865,7 +944,15 @@ function GroupedView({ includeNoDate, ...props }: CardProps & { includeNoDate: b
           )}
         </div>
       </div>
-    </>
+
+      <DragOverlay dropAnimation={prefersReducedMotion ? null : { duration: 150, easing: "ease" }}>
+        {activeReminder && (
+          <div style={{ boxShadow: "0 4px 20px rgba(0,0,0,0.15)", borderRadius: 4, backgroundColor: "var(--color-surface)", opacity: 0.96 }}>
+            <ReminderRow reminder={activeReminder} isDraggable={false} currentUserId={props.currentUserId} teamMembers={props.teamMembers} showScopeHint={props.showScopeHint} onComplete={() => {}} onDelete={() => {}} onEdit={() => {}} />
+          </div>
+        )}
+      </DragOverlay>
+    </DndContext>
   );
 }
 
@@ -1056,6 +1143,19 @@ export default function RemindersPage() {
     if (isSupabaseConfigured) supabase.from("reminders").update({ position: newPos }).eq("id", fromId).then(({ error }) => { if (error) console.error("[Reminders] reorder:", error); });
   }
 
+  async function handleReschedule(id: string, newDueAt: string | null) {
+    const original = reminders.find(r => r.id === id);
+    if (!original) return;
+    setReminders(prev => prev.map(r => r.id === id ? { ...r, dueAt: newDueAt ?? undefined } : r));
+    if (isSupabaseConfigured) {
+      const { error } = await supabase.from("reminders").update({ due_at: newDueAt }).eq("id", id);
+      if (error) {
+        console.error("[Reminders] reschedule:", error);
+        setReminders(prev => prev.map(r => r.id === id ? original : r));
+      }
+    }
+  }
+
   function handleListSelect(list: ListType) { setSelectedList(list); setIsAdding(false); setEditingId(null); setShowCompleted(false); }
 
   const allActive = useMemo(() => reminders.filter(r => !r.completed), [reminders]);
@@ -1086,12 +1186,13 @@ export default function RemindersPage() {
     isDraggable, accentColor: panelColor,
     currentUserId, teamMembers, editingId, isAdding, selectedList,
     projectId: projectId ?? undefined,
-    showScopeHint: selectedList === "all" || selectedList === "scheduled",
+    showScopeHint: selectedList === "all",
     onComplete: handleComplete, onDelete: handleDelete, onEdit: setEditingId,
     onSave: handleUpdate, onCancelEdit: () => setEditingId(null),
     onAdd: handleAdd, onToggleAdd: () => setIsAdding(v => !v),
     onToggleCompleted: () => setShowCompleted(v => !v),
     onUncomplete: handleUncomplete, onReorder: handleReorder,
+    onReschedule: handleReschedule,
   };
 
   return (
@@ -1105,7 +1206,7 @@ export default function RemindersPage() {
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
 
           <div className="flex md:hidden" style={{ overflowX: "auto", padding: "12px 16px", gap: 8, borderBottom: "1px solid var(--color-border)", flexShrink: 0 }}>
-            {(["all","scheduled","lab","personal"] as ListType[]).map(id => {
+            {(["all","personal","lab"] as ListType[]).map(id => {
               const isAct = selectedList === id;
               return <button key={id} onClick={() => handleListSelect(id)} style={{ height: 32, paddingInline: 14, borderRadius: 20, flexShrink: 0, border: "none", backgroundColor: isAct ? LIST_COLORS[id] : "rgba(0,0,0,0.06)", color: isAct ? "#fff" : "var(--color-secondary)", fontSize: 13, fontWeight: isAct ? 700 : 400, cursor: "pointer", fontFamily: "var(--font-roboto)" }}>{LIST_LABELS[id]}</button>;
             })}
@@ -1117,7 +1218,7 @@ export default function RemindersPage() {
 
           <div style={{ flex: 1, overflowY: "auto" }}>
             {visible.length > 0 || isAdding || completedVisible.length > 0 ? (
-              <GroupedView {...cardProps} includeNoDate={selectedList !== "scheduled"} />
+              <GroupedView {...cardProps} includeNoDate={true} />
             ) : (
               <EmptyState panelColor={panelColor} onAdd={() => setIsAdding(true)} />
             )}
