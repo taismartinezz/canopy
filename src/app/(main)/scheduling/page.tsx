@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Calendar, Users, Send, Clock, Check, X, Plus,
   AlertCircle, Lock, Trash2,
@@ -16,6 +16,7 @@ import TeamOverlapView from "@/components/scheduling/TeamOverlapView";
 import MeetingProposalModal from "@/components/scheduling/MeetingProposalModal";
 import Avatar from "@/components/ui/Avatar";
 import ClientOnly from "@/components/ui/ClientOnly";
+import { CalendarPicker, TimePicker, formatDateLabel, formatTimeDisplay } from "@/components/ui/DateTimePicker";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -569,6 +570,12 @@ function EventsTab({
   const [time, setTime] = useState("");
   const [scope, setScope] = useState<"lab" | "personal">("lab");
   const [error, setError] = useState("");
+  const [showCal, setShowCal] = useState(false);
+  const [calPos, setCalPos] = useState<{ top: number; left: number } | null>(null);
+  const [showTP, setShowTP] = useState(false);
+  const [tpPos, setTpPos] = useState<{ top: number; left: number } | null>(null);
+  const dateBtnRef = useRef<HTMLButtonElement>(null);
+  const timeBtnRef = useRef<HTMLButtonElement>(null);
 
   // Chronological, lab events + my personal events already filtered by parent
   const sorted = [...events].sort((a, b) => a.date.localeCompare(b.date));
@@ -634,9 +641,43 @@ function EventsTab({
             onBlur={(e) => { e.currentTarget.style.borderColor = "var(--color-border)"; }}
           />
           <div className="flex gap-2">
-            <input type="date" value={date} onChange={(e) => { setDate(e.target.value); setError(""); }} style={{ ...evInputStyle, flex: 1 }} />
-            <input type="time" value={time} onChange={(e) => setTime(e.target.value)} style={{ ...evInputStyle, width: 110 }} />
+            <button
+              ref={dateBtnRef}
+              onClick={() => {
+                if (!dateBtnRef.current) return;
+                const r = dateBtnRef.current.getBoundingClientRect();
+                setCalPos({ top: r.bottom + 6, left: r.left });
+                setShowCal(v => !v); setShowTP(false); setError("");
+              }}
+              style={{ ...evInputStyle, flex: 1, display: "flex", alignItems: "center", gap: 6, cursor: "pointer", color: date ? "var(--color-body)" : "var(--color-secondary)" }}
+            >
+              {date ? formatDateLabel(date) : "Date"}
+            </button>
+            <button
+              ref={timeBtnRef}
+              onClick={() => {
+                if (!timeBtnRef.current) return;
+                const r = timeBtnRef.current.getBoundingClientRect();
+                setTpPos({ top: r.bottom + 6, left: r.left });
+                setShowTP(v => !v); setShowCal(false);
+              }}
+              style={{ ...evInputStyle, width: 110, display: "flex", alignItems: "center", gap: 6, cursor: "pointer", color: time ? "var(--color-body)" : "var(--color-secondary)" }}
+            >
+              {time ? formatTimeDisplay(time) : "+ time"}
+            </button>
           </div>
+          {showCal && calPos && (
+            <CalendarPicker value={date || undefined} accentColor="#1B2E4B" pos={calPos}
+              onSelect={d => { setDate(d); setShowCal(false); }}
+              onClear={() => { setDate(""); setShowCal(false); }}
+              onClose={() => setShowCal(false)} />
+          )}
+          {showTP && tpPos && (
+            <TimePicker value={time || "09:00"} accentColor="#1B2E4B" pos={tpPos}
+              onChange={t => setTime(t)}
+              onClear={() => { setTime(""); setShowTP(false); }}
+              onClose={() => setShowTP(false)} />
+          )}
           {error && <p style={{ fontSize: 11, color: "var(--color-error)" }}>{error}</p>}
           <div className="flex gap-2">
             <button onClick={handleAdd} style={{ height: 32, paddingInline: 16, backgroundColor: "var(--color-navy)", color: "#fff", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Add</button>

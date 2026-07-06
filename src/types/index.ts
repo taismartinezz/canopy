@@ -69,6 +69,7 @@ export interface TaskFile {
   uploaderId: string;
   uploadedAt: string;
   url: string;
+  storagePath?: string;   // Supabase Storage object path for deletion
   type: "pdf" | "docx" | "image" | "spreadsheet" | "other";
 }
 

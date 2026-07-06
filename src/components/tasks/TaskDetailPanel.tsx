@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import {
   X, Send, Paperclip, Download, Trash2, FileText, File, Image, Table,
-  ExternalLink, Plus, Copy, MoreHorizontal,
+  ExternalLink, Plus, Copy, MoreHorizontal, CalendarDays,
 } from "lucide-react";
 import {
   CURRENT_USER_ID, formatRelativeTime, formatDate, formatFileSize, getUser,
@@ -11,7 +11,8 @@ import {
 import type { Task, TaskStatus, TaskPriority, User, TaskComment, TaskFile } from "@/types";
 import Avatar from "@/components/ui/Avatar";
 import { showToast } from "@/components/ui/Toast";
-import { supabase } from "@/lib/supabase";
+import { supabase, isSupabaseConfigured } from "@/lib/supabase";
+import { CalendarPicker, formatDateLabel } from "@/components/ui/DateTimePicker";
 
 // ── Shared config ─────────────────────────────────────────────────────────────
 
@@ -135,6 +136,9 @@ export default function TaskDetailPanel({
   const [localDesc, setLocalDesc] = useState(task.description ?? "");
   const descRef = useRef<HTMLTextAreaElement>(null);
   const [localDueDate, setLocalDueDate] = useState(task.dueDate ?? "");
+  const [showCal, setShowCal] = useState(false);
+  const [calPos, setCalPos] = useState<{ top: number; left: number } | null>(null);
+  const dueDateBtnRef = useRef<HTMLButtonElement>(null);
 
   // Local copies — initialized from task, mutated locally & pushed to parent
   const [localComments, setLocalComments] = useState<TaskComment[]>(task.comments);
@@ -218,29 +222,53 @@ export default function TaskDetailPanel({
 
   // ── File actions ──────────────────────────────────────────────────────────
 
-  function handleFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    e.target.value = "";
+
+    const fileId = crypto.randomUUID();
+    let url = "";
+    let storagePath: string | undefined;
+
+    if (isSupabaseConfigured) {
+      storagePath = `${task.projectId}/${task.id}/${fileId}-${file.name}`;
+      const { error: uploadError } = await supabase.storage
+        .from("task-files")
+        .upload(storagePath, file);
+      if (uploadError) {
+        console.error("[TaskFiles] upload:", uploadError);
+        showToast("Upload failed", "error");
+        return;
+      }
+      url = supabase.storage.from("task-files").getPublicUrl(storagePath).data.publicUrl;
+    }
+
     const newFile: TaskFile = {
-      id: crypto.randomUUID(),
+      id: fileId,
       name: file.name,
       size: file.size,
       uploaderId: currentUserId || CURRENT_USER_ID,
       uploadedAt: new Date().toISOString(),
-      url: "",
+      url,
+      storagePath,
       type: guessFileType(file.name),
     };
     const updated = [...localFiles, newFile];
     setLocalFiles(updated);
     onUpdateTask?.({ files: updated });
-    e.target.value = "";
   }
 
-  function handleDeleteFile(id: string) {
+  async function handleDeleteFile(id: string) {
     if (!window.confirm("Remove this file?")) return;
+    const target = localFiles.find(f => f.id === id);
     const updated = localFiles.filter((f) => f.id !== id);
     setLocalFiles(updated);
     onUpdateTask?.({ files: updated });
+    if (target?.storagePath && isSupabaseConfigured) {
+      const { error } = await supabase.storage.from("task-files").remove([target.storagePath]);
+      if (error) console.error("[TaskFiles] delete from storage:", error);
+    }
   }
 
   // ── Assignee actions ──────────────────────────────────────────────────────
@@ -424,26 +452,39 @@ export default function TaskDetailPanel({
             <div>
               <p style={{ fontSize: 11, fontWeight: 700, color: "var(--color-secondary)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>Due Date</p>
               <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                <input
-                  type="date"
-                  value={localDueDate}
-                  onChange={e => {
-                    const v = e.target.value;
-                    setLocalDueDate(v);
-                    onUpdateTask?.({ dueDate: v || undefined });
+                <button
+                  ref={dueDateBtnRef}
+                  onClick={() => {
+                    if (!dueDateBtnRef.current) return;
+                    const r = dueDateBtnRef.current.getBoundingClientRect();
+                    setCalPos({ top: r.bottom + 6, left: r.left });
+                    setShowCal(v => !v);
                   }}
-                  style={{ fontSize: 13, color: localDueDate ? "var(--color-body)" : "var(--color-secondary)", backgroundColor: "transparent", border: "1px solid transparent", borderRadius: 4, padding: "2px 4px", cursor: "pointer", fontFamily: "var(--font-roboto)" }}
-                  onFocus={e => (e.currentTarget.style.borderColor = "var(--color-navy)")}
-                  onBlur={e => (e.currentTarget.style.borderColor = "transparent")}
-                />
+                  style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 13, color: localDueDate ? "var(--color-body)" : "var(--color-secondary)", backgroundColor: "transparent", border: "1px solid transparent", borderRadius: 4, padding: "2px 4px", cursor: "pointer", fontFamily: "var(--font-roboto)" }}
+                  onMouseEnter={e => (e.currentTarget.style.borderColor = "var(--color-border)")}
+                  onMouseLeave={e => (e.currentTarget.style.borderColor = "transparent")}
+                >
+                  <CalendarDays size={13} />
+                  {localDueDate ? formatDateLabel(localDueDate) : "No due date"}
+                </button>
                 {localDueDate && (
                   <button
-                    onClick={() => { setLocalDueDate(""); onUpdateTask?.({ dueDate: undefined }); }}
+                    onClick={() => { setLocalDueDate(""); setShowCal(false); onUpdateTask?.({ dueDate: undefined }); }}
                     style={{ fontSize: 11, color: "var(--color-secondary)", background: "none", border: "none", cursor: "pointer", padding: "0 2px", lineHeight: 1 }}
                     title="Clear due date"
                   >×</button>
                 )}
               </div>
+              {showCal && calPos && (
+                <CalendarPicker
+                  value={localDueDate || undefined}
+                  accentColor="#1B2E4B"
+                  pos={calPos}
+                  onSelect={d => { setLocalDueDate(d); onUpdateTask?.({ dueDate: d }); setShowCal(false); }}
+                  onClear={() => { setLocalDueDate(""); onUpdateTask?.({ dueDate: undefined }); setShowCal(false); }}
+                  onClose={() => setShowCal(false)}
+                />
+              )}
             </div>
 
             <div>
@@ -644,7 +685,7 @@ export default function TaskDetailPanel({
                         </p>
                       </div>
                       <button
-                        onClick={() => showToast("Download started", "info")}
+                        onClick={() => file.url ? window.open(file.url, "_blank") : showToast("File not available", "error")}
                         className="w-7 h-7 flex items-center justify-center rounded hover:bg-[rgba(27,46,75,0.06)] transition-colors"
                         aria-label="Download"
                       >
