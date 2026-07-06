@@ -607,6 +607,19 @@ export default function TasksPage() {
   const updateTask = useCallback((taskId: string, updates: Partial<Task>) => {
     setTasks((prev) => prev.map((t) => t.id === taskId ? { ...t, ...updates } : t));
     setSelectedTask((prev) => prev?.id === taskId ? { ...prev, ...updates } as Task : prev);
+    if (!isSupabaseConfigured) return;
+    const db: Record<string, unknown> = {};
+    if (updates.title       !== undefined) db.title        = updates.title;
+    if (updates.description !== undefined) db.description  = updates.description;
+    if (updates.priority    !== undefined) db.priority     = updates.priority;
+    if (updates.status      !== undefined) db.status       = updates.status;
+    if (updates.dueDate     !== undefined) db.due_date     = updates.dueDate || null;
+    if (updates.assigneeIds !== undefined) db.assignee_ids = updates.assigneeIds;
+    if (updates.comments    !== undefined) db.comments     = updates.comments;
+    if (updates.files       !== undefined) db.files        = updates.files;
+    if (Object.keys(db).length > 0)
+      supabase.from("tasks").update(db).eq("id", taskId)
+        .then(({ error }) => { if (error) console.error("[Tasks] update error:", error); });
   }, []);
 
   const addTask = useCallback((task: Task) => {

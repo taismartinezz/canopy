@@ -128,15 +128,44 @@ export default function TaskDetailPanel({
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
+  // Inline-editable fields
+  const [localTitle, setLocalTitle] = useState(task.title);
+  const [editingTitle, setEditingTitle] = useState(false);
+  const titleInputRef = useRef<HTMLInputElement>(null);
+  const [localDesc, setLocalDesc] = useState(task.description ?? "");
+  const descRef = useRef<HTMLTextAreaElement>(null);
+  const [localDueDate, setLocalDueDate] = useState(task.dueDate ?? "");
+
   // Local copies — initialized from task, mutated locally & pushed to parent
   const [localComments, setLocalComments] = useState<TaskComment[]>(task.comments);
   const [localFiles, setLocalFiles]       = useState<TaskFile[]>(task.files);
   const [localAssigneeIds, setLocalAssigneeIds] = useState<string[]>(task.assigneeIds);
 
-  // Sync if parent updates the task (e.g. task switched)
-  useEffect(() => { setLocalComments(task.comments); }, [task.id]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { setLocalFiles(task.files); },       [task.id]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { setLocalAssigneeIds(task.assigneeIds); }, [task.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Sync all local state when task switches
+  useEffect(() => {
+    setLocalTitle(task.title);
+    setEditingTitle(false);
+    setLocalDesc(task.description ?? "");
+    setLocalDueDate(task.dueDate ?? "");
+    setLocalComments(task.comments);
+    setLocalFiles(task.files);
+    setLocalAssigneeIds(task.assigneeIds);
+  }, [task.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-resize description textarea
+  useEffect(() => {
+    if (descRef.current) {
+      descRef.current.style.height = "auto";
+      descRef.current.style.height = descRef.current.scrollHeight + "px";
+    }
+  }, [localDesc]);
+
+  function saveTitle() {
+    const t = localTitle.trim();
+    if (!t) { setLocalTitle(task.title); setEditingTitle(false); return; }
+    setEditingTitle(false);
+    if (t !== task.title) onUpdateTask?.({ title: t });
+  }
 
   function lookupUser(id: string): User | undefined {
     return teamMembers.find((u) => u.id === id) ?? getUser(id);
@@ -258,9 +287,28 @@ export default function TaskDetailPanel({
                   {cfg.label}
                 </span>
               </div>
-              <h2 style={{ fontFamily: "var(--font-lora)", fontWeight: 600, fontSize: 17, color: "var(--color-body)", lineHeight: 1.3, margin: 0 }}>
-                {task.title}
-              </h2>
+              {editingTitle ? (
+                <input
+                  ref={titleInputRef}
+                  value={localTitle}
+                  onChange={e => setLocalTitle(e.target.value)}
+                  onBlur={saveTitle}
+                  onKeyDown={e => {
+                    if (e.key === "Enter") { e.preventDefault(); saveTitle(); }
+                    if (e.key === "Escape") { setLocalTitle(task.title); setEditingTitle(false); }
+                  }}
+                  style={{ fontFamily: "var(--font-lora)", fontWeight: 600, fontSize: 17, color: "var(--color-body)", lineHeight: 1.3, width: "100%", border: "none", outline: "2px solid var(--color-navy)", outlineOffset: 2, borderRadius: 3, padding: "1px 4px", backgroundColor: "transparent", fontStyle: "normal" }}
+                  autoFocus
+                />
+              ) : (
+                <h2
+                  onClick={() => { setEditingTitle(true); setTimeout(() => titleInputRef.current?.select(), 0); }}
+                  title="Click to edit title"
+                  style={{ fontFamily: "var(--font-lora)", fontWeight: 600, fontSize: 17, color: "var(--color-body)", lineHeight: 1.3, margin: 0, cursor: "text" }}
+                >
+                  {localTitle}
+                </h2>
+              )}
             </div>
             <div className="flex items-center gap-0.5 shrink-0">
               {/* ⋯ overflow menu */}
@@ -375,7 +423,27 @@ export default function TaskDetailPanel({
 
             <div>
               <p style={{ fontSize: 11, fontWeight: 700, color: "var(--color-secondary)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>Due Date</p>
-              <p style={{ fontSize: 13, color: "var(--color-body)" }}>{task.dueDate ? formatDate(task.dueDate) : "No due date"}</p>
+              <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                <input
+                  type="date"
+                  value={localDueDate}
+                  onChange={e => {
+                    const v = e.target.value;
+                    setLocalDueDate(v);
+                    onUpdateTask?.({ dueDate: v || undefined });
+                  }}
+                  style={{ fontSize: 13, color: localDueDate ? "var(--color-body)" : "var(--color-secondary)", backgroundColor: "transparent", border: "1px solid transparent", borderRadius: 4, padding: "2px 4px", cursor: "pointer", fontFamily: "var(--font-roboto)" }}
+                  onFocus={e => (e.currentTarget.style.borderColor = "var(--color-navy)")}
+                  onBlur={e => (e.currentTarget.style.borderColor = "transparent")}
+                />
+                {localDueDate && (
+                  <button
+                    onClick={() => { setLocalDueDate(""); onUpdateTask?.({ dueDate: undefined }); }}
+                    style={{ fontSize: 11, color: "var(--color-secondary)", background: "none", border: "none", cursor: "pointer", padding: "0 2px", lineHeight: 1 }}
+                    title="Clear due date"
+                  >×</button>
+                )}
+              </div>
             </div>
 
             <div>
@@ -440,11 +508,18 @@ export default function TaskDetailPanel({
         </div>
 
         {/* Description */}
-        {task.description && (
-          <div className="px-6 py-4" style={{ borderBottom: "1px solid var(--color-border)" }}>
-            <p style={{ fontSize: 13, color: "var(--color-body)", lineHeight: 1.6 }}>{task.description}</p>
-          </div>
-        )}
+        <div className="px-6 py-4" style={{ borderBottom: "1px solid var(--color-border)" }}>
+          <p style={{ fontSize: 11, fontWeight: 700, color: "var(--color-secondary)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>Description</p>
+          <textarea
+            ref={descRef}
+            value={localDesc}
+            onChange={e => setLocalDesc(e.target.value)}
+            onBlur={() => { if (localDesc !== (task.description ?? "")) onUpdateTask?.({ description: localDesc }); }}
+            placeholder="Add a description…"
+            rows={2}
+            style={{ fontSize: 13, color: "var(--color-body)", lineHeight: 1.6, backgroundColor: "transparent", border: "none", outline: "none", padding: 0, fontFamily: "var(--font-roboto)", width: "100%", resize: "none", display: "block" }}
+          />
+        </div>
 
         {/* Linked docs */}
         {task.links.length > 0 && (
