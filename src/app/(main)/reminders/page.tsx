@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useMemo, Fragment } from "react";
-import { Plus, Check, Sun, CalendarDays, List, Trash2, ChevronLeft, ChevronRight, Clock, GripVertical, Users } from "lucide-react";
+import { Plus, Check, CalendarDays, List, Trash2, ChevronLeft, ChevronRight, Clock, GripVertical, Users, User as UserIcon } from "lucide-react";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { useProject } from "@/context/ProjectContext";
 import Avatar from "@/components/ui/Avatar";
@@ -30,8 +30,8 @@ const HOURS = [1,2,3,4,5,6,7,8,9,10,11,12];
 const MINUTES = [0,5,10,15,20,25,30,35,40,45,50,55];
 const ITEM_H = 34;
 
-// Draggable only in list views, not smart/grouped views
-const DRAGGABLE_LISTS: ListType[] = ["personal", "lab"];
+// No drag-reorder — all views use date-sorted grouped layout
+const DRAGGABLE_LISTS: ListType[] = [];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -108,31 +108,55 @@ function filterReminders(list: ListType, all: Reminder[]): Reminder[] {
   }
 }
 
-// Split reminders into two buckets for the Today smart list
-function groupToday(reminders: Reminder[]): { overdue: Reminder[]; today: Reminder[] } {
-  const todayMs = todayStart().getTime();
-  const tomorrowMs = tomorrowStart().getTime();
-  return {
-    overdue: reminders.filter(r => r.dueAt && new Date(r.dueAt).getTime() < todayMs),
-    today:   reminders.filter(r => { const ms = r.dueAt ? new Date(r.dueAt).getTime() : -1; return ms >= todayMs && ms < tomorrowMs; }),
-  };
+// ── Date grouping ─────────────────────────────────────────────────────────────
+
+interface DateGroup { label: string; sortKey: number; items: Reminder[]; }
+interface ReminderGroups {
+  pastDue: DateGroup[];
+  today: Reminder[];
+  tomorrow: Reminder[];
+  future: DateGroup[];
+  noDate: Reminder[];
 }
 
-function groupScheduled(reminders: Reminder[]): Array<{ label: string; sortKey: number; isPastDue: boolean; items: Reminder[] }> {
-  const today = todayStart(); const tomorrow = tomorrowStart();
-  const groups = new Map<string, { label: string; sortKey: number; isPastDue: boolean; items: Reminder[] }>();
-  const sorted = [...reminders.filter(r => !!r.dueAt)].sort((a,b) => new Date(a.dueAt!).getTime()-new Date(b.dueAt!).getTime());
-  for (const r of sorted) {
-    const dMid = new Date(r.dueAt!); dMid.setHours(0,0,0,0);
-    const sortKey = dMid.getTime(); let label: string; let isPastDue = false;
-    if (dMid < today)                               { isPastDue = true; label = dMid.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" }); }
-    else if (dMid.getTime() === today.getTime())    label = "Today";
-    else if (dMid.getTime() === tomorrow.getTime()) label = "Tomorrow";
-    else label = dMid.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
-    if (!groups.has(label)) groups.set(label, { label, sortKey, isPastDue, items: [] });
-    groups.get(label)!.items.push(r);
+function groupByDate(reminders: Reminder[]): ReminderGroups {
+  const todayMs = todayStart().getTime();
+  const tomorrowMs = tomorrowStart().getTime();
+  const pastMap  = new Map<number, DateGroup>();
+  const futureMap = new Map<number, DateGroup>();
+  const todayItems: Reminder[] = [];
+  const tomorrowItems: Reminder[] = [];
+
+  for (const r of sortByDate(reminders.filter(r => !!r.dueAt))) {
+    const dMid = new Date(r.dueAt!); dMid.setHours(0, 0, 0, 0);
+    const key = dMid.getTime();
+    const wd = dMid.toLocaleDateString("en-US", { weekday: "short" });
+    const md = dMid.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    const lbl = `${wd} ${md}`;
+    if (key < todayMs) {
+      if (!pastMap.has(key)) pastMap.set(key, { label: lbl, sortKey: key, items: [] });
+      pastMap.get(key)!.items.push(r);
+    } else if (key === todayMs) {
+      todayItems.push(r);
+    } else if (key === tomorrowMs) {
+      tomorrowItems.push(r);
+    } else {
+      if (!futureMap.has(key)) futureMap.set(key, { label: lbl, sortKey: key, items: [] });
+      futureMap.get(key)!.items.push(r);
+    }
   }
-  return Array.from(groups.values()).sort((a,b) => a.sortKey-b.sortKey);
+
+  const noDate = [...reminders.filter(r => !r.dueAt)].sort(
+    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+  );
+
+  return {
+    pastDue: Array.from(pastMap.values()).sort((a, b) => a.sortKey - b.sortKey),
+    today: todayItems,
+    tomorrow: tomorrowItems,
+    future: Array.from(futureMap.values()).sort((a, b) => a.sortKey - b.sortKey),
+    noDate,
+  };
 }
 
 // ── CalendarPicker ────────────────────────────────────────────────────────────
@@ -393,7 +417,7 @@ function ReminderRow({ reminder, currentUserId, teamMembers, isDraggable, showSc
               <span style={{ width: 7, height: 7, borderRadius: "50%", flexShrink: 0, backgroundColor: reminder.scope === "lab" ? LIST_COLORS.lab : LIST_COLORS.personal, opacity: 0.65, display: "inline-block" }} />
             )}
             {reminder.priority && (
-              <span style={{ fontSize: 11, fontWeight: 800, color: LIST_COLORS.personal, letterSpacing: "-0.5px", flexShrink: 0, userSelect: "none" }}>
+              <span style={{ fontSize: 11, fontWeight: 800, color: reminder.scope === "lab" ? LIST_COLORS.lab : LIST_COLORS.personal, letterSpacing: "-0.5px", flexShrink: 0, userSelect: "none" }}>
                 {PRIORITY_MARKS[reminder.priority]}
               </span>
             )}
@@ -673,47 +697,34 @@ function SmartListCard({ id, count, icon, selected, onClick }: { id: ListType; c
   );
 }
 
-function MyListRow({ id, count, selected, onClick }: { id: "personal"|"lab"; count: number; selected: boolean; onClick: () => void }) {
-  return (
-    <button onClick={onClick} style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, padding: "8px 12px", borderRadius: 9, border: "none", backgroundColor: selected ? "rgba(0,0,0,0.06)" : "transparent", cursor: "pointer", textAlign: "left" }}
-      onMouseEnter={e => { if (!selected) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "rgba(0,0,0,0.03)"; }}
-      onMouseLeave={e => { if (!selected) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "transparent"; }}>
-      <div style={{ width: 28, height: 28, borderRadius: "50%", backgroundColor: LIST_COLORS[id], flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <List size={14} color="#fff" />
-      </div>
-      <span style={{ flex: 1, fontSize: 15, color: "var(--color-body)", fontFamily: "var(--font-roboto)", fontWeight: selected ? 600 : 400 }}>
-        {id === "personal" ? "Personal" : "Lab"}
-      </span>
-      <span style={{ fontSize: 13, color: "var(--color-secondary)", fontFamily: "var(--font-roboto)" }}>{count}</span>
-    </button>
-  );
-}
+function LeftPanel({ selected, activeReminders, onSelect, collapsed, onToggleCollapse }: {
+  selected: ListType; activeReminders: Reminder[]; onSelect: (l: ListType) => void;
+  collapsed: boolean; onToggleCollapse: () => void;
+}) {
+  const counts = useMemo(() => ({
+    all:       activeReminders.length,
+    scheduled: activeReminders.filter(r => !!r.dueAt).length,
+    lab:       activeReminders.filter(r => r.scope === "lab").length,
+    personal:  activeReminders.filter(r => r.scope === "personal").length,
+  }), [activeReminders]);
 
-function LeftPanel({ selected, activeReminders, onSelect }: { selected: ListType; activeReminders: Reminder[]; onSelect: (l: ListType) => void }) {
-  const counts = useMemo(() => {
-    // Compute the boundary fresh inside the memo so it reflects the actual current day
-    const tomorrow = tomorrowStart();
-    return {
-      today:     activeReminders.filter(r => r.dueAt && new Date(r.dueAt) < tomorrow).length,
-      scheduled: activeReminders.filter(r => !!r.dueAt).length,
-      priority:  activeReminders.filter(r => !!r.priority).length,
-      all:       activeReminders.length,
-      personal:  activeReminders.filter(r => r.scope === "personal").length,
-      lab:       activeReminders.filter(r => r.scope === "lab").length,
-    };
-  }, [activeReminders]);
   return (
-    <div style={{ width: 240, flexShrink: 0, padding: "20px 16px", overflowY: "auto", borderRight: "1px solid var(--color-border)", backgroundColor: "var(--color-canvas)", height: "100%", boxSizing: "border-box" }}>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 24 }}>
-        <SmartListCard id="today" count={counts.today} icon={<Sun size={20} />} selected={selected === "today"} onClick={() => onSelect("today")} />
-        <SmartListCard id="scheduled" count={counts.scheduled} icon={<CalendarDays size={20} />} selected={selected === "scheduled"} onClick={() => onSelect("scheduled")} />
-        <SmartListCard id="priority" count={counts.priority} icon={<span style={{ fontSize: 20, fontWeight: 900, letterSpacing: "-1px", lineHeight: 1 }}>!</span>} selected={selected === "priority"} onClick={() => onSelect("priority")} />
-        <SmartListCard id="all" count={counts.all} icon={<List size={20} />} selected={selected === "all"} onClick={() => onSelect("all")} />
+    <div style={{ width: collapsed ? 48 : 240, flexShrink: 0, height: "100%", overflow: "hidden", transition: "width 0.22s ease", borderRight: "1px solid var(--color-border)", backgroundColor: "var(--color-canvas)", boxSizing: "border-box" }}>
+      <div style={{ padding: collapsed ? "14px 0" : "14px 12px 6px", display: "flex", justifyContent: collapsed ? "center" : "flex-end" }}>
+        <button onClick={onToggleCollapse} title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          style={{ width: 28, height: 28, borderRadius: 7, border: "1px solid var(--color-border)", backgroundColor: "transparent", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "background-color 0.12s" }}
+          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = "rgba(0,0,0,0.05)"; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = "transparent"; }}>
+          {collapsed ? <ChevronRight size={14} color="var(--color-secondary)" /> : <ChevronLeft size={14} color="var(--color-secondary)" />}
+        </button>
       </div>
-      <div>
-        <div style={{ fontSize: 11, fontWeight: 700, color: "var(--color-secondary)", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 6, paddingLeft: 12 }}>My Lists</div>
-        <MyListRow id="personal" count={counts.personal} selected={selected === "personal"} onClick={() => onSelect("personal")} />
-        <MyListRow id="lab" count={counts.lab} selected={selected === "lab"} onClick={() => onSelect("lab")} />
+      <div style={{ opacity: collapsed ? 0 : 1, transition: "opacity 0.12s", pointerEvents: collapsed ? "none" : undefined, padding: "0 12px 20px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <SmartListCard id="all"       count={counts.all}       icon={<List size={20} />}        selected={selected === "all"}       onClick={() => onSelect("all")} />
+          <SmartListCard id="scheduled" count={counts.scheduled} icon={<CalendarDays size={20} />} selected={selected === "scheduled"} onClick={() => onSelect("scheduled")} />
+          <SmartListCard id="lab"       count={counts.lab}       icon={<Users size={20} />}        selected={selected === "lab"}       onClick={() => onSelect("lab")} />
+          <SmartListCard id="personal"  count={counts.personal}  icon={<UserIcon size={20} />}     selected={selected === "personal"}  onClick={() => onSelect("personal")} />
+        </div>
       </div>
     </div>
   );
@@ -770,145 +781,63 @@ function ReminderCard(props: CardProps) {
   );
 }
 
-// ── ScheduledView — date-grouped, read-only order ─────────────────────────────
+// ── GroupedView — unified date-grouped layout for all 4 list types ────────────
 
-function ScheduledView(props: CardProps) {
-  const groups = useMemo(() => groupScheduled(props.items), [props.items]);
+function GroupedView({ includeNoDate, ...props }: CardProps & { includeNoDate: boolean }) {
+  const groups = useMemo(() => groupByDate(props.items), [props.items]);
   const { accentColor, isAdding, onToggleAdd, completedItems, showCompleted, onToggleCompleted, onUncomplete, currentUserId } = props;
+
+  const hdrStyle: React.CSSProperties = { fontSize: 12, fontWeight: 700, color: "var(--color-secondary)", letterSpacing: "0.04em", textTransform: "uppercase", fontFamily: "var(--font-roboto)" };
+  const subStyle: React.CSSProperties = { fontSize: 11, fontWeight: 600, color: "var(--color-secondary)", opacity: 0.7, fontFamily: "var(--font-roboto)" };
+
+  function GroupCard({ items }: { items: Reminder[] }) {
+    return (
+      <div style={{ margin: "0 24px" }}>
+        <ReminderCard {...props} items={items} completedItems={[]} showCompleted={false}
+          isDraggable={false} hideAddRow={true} onToggleCompleted={() => {}} onUncomplete={() => {}} />
+      </div>
+    );
+  }
 
   return (
     <>
-      {groups.map(group => (
-        <div key={group.label} style={{ marginBottom: 20 }}>
-          <div style={{ padding: "0 24px 6px", display: "flex", alignItems: "center", gap: 6 }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: group.isPastDue ? "var(--color-secondary)" : "var(--color-secondary)", letterSpacing: "0.04em", textTransform: "uppercase", fontFamily: "var(--font-roboto)" }}>
-              {group.label}
-            </span>
-            {group.isPastDue && <span style={{ fontSize: 11, color: "var(--color-secondary)", fontWeight: 500, opacity: 0.7 }}>· past due</span>}
-          </div>
-          <div style={{ margin: "0 24px" }}>
-            <ReminderCard {...props} items={group.items} completedItems={[]} showCompleted={false}
-              isDraggable={false} hideAddRow={true} onToggleCompleted={() => {}} onUncomplete={() => {}} />
-          </div>
+      {groups.pastDue.length > 0 && (
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ padding: "0 24px 6px" }}><span style={hdrStyle}>Past Due</span></div>
+          {groups.pastDue.map(dg => (
+            <div key={dg.sortKey} style={{ marginBottom: 6 }}>
+              <div style={{ padding: "0 24px 4px 32px" }}><span style={subStyle}>{dg.label}</span></div>
+              <GroupCard items={dg.items} />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {groups.today.length > 0 && (
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ padding: "0 24px 6px" }}><span style={hdrStyle}>Today</span></div>
+          <GroupCard items={groups.today} />
+        </div>
+      )}
+
+      {groups.tomorrow.length > 0 && (
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ padding: "0 24px 6px" }}><span style={hdrStyle}>Tomorrow</span></div>
+          <GroupCard items={groups.tomorrow} />
+        </div>
+      )}
+
+      {groups.future.map(dg => (
+        <div key={dg.sortKey} style={{ marginBottom: 20 }}>
+          <div style={{ padding: "0 24px 6px" }}><span style={hdrStyle}>{dg.label}</span></div>
+          <GroupCard items={dg.items} />
         </div>
       ))}
 
-      <div style={{ margin: "0 24px 24px" }}>
-        <div style={{ backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 12, overflow: "hidden" }}>
-          {isAdding ? (
-            <InlineAddRow defaultScope={getDefaultScope(props.selectedList)} accentColor={accentColor} teamMembers={props.teamMembers} onAdd={props.onAdd} onClose={onToggleAdd} />
-          ) : (
-            <button onClick={onToggleAdd}
-              style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "10px 16px", background: "none", border: "none", cursor: "pointer", fontSize: 14, fontFamily: "var(--font-roboto)" }}
-              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = "rgba(0,0,0,0.02)"; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = "transparent"; }}>
-              <Plus size={15} color={accentColor} />
-              <span style={{ color: accentColor, fontWeight: 500 }}>New Reminder</span>
-            </button>
-          )}
-          {completedItems.length > 0 && (
-            <div style={{ borderTop: "1px solid var(--color-border)" }}>
-              <button onClick={onToggleCompleted} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "9px 16px", background: "none", border: "none", cursor: "pointer" }}>
-                <span style={{ fontSize: 13, color: "var(--color-secondary)", fontFamily: "var(--font-roboto)" }}>{completedItems.length} Completed</span>
-                <span style={{ fontSize: 12, fontWeight: 600, color: accentColor, fontFamily: "var(--font-roboto)" }}>{showCompleted ? "Hide" : "Show"}</span>
-              </button>
-              {showCompleted && completedItems.map(r => <CompletedReminderRow key={r.id} reminder={r} currentUserId={currentUserId} onUncomplete={onUncomplete} />)}
-            </div>
-          )}
-        </div>
-      </div>
-    </>
-  );
-}
-
-// ── TodayView — two fixed sections: Overdue + Today ───────────────────────────
-
-function TodayView(props: CardProps) {
-  const { overdue, today } = useMemo(() => groupToday(props.items), [props.items]);
-  const { accentColor, isAdding, onToggleAdd, completedItems, showCompleted, onToggleCompleted, onUncomplete, currentUserId } = props;
-
-  const sectionLabel = (text: string) => (
-    <div style={{ padding: "0 24px 6px" }}>
-      <span style={{ fontSize: 12, fontWeight: 700, color: "var(--color-secondary)", letterSpacing: "0.04em", textTransform: "uppercase", fontFamily: "var(--font-roboto)" }}>{text}</span>
-    </div>
-  );
-
-  return (
-    <>
-      {overdue.length > 0 && (
+      {includeNoDate && groups.noDate.length > 0 && (
         <div style={{ marginBottom: 20 }}>
-          {sectionLabel("Overdue")}
-          <div style={{ margin: "0 24px" }}>
-            <ReminderCard {...props} items={overdue} completedItems={[]} showCompleted={false}
-              isDraggable={false} hideAddRow={true} onToggleCompleted={() => {}} onUncomplete={() => {}} />
-          </div>
-        </div>
-      )}
-
-      <div style={{ marginBottom: 20 }}>
-        {sectionLabel("Today")}
-        <div style={{ margin: "0 24px" }}>
-          <ReminderCard {...props} items={today} completedItems={[]} showCompleted={false}
-            isDraggable={false} hideAddRow={true} onToggleCompleted={() => {}} onUncomplete={() => {}} />
-        </div>
-      </div>
-
-      <div style={{ margin: "0 24px 24px" }}>
-        <div style={{ backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 12, overflow: "hidden" }}>
-          {isAdding ? (
-            <InlineAddRow defaultScope={getDefaultScope(props.selectedList)} accentColor={accentColor} teamMembers={props.teamMembers} onAdd={props.onAdd} onClose={onToggleAdd} />
-          ) : (
-            <button onClick={onToggleAdd}
-              style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "10px 16px", background: "none", border: "none", cursor: "pointer", fontSize: 14, fontFamily: "var(--font-roboto)" }}
-              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = "rgba(0,0,0,0.02)"; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = "transparent"; }}>
-              <Plus size={15} color={accentColor} />
-              <span style={{ color: accentColor, fontWeight: 500 }}>New Reminder</span>
-            </button>
-          )}
-          {completedItems.length > 0 && (
-            <div style={{ borderTop: "1px solid var(--color-border)" }}>
-              <button onClick={onToggleCompleted} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "9px 16px", background: "none", border: "none", cursor: "pointer" }}>
-                <span style={{ fontSize: 13, color: "var(--color-secondary)", fontFamily: "var(--font-roboto)" }}>{completedItems.length} Completed</span>
-                <span style={{ fontSize: 12, fontWeight: 600, color: accentColor, fontFamily: "var(--font-roboto)" }}>{showCompleted ? "Hide" : "Show"}</span>
-              </button>
-              {showCompleted && completedItems.map(r => <CompletedReminderRow key={r.id} reminder={r} currentUserId={currentUserId} onUncomplete={onUncomplete} />)}
-            </div>
-          )}
-        </div>
-      </div>
-    </>
-  );
-}
-
-// ── AllView — date-sorted, undated group at bottom ────────────────────────────
-
-function AllView(props: CardProps) {
-  const dated  = useMemo(() => props.items.filter(r => !!r.dueAt),  [props.items]);
-  const undated = useMemo(() => props.items.filter(r => !r.dueAt), [props.items]);
-  const hasSection = dated.length > 0 && undated.length > 0;
-  const { accentColor, isAdding, onToggleAdd, completedItems, showCompleted, onToggleCompleted, onUncomplete, currentUserId } = props;
-
-  return (
-    <>
-      {dated.length > 0 && (
-        <div style={{ margin: "0 24px", marginBottom: hasSection ? 20 : 0 }}>
-          <ReminderCard {...props} items={dated} completedItems={[]} showCompleted={false}
-            isDraggable={false} hideAddRow={true} onToggleCompleted={() => {}} onUncomplete={() => {}} />
-        </div>
-      )}
-
-      {undated.length > 0 && (
-        <div style={{ marginBottom: 20 }}>
-          {hasSection && (
-            <div style={{ padding: "0 24px 6px" }}>
-              <span style={{ fontSize: 12, fontWeight: 700, color: "var(--color-secondary)", letterSpacing: "0.04em", textTransform: "uppercase", fontFamily: "var(--font-roboto)" }}>No Date</span>
-            </div>
-          )}
-          <div style={{ margin: "0 24px" }}>
-            <ReminderCard {...props} items={undated} completedItems={[]} showCompleted={false}
-              isDraggable={false} hideAddRow={true} onToggleCompleted={() => {}} onUncomplete={() => {}} />
-          </div>
+          <div style={{ padding: "0 24px 6px" }}><span style={hdrStyle}>No Date</span></div>
+          <GroupCard items={groups.noDate} />
         </div>
       )}
 
@@ -970,6 +899,16 @@ export default function RemindersPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showCompleted, setShowCompleted] = useState(false);
   const [pendingUndo, setPendingUndo] = useState<PendingUndo | null>(null);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
+    try { return localStorage.getItem("canopy_sidebar_collapsed") === "true"; } catch { return false; }
+  });
+  function handleToggleCollapse() {
+    setSidebarCollapsed(v => {
+      const next = !v;
+      try { localStorage.setItem("canopy_sidebar_collapsed", String(next)); } catch {}
+      return next;
+    });
+  }
 
   useEffect(() => {
     if (!isSupabaseConfigured) {
@@ -1147,7 +1086,7 @@ export default function RemindersPage() {
     isDraggable, accentColor: panelColor,
     currentUserId, teamMembers, editingId, isAdding, selectedList,
     projectId: projectId ?? undefined,
-    showScopeHint: !DRAGGABLE_LISTS.includes(selectedList),
+    showScopeHint: selectedList === "all" || selectedList === "scheduled",
     onComplete: handleComplete, onDelete: handleDelete, onEdit: setEditingId,
     onSave: handleUpdate, onCancelEdit: () => setEditingId(null),
     onAdd: handleAdd, onToggleAdd: () => setIsAdding(v => !v),
@@ -1160,13 +1099,13 @@ export default function RemindersPage() {
       <div style={{ display: "flex", height: "100%", overflow: "hidden", backgroundColor: "var(--color-canvas)" }}>
 
         <div className="hidden md:block" style={{ height: "100%", flexShrink: 0 }}>
-          <LeftPanel selected={selectedList} activeReminders={allActive} onSelect={handleListSelect} />
+          <LeftPanel selected={selectedList} activeReminders={allActive} onSelect={handleListSelect} collapsed={sidebarCollapsed} onToggleCollapse={handleToggleCollapse} />
         </div>
 
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
 
           <div className="flex md:hidden" style={{ overflowX: "auto", padding: "12px 16px", gap: 8, borderBottom: "1px solid var(--color-border)", flexShrink: 0 }}>
-            {(["today","scheduled","priority","all","personal","lab"] as ListType[]).map(id => {
+            {(["all","scheduled","lab","personal"] as ListType[]).map(id => {
               const isAct = selectedList === id;
               return <button key={id} onClick={() => handleListSelect(id)} style={{ height: 32, paddingInline: 14, borderRadius: 20, flexShrink: 0, border: "none", backgroundColor: isAct ? LIST_COLORS[id] : "rgba(0,0,0,0.06)", color: isAct ? "#fff" : "var(--color-secondary)", fontSize: 13, fontWeight: isAct ? 700 : 400, cursor: "pointer", fontFamily: "var(--font-roboto)" }}>{LIST_LABELS[id]}</button>;
             })}
@@ -1177,28 +1116,8 @@ export default function RemindersPage() {
           </div>
 
           <div style={{ flex: 1, overflowY: "auto" }}>
-            {selectedList === "today" ? (
-              visible.length > 0 || isAdding || completedVisible.length > 0 ? (
-                <TodayView {...cardProps} />
-              ) : (
-                <EmptyState panelColor={panelColor} onAdd={() => setIsAdding(true)} />
-              )
-            ) : selectedList === "scheduled" ? (
-              visible.length > 0 || isAdding || completedVisible.length > 0 ? (
-                <ScheduledView {...cardProps} />
-              ) : (
-                <EmptyState panelColor={panelColor} onAdd={() => setIsAdding(true)} />
-              )
-            ) : selectedList === "all" ? (
-              visible.length > 0 || isAdding || completedVisible.length > 0 ? (
-                <AllView {...cardProps} />
-              ) : (
-                <EmptyState panelColor={panelColor} onAdd={() => setIsAdding(true)} />
-              )
-            ) : visible.length > 0 || isAdding || completedVisible.length > 0 ? (
-              <div style={{ margin: "0 24px 24px" }}>
-                <ReminderCard {...cardProps} />
-              </div>
+            {visible.length > 0 || isAdding || completedVisible.length > 0 ? (
+              <GroupedView {...cardProps} includeNoDate={selectedList !== "scheduled"} />
             ) : (
               <EmptyState panelColor={panelColor} onAdd={() => setIsAdding(true)} />
             )}
