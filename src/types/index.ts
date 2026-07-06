@@ -317,4 +317,6 @@ export interface Reminder {
   priority?: ReminderPriority;
   recurrence?: ReminderRecurrence;
   createdAt: string;
+  position?: number;      // fractional index for manual drag order
+  assigneeId?: string;    // user to notify (shows in their reminders)
 }
