@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import {
   Calendar, Users, Send, Clock, Check, X, Plus,
-  AlertCircle, Lock, Trash2,
+  Lock, Trash2, ChevronLeft, ChevronRight,
 } from "lucide-react";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { computeInitials } from "@/lib/utils";
@@ -16,7 +16,7 @@ import TeamOverlapView from "@/components/scheduling/TeamOverlapView";
 import MeetingProposalModal from "@/components/scheduling/MeetingProposalModal";
 import Avatar from "@/components/ui/Avatar";
 import ClientOnly from "@/components/ui/ClientOnly";
-import { CalendarPicker, TimePicker, formatDateLabel, formatTimeDisplay } from "@/components/ui/DateTimePicker";
+import { TimePicker, formatTimeDisplay } from "@/components/ui/DateTimePicker";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -104,24 +104,355 @@ function EmptyState({ icon: Icon, heading, body, action }: {
   );
 }
 
-// ── Tab: My Availability ──────────────────────────────────────────────────────
+// ── Tab: Calendar ─────────────────────────────────────────────────────────────
 
-function MyAvailabilityTab({
+const MONTH_NAMES_CAL = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+const DAY_HEADERS = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+
+function CalendarTab({
+  events,
+  proposals,
+  currentUserId,
+  projectId,
+  onAddEvent,
+  onDeleteEvent,
+}: {
+  events: ScheduleEvent[];
+  proposals: MeetingProposal[];
+  currentUserId: string;
+  projectId: string;
+  onAddEvent: (e: Omit<ScheduleEvent, "id">) => void;
+  onDeleteEvent: (id: string) => void;
+}) {
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+
+  const [calYear, setCalYear] = useState(today.getFullYear());
+  const [calMonth, setCalMonth] = useState(today.getMonth());
+  const [selectedDay, setSelectedDay] = useState<string | null>(todayStr);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [addTitle, setAddTitle] = useState("");
+  const [addTime, setAddTime] = useState("");
+  const [addScope, setAddScope] = useState<"lab" | "personal">("lab");
+  const [addError, setAddError] = useState("");
+  const [showTP, setShowTP] = useState(false);
+  const [tpPos, setTpPos] = useState<{ top: number; left: number } | null>(null);
+  const timeBtnRef = useRef<HTMLButtonElement>(null);
+
+  const firstDayOfMonth = new Date(calYear, calMonth, 1);
+  const startOffset = firstDayOfMonth.getDay();
+  const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+  const totalCells = Math.ceil((startOffset + daysInMonth) / 7) * 7;
+
+  function dayStr(d: number): string {
+    return `${calYear}-${String(calMonth + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  }
+
+  function prevMonth() {
+    if (calMonth === 0) { setCalYear(y => y - 1); setCalMonth(11); }
+    else setCalMonth(m => m - 1);
+  }
+  function nextMonth() {
+    if (calMonth === 11) { setCalYear(y => y + 1); setCalMonth(0); }
+    else setCalMonth(m => m + 1);
+  }
+
+  const eventsByDay = useMemo(() => {
+    const map: Record<string, ScheduleEvent[]> = {};
+    events.forEach(e => { (map[e.date] ??= []).push(e); });
+    return map;
+  }, [events]);
+
+  const meetingsByDay = useMemo(() => {
+    const map: Record<string, MeetingProposal[]> = {};
+    proposals.forEach(p => { (map[p.proposedDate] ??= []).push(p); });
+    return map;
+  }, [proposals]);
+
+  const selectedEvents = selectedDay ? (eventsByDay[selectedDay] ?? []) : [];
+  const selectedMeetings = selectedDay ? (meetingsByDay[selectedDay] ?? []) : [];
+
+  function handleAddEvent() {
+    if (!addTitle.trim()) { setAddError("Enter a title."); return; }
+    if (!selectedDay) return;
+    onAddEvent({ projectId, title: addTitle.trim(), date: selectedDay, time: addTime || undefined, scope: addScope, createdBy: currentUserId });
+    setAddTitle(""); setAddTime(""); setAddScope("lab"); setAddError(""); setShowAddForm(false);
+  }
+
+  const inputStyle: React.CSSProperties = {
+    height: 36, border: "1px solid var(--color-border)", borderRadius: 6,
+    padding: "0 10px", fontSize: 13, fontFamily: "var(--font-roboto)",
+    backgroundColor: "var(--color-canvas)", color: "var(--color-body)",
+    outline: "none", boxSizing: "border-box",
+  };
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        {/* Month navigation */}
+        <div className="flex items-center justify-between px-5 py-3" style={{ borderBottom: "1px solid var(--color-border)" }}>
+          <button onClick={prevMonth} style={{ background: "none", border: "none", cursor: "pointer", padding: 6, color: "var(--color-secondary)", borderRadius: 6 }}>
+            <ChevronLeft size={15} />
+          </button>
+          <h3 style={{ fontFamily: "var(--font-lora)", fontWeight: 600, fontSize: 15, color: "var(--color-navy)", margin: 0 }}>
+            {MONTH_NAMES_CAL[calMonth]} {calYear}
+          </h3>
+          <button onClick={nextMonth} style={{ background: "none", border: "none", cursor: "pointer", padding: 6, color: "var(--color-secondary)", borderRadius: 6 }}>
+            <ChevronRight size={15} />
+          </button>
+        </div>
+
+        <div className="p-4">
+          {/* Day-of-week headers */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", marginBottom: 4 }}>
+            {DAY_HEADERS.map(d => (
+              <div key={d} style={{ textAlign: "center", fontSize: 11, fontWeight: 700, color: "var(--color-secondary)", padding: "4px 0", letterSpacing: "0.05em" }}>
+                {d}
+              </div>
+            ))}
+          </div>
+
+          {/* Day cells */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2 }}>
+            {Array.from({ length: totalCells }, (_, i) => {
+              const dayNum = i - startOffset + 1;
+              const inMonth = dayNum >= 1 && dayNum <= daysInMonth;
+              const ds = inMonth ? dayStr(dayNum) : null;
+              const isToday = ds === todayStr;
+              const isSelected = ds === selectedDay;
+              const dayEvents = ds ? (eventsByDay[ds] ?? []) : [];
+              const dayMeetings = ds ? (meetingsByDay[ds] ?? []) : [];
+              const hasItems = dayEvents.length > 0 || dayMeetings.length > 0;
+
+              return (
+                <button
+                  key={i}
+                  onClick={() => {
+                    if (!ds) return;
+                    setSelectedDay(s => s === ds ? null : ds);
+                    setShowAddForm(false);
+                  }}
+                  disabled={!inMonth}
+                  style={{
+                    minHeight: 50,
+                    padding: "4px 3px 3px",
+                    border: isToday && !isSelected ? "1.5px solid var(--color-navy)" : "1px solid transparent",
+                    borderRadius: 7,
+                    backgroundColor: isSelected ? "var(--color-navy)" : "transparent",
+                    cursor: inMonth ? "pointer" : "default",
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    gap: 3,
+                    transition: "background-color 0.1s",
+                  }}
+                >
+                  <span style={{
+                    fontSize: 12,
+                    fontWeight: isToday ? 700 : 400,
+                    color: isSelected ? "#fff" : inMonth ? "var(--color-body)" : "transparent",
+                    lineHeight: 1,
+                  }}>
+                    {inMonth ? dayNum : ""}
+                  </span>
+                  {inMonth && hasItems && (
+                    <div style={{ display: "flex", gap: 2, flexWrap: "wrap", justifyContent: "center" }}>
+                      {dayEvents.slice(0, 2).map((ev, idx) => (
+                        <span key={idx} style={{
+                          width: 5, height: 5, borderRadius: "50%",
+                          backgroundColor: isSelected
+                            ? "rgba(255,255,255,0.75)"
+                            : ev.scope === "lab" ? "var(--color-navy)" : "rgba(27,46,75,0.35)",
+                        }} />
+                      ))}
+                      {dayMeetings.slice(0, 1).map((_, idx) => (
+                        <span key={`m${idx}`} style={{
+                          width: 5, height: 5, borderRadius: "50%",
+                          backgroundColor: isSelected ? "rgba(255,255,255,0.6)" : "#2E7D52",
+                        }} />
+                      ))}
+                    </div>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Legend */}
+          <div className="flex gap-4 mt-3 pt-3" style={{ borderTop: "1px solid var(--color-border)" }}>
+            {[
+              { color: "var(--color-navy)", label: "Lab event" },
+              { color: "rgba(27,46,75,0.35)", label: "Personal" },
+              { color: "#2E7D52", label: "Meeting" },
+            ].map(({ color, label }) => (
+              <div key={label} className="flex items-center gap-1.5">
+                <span style={{ width: 7, height: 7, borderRadius: "50%", backgroundColor: color, display: "inline-block", flexShrink: 0 }} />
+                <span style={{ fontSize: 11, color: "var(--color-secondary)" }}>{label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </Card>
+
+      {/* Day detail panel */}
+      {selectedDay && (
+        <Card>
+          <div className="flex items-center justify-between px-5 py-3" style={{ borderBottom: "1px solid var(--color-border)" }}>
+            <h3 style={{ fontFamily: "var(--font-lora)", fontWeight: 600, fontSize: 14, color: "var(--color-navy)", margin: 0 }}>
+              {new Date(selectedDay + "T12:00:00").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
+            </h3>
+            <button
+              onClick={() => { setShowAddForm(s => !s); setAddError(""); }}
+              className="flex items-center gap-1"
+              style={{ fontSize: 12, fontWeight: 600, color: "var(--color-navy)", background: "none", border: "none", cursor: "pointer" }}
+            >
+              <Plus size={13} /> Add event
+            </button>
+          </div>
+
+          {/* Inline add form */}
+          {showAddForm && (
+            <div className="px-5 py-3 space-y-3" style={{ borderBottom: "1px solid var(--color-border)", backgroundColor: "rgba(27,46,75,0.02)" }}>
+              <div className="flex gap-1.5">
+                {(["lab", "personal"] as const).map(s => (
+                  <button key={s} onClick={() => setAddScope(s)} style={{
+                    height: 27, paddingInline: 12, borderRadius: 20,
+                    border: `1.5px solid ${addScope === s ? "var(--color-navy)" : "var(--color-border)"}`,
+                    backgroundColor: addScope === s ? "var(--color-navy)" : "transparent",
+                    color: addScope === s ? "#fff" : "var(--color-secondary)",
+                    fontSize: 12, fontWeight: addScope === s ? 600 : 400, cursor: "pointer", fontFamily: "var(--font-roboto)",
+                  }}>
+                    {s === "lab" ? "Lab (visible to all)" : "Personal (only me)"}
+                  </button>
+                ))}
+              </div>
+              <input
+                autoFocus
+                value={addTitle}
+                onChange={e => { setAddTitle(e.target.value); setAddError(""); }}
+                placeholder="Event title"
+                style={{ ...inputStyle, width: "100%" }}
+                onFocus={e => { e.currentTarget.style.borderColor = "var(--color-navy)"; }}
+                onBlur={e => { e.currentTarget.style.borderColor = "var(--color-border)"; }}
+              />
+              <div className="flex items-center gap-2">
+                <button
+                  ref={timeBtnRef}
+                  onClick={() => {
+                    if (!timeBtnRef.current) return;
+                    const r = timeBtnRef.current.getBoundingClientRect();
+                    setTpPos({ top: r.bottom + 6, left: r.left });
+                    setShowTP(v => !v);
+                  }}
+                  style={{ ...inputStyle, display: "flex", alignItems: "center", gap: 6, cursor: "pointer", color: addTime ? "var(--color-body)" : "var(--color-secondary)", width: "auto", padding: "0 10px" }}
+                >
+                  {addTime ? formatTimeDisplay(addTime) : "+ time"}
+                </button>
+                {addTime && (
+                  <button onClick={() => setAddTime("")} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11, color: "var(--color-secondary)" }}>
+                    clear
+                  </button>
+                )}
+              </div>
+              {showTP && tpPos && (
+                <TimePicker value={addTime || "09:00"} accentColor="#1B2E4B" pos={tpPos}
+                  onChange={t => setAddTime(t)}
+                  onClear={() => { setAddTime(""); setShowTP(false); }}
+                  onClose={() => setShowTP(false)} />
+              )}
+              {addError && <p style={{ fontSize: 11, color: "var(--color-error)", margin: 0 }}>{addError}</p>}
+              <div className="flex gap-2">
+                <button onClick={handleAddEvent} style={{ height: 32, paddingInline: 16, backgroundColor: "var(--color-navy)", color: "#fff", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                  Add
+                </button>
+                <button onClick={() => { setShowAddForm(false); setAddError(""); }} style={{ height: 32, paddingInline: 12, background: "none", border: "none", fontSize: 12, color: "var(--color-secondary)", cursor: "pointer" }}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Events + meetings list */}
+          {selectedEvents.length === 0 && selectedMeetings.length === 0 && !showAddForm ? (
+            <EmptyState icon={Calendar} heading="Nothing scheduled" body="Add a lab or personal event for this day." />
+          ) : (
+            <div>
+              {selectedMeetings.map(p => (
+                <div key={p.id} className="flex items-center gap-3 px-5 py-3" style={{ borderBottom: "1px solid var(--color-border)" }}>
+                  <span style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: "#2E7D52", flexShrink: 0 }} />
+                  <div className="flex-1 min-w-0">
+                    <p style={{ fontSize: 13, fontWeight: 500, color: "var(--color-body)", margin: 0 }}>{p.title}</p>
+                    <p style={{ fontSize: 11, color: "var(--color-secondary)", margin: 0 }}>
+                      {p.proposedTime
+                        ? new Date(`2000-01-01T${p.proposedTime}`).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
+                        : ""}{p.proposedTime ? " · " : ""}
+                      {formatDuration(p.durationMinutes)}
+                    </p>
+                  </div>
+                </div>
+              ))}
+              {selectedEvents.map(event => (
+                <div key={event.id} className="flex items-center gap-3 px-5 py-3" style={{ borderBottom: "1px solid var(--color-border)" }}>
+                  <span style={{
+                    width: 8, height: 8, borderRadius: "50%", flexShrink: 0,
+                    backgroundColor: event.scope === "lab" ? "var(--color-navy)" : "rgba(27,46,75,0.35)",
+                  }} />
+                  <div className="flex-1 min-w-0">
+                    <p style={{ fontSize: 13, fontWeight: 500, color: "var(--color-body)", margin: 0 }}>{event.title}</p>
+                    {event.time && (
+                      <p style={{ fontSize: 11, color: "var(--color-secondary)", margin: 0 }}>
+                        {new Date(`2000-01-01T${event.time}`).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+                      </p>
+                    )}
+                  </div>
+                  {event.scope === "personal" && <Lock size={11} style={{ color: "var(--color-secondary)", flexShrink: 0 }} />}
+                  {event.createdBy === currentUserId && (
+                    <button
+                      onClick={() => onDeleteEvent(event.id)}
+                      style={{ background: "none", border: "none", cursor: "pointer", padding: 4, opacity: 0.5, flexShrink: 0 }}
+                      onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.opacity = "1"; }}
+                      onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.opacity = "0.5"; }}
+                    >
+                      <Trash2 size={13} color="var(--color-secondary)" />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+      )}
+    </div>
+  );
+}
+
+// ── Tab: Availability ─────────────────────────────────────────────────────────
+
+type AvailScope = "mine" | "all" | "custom";
+
+function AvailabilityTab({
   savedSlots,
   onSave,
-  googleConnected,
-  onToggleGoogle,
+  allAvailabilities,
+  teamMembers,
+  currentUserId,
 }: {
   savedSlots: string[];
   onSave: (slots: string[]) => void;
-  googleConnected: boolean;
-  onToggleGoogle: () => void;
+  allAvailabilities: WeeklyAvailability[];
+  teamMembers: User[];
+  currentUserId: string;
 }) {
+  const [scope, setScope] = useState<AvailScope>("mine");
+  const [selectedIds, setSelectedIds] = useState<string[]>(() => teamMembers.map(m => m.id));
   const [slots, setSlots] = useState<string[]>(savedSlots);
   const [saved, setSaved] = useState(false);
 
-  // Keep grid in sync if parent re-fetches (e.g. Supabase load completes)
   useEffect(() => { setSlots(savedSlots); }, [savedSlots]);
+
+  useEffect(() => {
+    if (scope === "all") setSelectedIds(teamMembers.map(m => m.id));
+  }, [scope, teamMembers]);
 
   function handleSave() {
     onSave(slots);
@@ -129,33 +460,78 @@ function MyAvailabilityTab({
     setTimeout(() => setSaved(false), 2000);
   }
 
-  const hasChanges =
-    JSON.stringify([...slots].sort()) !== JSON.stringify([...savedSlots].sort());
+  const hasChanges = JSON.stringify([...slots].sort()) !== JSON.stringify([...savedSlots].sort());
+
+  const filteredAvailabilities = scope === "mine"
+    ? allAvailabilities.filter(a => a.userId === currentUserId)
+    : allAvailabilities.filter(a => selectedIds.includes(a.userId));
+
+  const filteredMembers = scope === "mine"
+    ? teamMembers.filter(m => m.id === currentUserId)
+    : teamMembers.filter(m => selectedIds.includes(m.id));
+
+  const overlapTitle = filteredMembers.length === 0
+    ? "Select people to compare"
+    : filteredMembers.length <= 3
+      ? `Overlap — ${filteredMembers.map(m => m.name.split(" ")[0]).join(", ")}`
+      : `Overlap — ${filteredMembers.length} people`;
 
   return (
-    <div className="space-y-5">
-      <div
-        className="flex items-start gap-3 px-4 py-3 rounded-lg"
-        style={{ backgroundColor: "rgba(27,46,75,0.05)", border: "1px solid rgba(27,46,75,0.10)" }}
-      >
-        <Lock size={14} style={{ marginTop: 2, color: "var(--color-navy)", flexShrink: 0 }} />
-        <p style={{ fontSize: 13, color: "var(--color-body)", margin: 0, lineHeight: 1.5 }}>
-          Your availability shows when you&apos;re generally free — not what you&apos;re doing.
-          Team members see only the aggregate overlap, not your individual schedule details.
-        </p>
+    <div className="space-y-4">
+      {/* Scope pills */}
+      <div className="flex items-center gap-2 flex-wrap">
+        {([["mine", "Mine"], ["all", "My Team"], ["custom", "Custom"]] as [AvailScope, string][]).map(([s, label]) => (
+          <button
+            key={s}
+            onClick={() => setScope(s)}
+            style={{
+              height: 32, paddingInline: 14, borderRadius: 20,
+              border: `1.5px solid ${scope === s ? "var(--color-navy)" : "var(--color-border)"}`,
+              backgroundColor: scope === s ? "var(--color-navy)" : "transparent",
+              color: scope === s ? "#fff" : "var(--color-secondary)",
+              fontSize: 13, fontWeight: scope === s ? 600 : 400, cursor: "pointer", fontFamily: "var(--font-roboto)",
+            }}
+          >
+            {label}
+          </button>
+        ))}
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-[1fr_300px]">
+      {/* Per-person chips (shown when not "mine") */}
+      {scope !== "mine" && teamMembers.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {teamMembers.map(m => {
+            const checked = selectedIds.includes(m.id);
+            return (
+              <button
+                key={m.id}
+                onClick={() => setSelectedIds(prev =>
+                  checked ? prev.filter(id => id !== m.id) : [...prev, m.id]
+                )}
+                className="flex items-center gap-1.5"
+                style={{
+                  height: 30, paddingInline: 10, borderRadius: 20,
+                  border: `1.5px solid ${checked ? "var(--color-navy)" : "var(--color-border)"}`,
+                  backgroundColor: checked ? "rgba(27,46,75,0.07)" : "transparent",
+                  color: checked ? "var(--color-navy)" : "var(--color-secondary)",
+                  fontSize: 12, fontWeight: checked ? 600 : 400, cursor: "pointer", fontFamily: "var(--font-roboto)",
+                }}
+              >
+                <Avatar user={m} size={18} />
+                {m.name.split(" ")[0]}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {scope === "mine" ? (
         <Card>
           <SectionHeader
             title="My Weekly Availability"
             action={
               <div className="flex items-center gap-2">
-                {saved && (
-                  <span style={{ fontSize: 12, color: "var(--color-success)", fontWeight: 600 }}>
-                    ✓ Saved
-                  </span>
-                )}
+                {saved && <span style={{ fontSize: 12, color: "var(--color-success)", fontWeight: 600 }}>✓ Saved</span>}
                 <button
                   onClick={handleSave}
                   disabled={!hasChanges}
@@ -163,12 +539,8 @@ function MyAvailabilityTab({
                     backgroundColor: hasChanges ? "var(--color-navy)" : "transparent",
                     color: hasChanges ? "#fff" : "var(--color-secondary)",
                     border: hasChanges ? "none" : "1px solid var(--color-border)",
-                    borderRadius: 7,
-                    fontSize: 12,
-                    fontWeight: 600,
-                    padding: "6px 14px",
-                    cursor: hasChanges ? "pointer" : "not-allowed",
-                    fontFamily: "var(--font-roboto)",
+                    borderRadius: 7, fontSize: 12, fontWeight: 600, padding: "6px 14px",
+                    cursor: hasChanges ? "pointer" : "not-allowed", fontFamily: "var(--font-roboto)",
                   }}
                 >
                   Save Changes
@@ -177,187 +549,41 @@ function MyAvailabilityTab({
             }
           />
           <div className="p-5">
+            <div className="flex items-start gap-2 mb-4 px-3 py-2 rounded-lg" style={{ backgroundColor: "rgba(27,46,75,0.05)", border: "1px solid rgba(27,46,75,0.10)" }}>
+              <Lock size={13} style={{ marginTop: 2, color: "var(--color-navy)", flexShrink: 0 }} />
+              <p style={{ fontSize: 12, color: "var(--color-body)", margin: 0, lineHeight: 1.5 }}>
+                Team members see only the aggregate overlap — not your individual schedule details.
+              </p>
+            </div>
             <AvailabilityGrid slots={slots} onChange={setSlots} />
           </div>
         </Card>
-
-        <div className="space-y-4">
-          <Card>
-            <SectionHeader title="Google Calendar Sync" />
-            <div className="px-5 py-4 space-y-3">
-              <div
-                className="flex items-start gap-2 p-3 rounded-lg"
-                style={{
-                  backgroundColor: googleConnected ? "rgba(46,125,82,0.07)" : "rgba(27,46,75,0.04)",
-                  border: "1px solid",
-                  borderColor: googleConnected ? "rgba(46,125,82,0.25)" : "var(--color-border)",
-                }}
-              >
-                {googleConnected ? (
-                  <Check size={14} style={{ color: "var(--color-success)", marginTop: 2, flexShrink: 0 }} />
-                ) : (
-                  <AlertCircle size={14} style={{ color: "var(--color-secondary)", marginTop: 2, flexShrink: 0 }} />
-                )}
-                <p style={{ fontSize: 12, color: "var(--color-body)", margin: 0, lineHeight: 1.5 }}>
-                  {googleConnected
-                    ? "Connected — your free/busy status syncs automatically. No event titles or details are visible to anyone."
-                    : "Not connected. Connect to sync your free/busy status automatically instead of filling the grid manually."}
-                </p>
-              </div>
-
-              <button
-                onClick={onToggleGoogle}
-                className="w-full flex items-center justify-center gap-2"
-                style={{
-                  height: 38,
-                  border: "1px solid var(--color-border)",
-                  borderRadius: 7,
-                  fontSize: 13,
-                  fontWeight: 600,
-                  cursor: "pointer",
-                  backgroundColor: googleConnected ? "transparent" : "var(--color-navy)",
-                  color: googleConnected ? "var(--color-error)" : "#fff",
-                  fontFamily: "var(--font-roboto)",
-                }}
-              >
-                {googleConnected ? "Disconnect Calendar" : "Connect Google Calendar"}
-              </button>
-
-              <p style={{ fontSize: 11, color: "var(--color-secondary)", lineHeight: 1.5 }}>
-                Only your free/busy status is used. Event titles, descriptions, and attendees
-                are never read or shared with anyone.
+      ) : (
+        <Card>
+          <SectionHeader title={overlapTitle} />
+          <div className="p-5">
+            {filteredMembers.length === 0 ? (
+              <p style={{ fontSize: 13, color: "var(--color-secondary)", textAlign: "center", padding: "24px 0" }}>
+                Select at least one person above to see their availability.
               </p>
-            </div>
-          </Card>
-
-          <Card>
-            <div className="px-5 py-4">
-              <p style={{ fontSize: 12, fontWeight: 600, color: "var(--color-secondary)", marginBottom: 8, letterSpacing: "0.04em" }}>
-                AVAILABILITY SUMMARY
+            ) : filteredAvailabilities.length === 0 ? (
+              <p style={{ fontSize: 13, color: "var(--color-secondary)", textAlign: "center", padding: "24px 0" }}>
+                None of the selected members have set their availability yet.
               </p>
-              {slots.length === 0 ? (
-                <p style={{ fontSize: 13, color: "var(--color-secondary)" }}>
-                  No availability set yet. Click or drag cells on the grid to mark when you&apos;re free.
-                </p>
-              ) : (
-                <>
-                  <p style={{ fontSize: 13, color: "var(--color-body)", margin: 0 }}>
-                    <span style={{ fontWeight: 700, color: "var(--color-navy)", fontSize: 20 }}>
-                      {Math.round(slots.length * 0.5)}h
-                    </span>{" "}
-                    per week marked as available
-                  </p>
-                  <p style={{ fontSize: 11, color: "var(--color-secondary)", marginTop: 4 }}>
-                    {slots.length} time slots × 30 min
-                  </p>
-                </>
-              )}
-            </div>
-          </Card>
-        </div>
-      </div>
+            ) : (
+              <TeamOverlapView
+                availabilities={filteredAvailabilities}
+                teamMembers={filteredMembers}
+              />
+            )}
+          </div>
+        </Card>
+      )}
     </div>
   );
 }
 
-// ── Tab: Team Overlap ─────────────────────────────────────────────────────────
-
-function TeamOverlapTab({
-  availabilities,
-  teamMembers,
-  onProposeMeeting,
-}: {
-  availabilities: WeeklyAvailability[];
-  teamMembers: User[];
-  onProposeMeeting: () => void;
-}) {
-  if (teamMembers.length === 0) {
-    return (
-      <Card>
-        <EmptyState
-          icon={Users}
-          heading="No team members yet"
-          body="Invite collaborators to your lab to see availability overlap here."
-        />
-      </Card>
-    );
-  }
-
-  const membersWithAvailability = availabilities.filter((a) =>
-    teamMembers.some((m) => m.id === a.userId)
-  );
-
-  return (
-    <div className="space-y-5">
-      <Card>
-        <SectionHeader title="Team Availability Overlap" />
-        <div className="p-5">
-          {membersWithAvailability.length === 0 ? (
-            <div className="py-6 text-center">
-              <p style={{ fontSize: 13, color: "var(--color-secondary)" }}>
-                No team members have set their availability yet. Ask everyone to fill in their grid.
-              </p>
-              <button
-                onClick={onProposeMeeting}
-                style={{
-                  marginTop: 10,
-                  backgroundColor: "var(--color-navy)",
-                  color: "#fff",
-                  border: "none",
-                  borderRadius: 7,
-                  fontSize: 13,
-                  fontWeight: 600,
-                  padding: "8px 16px",
-                  cursor: "pointer",
-                  fontFamily: "var(--font-roboto)",
-                }}
-              >
-                + Propose Meeting Anyway
-              </button>
-            </div>
-          ) : (
-            <TeamOverlapView
-              availabilities={membersWithAvailability}
-              teamMembers={teamMembers}
-              onProposeMeeting={onProposeMeeting}
-            />
-          )}
-        </div>
-      </Card>
-
-      <Card>
-        <SectionHeader title="Availability Status" />
-        <div className="px-5 py-3 space-y-1">
-          {teamMembers.map((member) => {
-            const hasAvailability = availabilities.some((a) => a.userId === member.id);
-            return (
-              <div key={member.id} className="flex items-center gap-3 py-2">
-                <Avatar user={member} size={26} />
-                <span style={{ flex: 1, fontSize: 13, color: "var(--color-body)" }}>
-                  {member.name}
-                  {member.role === "pi" && (
-                    <span style={{ fontSize: 10, marginLeft: 6, color: "var(--color-secondary)" }}>PI</span>
-                  )}
-                </span>
-                {hasAvailability ? (
-                  <span style={{ fontSize: 11, fontWeight: 600, color: "#065F46", backgroundColor: "#D1FAE5", borderRadius: 12, padding: "2px 8px" }}>
-                    ✓ Set
-                  </span>
-                ) : (
-                  <span style={{ fontSize: 11, color: "var(--color-secondary)", backgroundColor: "rgba(27,46,75,0.05)", borderRadius: 12, padding: "2px 8px" }}>
-                    Not set
-                  </span>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </Card>
-    </div>
-  );
-}
-
-// ── Tab: Meetings ─────────────────────────────────────────────────────────────
+// ── Tab: Upcoming Meetings ────────────────────────────────────────────────────
 
 function MeetingsTab({
   proposals,
@@ -372,89 +598,72 @@ function MeetingsTab({
   onRespond: (proposalId: string, status: "accepted" | "declined") => void;
   onPropose: () => void;
 }) {
-  const incoming = proposals.filter(
-    (p) =>
-      p.proposerId !== currentUserId &&
-      p.inviteeIds.includes(currentUserId) &&
-      (p.responses.find((r) => r.userId === currentUserId)?.status ?? "pending") === "pending"
-  );
-  const outgoing = proposals.filter((p) => p.proposerId === currentUserId);
-  const responded = proposals.filter(
-    (p) =>
-      p.proposerId !== currentUserId &&
-      p.inviteeIds.includes(currentUserId) &&
-      (p.responses.find((r) => r.userId === currentUserId)?.status ?? "pending") !== "pending"
-  );
+  const todayStr = new Date().toISOString().split("T")[0];
 
-  function getMember(id: string): User | undefined {
-    return teamMembers.find((m) => m.id === id);
-  }
+  const myProposals = proposals
+    .filter(p => p.proposerId === currentUserId || p.inviteeIds.includes(currentUserId))
+    .sort((a, b) => a.proposedDate.localeCompare(b.proposedDate));
 
-  function MyResponseBadge({ proposal }: { proposal: MeetingProposal }) {
-    const myResp = proposal.responses.find((r) => r.userId === currentUserId);
-    const status = myResp?.status ?? "pending";
-    const c = STATUS_COLORS[status];
-    return (
-      <span style={{ fontSize: 11, fontWeight: 600, color: c.text, backgroundColor: c.bg, borderRadius: 12, padding: "2px 8px" }}>
-        {STATUS_LABELS[status]}
-      </span>
-    );
-  }
+  const upcoming = myProposals.filter(p => p.proposedDate >= todayStr);
+  const past = myProposals.filter(p => p.proposedDate < todayStr);
 
-  function ProposalCard({
-    proposal,
-    showActions,
-    showResponses,
-  }: {
-    proposal: MeetingProposal;
-    showActions?: boolean;
-    showResponses?: boolean;
-  }) {
-    const proposer = getMember(proposal.proposerId);
+  function getMember(id: string) { return teamMembers.find(m => m.id === id); }
+
+  function ProposalRow({ p }: { p: MeetingProposal }) {
+    const isIncoming = p.proposerId !== currentUserId;
+    const myStatus = p.responses.find(r => r.userId === currentUserId)?.status ?? "pending";
+    const needsResponse = isIncoming && myStatus === "pending";
+    const c = STATUS_COLORS[myStatus as MeetingResponseStatus];
+    const proposer = getMember(p.proposerId);
+
     return (
       <div className="px-5 py-4" style={{ borderBottom: "1px solid var(--color-border)" }}>
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
-            <p style={{ fontSize: 14, fontWeight: 600, color: "var(--color-body)", margin: 0 }}>
-              {proposal.title}
-            </p>
-            {proposal.description && (
-              <p style={{ fontSize: 12, color: "var(--color-secondary)", marginTop: 3 }}>
-                {proposal.description}
-              </p>
+            <p style={{ fontSize: 14, fontWeight: 600, color: "var(--color-body)", margin: 0 }}>{p.title}</p>
+            {p.description && (
+              <p style={{ fontSize: 12, color: "var(--color-secondary)", marginTop: 2 }}>{p.description}</p>
             )}
             <div className="flex items-center gap-3 mt-2 flex-wrap">
               <span className="flex items-center gap-1" style={{ fontSize: 12, color: "var(--color-body)" }}>
                 <Calendar size={11} style={{ color: "var(--color-navy)" }} />
-                {formatProposedDate(proposal.proposedDate, proposal.proposedTime)}
+                {formatProposedDate(p.proposedDate, p.proposedTime)}
               </span>
               <span className="flex items-center gap-1" style={{ fontSize: 12, color: "var(--color-secondary)" }}>
-                <Clock size={11} />
-                {formatDuration(proposal.durationMinutes)}
+                <Clock size={11} /> {formatDuration(p.durationMinutes)}
               </span>
-              {proposer && (
+              {isIncoming && proposer && (
                 <span className="flex items-center gap-1.5" style={{ fontSize: 12, color: "var(--color-secondary)" }}>
-                  <Avatar user={proposer} size={14} />
-                  {proposer.name.split(" ")[0]}
+                  <Avatar user={proposer} size={14} /> {proposer.name.split(" ")[0]}
                 </span>
               )}
             </div>
           </div>
-          {!showActions && <MyResponseBadge proposal={proposal} />}
+          {!needsResponse && (
+            <span style={{
+              fontSize: 11, fontWeight: 600, flexShrink: 0,
+              color: isIncoming ? c.text : "var(--color-secondary)",
+              backgroundColor: isIncoming ? c.bg : "rgba(27,46,75,0.06)",
+              borderRadius: 12, padding: "2px 8px",
+            }}>
+              {isIncoming ? STATUS_LABELS[myStatus as MeetingResponseStatus] : "Proposed"}
+            </span>
+          )}
         </div>
 
-        {showResponses && proposal.inviteeIds.length > 0 && (
+        {/* Invitee response chips for proposals I created */}
+        {!isIncoming && p.inviteeIds.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-2">
-            {proposal.inviteeIds.map((id) => {
+            {p.inviteeIds.map(id => {
               const u = getMember(id);
-              const resp = proposal.responses.find((r) => r.userId === id);
+              const resp = p.responses.find(r => r.userId === id);
               const status = resp?.status ?? "pending";
-              const c = STATUS_COLORS[status];
+              const rc = STATUS_COLORS[status];
               if (!u) return null;
               return (
-                <div key={id} className="flex items-center gap-1.5 px-2 py-1 rounded-lg" style={{ backgroundColor: c.bg }}>
+                <div key={id} className="flex items-center gap-1.5 px-2 py-1 rounded-lg" style={{ backgroundColor: rc.bg }}>
                   <Avatar user={u} size={16} />
-                  <span style={{ fontSize: 11, fontWeight: 600, color: c.text }}>
+                  <span style={{ fontSize: 11, fontWeight: 600, color: rc.text }}>
                     {u.name.split(" ")[0]}: {STATUS_LABELS[status]}
                   </span>
                 </div>
@@ -463,17 +672,17 @@ function MeetingsTab({
           </div>
         )}
 
-        {showActions && (
-          <div className="flex items-center gap-2 mt-3">
+        {needsResponse && (
+          <div className="flex gap-2 mt-3">
             <button
-              onClick={() => onRespond(proposal.id, "accepted")}
+              onClick={() => onRespond(p.id, "accepted")}
               className="flex items-center gap-1.5"
               style={{ height: 32, paddingInline: 14, backgroundColor: "var(--color-navy)", color: "#fff", border: "none", borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "var(--font-roboto)" }}
             >
               <Check size={12} /> Accept
             </button>
             <button
-              onClick={() => onRespond(proposal.id, "declined")}
+              onClick={() => onRespond(p.id, "declined")}
               className="flex items-center gap-1.5"
               style={{ height: 32, paddingInline: 14, backgroundColor: "transparent", color: "var(--color-error)", border: "1px solid var(--color-error)", borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "var(--font-roboto)" }}
             >
@@ -487,283 +696,58 @@ function MeetingsTab({
 
   return (
     <div className="space-y-5">
-      {incoming.length > 0 && (
-        <Card>
-          <SectionHeader title="Needs Your Response" />
-          <div>{incoming.map((p) => <ProposalCard key={p.id} proposal={p} showActions />)}</div>
-        </Card>
-      )}
-
       <Card>
         <SectionHeader
-          title="My Proposals"
+          title="Upcoming Meetings"
           action={
             <button
               onClick={onPropose}
-              className="flex items-center gap-1"
-              style={{ fontSize: 12, fontWeight: 600, color: "var(--color-navy)", background: "none", border: "none", cursor: "pointer" }}
+              className="flex items-center gap-1.5"
+              style={{ height: 32, paddingInline: 14, backgroundColor: "var(--color-navy)", color: "#fff", border: "none", borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "var(--font-roboto)" }}
             >
-              <Plus size={13} /> Propose Meeting
+              <Plus size={13} /> Propose
             </button>
           }
         />
-        {outgoing.length === 0 ? (
+        {upcoming.length === 0 ? (
           <EmptyState
             icon={Send}
-            heading="No meeting proposals yet"
-            body="Click '+ Propose Meeting' to suggest a time to your lab members."
+            heading="No upcoming meetings"
+            body="Propose a time with your lab members — everyone can accept or decline."
             action={
-              <button
-                onClick={onPropose}
-                style={{ fontSize: 13, fontWeight: 600, color: "var(--color-navy)", background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}
-              >
-                Propose a meeting time
+              <button onClick={onPropose} style={{ fontSize: 13, fontWeight: 600, color: "var(--color-navy)", background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>
+                Propose a meeting
               </button>
             }
           />
         ) : (
-          outgoing.map((p) => <ProposalCard key={p.id} proposal={p} showResponses />)
+          upcoming.map(p => <ProposalRow key={p.id} p={p} />)
         )}
       </Card>
 
-      {responded.length > 0 && (
+      {past.length > 0 && (
         <Card>
-          <SectionHeader title="Responded" />
-          <div>{responded.map((p) => <ProposalCard key={p.id} proposal={p} />)}</div>
+          <SectionHeader title="Past" />
+          {past.map(p => <ProposalRow key={p.id} p={p} />)}
         </Card>
       )}
     </div>
   );
 }
 
-// ── Tab: Events ───────────────────────────────────────────────────────────────
-
-const evInputStyle: React.CSSProperties = {
-  height: 36,
-  border: "1px solid var(--color-border)",
-  borderRadius: 6,
-  padding: "0 10px",
-  fontSize: 13,
-  fontFamily: "var(--font-roboto)",
-  backgroundColor: "var(--color-canvas)",
-  color: "var(--color-body)",
-  outline: "none",
-  boxSizing: "border-box",
-};
-
-function EventsTab({
-  events,
-  currentUserId,
-  projectId,
-  onAddEvent,
-  onDeleteEvent,
-}: {
-  events: ScheduleEvent[];
-  currentUserId: string;
-  projectId: string;
-  onAddEvent: (e: Omit<ScheduleEvent, "id">) => void;
-  onDeleteEvent: (id: string) => void;
-}) {
-  const [showForm, setShowForm] = useState(false);
-  const [title, setTitle] = useState("");
-  const [date, setDate] = useState("");
-  const [time, setTime] = useState("");
-  const [scope, setScope] = useState<"lab" | "personal">("lab");
-  const [error, setError] = useState("");
-  const [showCal, setShowCal] = useState(false);
-  const [calPos, setCalPos] = useState<{ top: number; left: number } | null>(null);
-  const [showTP, setShowTP] = useState(false);
-  const [tpPos, setTpPos] = useState<{ top: number; left: number } | null>(null);
-  const dateBtnRef = useRef<HTMLButtonElement>(null);
-  const timeBtnRef = useRef<HTMLButtonElement>(null);
-
-  // Chronological, lab events + my personal events already filtered by parent
-  const sorted = [...events].sort((a, b) => a.date.localeCompare(b.date));
-
-  function handleAdd() {
-    if (!title.trim()) { setError("Please enter a title."); return; }
-    if (!date) { setError("Please select a date."); return; }
-    setError("");
-    onAddEvent({ projectId, title: title.trim(), date, time: time || undefined, scope, createdBy: currentUserId });
-    setTitle(""); setDate(""); setTime(""); setScope("lab");
-    setShowForm(false);
-  }
-
-  return (
-    <Card>
-      <SectionHeader
-        title="Events"
-        action={
-          <button
-            onClick={() => setShowForm((s) => !s)}
-            className="flex items-center gap-1"
-            style={{ fontSize: 12, fontWeight: 600, color: "var(--color-navy)", background: "none", border: "none", cursor: "pointer" }}
-          >
-            <Plus size={13} /> Add event
-          </button>
-        }
-      />
-
-      {/* Inline form */}
-      {showForm && (
-        <div className="px-5 py-4 space-y-3 animate-fade-in" style={{ borderBottom: "1px solid var(--color-border)", backgroundColor: "rgba(27,46,75,0.02)" }}>
-          {/* Lab / Personal toggle */}
-          <div className="flex gap-1.5">
-            {(["lab", "personal"] as const).map((s) => (
-              <button
-                key={s}
-                onClick={() => setScope(s)}
-                style={{
-                  height: 28,
-                  paddingInline: 12,
-                  borderRadius: 20,
-                  border: "1.5px solid",
-                  borderColor: scope === s ? "var(--color-navy)" : "var(--color-border)",
-                  backgroundColor: scope === s ? "var(--color-navy)" : "transparent",
-                  color: scope === s ? "#fff" : "var(--color-secondary)",
-                  fontSize: 12,
-                  fontWeight: scope === s ? 600 : 400,
-                  cursor: "pointer",
-                  fontFamily: "var(--font-roboto)",
-                }}
-              >
-                {s === "lab" ? "Lab (visible to all)" : "Personal (only me)"}
-              </button>
-            ))}
-          </div>
-          <input
-            autoFocus
-            value={title}
-            onChange={(e) => { setTitle(e.target.value); setError(""); }}
-            placeholder="Event title"
-            style={{ ...evInputStyle, width: "100%" }}
-            onFocus={(e) => { e.currentTarget.style.borderColor = "var(--color-navy)"; }}
-            onBlur={(e) => { e.currentTarget.style.borderColor = "var(--color-border)"; }}
-          />
-          <div className="flex gap-2">
-            <button
-              ref={dateBtnRef}
-              onClick={() => {
-                if (!dateBtnRef.current) return;
-                const r = dateBtnRef.current.getBoundingClientRect();
-                setCalPos({ top: r.bottom + 6, left: r.left });
-                setShowCal(v => !v); setShowTP(false); setError("");
-              }}
-              style={{ ...evInputStyle, flex: 1, display: "flex", alignItems: "center", gap: 6, cursor: "pointer", color: date ? "var(--color-body)" : "var(--color-secondary)" }}
-            >
-              {date ? formatDateLabel(date) : "Date"}
-            </button>
-            <button
-              ref={timeBtnRef}
-              onClick={() => {
-                if (!timeBtnRef.current) return;
-                const r = timeBtnRef.current.getBoundingClientRect();
-                setTpPos({ top: r.bottom + 6, left: r.left });
-                setShowTP(v => !v); setShowCal(false);
-              }}
-              style={{ ...evInputStyle, width: 110, display: "flex", alignItems: "center", gap: 6, cursor: "pointer", color: time ? "var(--color-body)" : "var(--color-secondary)" }}
-            >
-              {time ? formatTimeDisplay(time) : "+ time"}
-            </button>
-          </div>
-          {showCal && calPos && (
-            <CalendarPicker value={date || undefined} accentColor="#1B2E4B" pos={calPos}
-              onSelect={d => { setDate(d); setShowCal(false); }}
-              onClear={() => { setDate(""); setShowCal(false); }}
-              onClose={() => setShowCal(false)} />
-          )}
-          {showTP && tpPos && (
-            <TimePicker value={time || "09:00"} accentColor="#1B2E4B" pos={tpPos}
-              onChange={t => setTime(t)}
-              onClear={() => { setTime(""); setShowTP(false); }}
-              onClose={() => setShowTP(false)} />
-          )}
-          {error && <p style={{ fontSize: 11, color: "var(--color-error)" }}>{error}</p>}
-          <div className="flex gap-2">
-            <button onClick={handleAdd} style={{ height: 32, paddingInline: 16, backgroundColor: "var(--color-navy)", color: "#fff", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Add</button>
-            <button onClick={() => { setShowForm(false); setError(""); }} style={{ height: 32, paddingInline: 12, background: "none", border: "none", fontSize: 12, color: "var(--color-secondary)", cursor: "pointer" }}>Cancel</button>
-          </div>
-        </div>
-      )}
-
-      {/* Event list */}
-      {sorted.length === 0 ? (
-        <EmptyState icon={Calendar} heading="No events yet" body="Add a lab event (visible to the whole team) or a personal one (only you)." />
-      ) : (
-        <>
-          {sorted.map((event) => {
-            const d = new Date(event.date + "T00:00:00");
-            const label = d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
-            const isPersonal = event.scope === "personal";
-            return (
-              <div
-                key={event.id}
-                className="flex items-center gap-3 px-5 py-3"
-                style={{ borderBottom: "1px solid var(--color-border)" }}
-              >
-                <span
-                  className="shrink-0 px-2 py-1"
-                  style={{
-                    backgroundColor: isPersonal ? "rgba(27,46,75,0.08)" : "var(--color-navy)",
-                    color: isPersonal ? "var(--color-navy)" : "#fff",
-                    borderRadius: 6,
-                    fontSize: 11,
-                    fontWeight: 700,
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {label}
-                </span>
-                <div className="flex-1 min-w-0">
-                  <p style={{ fontSize: 13, fontWeight: 500, color: "var(--color-body)", margin: 0 }}>{event.title}</p>
-                </div>
-                {isPersonal && (
-                  <Lock size={11} style={{ color: "var(--color-secondary)", flexShrink: 0 }} aria-label="Personal event" />
-                )}
-                {event.time && (
-                  <span style={{ fontSize: 11, color: "var(--color-secondary)", flexShrink: 0 }}>
-                    {new Date(`2000-01-01T${event.time}`).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
-                  </span>
-                )}
-                {event.createdBy === currentUserId && (
-                  <button
-                    onClick={() => onDeleteEvent(event.id)}
-                    style={{ background: "none", border: "none", cursor: "pointer", padding: 4, flexShrink: 0, opacity: 0.5 }}
-                    aria-label="Delete event"
-                    onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.opacity = "1"; }}
-                    onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.opacity = "0.5"; }}
-                  >
-                    <Trash2 size={13} color="var(--color-secondary)" />
-                  </button>
-                )}
-              </div>
-            );
-          })}
-          <p className="px-5 py-2" style={{ fontSize: 11, color: "var(--color-secondary)", margin: 0 }}>
-            <Lock size={10} style={{ display: "inline", marginRight: 4 }} />
-            Personal events are visible only to you and do not appear in the team overlap view.
-          </p>
-        </>
-      )}
-    </Card>
-  );
-}
-
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
-type Tab = "availability" | "team" | "meetings" | "events";
+type Tab = "calendar" | "availability" | "meetings";
 
 const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
-  { id: "availability", label: "My Availability",    icon: Calendar },
-  { id: "team",         label: "Team Overlap",        icon: Users    },
-  { id: "meetings",     label: "Meetings",            icon: Send     },
-  { id: "events",       label: "Events",               icon: Calendar },
+  { id: "calendar",     label: "Calendar",          icon: Calendar },
+  { id: "availability", label: "Availability",      icon: Users    },
+  { id: "meetings",     label: "Meetings",           icon: Send     },
 ];
 
 export default function SchedulingPage() {
-  const [tab, setTab] = useState<Tab>("availability");
+  const [tab, setTab] = useState<Tab>("calendar");
   const [showProposalModal, setShowProposalModal] = useState(false);
-  const [googleConnected, setGoogleConnected] = useState(false);
   const [loading, setLoading] = useState(true);
 
   // Resolved from auth
@@ -771,7 +755,7 @@ export default function SchedulingPage() {
   const [projectId, setProjectId] = useState("");
   const [teamMembers, setTeamMembers] = useState<User[]>([]);
 
-  // Scheduling data — starts empty for every user
+  // Scheduling data
   const [savedSlots, setSavedSlots] = useState<string[]>([]);
   const [allAvailabilities, setAllAvailabilities] = useState<WeeklyAvailability[]>([]);
   const [proposals, setProposals] = useState<MeetingProposal[]>([]);
@@ -780,7 +764,6 @@ export default function SchedulingPage() {
   useEffect(() => {
     async function init() {
       if (!isSupabaseConfigured) {
-        // Demo mode: identify the user from localStorage but show empty data
         try {
           const stored = localStorage.getItem("canopy_user");
           if (stored) {
@@ -837,7 +820,7 @@ export default function SchedulingPage() {
         );
       }
 
-      // Availability (all members in this project)
+      // Availability
       const { data: avData } = await supabase
         .from("user_availability")
         .select("*")
@@ -855,7 +838,7 @@ export default function SchedulingPage() {
         if (mine) setSavedSlots(mine.slots);
       }
 
-      // Meeting proposals for this project
+      // Meeting proposals
       const { data: propData } = await supabase
         .from("meeting_proposals")
         .select("*")
@@ -880,7 +863,7 @@ export default function SchedulingPage() {
         );
       }
 
-      // Schedule events: lab events for this project, plus my personal events
+      // Schedule events
       const { data: evData } = await supabase
         .from("schedule_events")
         .select("*")
@@ -1064,21 +1047,13 @@ export default function SchedulingPage() {
     <ClientOnly>
       <div className="px-4 md:px-8 py-6 max-w-5xl mx-auto">
         {/* Page header */}
-        <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
-          <div>
-            <h1 style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 22, color: "var(--color-navy)", margin: 0 }}>
-              Scheduling
-            </h1>
-            <p style={{ fontSize: 13, color: "var(--color-secondary)", marginTop: 3 }}>
-              Set your availability, find team overlap, and propose meetings.
-            </p>
-          </div>
-          <button
-            onClick={() => setShowProposalModal(true)}
-            style={{ display: "flex", alignItems: "center", gap: 6, backgroundColor: "var(--color-navy)", color: "#fff", border: "none", borderRadius: 7, fontSize: 13, fontWeight: 600, padding: "9px 16px", cursor: "pointer", fontFamily: "var(--font-roboto)" }}
-          >
-            <Plus size={14} /> Propose Meeting
-          </button>
+        <div className="mb-6">
+          <h1 style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 22, color: "var(--color-navy)", margin: 0 }}>
+            Scheduling
+          </h1>
+          <p style={{ fontSize: 13, color: "var(--color-secondary)", marginTop: 3 }}>
+            Calendar, availability, and meetings with your lab.
+          </p>
         </div>
 
         {/* Tab bar */}
@@ -1091,7 +1066,13 @@ export default function SchedulingPage() {
                 key={id}
                 onClick={() => setTab(id)}
                 className="flex items-center gap-1.5 whitespace-nowrap"
-                style={{ flex: "0 0 auto", padding: "7px 14px", borderRadius: 7, border: "none", cursor: "pointer", fontSize: 13, fontWeight: active ? 600 : 400, fontFamily: "var(--font-roboto)", backgroundColor: active ? "#fff" : "transparent", color: active ? "var(--color-navy)" : "var(--color-secondary)", boxShadow: active ? "0 1px 4px rgba(27,46,75,0.12)" : "none" }}
+                style={{
+                  flex: "0 0 auto", padding: "7px 14px", borderRadius: 7, border: "none", cursor: "pointer",
+                  fontSize: 13, fontWeight: active ? 600 : 400, fontFamily: "var(--font-roboto)",
+                  backgroundColor: active ? "#fff" : "transparent",
+                  color: active ? "var(--color-navy)" : "var(--color-secondary)",
+                  boxShadow: active ? "0 1px 4px rgba(27,46,75,0.12)" : "none",
+                }}
               >
                 <Icon size={13} />
                 {label}
@@ -1106,19 +1087,23 @@ export default function SchedulingPage() {
         </div>
 
         {/* Tab content */}
-        {tab === "availability" && (
-          <MyAvailabilityTab
-            savedSlots={savedSlots}
-            onSave={handleSaveAvailability}
-            googleConnected={googleConnected}
-            onToggleGoogle={() => setGoogleConnected((c) => !c)}
+        {tab === "calendar" && (
+          <CalendarTab
+            events={events}
+            proposals={proposals}
+            currentUserId={currentUserId}
+            projectId={projectId}
+            onAddEvent={handleAddEvent}
+            onDeleteEvent={handleDeleteEvent}
           />
         )}
-        {tab === "team" && (
-          <TeamOverlapTab
-            availabilities={allAvailabilities}
+        {tab === "availability" && (
+          <AvailabilityTab
+            savedSlots={savedSlots}
+            onSave={handleSaveAvailability}
+            allAvailabilities={allAvailabilities}
             teamMembers={teamMembers}
-            onProposeMeeting={() => setShowProposalModal(true)}
+            currentUserId={currentUserId}
           />
         )}
         {tab === "meetings" && (
@@ -1128,15 +1113,6 @@ export default function SchedulingPage() {
             teamMembers={teamMembers}
             onRespond={handleRespond}
             onPropose={() => setShowProposalModal(true)}
-          />
-        )}
-        {tab === "events" && (
-          <EventsTab
-            events={events}
-            currentUserId={currentUserId}
-            projectId={projectId}
-            onAddEvent={handleAddEvent}
-            onDeleteEvent={handleDeleteEvent}
           />
         )}
       </div>
