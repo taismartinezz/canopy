@@ -699,7 +699,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </header>
 
         {/* Page content */}
-        <main className="flex-1 overflow-auto min-h-0">{children}</main>
+        <main className="flex-1 overflow-y-auto overflow-x-hidden min-h-0">{children}</main>
       </div>
     </div>
     <Toast />

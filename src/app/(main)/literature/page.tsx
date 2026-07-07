@@ -90,7 +90,7 @@ function guessLitFileType(name: string): string {
 const REAL_LIT_COLS = new Set([
   "id", "project_id", "user_id", "library",
   "title", "authors", "year", "journal",
-  "doi", "abstract", "status", "tags",
+  "doi", "abstract", "status", "tags", "type",
 ]);
 
 function buildLitInsert(
@@ -107,6 +107,7 @@ function buildLitInsert(
     abstract?: string | null;
     tags?: string[];
     status?: "unread" | "reading" | "read";
+    type?: LiteratureType | null;
     [extra: string]: unknown;
   }
 ) {
@@ -122,6 +123,7 @@ function buildLitInsert(
     project_id: projectId,
     user_id: userId,
     library: dbLibrary,
+    type: fields.type ?? "article",
     title: fields.title,
     authors: Array.isArray(fields.authors)
       ? fields.authors
@@ -184,6 +186,7 @@ function AddItemModal({
       .from("literature_items")
       .insert(buildLitInsert(projectId, currentUserId, {
         library: scope,
+        type,
         title: title.trim(),
         authors: authors.split(",").map((a) => a.trim()).filter(Boolean),
         year: parseInt(year) || new Date().getFullYear(),
@@ -406,7 +409,7 @@ function ZoteroImportModal({ existingItems, onImport, onClose, projectId, curren
     setImporting(true);
     const rows = parsed.map((item) =>
       buildLitInsert(projectId, currentUserId, {
-        id: item.id, library: item.scope, title: item.title, authors: item.authors,
+        id: item.id, library: item.scope, type: item.type, title: item.title, authors: item.authors,
         year: item.year || null, journal: item.journal ?? null,
         doi: item.doi ?? null, abstract: item.abstract ?? null,
         tags: [], status: "unread",
@@ -612,7 +615,7 @@ function DOILookupModal({ onSave, onClose, projectId, currentUserId }: {
     };
     const { error: insertErr } = await supabase.from("literature_items").insert(
       buildLitInsert(projectId, currentUserId, {
-        id: item.id, library: scope, title: item.title, authors: item.authors,
+        id: item.id, library: scope, type: item.type, title: item.title, authors: item.authors,
         year: item.year || null, journal: item.journal ?? null,
         doi: item.doi ?? null, abstract: item.abstract ?? null,
         tags: [], status: "unread",
@@ -815,10 +818,12 @@ function AssignReadingForm({ itemId, projectId, assignedBy, onAssigned }: {
   const [dueDate, setDueDate]       = useState("");
   const [note, setNote]             = useState("");
   const [saving, setSaving]         = useState(false);
+  const [error, setError]           = useState("");
 
   async function handleAssign() {
     if (!assigneeId.trim()) return;
     setSaving(true);
+    setError("");
     const newA: LitAssignedReading = {
       id: crypto.randomUUID(), itemId, projectId, assignedBy,
       assigneeId: assigneeId.trim(), dueDate: dueDate || undefined,
@@ -828,7 +833,12 @@ function AssignReadingForm({ itemId, projectId, assignedBy, onAssigned }: {
       id: newA.id, item_id: itemId, project_id: projectId, assigned_by: assignedBy,
       assignee_id: assigneeId.trim(), due_date: dueDate || null, note: note.trim() || null,
     });
-    if (insertErr) console.error("[Assign reading]", insertErr);
+    if (insertErr) {
+      console.error("[Assign reading]", insertErr);
+      setError(`Failed to assign: ${insertErr.message}`);
+      setSaving(false);
+      return;
+    }
     onAssigned(newA); setAssigneeId(""); setDueDate(""); setNote(""); setSaving(false);
   }
 
@@ -836,7 +846,7 @@ function AssignReadingForm({ itemId, projectId, assignedBy, onAssigned }: {
     <div className="mt-2 p-3 rounded-lg" style={{ backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)" }}>
       <p style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-secondary)", marginBottom: 8 }}>Assign to a team member</p>
       <div className="space-y-2">
-        <input value={assigneeId} onChange={(e) => setAssigneeId(e.target.value)} placeholder="User ID or email"
+        <input value={assigneeId} onChange={(e) => { setAssigneeId(e.target.value); setError(""); }} placeholder="User ID or email"
           style={{ width: "100%", height: 34, border: "1px solid var(--color-border)", borderRadius: 6, padding: "0 10px", fontSize: 12, fontFamily: "var(--font-roboto)", outline: "none", boxSizing: "border-box" }}
           onFocus={(e) => { e.currentTarget.style.borderColor = "var(--color-navy)"; }} onBlur={(e) => { e.currentTarget.style.borderColor = "var(--color-border)"; }} />
         <div className="flex gap-2">
@@ -847,6 +857,7 @@ function AssignReadingForm({ itemId, projectId, assignedBy, onAssigned }: {
             style={{ flex: 2, height: 34, border: "1px solid var(--color-border)", borderRadius: 6, padding: "0 10px", fontSize: 12, fontFamily: "var(--font-roboto)", outline: "none" }}
             onFocus={(e) => { e.currentTarget.style.borderColor = "var(--color-navy)"; }} onBlur={(e) => { e.currentTarget.style.borderColor = "var(--color-border)"; }} />
         </div>
+        {error && <p style={{ fontSize: 11, color: "var(--color-error)", margin: 0 }}>{error}</p>}
         <button onClick={handleAssign} disabled={!assigneeId.trim() || saving}
           style={{ fontSize: 12, fontWeight: 700, padding: "6px 14px", borderRadius: 7, backgroundColor: "var(--color-navy)", color: "#fff", border: "none", cursor: "pointer", minHeight: 36, opacity: (!assigneeId.trim() || saving) ? 0.5 : 1 }}>
           {saving ? "Assigning…" : "Assign"}
@@ -1294,7 +1305,7 @@ function DetailPanelContent({
                       };
                       const { error: e } = await supabase.from("literature_items").insert(
                         buildLitInsert(projectId, currentUserId, {
-                          id: newItem.id, library: item.scope, title: rec.title,
+                          id: newItem.id, library: item.scope, type: "article", title: rec.title,
                           authors: rec.authors, year: rec.year || null,
                           journal: rec.journal ?? null, doi: rec.doi ?? null,
                           tags: [], status: "unread",
@@ -1402,12 +1413,26 @@ function DetailPanelContent({
                     <div key={a.id} className="flex items-start gap-3 px-3 py-2.5 rounded-lg" style={{ backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)" }}>
                       <UserCheck size={14} color="var(--color-navy)" style={{ marginTop: 2, flexShrink: 0 }} />
                       <div className="flex-1 min-w-0">
-                        <p style={{ fontSize: 12, fontWeight: 600, color: "var(--color-body)" }}>
-                          {a.assigneeId === currentUserId ? "You" : a.assigneeId.slice(0, 8)}
+                        <p style={{ fontSize: 12, fontWeight: 600, color: "var(--color-body)", wordBreak: "break-all" }}>
+                          {a.assigneeId === currentUserId ? "You" : a.assigneeId}
                         </p>
                         {a.dueDate && <p style={{ fontSize: 11, color: "var(--color-secondary)" }}>Due {new Date(a.dueDate).toLocaleDateString()}</p>}
                         {a.note && <p style={{ fontSize: 12, color: "var(--color-secondary)", marginTop: 2 }}>{a.note}</p>}
                       </div>
+                      {(a.assignedBy === currentUserId || a.assigneeId === currentUserId) && (
+                        <button
+                          onClick={async () => {
+                            const { error: delErr } = await supabase.from("lit_assigned_readings").delete().eq("id", a.id);
+                            if (delErr) { console.error("[Remove assignment]", delErr); return; }
+                            setAssigned((prev) => prev.filter((x) => x.id !== a.id));
+                          }}
+                          style={{ flexShrink: 0, background: "none", border: "none", cursor: "pointer", padding: 4, display: "flex", alignItems: "center" }}
+                          title="Remove assignment"
+                          aria-label="Remove assignment"
+                        >
+                          <X size={13} color="var(--color-secondary)" />
+                        </button>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -1441,6 +1466,7 @@ export default function LiteraturePage() {
   const [projectId, setProjectId]           = useState("");
   const [currentUserId, setCurrentUserId] = useState("");
   const [typeFilter, setTypeFilter]     = useState<LiteratureType | "all">("all");
+  const [yearFilter, setYearFilter]     = useState<number | "all">("all");
   const [yearSort, setYearSort]         = useState<"desc" | "asc">("desc");
 
   useEffect(() => {
@@ -1525,12 +1551,15 @@ export default function LiteraturePage() {
 
   const scopedItems = items.filter((item) => scope === "my" ? item.scope === "my" : item.scope === "lab");
 
+  const availableYears = [...new Set(scopedItems.map((i) => i.year).filter(Boolean))].sort((a, b) => b - a);
+
   const filtered = scopedItems
     .filter((item) => {
       if (search && !item.title.toLowerCase().includes(search.toLowerCase()) &&
           !toAuthorsArray(item.authors).some((a) => a.toLowerCase().includes(search.toLowerCase()))) return false;
       if (statusFilter !== "all" && item.status !== statusFilter) return false;
       if (typeFilter !== "all" && item.type !== typeFilter) return false;
+      if (yearFilter !== "all" && item.year !== yearFilter) return false;
       if (activeTag && !item.tags.includes(activeTag)) return false;
       if (activeCollection !== "lc0" && !item.collections.includes(activeCollection)) return false;
       return true;
@@ -1540,8 +1569,11 @@ export default function LiteraturePage() {
   const allTags = [...new Set(scopedItems.flatMap((i) => i.tags))].sort();
   const showingDetailMobile = isMobile && selectedItem !== null;
 
+  // When the detail panel is open on desktop, drop Authors/Year columns so title isn't squeezed
+  const narrowList = isMobile || (selectedItem !== null && !isMobile);
+
   return (
-    <div className="flex h-full" style={{ fontFamily: "var(--font-roboto)" }}>
+    <div className="flex h-full overflow-hidden" style={{ fontFamily: "var(--font-roboto)" }}>
 
       {collectionsOpen && (
         <div className="fixed inset-0 z-20 md:hidden" style={{ backgroundColor: "rgba(0,0,0,0.3)" }} onClick={() => setCollectionsOpen(false)} aria-hidden="true" />
@@ -1625,12 +1657,20 @@ export default function LiteraturePage() {
               <option value="report">Report</option>
               <option value="thesis">Thesis</option>
             </select>
-            <button
-              onClick={() => setYearSort((s) => s === "desc" ? "asc" : "desc")}
-              style={{ height: 36, paddingLeft: 10, paddingRight: 10, border: "1px solid var(--color-border)", borderRadius: 7, fontSize: 12, fontFamily: "var(--font-roboto)", backgroundColor: "var(--color-canvas)", color: "var(--color-secondary)", cursor: "pointer", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: 4 }}
-            >
-              Year {yearSort === "desc" ? "↓" : "↑"}
-            </button>
+            <div className="flex items-center gap-1">
+              <select value={yearFilter === "all" ? "all" : String(yearFilter)} onChange={(e) => setYearFilter(e.target.value === "all" ? "all" : parseInt(e.target.value))}
+                style={{ height: 36, paddingLeft: 8, paddingRight: 8, border: "1px solid var(--color-border)", borderRadius: 7, fontSize: 12, fontFamily: "var(--font-roboto)", backgroundColor: yearFilter !== "all" ? "rgba(27,46,75,0.06)" : "var(--color-canvas)", color: "var(--color-body)", outline: "none", cursor: "pointer" }}>
+                <option value="all">All Years</option>
+                {availableYears.map((y) => <option key={y} value={y}>{y}</option>)}
+              </select>
+              <button
+                onClick={() => setYearSort((s) => s === "desc" ? "asc" : "desc")}
+                title={yearSort === "desc" ? "Oldest first" : "Newest first"}
+                style={{ height: 36, width: 36, border: "1px solid var(--color-border)", borderRadius: 7, fontSize: 13, backgroundColor: "var(--color-canvas)", color: "var(--color-secondary)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
+              >
+                {yearSort === "desc" ? "↓" : "↑"}
+              </button>
+            </div>
             <button onClick={() => setAddItemOpen(true)} className="md:hidden flex items-center gap-1 shrink-0"
               style={{ fontSize: 12, fontWeight: 700, color: "#fff", backgroundColor: "var(--color-navy)", border: "none", borderRadius: 7, padding: "6px 12px", cursor: "pointer", minHeight: 44, fontFamily: "var(--font-roboto)" }}>
               <Plus size={13} /> Add
@@ -1644,8 +1684,8 @@ export default function LiteraturePage() {
             <span style={{ fontSize: 11, color: "var(--color-secondary)", marginLeft: "auto", whiteSpace: "nowrap" }}>{filtered.length} item{filtered.length !== 1 ? "s" : ""}</span>
           </div>
 
-          <div className="hidden md:grid items-center px-4 py-2" style={{ gridTemplateColumns: "28px 1fr 100px 70px 90px", backgroundColor: "var(--color-surface)", borderBottom: "1px solid var(--color-border)", gap: 8 }}>
-            {["", "Title", "Authors", "Year", "Status"].map((col, i) => (
+          <div className="hidden md:grid items-center px-4 py-2" style={{ gridTemplateColumns: narrowList ? "28px 1fr 90px" : "28px 1fr 100px 70px 90px", backgroundColor: "var(--color-surface)", borderBottom: "1px solid var(--color-border)", gap: 8 }}>
+            {(narrowList ? ["", "Title", "Status"] : ["", "Title", "Authors", "Year", "Status"]).map((col, i) => (
               <span key={i} style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-secondary)" }}>{col}</span>
             ))}
           </div>
@@ -1661,14 +1701,14 @@ export default function LiteraturePage() {
                   const isSelected = selectedItem?.id === item.id && !isMobile;
                   return (
                     <button key={item.id} onClick={() => setSelectedItem(isSelected ? null : item)} className="w-full text-left"
-                      style={{ display: "grid", gridTemplateColumns: isMobile ? "28px 1fr 80px" : "28px 1fr 100px 70px 90px", gap: 8, alignItems: "center", paddingLeft: isMobile ? 12 : 16, paddingRight: isMobile ? 12 : 16, paddingTop: 10, paddingBottom: 10, backgroundColor: isSelected ? "rgba(27,46,75,0.06)" : "transparent", borderLeft: isSelected ? "3px solid var(--color-navy)" : "3px solid transparent", borderBottom: "1px solid var(--color-border)", minHeight: 48 }}
+                      style={{ display: "grid", gridTemplateColumns: narrowList ? "28px 1fr 90px" : "28px 1fr 100px 70px 90px", gap: 8, alignItems: "center", paddingLeft: isMobile ? 12 : 16, paddingRight: isMobile ? 12 : 16, paddingTop: 10, paddingBottom: 10, backgroundColor: isSelected ? "rgba(27,46,75,0.06)" : "transparent", borderLeft: isSelected ? "3px solid var(--color-navy)" : "3px solid transparent", borderBottom: "1px solid var(--color-border)", minHeight: 48 }}
                       onMouseEnter={(e) => { if (!isSelected) (e.currentTarget as HTMLElement).style.backgroundColor = "#F8FAFF"; }}
                       onMouseLeave={(e) => { if (!isSelected) (e.currentTarget as HTMLElement).style.backgroundColor = ""; }}
                     >
                       <span>{TYPE_ICONS[item.type]}</span>
                       <span style={{ fontSize: 12, fontWeight: 500, color: "var(--color-body)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.title}</span>
-                      {!isMobile && <span style={{ fontSize: 12, color: "var(--color-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{formatAuthors(item.authors)}</span>}
-                      {!isMobile && <span style={{ fontSize: 12, color: "var(--color-secondary)" }}>{item.year}</span>}
+                      {!narrowList && <span style={{ fontSize: 12, color: "var(--color-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{formatAuthors(item.authors)}</span>}
+                      {!narrowList && <span style={{ fontSize: 12, color: "var(--color-secondary)" }}>{item.year}</span>}
                       <StatusBadge status={item.status} />
                     </button>
                   );
