@@ -117,8 +117,9 @@ function AddItemModal({
       .from("literature_items")
       .insert({
         project_id: projectId,
-        user_id: currentUserId,
-        library: scope,
+        added_by: currentUserId,
+        scope,
+        type,
         title: title.trim(),
         authors: authors.split(",").map((a) => a.trim()).filter(Boolean),
         year: parseInt(year) || new Date().getFullYear(),
@@ -131,8 +132,8 @@ function AddItemModal({
       .single();
 
     if (insertError) {
-      console.error("[Literature] insert error:", insertError);
-      setError("Failed to save. Please try again.");
+      console.error("[Literature] insert error:", insertError.code, insertError.message, insertError.details);
+      setError(`Failed to save: ${insertError.message}`);
       setSaving(false);
       return;
     }
@@ -140,8 +141,8 @@ function AddItemModal({
     const newItem: LiteratureItem = {
       id: data.id as string,
       projectId: data.project_id as string,
-      scope: (data.library as LiteratureItem["scope"]) ?? scope,
-      type: "article",
+      scope: (data.scope as LiteratureItem["scope"]) ?? scope,
+      type: (data.type as LiteratureItem["type"]) ?? type,
       title: data.title as string,
       authors: (data.authors as string[]) ?? [],
       year: (data.year as number) ?? 0,
@@ -153,8 +154,8 @@ function AddItemModal({
       rating: 0,
       notes: "",
       files: [],
-      addedById: data.user_id as string,
-      addedAt: data.created_at as string,
+      addedById: (data.added_by as string) ?? currentUserId,
+      addedAt: (data.added_at as string) ?? new Date().toISOString(),
       collections: [],
       relatedIds: [],
     };
@@ -344,10 +345,15 @@ function ZoteroImportModal({ existingItems, onImport, onClose, projectId, curren
       scope: item.scope, type: item.type, title: item.title, authors: item.authors,
       year: item.year || null, journal: item.journal ?? null, doi: item.doi ?? null,
       abstract: item.abstract ?? null, volume: item.volume ?? null, pages: item.pages ?? null,
-      url: item.url ?? null, tags: [], status: "unread", import_source: "zotero_json",
+      tags: [], status: "unread",
     }));
     const { error: insertErr } = await supabase.from("literature_items").insert(rows);
-    if (insertErr) console.error("[Zotero import]", insertErr);
+    if (insertErr) {
+      console.error("[Zotero import]", insertErr.code, insertErr.message, insertErr.details);
+      setError(`Import failed: ${insertErr.message}`);
+      setImporting(false);
+      return;
+    }
     onImport(parsed); setImporting(false);
   }
 
@@ -469,8 +475,41 @@ function DOILookupModal({ onSave, onClose, projectId, currentUserId }: {
   }
 
   async function handleURL() {
-    const doiMatch = /10\.\d{4,}\/\S+/.exec(input);
+    setError(""); setPreview(null);
+
+    // Bare DOI anywhere in the URL
+    const doiMatch = /10\.\d{4,}\/[^\s"<>]+/.exec(input);
     if (doiMatch) { await fetchDOI(doiMatch[0]); return; }
+
+    // Google Scholar — no structured metadata; try Semantic Scholar by title param
+    if (/scholar\.google\./i.test(input)) {
+      const titleParam = /[?&]title=([^&]+)/.exec(input)?.[1];
+      if (titleParam) {
+        setLoading(true);
+        try {
+          const q = decodeURIComponent(titleParam.replace(/\+/g, " "));
+          const res = await fetch(`https://api.semanticscholar.org/graph/v1/paper/search?query=${encodeURIComponent(q)}&fields=title,authors,year,journal,externalIds&limit=1`);
+          const { data: ss } = await res.json();
+          const paper = ss?.[0];
+          if (paper) {
+            setPreview({
+              type: "article", title: paper.title,
+              authors: (paper.authors ?? []).map((a: { name: string }) => a.name),
+              year: paper.year, journal: paper.journal?.name,
+              doi: paper.externalIds?.DOI,
+            });
+            setLoading(false);
+            return;
+          }
+        } catch { /* fall through */ }
+        setLoading(false);
+      }
+      setPreview({ title: "", authors: [], year: 0, url: input });
+      setError("Google Scholar doesn't expose structured metadata. Try the DOI or BibTeX option instead (on Scholar, click the quote icon → BibTeX).");
+      return;
+    }
+
+    // Generic URL fallback
     setPreview({ title: "", authors: [], year: 0, url: input });
     setError("Could not extract a DOI from this URL. Fill in the details manually below.");
   }
@@ -496,10 +535,14 @@ function DOILookupModal({ onSave, onClose, projectId, currentUserId }: {
       year: item.year || null, journal: item.journal ?? null,
       doi: item.doi ?? null, abstract: item.abstract ?? null,
       volume: item.volume ?? null, pages: item.pages ?? null,
-      url: item.url ?? null, tags: [], status: "unread",
-      import_source: item.importSource,
+      tags: [], status: "unread",
     });
-    if (insertErr) console.error("[DOI lookup save]", insertErr);
+    if (insertErr) {
+      console.error("[DOI lookup save]", insertErr.code, insertErr.message, insertErr.details);
+      setError(`Failed to save: ${insertErr.message}`);
+      setSaving(false);
+      return;
+    }
     onSave(item); setSaving(false);
   }
 
@@ -1159,16 +1202,23 @@ function DetailPanelContent({
                     <p style={{ fontSize: 11, color: "var(--color-secondary)" }}>{rec.authors.join(", ")}{rec.year ? ` · ${rec.year}` : ""}</p>
                   </div>
                   <div className="flex flex-col gap-1 shrink-0">
-                    <button onClick={() => {
+                    <button onClick={async () => {
                       const newItem: LiteratureItem = {
                         id: crypto.randomUUID(), projectId, scope: item.scope,
                         type: "article", title: rec.title, authors: rec.authors,
                         year: rec.year ?? 0, journal: rec.journal, doi: rec.doi,
                         tags: [], status: "unread", rating: 0, notes: "",
                         files: [], collections: [], relatedIds: [],
-                        addedById: currentUserId, addedAt: new Date().toISOString(), importSource: "url",
+                        addedById: currentUserId, addedAt: new Date().toISOString(),
                       };
-                      supabase.from("literature_items").insert({ id: newItem.id, project_id: projectId, added_by: currentUserId, scope: item.scope, type: "article", title: rec.title, authors: rec.authors, year: rec.year || null, journal: rec.journal ?? null, doi: rec.doi ?? null, tags: [], status: "unread" }).then(({ error: e }) => { if (e) console.error(e); });
+                      const { error: e } = await supabase.from("literature_items").insert({
+                        id: newItem.id, project_id: projectId, added_by: currentUserId,
+                        scope: item.scope, type: "article", title: rec.title,
+                        authors: rec.authors, year: rec.year || null,
+                        journal: rec.journal ?? null, doi: rec.doi ?? null,
+                        tags: [], status: "unread",
+                      });
+                      if (e) { console.error("[Rec add]", e.code, e.message, e.details); setRecsError(`Failed to add: ${e.message}`); return; }
                       onAddItem(newItem);
                       setRecs((prev) => prev.map((r) => r.id === rec.id ? { ...r, dismissed: true } : r));
                     }} style={{ fontSize: 11, fontWeight: 700, padding: "3px 8px", borderRadius: 5, backgroundColor: "var(--color-navy)", color: "#fff", border: "none", cursor: "pointer", minHeight: 28, whiteSpace: "nowrap" }}>+ Add</button>
