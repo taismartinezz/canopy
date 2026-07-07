@@ -51,8 +51,12 @@ function StatusBadge({ status }: { status: ReadStatus }) {
 
 function toAuthorsArray(authors: string | string[]): string[] {
   if (Array.isArray(authors)) return authors;
-  if (typeof authors === "string" && authors.trim()) return authors.split(",").map((s) => s.trim()).filter(Boolean);
-  return [];
+  if (typeof authors !== "string" || !authors.trim()) return [];
+  // Handles JSON-array strings stored in the text column e.g. '["Smith","Jones"]'
+  if (authors.startsWith("[")) {
+    try { return JSON.parse(authors) as string[]; } catch { /* fall through */ }
+  }
+  return authors.split(",").map((s) => s.trim()).filter(Boolean);
 }
 
 function formatAuthors(authors: string | string[]) {
@@ -75,6 +79,62 @@ function guessLitFileType(name: string): string {
   const ext = name.split(".").pop()?.toLowerCase() ?? "";
   if (ext === "pdf") return "pdf";
   return ext || "other";
+}
+
+// ── Insert payload builder — single source of truth for real DB schema ────────
+// Real columns (confirmed from live DB): id, project_id, user_id, library,
+//   title, authors, year, journal, doi, abstract, status, tags, created_at
+// Any key not in REAL_LIT_COLS is dropped with a console.warn so drift is
+// caught at dev time instead of surfacing as a 400 three rounds later.
+
+const REAL_LIT_COLS = new Set([
+  "id", "project_id", "user_id", "library",
+  "title", "authors", "year", "journal",
+  "doi", "abstract", "status", "tags",
+]);
+
+function buildLitInsert(
+  projectId: string,
+  userId: string,
+  fields: {
+    id?: string;
+    library: LibraryScope;
+    title: string;
+    authors: string | string[];
+    year?: number | null;
+    journal?: string | null;
+    doi?: string | null;
+    abstract?: string | null;
+    tags?: string[];
+    status?: "unread" | "reading" | "read";
+    [extra: string]: unknown;
+  }
+) {
+  // Warn on any key the caller passed that doesn't map to a real column
+  for (const key of Object.keys(fields)) {
+    if (key !== "id" && !REAL_LIT_COLS.has(key)) {
+      console.warn(`[buildLitInsert] Dropping unrecognized field: "${key}"`);
+    }
+  }
+  // DB uses 'personal' for the user's own library; TypeScript type uses 'my'
+  const dbLibrary = fields.library === "my" ? "personal" : fields.library;
+  const payload: Record<string, unknown> = {
+    project_id: projectId,
+    user_id: userId,
+    library: dbLibrary,
+    title: fields.title,
+    authors: Array.isArray(fields.authors)
+      ? fields.authors
+      : (fields.authors ?? ""),
+    year: fields.year ?? null,
+    journal: fields.journal ?? null,
+    doi: fields.doi ?? null,
+    abstract: fields.abstract ?? null,
+    tags: fields.tags ?? [],
+    status: fields.status ?? "unread",
+  };
+  if (fields.id) payload.id = fields.id;
+  return payload;
 }
 
 // ── Add Item Modal ────────────────────────────────────────────────────────────
@@ -122,19 +182,16 @@ function AddItemModal({
 
     const { data, error: insertError } = await supabase
       .from("literature_items")
-      .insert({
-        project_id: projectId,
-        user_id: currentUserId,
+      .insert(buildLitInsert(projectId, currentUserId, {
         library: scope,
-        type,
         title: title.trim(),
-        authors: authors.trim(),
+        authors: authors.split(",").map((a) => a.trim()).filter(Boolean),
         year: parseInt(year) || new Date().getFullYear(),
         journal: journal.trim() || null,
         doi: doi.trim() || null,
         tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
         status,
-      })
+      }))
       .select()
       .single();
 
@@ -148,7 +205,7 @@ function AddItemModal({
     const newItem: LiteratureItem = {
       id: data.id as string,
       projectId: data.project_id as string,
-      scope: ((data.library ?? data.scope) as LiteratureItem["scope"]) ?? scope,
+      scope: (((data.library ?? data.scope) === "personal" ? "my" : (data.library ?? data.scope)) as LiteratureItem["scope"]) ?? scope,
       type: (data.type as LiteratureItem["type"]) ?? type,
       title: data.title as string,
       authors: toAuthorsArray(data.authors as string | string[]),
@@ -347,13 +404,14 @@ function ZoteroImportModal({ existingItems, onImport, onClose, projectId, curren
   async function handleImport() {
     if (!parsed.length) return;
     setImporting(true);
-    const rows = parsed.map((item) => ({
-      id: item.id, project_id: projectId, user_id: currentUserId,
-      library: item.scope, type: item.type, title: item.title,
-      authors: item.authors.join(", "),
-      year: item.year || null, journal: item.journal ?? null, doi: item.doi ?? null,
-      abstract: item.abstract ?? null, tags: [], status: "unread",
-    }));
+    const rows = parsed.map((item) =>
+      buildLitInsert(projectId, currentUserId, {
+        id: item.id, library: item.scope, title: item.title, authors: item.authors,
+        year: item.year || null, journal: item.journal ?? null,
+        doi: item.doi ?? null, abstract: item.abstract ?? null,
+        tags: [], status: "unread",
+      })
+    );
     const { error: insertErr } = await supabase.from("literature_items").insert(rows);
     if (insertErr) {
       console.error("[Zotero import]", insertErr.code, insertErr.message, insertErr.details);
@@ -488,31 +546,47 @@ function DOILookupModal({ onSave, onClose, projectId, currentUserId }: {
     const doiMatch = /10\.\d{4,}\/[^\s"<>]+/.exec(input);
     if (doiMatch) { await fetchDOI(doiMatch[0]); return; }
 
-    // Google Scholar — no structured metadata; try Semantic Scholar by title or q param
+    // Google Scholar — no structured metadata on citation-profile pages (user=…),
+    // but search/lookup URLs carry title= or q= params we can forward to Semantic Scholar.
     if (/scholar\.google\./i.test(input)) {
+      // Citation-profile pages (user=…) never have extractable title params — document this.
+      if (/[?&]user=/.test(input)) {
+        setPreview({ title: "", authors: [], year: 0, url: input });
+        setError("This is a Scholar author profile page, not a paper page. Paste a Scholar search result URL, or use the DOI/BibTeX option instead.");
+        return;
+      }
       const titleParam = /[?&](?:title|q)=([^&]+)/.exec(input)?.[1];
       if (titleParam) {
         setLoading(true);
-        try {
-          const q = decodeURIComponent(titleParam.replace(/\+/g, " "));
-          const res = await fetch(`https://api.semanticscholar.org/graph/v1/paper/search?query=${encodeURIComponent(q)}&fields=title,authors,year,journal,externalIds&limit=1`);
-          const { data: ss } = await res.json();
-          const paper = ss?.[0];
-          if (paper) {
-            setPreview({
-              type: "article", title: paper.title,
-              authors: (paper.authors ?? []).map((a: { name: string }) => a.name),
-              year: paper.year, journal: paper.journal?.name,
-              doi: paper.externalIds?.DOI,
-            });
-            setLoading(false);
-            return;
-          }
-        } catch { /* fall through */ }
+        const q = decodeURIComponent(titleParam.replace(/\+/g, " "));
+        const ssUrl = `https://api.semanticscholar.org/graph/v1/paper/search?query=${encodeURIComponent(q)}&fields=title,authors,year,journal,externalIds&limit=1`;
+        let paper: { title: string; authors?: { name: string }[]; year?: number; journal?: { name?: string }; externalIds?: { DOI?: string } } | null = null;
+        for (let attempt = 0; attempt < 3 && !paper; attempt++) {
+          try {
+            if (attempt > 0) await new Promise((r) => setTimeout(r, 600));
+            const res = await fetch(ssUrl);
+            const { data: ss } = await res.json();
+            paper = ss?.[0] ?? null;
+          } catch { /* retry */ }
+        }
         setLoading(false);
+        if (paper) {
+          setPreview({
+            type: "article", title: paper.title,
+            authors: (paper.authors ?? []).map((a) => a.name),
+            year: paper.year, journal: paper.journal?.name,
+            doi: paper.externalIds?.DOI,
+          });
+          return;
+        }
+        // Semantic Scholar returned nothing after 2 attempts
+        setPreview({ title: "", authors: [], year: 0, url: input });
+        setError("Couldn't find this paper on Semantic Scholar. Try the DOI or BibTeX option instead (on Scholar, click the quote icon → BibTeX).");
+        return;
       }
+      // Scholar URL with no extractable query (e.g. cites=, cluster=)
       setPreview({ title: "", authors: [], year: 0, url: input });
-      setError("Google Scholar doesn't expose structured metadata. Try the DOI or BibTeX option instead (on Scholar, click the quote icon → BibTeX).");
+      setError("Can't extract a title from this Scholar URL. Use the DOI or BibTeX option instead.");
       return;
     }
 
@@ -536,14 +610,14 @@ function DOILookupModal({ onSave, onClose, projectId, currentUserId }: {
       addedById: currentUserId, addedAt: now,
       importSource: mode === "doi" ? "doi" : mode === "bibtex" ? "bibtex" : "url",
     };
-    const { error: insertErr } = await supabase.from("literature_items").insert({
-      id: item.id, project_id: projectId, user_id: currentUserId,
-      library: scope, type: item.type, title: item.title,
-      authors: item.authors.join(", "),
-      year: item.year || null, journal: item.journal ?? null,
-      doi: item.doi ?? null, abstract: item.abstract ?? null,
-      tags: [], status: "unread",
-    });
+    const { error: insertErr } = await supabase.from("literature_items").insert(
+      buildLitInsert(projectId, currentUserId, {
+        id: item.id, library: scope, title: item.title, authors: item.authors,
+        year: item.year || null, journal: item.journal ?? null,
+        doi: item.doi ?? null, abstract: item.abstract ?? null,
+        tags: [], status: "unread",
+      })
+    );
     if (insertErr) {
       console.error("[DOI lookup save]", insertErr.code, insertErr.message, insertErr.details);
       setError(`Failed to save: ${insertErr.message}`);
@@ -1218,13 +1292,14 @@ function DetailPanelContent({
                         files: [], collections: [], relatedIds: [],
                         addedById: currentUserId, addedAt: new Date().toISOString(),
                       };
-                      const { error: e } = await supabase.from("literature_items").insert({
-                        id: newItem.id, project_id: projectId, user_id: currentUserId,
-                        library: item.scope, type: "article", title: rec.title,
-                        authors: rec.authors.join(", "), year: rec.year || null,
-                        journal: rec.journal ?? null, doi: rec.doi ?? null,
-                        tags: [], status: "unread",
-                      });
+                      const { error: e } = await supabase.from("literature_items").insert(
+                        buildLitInsert(projectId, currentUserId, {
+                          id: newItem.id, library: item.scope, title: rec.title,
+                          authors: rec.authors, year: rec.year || null,
+                          journal: rec.journal ?? null, doi: rec.doi ?? null,
+                          tags: [], status: "unread",
+                        })
+                      );
                       if (e) { console.error("[Rec add]", e.code, e.message, e.details); setRecsError(`Failed to add: ${e.message}`); return; }
                       onAddItem(newItem);
                       setRecs((prev) => prev.map((r) => r.id === rec.id ? { ...r, dismissed: true } : r));
@@ -1398,7 +1473,7 @@ export default function LiteraturePage() {
           if (data) setItems(data.map((row) => ({
             id: row.id as string,
             projectId: row.project_id as string,
-            scope: ((row.library ?? row.scope) as LiteratureItem["scope"]) ?? "lab",
+            scope: (((row.library ?? row.scope) === "personal" ? "my" : (row.library ?? row.scope)) as LiteratureItem["scope"]) ?? "lab",
             type: (row.type as LiteratureItem["type"]) ?? "article",
             title: row.title as string,
             authors: toAuthorsArray(row.authors as string | string[]),
