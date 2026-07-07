@@ -5,7 +5,7 @@ import {
   formatFileSize,
 } from "@/lib/mock-data";
 import { supabase } from "@/lib/supabase";
-import type { LiteratureItem, ReadStatus, LiteratureType, LibraryScope, LiteratureFile, LitAnnotation, LitAssignedReading, LitRecommendation } from "@/types";
+import type { LiteratureItem, ReadStatus, LiteratureType, LibraryScope, LiteratureFile, LitAnnotation, LitAssignedReading, LitRecommendation, AssignmentReadingStatus } from "@/types";
 import {
   Plus, Search, Download, FileText, File, X,
   Tag, Star, ExternalLink, Copy, Check, ChevronLeft, ChevronRight,
@@ -827,11 +827,13 @@ function AssignReadingForm({ itemId, projectId, assignedBy, onAssigned }: {
     const newA: LitAssignedReading = {
       id: crypto.randomUUID(), itemId, projectId, assignedBy,
       assigneeId: assigneeId.trim(), dueDate: dueDate || undefined,
-      note: note.trim() || undefined, createdAt: new Date().toISOString(),
+      note: note.trim() || undefined, readingStatus: "not_started",
+      createdAt: new Date().toISOString(),
     };
     const { error: insertErr } = await supabase.from("lit_assigned_readings").insert({
       id: newA.id, item_id: itemId, project_id: projectId, assigned_by: assignedBy,
       assignee_id: assigneeId.trim(), due_date: dueDate || null, note: note.trim() || null,
+      reading_status: "not_started",
     });
     if (insertErr) {
       console.error("[Assign reading]", insertErr);
@@ -938,6 +940,7 @@ function DetailPanelContent({
             id: r.id as string, itemId: r.item_id as string, projectId: r.project_id as string,
             assignedBy: r.assigned_by as string, assigneeId: r.assignee_id as string,
             dueDate: r.due_date as string | undefined, note: r.note as string | undefined,
+            readingStatus: (r.reading_status as AssignmentReadingStatus | null) ?? "not_started",
             createdAt: r.created_at as string,
           })));
         });
@@ -1409,32 +1412,67 @@ function DetailPanelContent({
               ? <p style={{ fontSize: 13, color: "var(--color-secondary)", marginBottom: 16 }}>No one has been assigned this paper yet.</p>
               : (
                 <div className="space-y-2 mb-4">
-                  {assigned.map((a) => (
-                    <div key={a.id} className="flex items-start gap-3 px-3 py-2.5 rounded-lg" style={{ backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)" }}>
-                      <UserCheck size={14} color="var(--color-navy)" style={{ marginTop: 2, flexShrink: 0 }} />
-                      <div className="flex-1 min-w-0">
-                        <p style={{ fontSize: 12, fontWeight: 600, color: "var(--color-body)", wordBreak: "break-all" }}>
-                          {a.assigneeId === currentUserId ? "You" : a.assigneeId}
-                        </p>
-                        {a.dueDate && <p style={{ fontSize: 11, color: "var(--color-secondary)" }}>Due {new Date(a.dueDate).toLocaleDateString()}</p>}
-                        {a.note && <p style={{ fontSize: 12, color: "var(--color-secondary)", marginTop: 2 }}>{a.note}</p>}
+                  {assigned.map((a) => {
+                    const STATUS_LABELS: Record<AssignmentReadingStatus, string> = {
+                      not_started: "Not started", in_progress: "In progress", done: "Done",
+                    };
+                    const STATUS_COLORS: Record<AssignmentReadingStatus, { color: string; bg: string }> = {
+                      not_started: { color: "#64748B", bg: "#F1F5F9" },
+                      in_progress: { color: "#A0622A", bg: "#FDEFD4" },
+                      done:        { color: "#2E7D52", bg: "#D4EDE0" },
+                    };
+                    const sc = STATUS_COLORS[a.readingStatus];
+                    return (
+                      <div key={a.id} className="flex items-start gap-3 px-3 py-2.5 rounded-lg" style={{ backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)" }}>
+                        <UserCheck size={14} color="var(--color-navy)" style={{ marginTop: 2, flexShrink: 0 }} />
+                        <div className="flex-1 min-w-0">
+                          <p style={{ fontSize: 12, fontWeight: 600, color: "var(--color-body)", wordBreak: "break-all" }}>
+                            {a.assigneeId === currentUserId ? "You" : a.assigneeId}
+                          </p>
+                          {a.dueDate && <p style={{ fontSize: 11, color: "var(--color-secondary)" }}>Due {new Date(a.dueDate).toLocaleDateString()}</p>}
+                          {a.note && <p style={{ fontSize: 12, color: "var(--color-secondary)", marginTop: 2 }}>{a.note}</p>}
+                          {/* Status — only the assignee or PI can update */}
+                          {a.assigneeId === currentUserId ? (
+                            <select
+                              value={a.readingStatus}
+                              onChange={async (e) => {
+                                const newStatus = e.target.value as AssignmentReadingStatus;
+                                const { error: updErr } = await supabase
+                                  .from("lit_assigned_readings")
+                                  .update({ reading_status: newStatus })
+                                  .eq("id", a.id);
+                                if (updErr) { console.error("[Update reading status]", updErr); return; }
+                                setAssigned((prev) => prev.map((x) => x.id === a.id ? { ...x, readingStatus: newStatus } : x));
+                              }}
+                              style={{ marginTop: 4, fontSize: 11, fontWeight: 600, padding: "2px 6px", borderRadius: 5, border: `1px solid ${sc.color}`, backgroundColor: sc.bg, color: sc.color, cursor: "pointer", outline: "none" }}
+                            >
+                              {(["not_started", "in_progress", "done"] as AssignmentReadingStatus[]).map((s) => (
+                                <option key={s} value={s}>{STATUS_LABELS[s]}</option>
+                              ))}
+                            </select>
+                          ) : (
+                            <span style={{ display: "inline-block", marginTop: 4, fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 5, backgroundColor: sc.bg, color: sc.color }}>
+                              {STATUS_LABELS[a.readingStatus]}
+                            </span>
+                          )}
+                        </div>
+                        {(a.assignedBy === currentUserId || a.assigneeId === currentUserId) && (
+                          <button
+                            onClick={async () => {
+                              const { error: delErr } = await supabase.from("lit_assigned_readings").delete().eq("id", a.id);
+                              if (delErr) { console.error("[Remove assignment]", delErr); return; }
+                              setAssigned((prev) => prev.filter((x) => x.id !== a.id));
+                            }}
+                            style={{ flexShrink: 0, background: "none", border: "none", cursor: "pointer", padding: 4, display: "flex", alignItems: "center" }}
+                            title="Remove assignment"
+                            aria-label="Remove assignment"
+                          >
+                            <X size={13} color="var(--color-secondary)" />
+                          </button>
+                        )}
                       </div>
-                      {(a.assignedBy === currentUserId || a.assigneeId === currentUserId) && (
-                        <button
-                          onClick={async () => {
-                            const { error: delErr } = await supabase.from("lit_assigned_readings").delete().eq("id", a.id);
-                            if (delErr) { console.error("[Remove assignment]", delErr); return; }
-                            setAssigned((prev) => prev.filter((x) => x.id !== a.id));
-                          }}
-                          style={{ flexShrink: 0, background: "none", border: "none", cursor: "pointer", padding: 4, display: "flex", alignItems: "center" }}
-                          title="Remove assignment"
-                          aria-label="Remove assignment"
-                        >
-                          <X size={13} color="var(--color-secondary)" />
-                        </button>
-                      )}
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             <AssignReadingForm itemId={item.id} projectId={projectId} assignedBy={currentUserId}
@@ -1453,7 +1491,7 @@ export default function LiteraturePage() {
   const [loadingItems, setLoadingItems] = useState(true);
   const [scope, setScope]               = useState<LibraryScope>("lab");
   const [activeCollection, setActiveCollection] = useState("lc0");
-  const [selectedItem, setSelectedItem] = useState<LiteratureItem | null>(null);
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [search, setSearch]             = useState("");
   const [statusFilter, setStatusFilter] = useState<ReadStatus | "all">("all");
   const [activeTag, setActiveTag]       = useState<string | null>(null);
@@ -1529,9 +1567,11 @@ export default function LiteraturePage() {
     return () => { document.body.style.overflow = ""; };
   }, [collectionsOpen]);
 
+  // Derive selectedItem from items so updates are atomic — no two-render flicker
+  const selectedItem = items.find((i) => i.id === selectedItemId) ?? null;
+
   function updateItem(id: string, updates: Partial<LiteratureItem>) {
     setItems((prev) => prev.map((item) => item.id === id ? { ...item, ...updates } : item));
-    setSelectedItem((prev) => prev?.id === id ? { ...prev, ...updates } as LiteratureItem : prev);
   }
 
   function addItem(item: LiteratureItem) {
@@ -1700,7 +1740,7 @@ export default function LiteraturePage() {
               : filtered.map((item) => {
                   const isSelected = selectedItem?.id === item.id && !isMobile;
                   return (
-                    <button key={item.id} onClick={() => setSelectedItem(isSelected ? null : item)} className="w-full text-left"
+                    <button key={item.id} onClick={() => setSelectedItemId(isSelected ? null : item.id)} className="w-full text-left"
                       style={{ display: "grid", gridTemplateColumns: narrowList ? "28px 1fr 90px" : "28px 1fr 100px 70px 90px", gap: 8, alignItems: "center", paddingLeft: isMobile ? 12 : 16, paddingRight: isMobile ? 12 : 16, paddingTop: 10, paddingBottom: 10, backgroundColor: isSelected ? "rgba(27,46,75,0.06)" : "transparent", borderLeft: isSelected ? "3px solid var(--color-navy)" : "3px solid transparent", borderBottom: "1px solid var(--color-border)", minHeight: 48 }}
                       onMouseEnter={(e) => { if (!isSelected) (e.currentTarget as HTMLElement).style.backgroundColor = "#F8FAFF"; }}
                       onMouseLeave={(e) => { if (!isSelected) (e.currentTarget as HTMLElement).style.backgroundColor = ""; }}
@@ -1722,11 +1762,11 @@ export default function LiteraturePage() {
         <>
           {isMobile ? (
             <div className="fixed inset-0 z-40 animate-slide-in-bottom" style={{ backgroundColor: "var(--color-surface)" }}>
-              <DetailPanelContent item={selectedItem} onClose={() => setSelectedItem(null)} onUpdateItem={updateItem} allItems={items} currentUserId={currentUserId} projectId={projectId} onAddItem={addItem} />
+              <DetailPanelContent item={selectedItem} onClose={() => setSelectedItemId(null)} onUpdateItem={updateItem} allItems={items} currentUserId={currentUserId} projectId={projectId} onAddItem={addItem} />
             </div>
           ) : (
             <div className="flex flex-col shrink-0" style={{ width: 340, borderLeft: "1px solid var(--color-border)" }}>
-              <DetailPanelContent item={selectedItem} onClose={() => setSelectedItem(null)} onUpdateItem={updateItem} allItems={items} currentUserId={currentUserId} projectId={projectId} onAddItem={addItem} />
+              <DetailPanelContent item={selectedItem} onClose={() => setSelectedItemId(null)} onUpdateItem={updateItem} allItems={items} currentUserId={currentUserId} projectId={projectId} onAddItem={addItem} />
             </div>
           )}
         </>

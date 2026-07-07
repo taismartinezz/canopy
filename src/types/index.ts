@@ -208,6 +208,8 @@ export interface LitReadingStatus {
   updatedAt: string;
 }
 
+export type AssignmentReadingStatus = "not_started" | "in_progress" | "done";
+
 export interface LitAssignedReading {
   id: string;
   itemId: string;
@@ -216,6 +218,7 @@ export interface LitAssignedReading {
   assigneeId: string;
   dueDate?: string;      // ISO date
   note?: string;
+  readingStatus: AssignmentReadingStatus;
   createdAt: string;
 }
 
