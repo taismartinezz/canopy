@@ -375,3 +375,148 @@ create policy "reminders update" on reminders
 
 create policy "reminders delete" on reminders
   for delete using (auth.uid() = user_id);
+
+-- ── Literature: Additions ─────────────────────────────────────────────────────
+
+-- Add url + import_source to existing literature_items
+alter table literature_items
+  add column if not exists url text,
+  add column if not exists import_source text check (import_source in ('manual','zotero_json','zotero_api','doi','bibtex','url'));
+
+-- Per-user reading status (overrides the item-level status for multi-user views)
+create table if not exists lit_reading_status (
+  user_id   uuid not null references auth.users(id) on delete cascade,
+  item_id   uuid not null references literature_items(id) on delete cascade,
+  status    text not null check (status in ('unread','reading','read')) default 'unread',
+  updated_at timestamptz not null default now(),
+  primary key (user_id, item_id)
+);
+
+alter table lit_reading_status enable row level security;
+
+create policy "user can manage own reading status" on lit_reading_status
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- Project members can see team reading status for shared items
+create policy "project members can read team status" on lit_reading_status
+  for select using (
+    exists (
+      select 1 from literature_items li
+      join team_members tm on tm.project_id = li.project_id
+      where li.id = lit_reading_status.item_id and tm.user_id = auth.uid()
+    )
+  );
+
+-- Annotations: highlights + comments on a reference
+create table if not exists lit_annotations (
+  id         uuid primary key default gen_random_uuid(),
+  item_id    uuid not null references literature_items(id) on delete cascade,
+  author_id  uuid not null references auth.users(id) on delete cascade,
+  text       text not null default '',    -- quoted passage; empty for standalone comment
+  comment    text not null default '',
+  page_ref   text,
+  parent_id  uuid references lit_annotations(id) on delete cascade,  -- null = top-level
+  created_at timestamptz not null default now(),
+  updated_at timestamptz
+);
+
+alter table lit_annotations enable row level security;
+
+create policy "project members can read annotations" on lit_annotations
+  for select using (
+    exists (
+      select 1 from literature_items li
+      join team_members tm on tm.project_id = li.project_id
+      where li.id = lit_annotations.item_id and tm.user_id = auth.uid()
+    )
+  );
+
+create policy "project members can insert annotations" on lit_annotations
+  for insert with check (
+    auth.uid() = author_id and
+    exists (
+      select 1 from literature_items li
+      join team_members tm on tm.project_id = li.project_id
+      where li.id = lit_annotations.item_id and tm.user_id = auth.uid()
+    )
+  );
+
+create policy "author can update own annotation" on lit_annotations
+  for update using (auth.uid() = author_id);
+
+create policy "author can delete own annotation" on lit_annotations
+  for delete using (auth.uid() = author_id);
+
+-- Assigned readings: PI assigns a reference to one or more members
+create table if not exists lit_assigned_readings (
+  id          uuid primary key default gen_random_uuid(),
+  item_id     uuid not null references literature_items(id) on delete cascade,
+  project_id  uuid not null references projects(id) on delete cascade,
+  assigned_by uuid not null references auth.users(id),
+  assignee_id uuid not null references auth.users(id),
+  due_date    date,
+  note        text,
+  created_at  timestamptz not null default now()
+);
+
+alter table lit_assigned_readings enable row level security;
+
+create policy "project members can read assigned readings" on lit_assigned_readings
+  for select using (
+    exists (select 1 from team_members tm where tm.project_id = lit_assigned_readings.project_id and tm.user_id = auth.uid())
+  );
+
+create policy "pi can assign readings" on lit_assigned_readings
+  for insert with check (
+    auth.uid() = assigned_by and
+    exists (
+      select 1 from user_profiles up where up.id = auth.uid() and up.role = 'pi'
+    )
+  );
+
+create policy "assigner can delete assignments" on lit_assigned_readings
+  for delete using (auth.uid() = assigned_by);
+
+-- Per-user Zotero credentials (stored encrypted at rest via Supabase Vault in prod)
+create table if not exists user_zotero_credentials (
+  user_id        uuid primary key references auth.users(id) on delete cascade,
+  api_key        text not null,             -- treat as sensitive; encrypt in prod via Vault
+  zotero_user_id text not null,
+  group_id       text,                      -- optional Zotero group library
+  last_synced_at timestamptz,
+  created_at     timestamptz not null default now()
+);
+
+alter table user_zotero_credentials enable row level security;
+
+create policy "user can manage own zotero creds" on user_zotero_credentials
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- AI recommendation cache (per project, keyed to source item + OpenAlex ID)
+create table if not exists lit_recommendation_cache (
+  id             uuid primary key default gen_random_uuid(),
+  source_item_id uuid not null references literature_items(id) on delete cascade,
+  project_id     uuid not null references projects(id) on delete cascade,
+  title          text not null,
+  authors        text[] not null default '{}',
+  year           int,
+  journal        text,
+  doi            text,
+  abstract       text,
+  open_alex_id   text,
+  score          float,
+  dismissed      boolean not null default false,
+  cached_at      timestamptz not null default now()
+);
+
+alter table lit_recommendation_cache enable row level security;
+
+create policy "project members can read recommendations" on lit_recommendation_cache
+  for select using (
+    exists (select 1 from team_members tm where tm.project_id = lit_recommendation_cache.project_id and tm.user_id = auth.uid())
+  );
+
+create policy "project members can manage recommendation cache" on lit_recommendation_cache
+  for all using (
+    exists (select 1 from team_members tm where tm.project_id = lit_recommendation_cache.project_id and tm.user_id = auth.uid())
+  );

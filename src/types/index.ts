@@ -168,6 +168,7 @@ export interface LiteratureItem {
   volume?: string;
   pages?: string;
   doi?: string;
+  url?: string;
   abstract?: string;
   tags: string[];
   status: ReadStatus;
@@ -178,6 +179,7 @@ export interface LiteratureItem {
   addedAt: string;
   collections: string[];   // Collection IDs
   relatedIds: string[];    // Related item IDs
+  importSource?: "manual" | "zotero_json" | "zotero_api" | "doi" | "bibtex" | "url";
 }
 
 export interface LiteratureCollection {
@@ -185,6 +187,60 @@ export interface LiteratureCollection {
   name: string;
   iconName: string;
   itemCount: number;
+}
+
+export interface LitAnnotation {
+  id: string;
+  itemId: string;
+  authorId: string;
+  text: string;          // quoted passage (empty for standalone comments)
+  comment: string;
+  pageRef?: string;
+  parentId?: string;     // null = top-level; set = reply
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface LitReadingStatus {
+  userId: string;
+  itemId: string;
+  status: ReadStatus;
+  updatedAt: string;
+}
+
+export interface LitAssignedReading {
+  id: string;
+  itemId: string;
+  projectId: string;
+  assignedBy: string;    // PI user ID
+  assigneeId: string;
+  dueDate?: string;      // ISO date
+  note?: string;
+  createdAt: string;
+}
+
+export interface ZoteroCredentials {
+  userId: string;
+  apiKey: string;
+  zoteroUserId: string;
+  groupId?: string;      // Zotero group library ID
+  lastSyncedAt?: string;
+}
+
+export interface LitRecommendation {
+  id: string;
+  sourceItemId: string;
+  projectId: string;
+  title: string;
+  authors: string[];
+  year?: number;
+  journal?: string;
+  doi?: string;
+  abstract?: string;
+  openAlexId?: string;
+  score?: number;        // relevance score from API
+  cachedAt: string;
+  dismissed: boolean;
 }
 
 // ── Team ──────────────────────────────────────────────────────────────────────
