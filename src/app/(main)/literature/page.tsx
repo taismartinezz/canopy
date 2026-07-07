@@ -49,14 +49,21 @@ function StatusBadge({ status }: { status: ReadStatus }) {
   );
 }
 
-function formatAuthors(authors: string[]) {
-  if (!authors.length) return "—";
-  if (authors.length <= 2) return authors.join(", ");
-  return `${authors[0]} et al.`;
+function toAuthorsArray(authors: string | string[]): string[] {
+  if (Array.isArray(authors)) return authors;
+  if (typeof authors === "string" && authors.trim()) return authors.split(",").map((s) => s.trim()).filter(Boolean);
+  return [];
+}
+
+function formatAuthors(authors: string | string[]) {
+  const arr = toAuthorsArray(authors);
+  if (!arr.length) return "—";
+  if (arr.length <= 2) return arr.join(", ");
+  return `${arr[0]} et al.`;
 }
 
 function formatCitation(item: LiteratureItem, style: "apa" | "mla" | "chicago"): string {
-  const authors = item.authors.join(", ");
+  const authors = toAuthorsArray(item.authors).join(", ");
   if (style === "apa")
     return `${authors} (${item.year}). ${item.title}. ${item.journal ?? item.publisher ?? ""}${item.volume ? `, ${item.volume}` : ""}${item.pages ? `, ${item.pages}` : ""}.${item.doi ? ` https://doi.org/${item.doi}` : ""}`;
   if (style === "mla")
@@ -117,11 +124,11 @@ function AddItemModal({
       .from("literature_items")
       .insert({
         project_id: projectId,
-        added_by: currentUserId,
-        scope,
+        user_id: currentUserId,
+        library: scope,
         type,
         title: title.trim(),
-        authors: authors.split(",").map((a) => a.trim()).filter(Boolean),
+        authors: authors.trim(),
         year: parseInt(year) || new Date().getFullYear(),
         journal: journal.trim() || null,
         doi: doi.trim() || null,
@@ -141,21 +148,21 @@ function AddItemModal({
     const newItem: LiteratureItem = {
       id: data.id as string,
       projectId: data.project_id as string,
-      scope: (data.scope as LiteratureItem["scope"]) ?? scope,
+      scope: ((data.library ?? data.scope) as LiteratureItem["scope"]) ?? scope,
       type: (data.type as LiteratureItem["type"]) ?? type,
       title: data.title as string,
-      authors: (data.authors as string[]) ?? [],
+      authors: toAuthorsArray(data.authors as string | string[]),
       year: (data.year as number) ?? 0,
-      journal: (data.journal as string) ?? undefined,
-      doi: (data.doi as string) ?? undefined,
-      abstract: (data.abstract as string) ?? undefined,
-      tags: (data.tags as string[]) ?? [],
+      journal: (data.journal as string | null) ?? undefined,
+      doi: (data.doi as string | null) ?? undefined,
+      abstract: (data.abstract as string | null) ?? undefined,
+      tags: Array.isArray(data.tags) ? (data.tags as string[]) : [],
       status: data.status as LiteratureItem["status"],
       rating: 0,
       notes: "",
       files: [],
-      addedById: (data.added_by as string) ?? currentUserId,
-      addedAt: (data.added_at as string) ?? new Date().toISOString(),
+      addedById: (data.user_id as string) ?? currentUserId,
+      addedAt: (data.created_at as string) ?? new Date().toISOString(),
       collections: [],
       relatedIds: [],
     };
@@ -341,11 +348,11 @@ function ZoteroImportModal({ existingItems, onImport, onClose, projectId, curren
     if (!parsed.length) return;
     setImporting(true);
     const rows = parsed.map((item) => ({
-      id: item.id, project_id: projectId, added_by: currentUserId,
-      scope: item.scope, type: item.type, title: item.title, authors: item.authors,
+      id: item.id, project_id: projectId, user_id: currentUserId,
+      library: item.scope, type: item.type, title: item.title,
+      authors: item.authors.join(", "),
       year: item.year || null, journal: item.journal ?? null, doi: item.doi ?? null,
-      abstract: item.abstract ?? null, volume: item.volume ?? null, pages: item.pages ?? null,
-      tags: [], status: "unread",
+      abstract: item.abstract ?? null, tags: [], status: "unread",
     }));
     const { error: insertErr } = await supabase.from("literature_items").insert(rows);
     if (insertErr) {
@@ -481,9 +488,9 @@ function DOILookupModal({ onSave, onClose, projectId, currentUserId }: {
     const doiMatch = /10\.\d{4,}\/[^\s"<>]+/.exec(input);
     if (doiMatch) { await fetchDOI(doiMatch[0]); return; }
 
-    // Google Scholar — no structured metadata; try Semantic Scholar by title param
+    // Google Scholar — no structured metadata; try Semantic Scholar by title or q param
     if (/scholar\.google\./i.test(input)) {
-      const titleParam = /[?&]title=([^&]+)/.exec(input)?.[1];
+      const titleParam = /[?&](?:title|q)=([^&]+)/.exec(input)?.[1];
       if (titleParam) {
         setLoading(true);
         try {
@@ -530,11 +537,11 @@ function DOILookupModal({ onSave, onClose, projectId, currentUserId }: {
       importSource: mode === "doi" ? "doi" : mode === "bibtex" ? "bibtex" : "url",
     };
     const { error: insertErr } = await supabase.from("literature_items").insert({
-      id: item.id, project_id: projectId, added_by: currentUserId,
-      scope, type: item.type, title: item.title, authors: item.authors,
+      id: item.id, project_id: projectId, user_id: currentUserId,
+      library: scope, type: item.type, title: item.title,
+      authors: item.authors.join(", "),
       year: item.year || null, journal: item.journal ?? null,
       doi: item.doi ?? null, abstract: item.abstract ?? null,
-      volume: item.volume ?? null, pages: item.pages ?? null,
       tags: [], status: "unread",
     });
     if (insertErr) {
@@ -996,7 +1003,7 @@ function DetailPanelContent({
       <div className="flex-1 overflow-y-auto">
         {tab === "Info" && (
           <div className="px-4 py-4 space-y-3">
-            {[["Authors", item.authors.join("; ") || "—"], ["Year", String(item.year)], ["Journal", item.journal ?? item.publisher ?? "—"], ["Volume", item.volume ?? "—"], ["Pages", item.pages ?? "—"], ["DOI", item.doi ?? "—"], ["Type", item.type.charAt(0).toUpperCase() + item.type.slice(1)]].map(([label, value]) => (
+            {[["Authors", toAuthorsArray(item.authors).join("; ") || "—"], ["Year", String(item.year)], ["Journal", item.journal ?? item.publisher ?? "—"], ["Volume", item.volume ?? "—"], ["Pages", item.pages ?? "—"], ["DOI", item.doi ?? "—"], ["Type", item.type.charAt(0).toUpperCase() + item.type.slice(1)]].map(([label, value]) => (
               <div key={label}>
                 <p style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-secondary)", marginBottom: 3 }}>{label}</p>
                 <p style={{ fontSize: 12, color: "var(--color-body)", lineHeight: 1.4, wordBreak: "break-word" }}>{value}</p>
@@ -1212,9 +1219,9 @@ function DetailPanelContent({
                         addedById: currentUserId, addedAt: new Date().toISOString(),
                       };
                       const { error: e } = await supabase.from("literature_items").insert({
-                        id: newItem.id, project_id: projectId, added_by: currentUserId,
-                        scope: item.scope, type: "article", title: rec.title,
-                        authors: rec.authors, year: rec.year || null,
+                        id: newItem.id, project_id: projectId, user_id: currentUserId,
+                        library: item.scope, type: "article", title: rec.title,
+                        authors: rec.authors.join(", "), year: rec.year || null,
                         journal: rec.journal ?? null, doi: rec.doi ?? null,
                         tags: [], status: "unread",
                       });
@@ -1394,23 +1401,20 @@ export default function LiteraturePage() {
             scope: ((row.library ?? row.scope) as LiteratureItem["scope"]) ?? "lab",
             type: (row.type as LiteratureItem["type"]) ?? "article",
             title: row.title as string,
-            authors: (row.authors as string[]) ?? [],
+            authors: toAuthorsArray(row.authors as string | string[]),
             year: (row.year as number | null) ?? 0,
-            journal: row.journal as string | undefined,
-            publisher: row.publisher as string | undefined,
-            volume: row.volume as string | undefined,
-            pages: row.pages as string | undefined,
-            doi: row.doi as string | undefined,
-            abstract: row.abstract as string | undefined,
-            tags: (row.tags as string[]) ?? [],
-            status: row.status as LiteratureItem["status"],
-            rating: (row.rating as number) ?? 0,
-            notes: (row.notes as string) ?? "",
-            files: (row.files as LiteratureItem["files"]) ?? [],
+            journal: (row.journal as string | null) ?? undefined,
+            doi: (row.doi as string | null) ?? undefined,
+            abstract: (row.abstract as string | null) ?? undefined,
+            tags: Array.isArray(row.tags) ? (row.tags as string[]) : [],
+            status: (row.status as LiteratureItem["status"]) ?? "unread",
+            rating: 0,
+            notes: "",
+            files: [],
             addedById: (row.user_id ?? row.added_by) as string,
             addedAt: (row.created_at ?? row.added_at) as string,
-            collections: (row.collections as string[]) ?? [],
-            relatedIds: (row.related_ids as string[]) ?? [],
+            collections: [],
+            relatedIds: [],
           })));
           setLoadingItems(false);
         });
@@ -1449,7 +1453,7 @@ export default function LiteraturePage() {
   const filtered = scopedItems
     .filter((item) => {
       if (search && !item.title.toLowerCase().includes(search.toLowerCase()) &&
-          !item.authors.some((a) => a.toLowerCase().includes(search.toLowerCase()))) return false;
+          !toAuthorsArray(item.authors).some((a) => a.toLowerCase().includes(search.toLowerCase()))) return false;
       if (statusFilter !== "all" && item.status !== statusFilter) return false;
       if (typeFilter !== "all" && item.type !== typeFilter) return false;
       if (activeTag && !item.tags.includes(activeTag)) return false;
