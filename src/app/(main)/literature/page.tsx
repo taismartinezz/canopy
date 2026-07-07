@@ -814,11 +814,12 @@ function AssignReadingForm({ itemId, projectId, assignedBy, onAssigned }: {
   itemId: string; projectId: string; assignedBy: string;
   onAssigned: (a: LitAssignedReading) => void;
 }) {
-  const [assigneeId, setAssigneeId] = useState("");
-  const [dueDate, setDueDate]       = useState("");
-  const [note, setNote]             = useState("");
-  const [saving, setSaving]         = useState(false);
-  const [error, setError]           = useState("");
+  const [assigneeId, setAssigneeId]         = useState("");
+  const [dueDate, setDueDate]               = useState("");
+  const [note, setNote]                     = useState("");
+  const [initialStatus, setInitialStatus]   = useState<AssignmentReadingStatus>("not_started");
+  const [saving, setSaving]                 = useState(false);
+  const [error, setError]                   = useState("");
 
   async function handleAssign() {
     if (!assigneeId.trim()) return;
@@ -827,13 +828,13 @@ function AssignReadingForm({ itemId, projectId, assignedBy, onAssigned }: {
     const newA: LitAssignedReading = {
       id: crypto.randomUUID(), itemId, projectId, assignedBy,
       assigneeId: assigneeId.trim(), dueDate: dueDate || undefined,
-      note: note.trim() || undefined, readingStatus: "not_started",
+      note: note.trim() || undefined, readingStatus: initialStatus,
       createdAt: new Date().toISOString(),
     };
     const { error: insertErr } = await supabase.from("lit_assigned_readings").insert({
       id: newA.id, item_id: itemId, project_id: projectId, assigned_by: assignedBy,
       assignee_id: assigneeId.trim(), due_date: dueDate || null, note: note.trim() || null,
-      reading_status: "not_started",
+      reading_status: initialStatus,
     });
     if (insertErr) {
       console.error("[Assign reading]", insertErr);
@@ -841,7 +842,7 @@ function AssignReadingForm({ itemId, projectId, assignedBy, onAssigned }: {
       setSaving(false);
       return;
     }
-    onAssigned(newA); setAssigneeId(""); setDueDate(""); setNote(""); setSaving(false);
+    onAssigned(newA); setAssigneeId(""); setDueDate(""); setNote(""); setInitialStatus("not_started"); setSaving(false);
   }
 
   return (
@@ -855,10 +856,16 @@ function AssignReadingForm({ itemId, projectId, assignedBy, onAssigned }: {
           <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)}
             style={{ flex: 1, height: 34, border: "1px solid var(--color-border)", borderRadius: 6, padding: "0 10px", fontSize: 12, fontFamily: "var(--font-roboto)", outline: "none" }}
             onFocus={(e) => { e.currentTarget.style.borderColor = "var(--color-navy)"; }} onBlur={(e) => { e.currentTarget.style.borderColor = "var(--color-border)"; }} />
-          <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note (optional)"
-            style={{ flex: 2, height: 34, border: "1px solid var(--color-border)", borderRadius: 6, padding: "0 10px", fontSize: 12, fontFamily: "var(--font-roboto)", outline: "none" }}
-            onFocus={(e) => { e.currentTarget.style.borderColor = "var(--color-navy)"; }} onBlur={(e) => { e.currentTarget.style.borderColor = "var(--color-border)"; }} />
+          <select value={initialStatus} onChange={(e) => setInitialStatus(e.target.value as AssignmentReadingStatus)}
+            style={{ height: 34, border: "1px solid var(--color-border)", borderRadius: 6, padding: "0 8px", fontSize: 12, fontFamily: "var(--font-roboto)", outline: "none", color: "var(--color-body)", backgroundColor: "var(--color-surface)", cursor: "pointer" }}>
+            <option value="not_started">Not Started</option>
+            <option value="in_progress">In Progress</option>
+            <option value="done">Done</option>
+          </select>
         </div>
+        <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note (optional)"
+          style={{ width: "100%", height: 34, border: "1px solid var(--color-border)", borderRadius: 6, padding: "0 10px", fontSize: 12, fontFamily: "var(--font-roboto)", outline: "none", boxSizing: "border-box" }}
+          onFocus={(e) => { e.currentTarget.style.borderColor = "var(--color-navy)"; }} onBlur={(e) => { e.currentTarget.style.borderColor = "var(--color-border)"; }} />
         {error && <p style={{ fontSize: 11, color: "var(--color-error)", margin: 0 }}>{error}</p>}
         <button onClick={handleAssign} disabled={!assigneeId.trim() || saving}
           style={{ fontSize: 12, fontWeight: 700, padding: "6px 14px", borderRadius: 7, backgroundColor: "var(--color-navy)", color: "#fff", border: "none", cursor: "pointer", minHeight: 36, opacity: (!assigneeId.trim() || saving) ? 0.5 : 1 }}>
@@ -1613,7 +1620,7 @@ export default function LiteraturePage() {
   const narrowList = isMobile || (selectedItem !== null && !isMobile);
 
   return (
-    <div className="flex h-full overflow-hidden" style={{ fontFamily: "var(--font-roboto)" }}>
+    <div className="flex h-full" style={{ fontFamily: "var(--font-roboto)" }}>
 
       {collectionsOpen && (
         <div className="fixed inset-0 z-20 md:hidden" style={{ backgroundColor: "rgba(0,0,0,0.3)" }} onClick={() => setCollectionsOpen(false)} aria-hidden="true" />
@@ -1670,7 +1677,7 @@ export default function LiteraturePage() {
 
       {/* Center list */}
       {!showingDetailMobile && (
-        <div className="flex flex-col flex-1 min-w-0" style={{ borderRight: selectedItem && !isMobile ? "1px solid var(--color-border)" : undefined }}>
+        <div className="flex flex-col flex-1 min-w-0" style={{ minWidth: 160, borderRight: selectedItem && !isMobile ? "1px solid var(--color-border)" : undefined }}>
           <div className="flex items-center gap-2 px-3 md:px-4 py-2.5 flex-wrap" style={{ backgroundColor: "var(--color-surface)", borderBottom: "1px solid var(--color-border)", minHeight: 52 }}>
             <button onClick={() => setCollectionsOpen(true)} className="md:hidden flex items-center gap-1.5 shrink-0"
               style={{ fontSize: 12, fontWeight: 600, color: "var(--color-navy)", border: "1px solid var(--color-border)", borderRadius: 7, padding: "6px 10px", backgroundColor: "transparent", cursor: "pointer", minHeight: 44 }}>
@@ -1724,7 +1731,7 @@ export default function LiteraturePage() {
             <span style={{ fontSize: 11, color: "var(--color-secondary)", marginLeft: "auto", whiteSpace: "nowrap" }}>{filtered.length} item{filtered.length !== 1 ? "s" : ""}</span>
           </div>
 
-          <div className="hidden md:grid items-center px-4 py-2" style={{ gridTemplateColumns: narrowList ? "28px 1fr 90px" : "28px 1fr 100px 70px 90px", backgroundColor: "var(--color-surface)", borderBottom: "1px solid var(--color-border)", gap: 8 }}>
+          <div className="hidden md:grid items-center px-4 py-2" style={{ gridTemplateColumns: narrowList ? "28px minmax(0,1fr) 90px" : "28px minmax(0,1fr) 100px 70px 90px", backgroundColor: "var(--color-surface)", borderBottom: "1px solid var(--color-border)", gap: 8 }}>
             {(narrowList ? ["", "Title", "Status"] : ["", "Title", "Authors", "Year", "Status"]).map((col, i) => (
               <span key={i} style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-secondary)" }}>{col}</span>
             ))}
@@ -1741,12 +1748,12 @@ export default function LiteraturePage() {
                   const isSelected = selectedItem?.id === item.id && !isMobile;
                   return (
                     <button key={item.id} onClick={() => setSelectedItemId(isSelected ? null : item.id)} className="w-full text-left"
-                      style={{ display: "grid", gridTemplateColumns: narrowList ? "28px 1fr 90px" : "28px 1fr 100px 70px 90px", gap: 8, alignItems: "center", paddingLeft: isMobile ? 12 : 16, paddingRight: isMobile ? 12 : 16, paddingTop: 10, paddingBottom: 10, backgroundColor: isSelected ? "rgba(27,46,75,0.06)" : "transparent", borderLeft: isSelected ? "3px solid var(--color-navy)" : "3px solid transparent", borderBottom: "1px solid var(--color-border)", minHeight: 48 }}
+                      style={{ display: "grid", gridTemplateColumns: narrowList ? "28px minmax(0,1fr) 90px" : "28px minmax(0,1fr) 100px 70px 90px", gap: 8, alignItems: "center", paddingLeft: isMobile ? 12 : 16, paddingRight: isMobile ? 12 : 16, paddingTop: 10, paddingBottom: 10, backgroundColor: isSelected ? "rgba(27,46,75,0.06)" : "transparent", borderLeft: isSelected ? "3px solid var(--color-navy)" : "3px solid transparent", borderBottom: "1px solid var(--color-border)", minHeight: 48, overflow: "hidden" }}
                       onMouseEnter={(e) => { if (!isSelected) (e.currentTarget as HTMLElement).style.backgroundColor = "#F8FAFF"; }}
                       onMouseLeave={(e) => { if (!isSelected) (e.currentTarget as HTMLElement).style.backgroundColor = ""; }}
                     >
                       <span>{TYPE_ICONS[item.type]}</span>
-                      <span style={{ fontSize: 12, fontWeight: 500, color: "var(--color-body)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.title}</span>
+                      <span title={item.title} style={{ fontSize: 12, fontWeight: 500, color: "var(--color-body)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block", minWidth: 0 }}>{item.title}</span>
                       {!narrowList && <span style={{ fontSize: 12, color: "var(--color-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{formatAuthors(item.authors)}</span>}
                       {!narrowList && <span style={{ fontSize: 12, color: "var(--color-secondary)" }}>{item.year}</span>}
                       <StatusBadge status={item.status} />

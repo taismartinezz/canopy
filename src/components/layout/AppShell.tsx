@@ -536,7 +536,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       {/* ── Layer 1: 40px icon strip — desktop only ── */}
       <div
         className="hidden md:flex flex-col items-center pt-3 pb-3 gap-3 shrink-0"
-        style={{ width: 40, backgroundColor: "var(--color-strip)", borderRight: "1px solid var(--color-border)", position: "relative", zIndex: 35 }}
+        style={{ width: 40, backgroundColor: "var(--color-strip)", borderRight: "1px solid var(--color-border)" }}
       >
         <div className="w-8 h-8 flex items-center justify-center mb-1"><CanopyLogo size={28} /></div>
         <button aria-label={profile?.name ?? "Your profile"} title={profile?.name ?? "Your profile"}>
@@ -552,8 +552,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         style={{
           width: navCollapsed ? 52 : 210,
           borderRight: "1px solid var(--color-border)",
-          position: "relative",
-          zIndex: 35,
           transition: "width 200ms ease",
         }}
       >
