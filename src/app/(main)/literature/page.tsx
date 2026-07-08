@@ -1504,6 +1504,7 @@ export default function LiteraturePage() {
   const [activeTag, setActiveTag]       = useState<string | null>(null);
   const [collectionsOpen, setCollectionsOpen] = useState(false);
   const [panelCollapsed, setPanelCollapsed] = useState(false);
+  const [panelTransitionActive, setPanelTransitionActive] = useState(false);
   const [isMobile, setIsMobile]         = useState(false);
   const [addItemOpen, setAddItemOpen]       = useState(false);
   const [zoteroImportOpen, setZoteroImportOpen] = useState(false);
@@ -1628,11 +1629,12 @@ export default function LiteraturePage() {
 
       {/* Left panel — animates to 0 when collapsed */}
       <div
-        className="hidden md:flex flex-col shrink-0 overflow-hidden group/litpanel"
+        className="hidden md:flex flex-col shrink-0 group/litpanel"
         style={{
           width: panelCollapsed ? 0 : 220,
+          overflow: "clip",
           borderRight: panelCollapsed ? "none" : "1px solid var(--color-border)",
-          transition: "width 200ms ease",
+          transition: panelTransitionActive ? "width 200ms ease" : "none",
         }}
       >
         <CollectionsSidebar
@@ -1640,7 +1642,11 @@ export default function LiteraturePage() {
           activeCollection={activeCollection} setActiveCollection={setActiveCollection}
           allTags={allTags} activeTag={activeTag} setActiveTag={setActiveTag}
           items={scopedItems} onAddItem={() => setAddItemOpen(true)}
-          onCollapse={() => setPanelCollapsed(true)}
+          onCollapse={() => {
+            setPanelTransitionActive(true);
+            setPanelCollapsed(true);
+            setTimeout(() => setPanelTransitionActive(false), 220);
+          }}
           onImportZotero={() => setZoteroImportOpen(true)}
           onAddByDOI={() => setDoiLookupOpen(true)}
         />
@@ -1651,7 +1657,11 @@ export default function LiteraturePage() {
         <button
           className="hidden md:flex shrink-0 items-center justify-center transition-colors hover:bg-[rgba(27,46,75,0.04)]"
           style={{ width: 16, border: "none", borderRight: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", cursor: "pointer", padding: 0 }}
-          onClick={() => setPanelCollapsed(false)}
+          onClick={() => {
+            setPanelTransitionActive(true);
+            setPanelCollapsed(false);
+            setTimeout(() => setPanelTransitionActive(false), 220);
+          }}
           title="Expand collections panel"
           aria-label="Expand collections panel"
         >
@@ -1731,10 +1741,12 @@ export default function LiteraturePage() {
             <span style={{ fontSize: 11, color: "var(--color-secondary)", marginLeft: "auto", whiteSpace: "nowrap" }}>{filtered.length} item{filtered.length !== 1 ? "s" : ""}</span>
           </div>
 
-          <div className="hidden md:grid items-center px-4 py-2" style={{ gridTemplateColumns: narrowList ? "28px minmax(0,1fr) 90px" : "28px minmax(0,1fr) 100px 70px 90px", backgroundColor: "var(--color-surface)", borderBottom: "1px solid var(--color-border)", gap: 8 }}>
-            {(narrowList ? ["", "Title", "Status"] : ["", "Title", "Authors", "Year", "Status"]).map((col, i) => (
-              <span key={i} style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-secondary)" }}>{col}</span>
-            ))}
+          <div className="hidden md:flex items-center px-4 py-2" style={{ gap: 8, backgroundColor: "var(--color-surface)", borderBottom: "1px solid var(--color-border)" }}>
+            <span style={{ flexShrink: 0, width: 28 }} />
+            <span style={{ flex: 1, minWidth: 0, fontSize: 11, fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.05em", color: "var(--color-secondary)" }}>Title</span>
+            {!narrowList && <span style={{ flexShrink: 0, width: 100, fontSize: 11, fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.05em", color: "var(--color-secondary)" }}>Authors</span>}
+            {!narrowList && <span style={{ flexShrink: 0, width: 70, fontSize: 11, fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.05em", color: "var(--color-secondary)" }}>Year</span>}
+            <span style={{ flexShrink: 0, width: 90, fontSize: 11, fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.05em", color: "var(--color-secondary)" }}>Status</span>
           </div>
 
           <div className="flex-1 overflow-y-auto">
@@ -1748,15 +1760,15 @@ export default function LiteraturePage() {
                   const isSelected = selectedItem?.id === item.id && !isMobile;
                   return (
                     <button key={item.id} onClick={() => setSelectedItemId(isSelected ? null : item.id)} className="w-full text-left"
-                      style={{ display: "grid", gridTemplateColumns: narrowList ? "28px minmax(0,1fr) 90px" : "28px minmax(0,1fr) 100px 70px 90px", gap: 8, alignItems: "center", paddingLeft: isMobile ? 12 : 16, paddingRight: isMobile ? 12 : 16, paddingTop: 10, paddingBottom: 10, backgroundColor: isSelected ? "rgba(27,46,75,0.06)" : "transparent", borderLeft: isSelected ? "3px solid var(--color-navy)" : "3px solid transparent", borderBottom: "1px solid var(--color-border)", minHeight: 48, overflow: "hidden" }}
+                      style={{ display: "flex", alignItems: "center", gap: 8, paddingLeft: isMobile ? 12 : 16, paddingRight: isMobile ? 12 : 16, paddingTop: 10, paddingBottom: 10, backgroundColor: isSelected ? "rgba(27,46,75,0.06)" : "transparent", borderLeft: isSelected ? "3px solid var(--color-navy)" : "3px solid transparent", borderBottom: "1px solid var(--color-border)", minHeight: 48 }}
                       onMouseEnter={(e) => { if (!isSelected) (e.currentTarget as HTMLElement).style.backgroundColor = "#F8FAFF"; }}
                       onMouseLeave={(e) => { if (!isSelected) (e.currentTarget as HTMLElement).style.backgroundColor = ""; }}
                     >
-                      <span>{TYPE_ICONS[item.type]}</span>
-                      <span title={item.title} style={{ fontSize: 12, fontWeight: 500, color: "var(--color-body)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block", minWidth: 0 }}>{item.title}</span>
-                      {!narrowList && <span style={{ fontSize: 12, color: "var(--color-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{formatAuthors(item.authors)}</span>}
-                      {!narrowList && <span style={{ fontSize: 12, color: "var(--color-secondary)" }}>{item.year}</span>}
-                      <StatusBadge status={item.status} />
+                      <span style={{ flexShrink: 0, width: 28 }}>{TYPE_ICONS[item.type]}</span>
+                      <span title={item.title} style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 500, color: "var(--color-body)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.title}</span>
+                      {!narrowList && <span style={{ flexShrink: 0, width: 100, fontSize: 12, color: "var(--color-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{formatAuthors(item.authors)}</span>}
+                      {!narrowList && <span style={{ flexShrink: 0, width: 70, fontSize: 12, color: "var(--color-secondary)" }}>{item.year}</span>}
+                      <span style={{ flexShrink: 0, width: 90 }}><StatusBadge status={item.status} /></span>
                     </button>
                   );
                 })}
