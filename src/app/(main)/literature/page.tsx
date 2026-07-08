@@ -745,8 +745,8 @@ function CollectionsSidebar({
             </button>
           )}
           {showClose && <button onClick={onClose} className="flex items-center justify-center rounded-lg hover:bg-[rgba(27,46,75,0.06)]" style={{ width: 44, height: 44 }} aria-label="Close"><X size={16} color="var(--color-secondary)" /></button>}
-          {onImportZotero && <button onClick={onImportZotero} className="flex items-center justify-center rounded-lg hover:bg-[rgba(27,46,75,0.06)]" style={{ width: 32, height: 32 }} title="Import from Zotero" aria-label="Import from Zotero"><Upload size={13} color="var(--color-secondary)" /></button>}
-          {onAddByDOI && <button onClick={onAddByDOI} className="flex items-center justify-center rounded-lg hover:bg-[rgba(27,46,75,0.06)]" style={{ width: 32, height: 32 }} title="Add by DOI / BibTeX / URL" aria-label="Add by DOI"><Link2 size={13} color="var(--color-secondary)" /></button>}
+          {onImportZotero && <button onClick={onImportZotero} className="flex items-center justify-center rounded-lg hover:bg-[rgba(27,46,75,0.06)]" style={{ width: 32, height: 32 }} title="Import from Zotero" aria-label="Import from Zotero"><Upload size={15} color="var(--color-body)" /></button>}
+          {onAddByDOI && <button onClick={onAddByDOI} className="flex items-center justify-center rounded-lg hover:bg-[rgba(27,46,75,0.06)]" style={{ width: 32, height: 32 }} title="Add by DOI / BibTeX / URL" aria-label="Add by DOI"><Link2 size={15} color="var(--color-body)" /></button>}
           <button onClick={onAddItem} className="flex items-center justify-center rounded-lg hover:bg-[rgba(27,46,75,0.06)]" style={{ width: 44, height: 44 }} aria-label="Add item">
             <Plus size={14} color="var(--color-navy)" />
           </button>
@@ -1671,7 +1671,7 @@ export default function LiteraturePage() {
 
       {/* Mobile collections drawer */}
       <div className="md:hidden fixed top-0 left-0 h-full z-30"
-        style={{ width: 260, transform: collectionsOpen ? "translateX(0)" : "translateX(-100%)", transition: "transform 0.22s ease-out", borderRight: "1px solid var(--color-border)" }}
+        style={{ width: 260, transform: collectionsOpen ? "translateX(0)" : "translateX(-100%)", transition: "transform 0.22s ease-out", borderRight: "1px solid var(--color-border)", pointerEvents: collectionsOpen ? "auto" : "none" }}
         aria-hidden={!collectionsOpen}
       >
         <CollectionsSidebar
@@ -1687,7 +1687,7 @@ export default function LiteraturePage() {
 
       {/* Center list */}
       {!showingDetailMobile && (
-        <div className="flex flex-col flex-1 min-w-0" style={{ minWidth: 160, borderRight: selectedItem && !isMobile ? "1px solid var(--color-border)" : undefined }}>
+        <div className="flex flex-col flex-1 min-w-0" style={{ minWidth: 240, overflow: "hidden", borderRight: selectedItem && !isMobile ? "1px solid var(--color-border)" : undefined }}>
           <div className="flex items-center gap-2 px-3 md:px-4 py-2.5 flex-wrap" style={{ backgroundColor: "var(--color-surface)", borderBottom: "1px solid var(--color-border)", minHeight: 52 }}>
             <button onClick={() => setCollectionsOpen(true)} className="md:hidden flex items-center gap-1.5 shrink-0"
               style={{ fontSize: 12, fontWeight: 600, color: "var(--color-navy)", border: "1px solid var(--color-border)", borderRadius: 7, padding: "6px 10px", backgroundColor: "transparent", cursor: "pointer", minHeight: 44 }}>
