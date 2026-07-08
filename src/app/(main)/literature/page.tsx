@@ -1730,7 +1730,7 @@ export default function LiteraturePage() {
               </button>
             </div>
             <button onClick={() => setAddItemOpen(true)} className="flex items-center gap-1 shrink-0"
-              style={{ display: isMobile ? "flex" : "none", fontSize: 12, fontWeight: 700, color: "#fff", backgroundColor: "var(--color-navy)", border: "none", borderRadius: 7, padding: "6px 12px", cursor: "pointer", minHeight: 44, fontFamily: "var(--font-roboto)" }}>
+              style={{ fontSize: 12, fontWeight: 700, color: "#fff", backgroundColor: "var(--color-navy)", border: "none", borderRadius: 7, padding: "6px 12px", cursor: "pointer", minHeight: 36, fontFamily: "var(--font-roboto)" }}>
               <Plus size={13} /> Add
             </button>
             {activeTag && (
