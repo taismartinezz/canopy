@@ -1624,13 +1624,14 @@ export default function LiteraturePage() {
     <div className="flex h-full" style={{ fontFamily: "var(--font-roboto)" }}>
 
       {collectionsOpen && (
-        <div className="fixed inset-0 z-20 md:hidden" style={{ backgroundColor: "rgba(0,0,0,0.3)" }} onClick={() => setCollectionsOpen(false)} aria-hidden="true" />
+        <div className="fixed inset-0 z-20" style={{ display: isMobile ? "block" : "none", backgroundColor: "rgba(0,0,0,0.3)" }} onClick={() => setCollectionsOpen(false)} aria-hidden="true" />
       )}
 
       {/* Left panel — animates to 0 when collapsed */}
       <div
-        className="hidden md:flex flex-col shrink-0 group/litpanel"
+        className="flex-col shrink-0 group/litpanel"
         style={{
+          display: isMobile ? "none" : "flex",
           width: panelCollapsed ? 0 : 220,
           overflow: "clip",
           borderRight: panelCollapsed ? "none" : "1px solid var(--color-border)",
@@ -1655,8 +1656,8 @@ export default function LiteraturePage() {
       {/* Peek strip — desktop only, when panel is collapsed */}
       {panelCollapsed && (
         <button
-          className="hidden md:flex shrink-0 items-center justify-center transition-colors hover:bg-[rgba(27,46,75,0.04)]"
-          style={{ width: 16, border: "none", borderRight: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", cursor: "pointer", padding: 0 }}
+          className="flex shrink-0 items-center justify-center transition-colors hover:bg-[rgba(27,46,75,0.04)]"
+          style={{ display: isMobile ? "none" : "flex", width: 16, border: "none", borderRight: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", cursor: "pointer", padding: 0 }}
           onClick={() => {
             setPanelTransitionActive(true);
             setPanelCollapsed(false);
@@ -1670,8 +1671,8 @@ export default function LiteraturePage() {
       )}
 
       {/* Mobile collections drawer */}
-      <div className="md:hidden fixed top-0 left-0 h-full z-30"
-        style={{ width: 260, transform: collectionsOpen ? "translateX(0)" : "translateX(-100%)", transition: "transform 0.22s ease-out", borderRight: "1px solid var(--color-border)", pointerEvents: collectionsOpen ? "auto" : "none" }}
+      <div className="fixed top-0 left-0 h-full z-30"
+        style={{ display: isMobile ? "block" : "none", width: 260, transform: collectionsOpen ? "translateX(0)" : "translateX(-100%)", transition: "transform 0.22s ease-out", borderRight: "1px solid var(--color-border)", pointerEvents: collectionsOpen ? "auto" : "none" }}
         aria-hidden={!collectionsOpen}
       >
         <CollectionsSidebar
@@ -1689,8 +1690,8 @@ export default function LiteraturePage() {
       {!showingDetailMobile && (
         <div className="flex flex-col flex-1 min-w-0" style={{ minWidth: 240, overflow: "hidden", borderRight: selectedItem && !isMobile ? "1px solid var(--color-border)" : undefined }}>
           <div className="flex items-center gap-2 px-3 md:px-4 py-2.5 flex-wrap" style={{ backgroundColor: "var(--color-surface)", borderBottom: "1px solid var(--color-border)", minHeight: 52 }}>
-            <button onClick={() => setCollectionsOpen(true)} className="md:hidden flex items-center gap-1.5 shrink-0"
-              style={{ fontSize: 12, fontWeight: 600, color: "var(--color-navy)", border: "1px solid var(--color-border)", borderRadius: 7, padding: "6px 10px", backgroundColor: "transparent", cursor: "pointer", minHeight: 44 }}>
+            <button onClick={() => setCollectionsOpen(true)} className="flex items-center gap-1.5 shrink-0"
+              style={{ display: isMobile ? "flex" : "none", fontSize: 12, fontWeight: 600, color: "var(--color-navy)", border: "1px solid var(--color-border)", borderRadius: 7, padding: "6px 10px", backgroundColor: "transparent", cursor: "pointer", minHeight: 44 }}>
               <ChevronLeft size={14} /> Collections
             </button>
             <div className="relative" style={{ minWidth: 0, flex: 1 }}>
@@ -1728,8 +1729,8 @@ export default function LiteraturePage() {
                 {yearSort === "desc" ? "↓" : "↑"}
               </button>
             </div>
-            <button onClick={() => setAddItemOpen(true)} className="md:hidden flex items-center gap-1 shrink-0"
-              style={{ fontSize: 12, fontWeight: 700, color: "#fff", backgroundColor: "var(--color-navy)", border: "none", borderRadius: 7, padding: "6px 12px", cursor: "pointer", minHeight: 44, fontFamily: "var(--font-roboto)" }}>
+            <button onClick={() => setAddItemOpen(true)} className="flex items-center gap-1 shrink-0"
+              style={{ display: isMobile ? "flex" : "none", fontSize: 12, fontWeight: 700, color: "#fff", backgroundColor: "var(--color-navy)", border: "none", borderRadius: 7, padding: "6px 12px", cursor: "pointer", minHeight: 44, fontFamily: "var(--font-roboto)" }}>
               <Plus size={13} /> Add
             </button>
             {activeTag && (
@@ -1741,7 +1742,7 @@ export default function LiteraturePage() {
             <span style={{ fontSize: 11, color: "var(--color-secondary)", marginLeft: "auto", whiteSpace: "nowrap" }}>{filtered.length} item{filtered.length !== 1 ? "s" : ""}</span>
           </div>
 
-          <div className="hidden md:flex items-center px-4 py-2" style={{ gap: 8, backgroundColor: "var(--color-surface)", borderBottom: "1px solid var(--color-border)" }}>
+          <div className="flex items-center px-4 py-2" style={{ display: isMobile ? "none" : "flex", gap: 8, backgroundColor: "var(--color-surface)", borderBottom: "1px solid var(--color-border)" }}>
             <span style={{ flexShrink: 0, width: 28 }} />
             <span style={{ flex: 1, minWidth: 0, fontSize: 11, fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.05em", color: "var(--color-secondary)" }}>Title</span>
             {!narrowList && <span style={{ flexShrink: 0, width: 100, fontSize: 11, fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.05em", color: "var(--color-secondary)" }}>Authors</span>}
