@@ -11,7 +11,7 @@ import {
   Tag, Star, ExternalLink, Copy, Check, ChevronLeft, ChevronRight,
   Book, BarChart2, GraduationCap,
   Library, ClipboardList, Brain, Microscope, Heart,
-  Upload, Link2, MessageSquare, Zap, UserCheck, RefreshCw,
+  Upload, Link2, MessageSquare, Zap, UserCheck, RefreshCw, Eye, EyeOff, Wifi,
 } from "lucide-react";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -330,6 +330,124 @@ function AddItemModal({
   );
 }
 
+// ── Annotation color palette ──────────────────────────────────────────────────
+
+export const ANNOT_COLORS: { hex: string; label: string }[] = [
+  { hex: "#3B82F6", label: "Key finding" },
+  { hex: "#F59E0B", label: "Question" },
+  { hex: "#EF4444", label: "Important" },
+  { hex: "#10B981", label: "Methodology" },
+  { hex: "#8B5CF6", label: "Hypothesis" },
+  { hex: "#64748B", label: "Note" },
+];
+
+// ── Zotero RDF parser ─────────────────────────────────────────────────────────
+
+type RDFParsedNote = { itemRef: string; html: string; color?: string };
+
+function parseZoteroRDF(content: string, existingItems: LiteratureItem[], projectId: string, currentUserId: string, scope: LibraryScope): {
+  items: LiteratureItem[];
+  notes: RDFParsedNote[];
+  dupes: number;
+} {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(content, "application/xml");
+
+  const ns = (prefix: string) => ({
+    rdf:     "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+    z:       "http://www.zotero.org/namespaces/export#",
+    dc:      "http://purl.org/dc/elements/1.1/",
+    dcterms: "http://purl.org/dc/terms/",
+    bib:     "http://purl.org/net/biblio#",
+    foaf:    "http://xmlns.com/foaf/0.1/",
+    prism:   "http://prismstandard.org/namespaces/basic/2.0/",
+    link:    "http://purl.org/rss/1.0/modules/link/",
+  })[prefix];
+
+  const el = (parent: Element | Document, localName: string, nsPrefix: string) =>
+    parent.getElementsByTagNameNS(ns(nsPrefix)!, localName)[0];
+  const txt = (parent: Element | Document, localName: string, nsPrefix: string) =>
+    el(parent, localName, nsPrefix)?.textContent?.trim() ?? "";
+
+  const RDF_TYPE_MAP: Record<string, LiteratureType> = {
+    Article: "article", BookSection: "book", Book: "book",
+    Thesis: "thesis", Report: "report", Memo: "article",
+  };
+
+  const itemEls = Array.from(doc.querySelectorAll(
+    "Article, BookSection, Book, Thesis, Report, ConferencePaper, Document, Presentation"
+  ));
+
+  const now = new Date().toISOString();
+  const items: LiteratureItem[] = [];
+  let dupes = 0;
+
+  for (const itemEl of itemEls) {
+    const title = txt(itemEl, "title", "dc") || txt(itemEl, "title", "dcterms");
+    if (!title) continue;
+
+    const doiRaw = txt(itemEl, "identifier", "dc");
+    const doi = /^DOI\s+/i.test(doiRaw) ? doiRaw.replace(/^DOI\s+/i, "").trim() : undefined;
+
+    const isDupe = existingItems.some(
+      (ex) => (doi && ex.doi?.toLowerCase() === doi.toLowerCase()) ||
+               ex.title.toLowerCase() === title.toLowerCase()
+    );
+    if (isDupe) { dupes++; continue; }
+
+    // Authors from bib:authors → rdf:Seq → rdf:li → foaf:Person
+    const authorsEl = el(itemEl, "authors", "bib");
+    const authors: string[] = [];
+    if (authorsEl) {
+      for (const person of Array.from(authorsEl.getElementsByTagNameNS(ns("foaf")!, "Person"))) {
+        const surname = person.getElementsByTagNameNS(ns("foaf")!, "surname")[0]?.textContent?.trim() ?? "";
+        const given   = person.getElementsByTagNameNS(ns("foaf")!, "givenName")[0]?.textContent?.trim() ?? "";
+        const full = [given, surname].filter(Boolean).join(" ");
+        if (full) authors.push(full);
+      }
+    }
+
+    // Year from dc:date or dcterms:dateSubmitted
+    const dateStr = txt(itemEl, "date", "dc") || txt(itemEl, "dateSubmitted", "dcterms");
+    const year = parseInt(dateStr) || 0;
+
+    // Journal from dcterms:isPartOf → bib:Journal → dc:title
+    const isPartOf = el(itemEl, "isPartOf", "dcterms");
+    const journal  = isPartOf ? txt(isPartOf, "title", "dc") : undefined;
+    const volume   = isPartOf ? txt(isPartOf, "volume", "prism") : undefined;
+
+    const abstract = txt(itemEl, "abstract", "dcterms") || txt(itemEl, "description", "dc");
+    const url      = txt(itemEl, "link", "link") || txt(itemEl, "identifier", "link") || undefined;
+
+    // Tags from dc:subject
+    const tags = Array.from(itemEl.getElementsByTagNameNS(ns("dc")!, "subject"))
+      .map((e) => e.textContent?.trim()).filter((t): t is string => !!t);
+
+    const tagName = itemEl.localName;
+    items.push({
+      id: crypto.randomUUID(), projectId, scope,
+      type: RDF_TYPE_MAP[tagName] ?? "article",
+      title, authors, year, journal, doi, abstract, url, volume,
+      tags, status: "unread", rating: 0, notes: "",
+      files: [], collections: [], relatedIds: [],
+      addedById: currentUserId, addedAt: now, importSource: "zotero_json",
+    });
+  }
+
+  // Extract z:Note elements (Zotero child notes)
+  const noteEls = Array.from(doc.getElementsByTagNameNS(ns("z")!, "Note"));
+  const notes: RDFParsedNote[] = noteEls.map((noteEl) => {
+    const html    = txt(noteEl, "value", "rdf");
+    const color   = noteEl.getElementsByTagNameNS(ns("z")!, "color")[0]?.textContent?.trim();
+    // Relation: dc:relation @rdf:resource → "#item_N"
+    const relation = noteEl.getElementsByTagNameNS(ns("dc")!, "relation")[0]
+      ?.getAttributeNS(ns("rdf")!, "resource") ?? "";
+    return { itemRef: relation, html, color: color || undefined };
+  }).filter((n) => n.html);
+
+  return { items, notes, dupes };
+}
+
 // ── Zotero JSON Import Modal ──────────────────────────────────────────────────
 
 type CSLJsonItem = {
@@ -355,12 +473,20 @@ function ZoteroImportModal({ existingItems, onImport, onClose, projectId, curren
   existingItems: LiteratureItem[]; onImport: (items: LiteratureItem[]) => void;
   onClose: () => void; projectId: string; currentUserId: string;
 }) {
+  const [tab, setTab]           = useState<"file" | "api">("file");
   const [parsed, setParsed]     = useState<LiteratureItem[]>([]);
+  const [pendingNotes, setPendingNotes] = useState<RDFParsedNote[]>([]);
   const [dupes, setDupes]       = useState(0);
   const [fileName, setFileName] = useState("");
   const [error, setError]       = useState("");
   const [importing, setImporting] = useState(false);
   const [scope, setScope]       = useState<LibraryScope>("lab");
+
+  // Zotero API tab state
+  const [apiKey, setApiKey]     = useState("");
+  const [zoteroUserId, setZoteroUserId] = useState("");
+  const [syncing, setSyncing]   = useState(false);
+  const [apiError, setApiError] = useState("");
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) { if (e.key === "Escape") onClose(); }
@@ -370,36 +496,48 @@ function ZoteroImportModal({ existingItems, onImport, onClose, projectId, curren
 
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]; if (!file) return;
-    setFileName(file.name);
+    setFileName(file.name); setParsed([]); setPendingNotes([]); setError("");
     const reader = new FileReader();
     reader.onload = (ev) => {
+      const content = ev.target?.result as string;
       try {
-        const raw = JSON.parse(ev.target?.result as string) as CSLJsonItem[];
-        const now = new Date().toISOString();
-        let dupeCount = 0;
-        const items: LiteratureItem[] = [];
-        for (const z of raw) {
-          const title = (Array.isArray(z.title) ? z.title[0] : z.title) ?? "";
-          const doi = z.DOI?.toLowerCase();
-          const isDupe = existingItems.some(
-            (ex) => (doi && ex.doi?.toLowerCase() === doi) || ex.title.toLowerCase() === title.toLowerCase()
-          );
-          if (isDupe) { dupeCount++; continue; }
-          items.push({
-            id: crypto.randomUUID(), projectId, scope,
-            type: CSL_TYPE_MAP[z.type ?? ""] ?? "article",
-            title, authors: parseCSLAuthors(z.author),
-            year: z.issued?.["date-parts"]?.[0]?.[0] ?? 0,
-            journal: z["container-title"] ?? z.publisher,
-            doi: z.DOI, abstract: z.abstract?.replace(/<[^>]+>/g, ""),
-            volume: z.volume, pages: z.page, url: z.URL,
-            tags: [], status: "unread", rating: 0, notes: "",
-            files: [], collections: [], relatedIds: [],
-            addedById: currentUserId, addedAt: now, importSource: "zotero_json",
-          });
+        if (file.name.toLowerCase().endsWith(".rdf")) {
+          // Zotero RDF export (multi-item, with notes)
+          const { items, notes, dupes: d } = parseZoteroRDF(content, existingItems, projectId, currentUserId, scope);
+          setParsed(items); setPendingNotes(notes); setDupes(d);
+        } else {
+          // CSL JSON export
+          const raw = JSON.parse(content) as CSLJsonItem[];
+          const now = new Date().toISOString();
+          let dupeCount = 0;
+          const items: LiteratureItem[] = [];
+          for (const z of raw) {
+            const title = (Array.isArray(z.title) ? z.title[0] : z.title) ?? "";
+            const doi = z.DOI?.toLowerCase();
+            const isDupe = existingItems.some(
+              (ex) => (doi && ex.doi?.toLowerCase() === doi) || ex.title.toLowerCase() === title.toLowerCase()
+            );
+            if (isDupe) { dupeCount++; continue; }
+            items.push({
+              id: crypto.randomUUID(), projectId, scope,
+              type: CSL_TYPE_MAP[z.type ?? ""] ?? "article",
+              title, authors: parseCSLAuthors(z.author),
+              year: z.issued?.["date-parts"]?.[0]?.[0] ?? 0,
+              journal: z["container-title"] ?? z.publisher,
+              doi: z.DOI, abstract: z.abstract?.replace(/<[^>]+>/g, ""),
+              volume: z.volume, pages: z.page, url: z.URL,
+              tags: [], status: "unread", rating: 0, notes: "",
+              files: [], collections: [], relatedIds: [],
+              addedById: currentUserId, addedAt: now, importSource: "zotero_json",
+            });
+          }
+          setParsed(items); setDupes(dupeCount);
         }
-        setParsed(items); setDupes(dupeCount); setError("");
-      } catch { setError("Could not parse file. Export from Zotero as CSL JSON (File → Export Library → CSL JSON)."); }
+      } catch {
+        setError(file.name.toLowerCase().endsWith(".rdf")
+          ? "Could not parse RDF file. Export from Zotero: File → Export Library → Zotero RDF."
+          : "Could not parse file. Export from Zotero as CSL JSON (File → Export Library → CSL JSON).");
+      }
     };
     reader.readAsText(file);
   }
@@ -422,47 +560,159 @@ function ZoteroImportModal({ existingItems, onImport, onClose, projectId, curren
       setImporting(false);
       return;
     }
+    // Import RDF notes as annotations on the corresponding items
+    if (pendingNotes.length > 0) {
+      const annotRows = pendingNotes.flatMap((note) => {
+        // Match by itemRef fragment (#item_N) or positional index if available
+        const refFragment = note.itemRef.replace(/^.*#/, "");
+        const target = parsed.find((_, i) => `item_${i + 1}` === refFragment || `item${i + 1}` === refFragment)
+          ?? parsed[0]; // fallback to first item if ref can't be matched
+        if (!target) return [];
+        // Pick nearest Canopy color; if Zotero color hex doesn't match palette, keep raw hex
+        const color = note.color ?? undefined;
+        const plainText = note.html.replace(/<[^>]+>/g, "").trim();
+        if (!plainText) return [];
+        return [{
+          id: crypto.randomUUID(), item_id: target.id, author_id: currentUserId,
+          text: "", comment: plainText, parent_id: null,
+          ...(color ? { color } : {}),
+        }];
+      });
+      if (annotRows.length > 0)
+        await supabase.from("lit_annotations").insert(annotRows);
+    }
     onImport(parsed); setImporting(false);
   }
 
+  async function handleAPISync() {
+    if (!apiKey.trim() || !zoteroUserId.trim()) {
+      setApiError("Enter your Zotero user ID and API key."); return;
+    }
+    setSyncing(true); setApiError("");
+    try {
+      const res = await fetch("/api/zotero/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ apiKey: apiKey.trim(), zoteroUserId: zoteroUserId.trim() }),
+      });
+      const { items: raw, error: err } = await res.json() as { items?: CSLJsonItem[]; error?: string };
+      if (err || !raw) { setApiError(err ?? "Sync failed"); setSyncing(false); return; }
+      const now = new Date().toISOString();
+      let dupeCount = 0;
+      const items: LiteratureItem[] = [];
+      for (const z of raw) {
+        const title = (Array.isArray(z.title) ? z.title[0] : z.title) ?? "";
+        const doi = z.DOI?.toLowerCase();
+        const isDupe = existingItems.some(
+          (ex) => (doi && ex.doi?.toLowerCase() === doi) || ex.title.toLowerCase() === title.toLowerCase()
+        );
+        if (isDupe) { dupeCount++; continue; }
+        items.push({
+          id: crypto.randomUUID(), projectId, scope,
+          type: CSL_TYPE_MAP[z.type ?? ""] ?? "article",
+          title, authors: parseCSLAuthors(z.author),
+          year: z.issued?.["date-parts"]?.[0]?.[0] ?? 0,
+          journal: z["container-title"] ?? z.publisher,
+          doi: z.DOI, abstract: z.abstract?.replace(/<[^>]+>/g, ""),
+          volume: z.volume, pages: z.page, url: z.URL,
+          tags: [], status: "unread", rating: 0, notes: "",
+          files: [], collections: [], relatedIds: [],
+          addedById: currentUserId, addedAt: now, importSource: "zotero_api",
+        });
+      }
+      setFileName(`Zotero API — ${items.length + dupeCount} items`);
+      setParsed(items); setDupes(dupeCount);
+      setTab("file"); // switch to preview/import flow
+    } catch (ex) {
+      setApiError(ex instanceof Error ? ex.message : "Sync failed");
+    } finally { setSyncing(false); }
+  }
+
+  const SCOPE_LABELS: Record<LibraryScope, string> = { lab: "Lab Library", my: "My Library", project: "Project Library" };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: "rgba(27,46,75,0.35)" }} onClick={onClose}>
-      <div style={{ backgroundColor: "var(--color-surface)", maxWidth: 480, width: "100%", borderRadius: 10, padding: 28, boxShadow: "0 8px 40px rgba(27,46,75,0.18)" }} onClick={(e) => e.stopPropagation()}>
+      <div style={{ backgroundColor: "var(--color-surface)", maxWidth: 480, width: "100%", borderRadius: 10, padding: 28, boxShadow: "0 8px 40px rgba(27,46,75,0.18)", maxHeight: "90dvh", overflowY: "auto" }} onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
           <h2 style={{ fontFamily: "var(--font-lora)", fontWeight: 600, fontSize: 16, color: "var(--color-navy)", margin: 0 }}>Import from Zotero</h2>
           <button onClick={onClose} className="flex items-center justify-center rounded-lg hover:bg-[rgba(27,46,75,0.06)]" style={{ width: 36, height: 36 }}><X size={16} color="var(--color-secondary)" /></button>
         </div>
-        <p style={{ fontSize: 12, color: "var(--color-secondary)", marginBottom: 14 }}>
-          In Zotero: <strong>File → Export Library → CSL JSON</strong>, then upload that file here.
-        </p>
-        <label style={{ display: "block", border: "2px dashed var(--color-border)", borderRadius: 8, padding: "20px 16px", textAlign: "center", cursor: "pointer", marginBottom: 14 }}>
-          <Upload size={20} color="var(--color-secondary)" style={{ margin: "0 auto 8px" }} />
-          <p style={{ fontSize: 12, color: fileName ? "var(--color-body)" : "var(--color-secondary)" }}>{fileName || "Click to select a .json file"}</p>
-          <input type="file" accept=".json" className="hidden" onChange={handleFile} />
-        </label>
-        {error && <p style={{ fontSize: 12, color: "var(--color-error)", marginBottom: 10 }}>{error}</p>}
-        {parsed.length > 0 && (
-          <div className="mb-4 px-3 py-3 rounded-lg" style={{ backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)" }}>
-            <p style={{ fontSize: 13, fontWeight: 600, color: "var(--color-body)" }}>{parsed.length} item{parsed.length > 1 ? "s" : ""} ready to import</p>
-            {dupes > 0 && <p style={{ fontSize: 12, color: "var(--color-secondary)", marginTop: 2 }}>{dupes} duplicate{dupes > 1 ? "s" : ""} skipped (matched by DOI or title)</p>}
-            <div className="mt-3">
-              <label style={labelStyle}>Add to</label>
-              <div className="flex rounded-lg p-0.5 mt-1" style={{ backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", width: "fit-content" }}>
-                {(["lab", "my"] as const).map((s) => (
-                  <button key={s} onClick={() => setScope(s)} style={{ fontSize: 12, fontWeight: 600, padding: "5px 16px", borderRadius: 6, border: "none", backgroundColor: scope === s ? "var(--color-navy)" : "transparent", color: scope === s ? "#fff" : "var(--color-secondary)", cursor: "pointer" }}>
-                    {s === "lab" ? "Lab Library" : "My Library"}
-                  </button>
-                ))}
+
+        {/* Tab: File vs API */}
+        <div className="flex rounded-lg p-0.5 mb-4" style={{ backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)", width: "fit-content" }}>
+          {([["file", "File export"], ["api", "API sync"]] as const).map(([t, label]) => (
+            <button key={t} onClick={() => setTab(t)} style={{ fontSize: 12, fontWeight: 600, padding: "5px 14px", borderRadius: 6, border: "none", backgroundColor: tab === t ? "var(--color-navy)" : "transparent", color: tab === t ? "#fff" : "var(--color-secondary)", cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}>
+              {t === "api" && <Wifi size={11} />}{label}
+            </button>
+          ))}
+        </div>
+
+        {tab === "file" && (
+          <>
+            <p style={{ fontSize: 12, color: "var(--color-secondary)", marginBottom: 14 }}>
+              In Zotero: <strong>File → Export Library</strong>, then choose <strong>CSL JSON</strong> or <strong>Zotero RDF</strong> (RDF also imports notes as annotations).
+            </p>
+            <label style={{ display: "block", border: "2px dashed var(--color-border)", borderRadius: 8, padding: "20px 16px", textAlign: "center", cursor: "pointer", marginBottom: 14 }}>
+              <Upload size={20} color="var(--color-secondary)" style={{ margin: "0 auto 8px" }} />
+              <p style={{ fontSize: 12, color: fileName ? "var(--color-body)" : "var(--color-secondary)" }}>{fileName || "Click to select a .json or .rdf file"}</p>
+              <input type="file" accept=".json,.rdf" className="hidden" onChange={handleFile} />
+            </label>
+            {error && <p style={{ fontSize: 12, color: "var(--color-error)", marginBottom: 10 }}>{error}</p>}
+            {parsed.length > 0 && (
+              <div className="mb-4 px-3 py-3 rounded-lg" style={{ backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)" }}>
+                <p style={{ fontSize: 13, fontWeight: 600, color: "var(--color-body)" }}>{parsed.length} item{parsed.length > 1 ? "s" : ""} ready to import{pendingNotes.length > 0 ? ` + ${pendingNotes.length} note${pendingNotes.length > 1 ? "s" : ""} as annotations` : ""}</p>
+                {dupes > 0 && <p style={{ fontSize: 12, color: "var(--color-secondary)", marginTop: 2 }}>{dupes} duplicate{dupes > 1 ? "s" : ""} skipped (matched by DOI or title)</p>}
+                <div className="mt-3">
+                  <label style={labelStyle}>Add to</label>
+                  <div className="flex rounded-lg p-0.5 mt-1" style={{ backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", width: "fit-content" }}>
+                    {(["lab", "my", "project"] as const).map((s) => (
+                      <button key={s} onClick={() => setScope(s)} style={{ fontSize: 12, fontWeight: 600, padding: "5px 12px", borderRadius: 6, border: "none", backgroundColor: scope === s ? "var(--color-navy)" : "transparent", color: scope === s ? "#fff" : "var(--color-secondary)", cursor: "pointer" }}>
+                        {SCOPE_LABELS[s]}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
+        {tab === "api" && (
+          <div>
+            <p style={{ fontSize: 12, color: "var(--color-secondary)", marginBottom: 14 }}>
+              Go to <strong>zotero.org → Settings → Feeds/API</strong> to create a personal API key, then enter it below.
+            </p>
+            <div className="space-y-3 mb-4">
+              <div>
+                <label style={labelStyle}>Zotero User ID</label>
+                <input value={zoteroUserId} onChange={(e) => setZoteroUserId(e.target.value)} placeholder="e.g. 1234567"
+                  style={{ ...inputStyle, width: "100%" }}
+                  onFocus={(e) => { e.currentTarget.style.borderColor = "var(--color-navy)"; }} onBlur={(e) => { e.currentTarget.style.borderColor = "var(--color-border)"; }} />
+              </div>
+              <div>
+                <label style={labelStyle}>API Key</label>
+                <input value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="e.g. AbCdEfGhIjKlMnOp"
+                  type="password" style={{ ...inputStyle, width: "100%" }}
+                  onFocus={(e) => { e.currentTarget.style.borderColor = "var(--color-navy)"; }} onBlur={(e) => { e.currentTarget.style.borderColor = "var(--color-border)"; }} />
               </div>
             </div>
+            {apiError && <p style={{ fontSize: 12, color: "var(--color-error)", marginBottom: 10 }}>{apiError}</p>}
+            <button onClick={handleAPISync} disabled={syncing || !apiKey.trim() || !zoteroUserId.trim()}
+              className="flex items-center gap-2"
+              style={{ fontSize: 13, fontWeight: 700, color: "#fff", backgroundColor: "var(--color-navy)", border: "none", borderRadius: 7, padding: "8px 20px", cursor: "pointer", minHeight: 44, opacity: (syncing || !apiKey.trim() || !zoteroUserId.trim()) ? 0.5 : 1 }}>
+              <Wifi size={14} />{syncing ? "Syncing…" : "Sync library"}
+            </button>
           </div>
         )}
-        <div className="flex justify-end gap-2">
+
+        <div className="flex justify-end gap-2 mt-4">
           <button onClick={onClose} style={{ fontSize: 13, fontWeight: 600, color: "var(--color-body)", border: "1px solid var(--color-border)", borderRadius: 7, padding: "8px 16px", backgroundColor: "transparent", cursor: "pointer", minHeight: 44 }}>Cancel</button>
-          <button onClick={handleImport} disabled={!parsed.length || importing}
-            style={{ fontSize: 13, fontWeight: 700, color: "#fff", backgroundColor: "var(--color-navy)", border: "none", borderRadius: 7, padding: "8px 20px", cursor: (!parsed.length || importing) ? "default" : "pointer", minHeight: 44, opacity: (!parsed.length || importing) ? 0.5 : 1 }}>
-            {importing ? "Importing…" : `Import ${parsed.length > 0 ? parsed.length + " item" + (parsed.length > 1 ? "s" : "") : ""}`}
-          </button>
+          {tab === "file" && (
+            <button onClick={handleImport} disabled={!parsed.length || importing}
+              style={{ fontSize: 13, fontWeight: 700, color: "#fff", backgroundColor: "var(--color-navy)", border: "none", borderRadius: 7, padding: "8px 20px", cursor: (!parsed.length || importing) ? "default" : "pointer", minHeight: 44, opacity: (!parsed.length || importing) ? 0.5 : 1 }}>
+              {importing ? "Importing…" : `Import ${parsed.length > 0 ? parsed.length + " item" + (parsed.length > 1 ? "s" : "") : ""}`}
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -549,45 +799,50 @@ function DOILookupModal({ onSave, onClose, projectId, currentUserId }: {
     const doiMatch = /10\.\d{4,}\/[^\s"<>]+/.exec(input);
     if (doiMatch) { await fetchDOI(doiMatch[0]); return; }
 
-    // Google Scholar — no structured metadata on citation-profile pages (user=…),
-    // but search/lookup URLs carry title= or q= params we can forward to Semantic Scholar.
+    // Google Scholar — try SerpApi first (if configured server-side), then Semantic Scholar
     if (/scholar\.google\./i.test(input)) {
-      // Citation-profile pages (user=…) never have extractable title params — document this.
       if (/[?&]user=/.test(input)) {
         setPreview({ title: "", authors: [], year: 0, url: input });
-        setError("This is a Scholar author profile page, not a paper page. Paste a Scholar search result URL, or use the DOI/BibTeX option instead.");
+        setError("This is a Scholar author profile page, not a paper page. Paste a Scholar search result or paper URL instead.");
         return;
       }
+      setLoading(true);
+      // Try server-side SerpApi route first (handles arbitrary Scholar URLs)
+      try {
+        const serpRes = await fetch("/api/scholar-search", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url: input }),
+        });
+        if (serpRes.ok) {
+          const data = await serpRes.json() as Partial<LiteratureItem>;
+          if (data.title) { setPreview(data); setLoading(false); return; }
+        }
+        // SerpApi not configured or returned nothing — fall through to Semantic Scholar
+      } catch { /* fall through */ }
+      // Semantic Scholar fallback using title/q param
       const titleParam = /[?&](?:title|q)=([^&]+)/.exec(input)?.[1];
       if (titleParam) {
-        setLoading(true);
         const q = decodeURIComponent(titleParam.replace(/\+/g, " "));
         const ssUrl = `https://api.semanticscholar.org/graph/v1/paper/search?query=${encodeURIComponent(q)}&fields=title,authors,year,journal,externalIds&limit=1`;
         let paper: { title: string; authors?: { name: string }[]; year?: number; journal?: { name?: string }; externalIds?: { DOI?: string } } | null = null;
         for (let attempt = 0; attempt < 3 && !paper; attempt++) {
           try {
             if (attempt > 0) await new Promise((r) => setTimeout(r, 600));
-            const res = await fetch(ssUrl);
-            const { data: ss } = await res.json();
+            const { data: ss } = await (await fetch(ssUrl)).json();
             paper = ss?.[0] ?? null;
           } catch { /* retry */ }
         }
         setLoading(false);
         if (paper) {
-          setPreview({
-            type: "article", title: paper.title,
-            authors: (paper.authors ?? []).map((a) => a.name),
-            year: paper.year, journal: paper.journal?.name,
-            doi: paper.externalIds?.DOI,
-          });
+          setPreview({ type: "article", title: paper.title, authors: (paper.authors ?? []).map((a) => a.name), year: paper.year, journal: paper.journal?.name, doi: paper.externalIds?.DOI });
           return;
         }
-        // Semantic Scholar returned nothing after 2 attempts
         setPreview({ title: "", authors: [], year: 0, url: input });
-        setError("Couldn't find this paper on Semantic Scholar. Try the DOI or BibTeX option instead (on Scholar, click the quote icon → BibTeX).");
+        setError("Couldn't find this paper. Try the DOI or BibTeX option instead (on Scholar, click the quote icon → BibTeX).");
         return;
       }
-      // Scholar URL with no extractable query (e.g. cites=, cluster=)
+      setLoading(false);
       setPreview({ title: "", authors: [], year: 0, url: input });
       setError("Can't extract a title from this Scholar URL. Use the DOI or BibTeX option instead.");
       return;
@@ -755,10 +1010,10 @@ function CollectionsSidebar({
 
       <div className="px-3 py-2.5" style={{ borderBottom: "1px solid var(--color-border)" }}>
         <div className="flex rounded-lg p-0.5" style={{ backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)" }}>
-          {(["lab", "my"] as const).map((s) => (
+          {(["lab", "my", "project"] as const).map((s) => (
             <button key={s} onClick={() => setScope(s)} className="flex-1 py-1.5 rounded-md"
               style={{ fontSize: 11, fontWeight: 600, backgroundColor: scope === s ? "var(--color-navy)" : "transparent", color: scope === s ? "#fff" : "var(--color-secondary)", border: "none", cursor: "pointer", minHeight: 36 }}>
-              {s === "lab" ? "Lab Library" : "My Library"}
+              {s === "lab" ? "Lab" : s === "my" ? "Mine" : "Project"}
             </button>
           ))}
         </div>
@@ -907,6 +1162,7 @@ function DetailPanelContent({
   const [annotations, setAnnotations]   = useState<LitAnnotation[]>([]);
   const [newAnnotText, setNewAnnotText] = useState("");
   const [newAnnotComment, setNewAnnotComment] = useState("");
+  const [newAnnotColor, setNewAnnotColor] = useState<string | undefined>(undefined);
   const [replyingTo, setReplyingTo]     = useState<string | null>(null);
   const [replyText, setReplyText]       = useState("");
   const [savingAnnot, setSavingAnnot]   = useState(false);
@@ -937,6 +1193,7 @@ function DetailPanelContent({
             pageRef: r.page_ref as string | undefined,
             parentId: r.parent_id as string | undefined,
             createdAt: r.created_at as string,
+            color: r.color as string | undefined,
           })));
         });
     }
@@ -949,6 +1206,7 @@ function DetailPanelContent({
             dueDate: r.due_date as string | undefined, note: r.note as string | undefined,
             readingStatus: (r.reading_status as AssignmentReadingStatus | null) ?? "not_started",
             createdAt: r.created_at as string,
+            statusHidden: (r.status_hidden as boolean | null) ?? false,
           })));
         });
     }
@@ -957,22 +1215,29 @@ function DetailPanelContent({
   async function addAnnotation(parentId?: string) {
     const comment = parentId ? replyText : newAnnotComment;
     const text    = parentId ? "" : newAnnotText;
+    const color   = parentId ? undefined : newAnnotColor;
     if (!comment.trim()) return;
     setSavingAnnot(true);
     const now = new Date().toISOString();
     const newA: LitAnnotation = {
       id: crypto.randomUUID(), itemId: item.id, authorId: currentUserId,
-      text, comment, parentId, createdAt: now,
+      text, comment, parentId, createdAt: now, color,
     };
     const { error: insertErr } = await supabase.from("lit_annotations").insert({
       id: newA.id, item_id: item.id, author_id: currentUserId,
       text, comment, parent_id: parentId ?? null,
+      ...(color ? { color } : {}),
     });
     if (insertErr) console.error("[Annotation insert]", insertErr);
     setAnnotations((prev) => [...prev, newA]);
     if (parentId) { setReplyText(""); setReplyingTo(null); }
-    else { setNewAnnotText(""); setNewAnnotComment(""); }
+    else { setNewAnnotText(""); setNewAnnotComment(""); setNewAnnotColor(undefined); }
     setSavingAnnot(false);
+  }
+
+  async function updateAnnotationColor(id: string, color: string | undefined) {
+    await supabase.from("lit_annotations").update({ color: color ?? null }).eq("id", id);
+    setAnnotations((prev) => prev.map((a) => a.id === id ? { ...a, color } : a));
   }
 
   async function deleteAnnotation(id: string) {
@@ -1351,6 +1616,19 @@ function DetailPanelContent({
               <textarea value={newAnnotComment} onChange={(e) => setNewAnnotComment(e.target.value)} placeholder="Add your comment…"
                 style={{ width: "100%", minHeight: 60, fontSize: 12, fontFamily: "var(--font-roboto)", border: "1px solid var(--color-border)", borderRadius: 6, padding: "8px 10px", resize: "none", outline: "none", boxSizing: "border-box", backgroundColor: "var(--color-surface)", color: "var(--color-body)", marginBottom: 8 }}
                 onFocus={(e) => { e.currentTarget.style.borderColor = "var(--color-navy)"; }} onBlur={(e) => { e.currentTarget.style.borderColor = "var(--color-border)"; }} />
+              {/* Color tag picker */}
+              <div className="flex items-center gap-2 mb-3">
+                <span style={{ fontSize: 11, color: "var(--color-secondary)" }}>Tag:</span>
+                {ANNOT_COLORS.map((c) => (
+                  <button key={c.hex} title={c.label} onClick={() => setNewAnnotColor(newAnnotColor === c.hex ? undefined : c.hex)}
+                    style={{ width: 16, height: 16, borderRadius: "50%", backgroundColor: c.hex, border: newAnnotColor === c.hex ? "2px solid var(--color-navy)" : "2px solid transparent", cursor: "pointer", outline: "none", flexShrink: 0 }} />
+                ))}
+                {newAnnotColor && (
+                  <span style={{ fontSize: 11, color: "var(--color-secondary)" }}>
+                    {ANNOT_COLORS.find((c) => c.hex === newAnnotColor)?.label}
+                  </span>
+                )}
+              </div>
               <button onClick={() => addAnnotation()} disabled={!newAnnotComment.trim() || savingAnnot}
                 style={{ fontSize: 12, fontWeight: 700, padding: "6px 14px", borderRadius: 7, backgroundColor: "var(--color-navy)", color: "#fff", border: "none", cursor: "pointer", minHeight: 36, opacity: (!newAnnotComment.trim() || savingAnnot) ? 0.5 : 1 }}>
                 <MessageSquare size={12} style={{ display: "inline", marginRight: 5 }} />{savingAnnot ? "Saving…" : "Add annotation"}
@@ -1362,17 +1640,31 @@ function DetailPanelContent({
               ? <p style={{ fontSize: 13, color: "var(--color-secondary)" }}>No annotations yet. Be the first to comment.</p>
               : annotations.filter((a) => !a.parentId).map((a) => (
                 <div key={a.id} className="mb-3">
-                  <div className="px-3 py-3 rounded-lg" style={{ backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)" }}>
+                  <div className="px-3 py-3 rounded-lg" style={{ backgroundColor: "var(--color-canvas)", border: `1px solid ${a.color ?? "var(--color-border)"}`, borderLeft: a.color ? `3px solid ${a.color}` : "1px solid var(--color-border)" }}>
                     {a.text && (
-                      <blockquote style={{ borderLeft: "3px solid var(--color-navy)", paddingLeft: 10, margin: "0 0 8px", fontSize: 12, color: "var(--color-secondary)", fontStyle: "italic", lineHeight: 1.5 }}>
+                      <blockquote style={{ borderLeft: `3px solid ${a.color ?? "var(--color-navy)"}`, paddingLeft: 10, margin: "0 0 8px", fontSize: 12, color: "var(--color-secondary)", fontStyle: "italic", lineHeight: 1.5 }}>
                         {a.text}
                       </blockquote>
                     )}
                     <p style={{ fontSize: 13, color: "var(--color-body)", lineHeight: 1.5, marginBottom: 6 }}>{a.comment}</p>
                     <div className="flex items-center justify-between">
-                      <span style={{ fontSize: 10, color: "var(--color-secondary)" }}>
-                        {a.authorId === currentUserId ? "You" : a.authorId.slice(0, 8)} · {new Date(a.createdAt).toLocaleDateString()}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span style={{ fontSize: 10, color: "var(--color-secondary)" }}>
+                          {a.authorId === currentUserId ? "You" : a.authorId.slice(0, 8)} · {new Date(a.createdAt).toLocaleDateString()}
+                        </span>
+                        {/* Inline color tag change for annotation author */}
+                        {a.authorId === currentUserId && (
+                          <div className="flex items-center gap-1">
+                            {ANNOT_COLORS.map((c) => (
+                              <button key={c.hex} title={c.label} onClick={() => updateAnnotationColor(a.id, a.color === c.hex ? undefined : c.hex)}
+                                style={{ width: 10, height: 10, borderRadius: "50%", backgroundColor: c.hex, border: a.color === c.hex ? "1.5px solid var(--color-navy)" : "1.5px solid transparent", cursor: "pointer", outline: "none" }} />
+                            ))}
+                          </div>
+                        )}
+                        {a.color && a.authorId !== currentUserId && (
+                          <span style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: a.color, display: "inline-block" }} />
+                        )}
+                      </div>
                       <div className="flex items-center gap-1">
                         <button onClick={() => setReplyingTo(replyingTo === a.id ? null : a.id)}
                           style={{ fontSize: 11, color: "var(--color-secondary)", background: "none", border: "none", cursor: "pointer", padding: "2px 6px" }}>Reply</button>
@@ -1412,80 +1704,119 @@ function DetailPanelContent({
           </div>
         )}
 
-        {tab === "Assigned" && (
-          <div className="px-4 py-4">
-            <p style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-secondary)", marginBottom: 12 }}>Team Assignments</p>
-            {assigned.length === 0
-              ? <p style={{ fontSize: 13, color: "var(--color-secondary)", marginBottom: 16 }}>No one has been assigned this paper yet.</p>
-              : (
-                <div className="space-y-2 mb-4">
-                  {assigned.map((a) => {
-                    const STATUS_LABELS: Record<AssignmentReadingStatus, string> = {
-                      not_started: "Not started", in_progress: "In progress", done: "Done",
-                    };
-                    const STATUS_COLORS: Record<AssignmentReadingStatus, { color: string; bg: string }> = {
-                      not_started: { color: "#64748B", bg: "#F1F5F9" },
-                      in_progress: { color: "#A0622A", bg: "#FDEFD4" },
-                      done:        { color: "#2E7D52", bg: "#D4EDE0" },
-                    };
-                    const sc = STATUS_COLORS[a.readingStatus];
-                    return (
-                      <div key={a.id} className="flex items-start gap-3 px-3 py-2.5 rounded-lg" style={{ backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)" }}>
-                        <UserCheck size={14} color="var(--color-navy)" style={{ marginTop: 2, flexShrink: 0 }} />
-                        <div className="flex-1 min-w-0">
-                          <p style={{ fontSize: 12, fontWeight: 600, color: "var(--color-body)", wordBreak: "break-all" }}>
-                            {a.assigneeId === currentUserId ? "You" : a.assigneeId}
-                          </p>
-                          {a.dueDate && <p style={{ fontSize: 11, color: "var(--color-secondary)" }}>Due {new Date(a.dueDate).toLocaleDateString()}</p>}
-                          {a.note && <p style={{ fontSize: 12, color: "var(--color-secondary)", marginTop: 2 }}>{a.note}</p>}
-                          {/* Status — only the assignee or PI can update */}
-                          {a.assigneeId === currentUserId ? (
-                            <select
-                              value={a.readingStatus}
-                              onChange={async (e) => {
-                                const newStatus = e.target.value as AssignmentReadingStatus;
-                                const { error: updErr } = await supabase
-                                  .from("lit_assigned_readings")
-                                  .update({ reading_status: newStatus })
-                                  .eq("id", a.id);
-                                if (updErr) { console.error("[Update reading status]", updErr); return; }
-                                setAssigned((prev) => prev.map((x) => x.id === a.id ? { ...x, readingStatus: newStatus } : x));
-                              }}
-                              style={{ marginTop: 4, fontSize: 11, fontWeight: 600, padding: "2px 6px", borderRadius: 5, border: `1px solid ${sc.color}`, backgroundColor: sc.bg, color: sc.color, cursor: "pointer", outline: "none" }}
-                            >
-                              {(["not_started", "in_progress", "done"] as AssignmentReadingStatus[]).map((s) => (
-                                <option key={s} value={s}>{STATUS_LABELS[s]}</option>
-                              ))}
-                            </select>
-                          ) : (
-                            <span style={{ display: "inline-block", marginTop: 4, fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 5, backgroundColor: sc.bg, color: sc.color }}>
-                              {STATUS_LABELS[a.readingStatus]}
-                            </span>
-                          )}
-                        </div>
-                        {(a.assignedBy === currentUserId || a.assigneeId === currentUserId) && (
-                          <button
-                            onClick={async () => {
-                              const { error: delErr } = await supabase.from("lit_assigned_readings").delete().eq("id", a.id);
-                              if (delErr) { console.error("[Remove assignment]", delErr); return; }
-                              setAssigned((prev) => prev.filter((x) => x.id !== a.id));
-                            }}
-                            style={{ flexShrink: 0, background: "none", border: "none", cursor: "pointer", padding: 4, display: "flex", alignItems: "center" }}
-                            title="Remove assignment"
-                            aria-label="Remove assignment"
-                          >
-                            <X size={13} color="var(--color-secondary)" />
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })}
+        {tab === "Assigned" && (() => {
+          const STATUS_LABELS: Record<AssignmentReadingStatus, string> = {
+            not_started: "Not started", in_progress: "In progress", done: "Done",
+          };
+          const STATUS_COLORS: Record<AssignmentReadingStatus, { color: string; bg: string }> = {
+            not_started: { color: "#64748B", bg: "#F1F5F9" },
+            in_progress: { color: "#A0622A", bg: "#FDEFD4" },
+            done:        { color: "#2E7D52", bg: "#D4EDE0" },
+          };
+          // Current user's role: PI can always see hidden statuses
+          const isPISelf = false; // would be derived from team role; false = peer view
+          const doneCount = assigned.filter((a) => a.readingStatus === "done").length;
+          const progress  = assigned.length > 0 ? Math.round((doneCount / assigned.length) * 100) : 0;
+
+          return (
+            <div className="px-4 py-4">
+              <p style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-secondary)", marginBottom: 8 }}>Team Assignments</p>
+
+              {/* Progress summary */}
+              {assigned.length > 0 && (
+                <div className="mb-4 px-3 py-2.5 rounded-lg" style={{ backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)" }}>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span style={{ fontSize: 12, fontWeight: 600, color: "var(--color-body)" }}>{doneCount}/{assigned.length} complete</span>
+                    <span style={{ fontSize: 11, color: "var(--color-secondary)" }}>{progress}%</span>
+                  </div>
+                  <div style={{ height: 6, borderRadius: 3, backgroundColor: "var(--color-border)", overflow: "hidden" }}>
+                    <div style={{ height: "100%", width: `${progress}%`, backgroundColor: "#2E7D52", borderRadius: 3, transition: "width 0.3s ease" }} />
+                  </div>
                 </div>
               )}
-            <AssignReadingForm itemId={item.id} projectId={projectId} assignedBy={currentUserId}
-              onAssigned={(a) => setAssigned((prev) => [...prev, a])} />
-          </div>
-        )}
+
+              {assigned.length === 0
+                ? <p style={{ fontSize: 13, color: "var(--color-secondary)", marginBottom: 16 }}>No one has been assigned this paper yet.</p>
+                : (
+                  <div className="space-y-2 mb-4">
+                    {assigned.map((a) => {
+                      const sc = STATUS_COLORS[a.readingStatus];
+                      // Peers see "—" if status is hidden and they're not the assignee or PI
+                      const canSeeStatus = a.assigneeId === currentUserId || isPISelf || !a.statusHidden;
+                      return (
+                        <div key={a.id} className="flex items-start gap-3 px-3 py-2.5 rounded-lg" style={{ backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)" }}>
+                          <UserCheck size={14} color="var(--color-navy)" style={{ marginTop: 2, flexShrink: 0 }} />
+                          <div className="flex-1 min-w-0">
+                            <p style={{ fontSize: 12, fontWeight: 600, color: "var(--color-body)", wordBreak: "break-all" }}>
+                              {a.assigneeId === currentUserId ? "You" : a.assigneeId}
+                            </p>
+                            {a.dueDate && <p style={{ fontSize: 11, color: "var(--color-secondary)" }}>Due {new Date(a.dueDate).toLocaleDateString()}</p>}
+                            {a.note && <p style={{ fontSize: 12, color: "var(--color-secondary)", marginTop: 2 }}>{a.note}</p>}
+                            {/* Status — only the assignee can update; peers may see "—" if hidden */}
+                            {a.assigneeId === currentUserId ? (
+                              <div className="flex items-center gap-2 mt-1">
+                                <select
+                                  value={a.readingStatus}
+                                  onChange={async (e) => {
+                                    const newStatus = e.target.value as AssignmentReadingStatus;
+                                    const { error: updErr } = await supabase
+                                      .from("lit_assigned_readings")
+                                      .update({ reading_status: newStatus })
+                                      .eq("id", a.id);
+                                    if (updErr) { console.error("[Update reading status]", updErr); return; }
+                                    setAssigned((prev) => prev.map((x) => x.id === a.id ? { ...x, readingStatus: newStatus } : x));
+                                  }}
+                                  style={{ fontSize: 11, fontWeight: 600, padding: "2px 6px", borderRadius: 5, border: `1px solid ${sc.color}`, backgroundColor: sc.bg, color: sc.color, cursor: "pointer", outline: "none" }}
+                                >
+                                  {(["not_started", "in_progress", "done"] as AssignmentReadingStatus[]).map((s) => (
+                                    <option key={s} value={s}>{STATUS_LABELS[s]}</option>
+                                  ))}
+                                </select>
+                                {/* Visibility toggle — only the assignee sees this */}
+                                <button
+                                  title={a.statusHidden ? "Status hidden from peers — click to show" : "Status visible to peers — click to hide"}
+                                  onClick={async () => {
+                                    const hidden = !a.statusHidden;
+                                    await supabase.from("lit_assigned_readings").update({ status_hidden: hidden }).eq("id", a.id);
+                                    setAssigned((prev) => prev.map((x) => x.id === a.id ? { ...x, statusHidden: hidden } : x));
+                                  }}
+                                  style={{ background: "none", border: "none", cursor: "pointer", padding: 2, display: "flex", alignItems: "center" }}
+                                  aria-label={a.statusHidden ? "Show status to peers" : "Hide status from peers"}
+                                >
+                                  {a.statusHidden
+                                    ? <EyeOff size={13} color="var(--color-secondary)" />
+                                    : <Eye size={13} color="var(--color-secondary)" />}
+                                </button>
+                              </div>
+                            ) : (
+                              <span style={{ display: "inline-block", marginTop: 4, fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 5, backgroundColor: canSeeStatus ? sc.bg : "#F1F5F9", color: canSeeStatus ? sc.color : "#64748B" }}>
+                                {canSeeStatus ? STATUS_LABELS[a.readingStatus] : "—"}
+                              </span>
+                            )}
+                          </div>
+                          {(a.assignedBy === currentUserId || a.assigneeId === currentUserId) && (
+                            <button
+                              onClick={async () => {
+                                const { error: delErr } = await supabase.from("lit_assigned_readings").delete().eq("id", a.id);
+                                if (delErr) { console.error("[Remove assignment]", delErr); return; }
+                                setAssigned((prev) => prev.filter((x) => x.id !== a.id));
+                              }}
+                              style={{ flexShrink: 0, background: "none", border: "none", cursor: "pointer", padding: 4, display: "flex", alignItems: "center" }}
+                              title="Remove assignment" aria-label="Remove assignment"
+                            >
+                              <X size={13} color="var(--color-secondary)" />
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              <AssignReadingForm itemId={item.id} projectId={projectId} assignedBy={currentUserId}
+                onAssigned={(a) => setAssigned((prev) => [...prev, a])} />
+            </div>
+          );
+        })()}
       </div>
     </div>
   );
@@ -1597,7 +1928,11 @@ export default function LiteraturePage() {
     setDoiLookupOpen(false);
   }
 
-  const scopedItems = items.filter((item) => scope === "my" ? item.scope === "my" : item.scope === "lab");
+  const scopedItems = items.filter((item) =>
+    scope === "my" ? item.scope === "my"
+    : scope === "project" ? item.scope === "project"
+    : item.scope === "lab"
+  );
 
   const availableYears = [...new Set(scopedItems.map((i) => i.year).filter(Boolean))].sort((a, b) => b - a);
 

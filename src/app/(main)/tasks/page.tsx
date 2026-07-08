@@ -432,11 +432,16 @@ export default function TasksPage() {
 
   useEffect(() => {
     if (!isSupabaseConfigured) {
-      // Demo mode — use mock data
+      // Demo mode — use mock data, restoring any in-session mutations from sessionStorage
       const sp = getStoredProject();
       setProjectId(sp.id);
       setTeamMembers(USERS);
-      setTasks(MOCK_TASKS);
+      try {
+        const saved = sessionStorage.getItem("canopy_demo_tasks");
+        setTasks(saved ? (JSON.parse(saved) as Task[]) : MOCK_TASKS);
+      } catch {
+        setTasks(MOCK_TASKS);
+      }
       setLoading(false);
       return;
     }
@@ -539,6 +544,13 @@ export default function TasksPage() {
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [projectId]);
+
+  // Persist task mutations (e.g. file uploads) across page navigations in demo mode
+  useEffect(() => {
+    if (!isSupabaseConfigured && !loading) {
+      try { sessionStorage.setItem("canopy_demo_tasks", JSON.stringify(tasks)); } catch {}
+    }
+  }, [tasks, loading]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })

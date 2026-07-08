@@ -144,7 +144,7 @@ export interface CheckinQuestion {
 
 export type LiteratureType = "article" | "book" | "preprint" | "report" | "thesis";
 export type ReadStatus = "read" | "reading" | "unread";
-export type LibraryScope = "my" | "lab";
+export type LibraryScope = "my" | "lab" | "project";
 
 export interface LiteratureFile {
   id: string;
@@ -199,6 +199,7 @@ export interface LitAnnotation {
   parentId?: string;     // null = top-level; set = reply
   createdAt: string;
   updatedAt?: string;
+  color?: string;        // hex color tag e.g. "#3B82F6"; undefined = no tag
 }
 
 export interface LitReadingStatus {
@@ -220,6 +221,7 @@ export interface LitAssignedReading {
   note?: string;
   readingStatus: AssignmentReadingStatus;
   createdAt: string;
+  statusHidden?: boolean; // when true, peers see "—" instead of status; PI always sees real status
 }
 
 export interface ZoteroCredentials {

@@ -520,3 +520,43 @@ create policy "project members can manage recommendation cache" on lit_recommend
   for all using (
     exists (select 1 from team_members tm where tm.project_id = lit_recommendation_cache.project_id and tm.user_id = auth.uid())
   );
+
+-- ── Feature additions ─────────────────────────────────────────────────────────
+
+-- Item 2: annotation color tagging
+alter table lit_annotations add column if not exists color text;
+
+-- Item 7: reading status + visibility on assigned readings
+alter table lit_assigned_readings
+  add column if not exists reading_status text not null default 'not_started'
+    check (reading_status in ('not_started', 'in_progress', 'done')),
+  add column if not exists status_hidden boolean not null default false;
+
+-- Assignee can update their own reading_status and status_hidden
+create policy if not exists "assignee can update reading status" on lit_assigned_readings
+  for update using (auth.uid() = assignee_id);
+
+-- Item 4: project-level library scope
+create table if not exists project_libraries (
+  id         uuid primary key default gen_random_uuid(),
+  project_id uuid not null references projects(id) on delete cascade,
+  name       text not null,
+  created_by uuid not null references auth.users(id),
+  created_at timestamptz not null default now()
+);
+
+alter table project_libraries enable row level security;
+
+create policy if not exists "project members can read project libraries" on project_libraries
+  for select using (
+    exists (select 1 from team_members tm where tm.project_id = project_libraries.project_id and tm.user_id = auth.uid())
+  );
+
+create policy if not exists "project members can manage project libraries" on project_libraries
+  for all using (
+    exists (select 1 from team_members tm where tm.project_id = project_libraries.project_id and tm.user_id = auth.uid())
+  ) with check (auth.uid() = created_by);
+
+-- Link literature items to a named project library (optional, null = unassigned)
+alter table literature_items
+  add column if not exists project_library_id uuid references project_libraries(id) on delete set null;
