@@ -39,6 +39,7 @@ create table if not exists user_profiles (
   institution     text,
   avatar_initials text,
   avatar_color    text default '#B4D4E3',
+  avatar_url      text,
   project_id      uuid references projects(id) on delete set null,
   created_at      timestamptz not null default now()
 );
@@ -62,13 +63,7 @@ create policy "same-project members can read profiles" on user_profiles
 -- users who share at least one sub_project with the caller.
 create policy "sub-project co-members can read profiles" on user_profiles
   for select using (
-    exists (
-      select 1
-      from   sub_project_members a
-      join   sub_project_members b on b.sub_project_id = a.sub_project_id
-      where  a.user_id = auth.uid()
-        and  b.user_id = user_profiles.id
-    )
+    auth_uid_shares_sub_project(user_profiles.id)
   );
 
 create policy "user can upsert own profile" on user_profiles
@@ -127,10 +122,8 @@ create policy "lab members can read sub_projects" on sub_projects
       where tm.project_id = sub_projects.project_id and tm.user_id = auth.uid()
     )
     -- external member sees only the sub_projects they belong to
-    or exists (
-      select 1 from sub_project_members spm
-      where spm.sub_project_id = sub_projects.id and spm.user_id = auth.uid()
-    )
+    -- (SECURITY DEFINER — bypasses sub_project_members RLS to prevent mutual recursion)
+    or auth_uid_is_sub_project_member(sub_projects.id)
   );
 
 create policy "lab members can insert sub_projects" on sub_projects
