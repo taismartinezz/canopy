@@ -1082,28 +1082,43 @@ function AssignReadingForm({ itemId, projectId, assignedBy, onAssigned }: {
     setSaving(true);
     setError("");
 
-    if (raw.includes("@")) {
-      setError("Please enter the user's ID (UUID), not their email. You can find it in team settings.");
-      setSaving(false);
-      return;
-    }
+    let resolvedId = raw;
 
-    const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if (!uuidRe.test(raw)) {
-      setError("Invalid format. Please enter a valid user ID (UUID).");
-      setSaving(false);
-      return;
+    if (raw.includes("@")) {
+      // Resolve email → user_id via security-definer RPC (reads auth.users server-side)
+      const { data: found, error: lookupErr } = await supabase.rpc(
+        "find_team_member_id_by_email",
+        { p_project_id: projectId, p_email: raw },
+      );
+      if (lookupErr) {
+        setError("Email lookup failed. Please try again.");
+        setSaving(false);
+        return;
+      }
+      if (!found) {
+        setError("No team member with that email found in this project.");
+        setSaving(false);
+        return;
+      }
+      resolvedId = found as string;
+    } else {
+      const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!uuidRe.test(raw)) {
+        setError("Invalid format. Enter a valid user ID (UUID) or email address.");
+        setSaving(false);
+        return;
+      }
     }
 
     const newA: LitAssignedReading = {
       id: crypto.randomUUID(), itemId, projectId, assignedBy,
-      assigneeId: raw, dueDate: dueDate || undefined,
+      assigneeId: resolvedId, dueDate: dueDate || undefined,
       note: note.trim() || undefined, readingStatus: initialStatus,
       createdAt: new Date().toISOString(),
     };
     const { error: insertErr } = await supabase.from("lit_assigned_readings").insert({
       id: newA.id, item_id: itemId, project_id: projectId, assigned_by: assignedBy,
-      assignee_id: raw, due_date: dueDate || null, note: note.trim() || null,
+      assignee_id: resolvedId, due_date: dueDate || null, note: note.trim() || null,
       reading_status: initialStatus,
     });
     if (insertErr) {
@@ -1123,7 +1138,7 @@ function AssignReadingForm({ itemId, projectId, assignedBy, onAssigned }: {
     <div className="mt-2 p-3 rounded-lg" style={{ backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)" }}>
       <p style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-secondary)", marginBottom: 8 }}>Assign to a team member</p>
       <div className="space-y-2">
-        <input value={assigneeId} onChange={(e) => { setAssigneeId(e.target.value); setError(""); }} placeholder="User ID (UUID)"
+        <input value={assigneeId} onChange={(e) => { setAssigneeId(e.target.value); setError(""); }} placeholder="User ID or email"
           style={{ width: "100%", height: 34, border: "1px solid var(--color-border)", borderRadius: 6, padding: "0 10px", fontSize: 12, fontFamily: "var(--font-roboto)", outline: "none", boxSizing: "border-box" }}
           onFocus={(e) => { e.currentTarget.style.borderColor = "var(--color-navy)"; }} onBlur={(e) => { e.currentTarget.style.borderColor = "var(--color-border)"; }} />
         <div className="flex gap-2">
@@ -1217,8 +1232,27 @@ function DetailPanelContent({
         });
     }
     if (tab === "Assigned") {
-      supabase.from("lit_assigned_readings").select("*").eq("item_id", item.id)
-        .then(({ data }) => {
+      (async () => {
+        // Prefer the RPC which enforces server-side status masking and returns aggregates.
+        // Fall back to direct select (client-side masking only) if the RPC is unavailable.
+        const { data: rpcRows, error: rpcErr } = await supabase.rpc(
+          "get_item_assignments", { p_item_id: item.id },
+        );
+        if (!rpcErr && rpcRows) {
+          setAssigned((rpcRows as Record<string, unknown>[]).map((r) => ({
+            id: r.id as string, itemId: r.item_id as string, projectId: r.project_id as string,
+            assignedBy: r.assigned_by as string, assigneeId: r.assignee_id as string,
+            dueDate: r.due_date as string | undefined, note: r.note as string | undefined,
+            readingStatus: r.reading_status as AssignmentReadingStatus | null,
+            createdAt: r.created_at as string,
+            statusHidden: (r.status_hidden as boolean | null) ?? false,
+            aggDone: r.agg_done as number,
+            aggTotal: r.agg_total as number,
+          })));
+        } else {
+          // Fallback: direct query with client-side masking
+          if (rpcErr) console.warn("[Assigned] RPC unavailable, falling back to direct query:", rpcErr.message);
+          const { data } = await supabase.from("lit_assigned_readings").select("*").eq("item_id", item.id);
           if (data) setAssigned(data.map((r) => ({
             id: r.id as string, itemId: r.item_id as string, projectId: r.project_id as string,
             assignedBy: r.assigned_by as string, assigneeId: r.assignee_id as string,
@@ -1227,7 +1261,8 @@ function DetailPanelContent({
             createdAt: r.created_at as string,
             statusHidden: (r.status_hidden as boolean | null) ?? false,
           })));
-        });
+        }
+      })();
     }
   }, [tab, item.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1732,10 +1767,10 @@ function DetailPanelContent({
             in_progress: { color: "#A0622A", bg: "#FDEFD4" },
             done:        { color: "#2E7D52", bg: "#D4EDE0" },
           };
-          // Current user's role: PI can always see hidden statuses
-          const isPISelf = false; // would be derived from team role; false = peer view
-          const doneCount = assigned.filter((a) => a.readingStatus === "done").length;
-          const progress  = assigned.length > 0 ? Math.round((doneCount / assigned.length) * 100) : 0;
+          // Server-computed aggregates include hidden entries; fall back to client count when RPC unavailable.
+          const aggDone  = assigned[0]?.aggDone  ?? assigned.filter((a) => a.readingStatus === "done").length;
+          const aggTotal = assigned[0]?.aggTotal ?? assigned.length;
+          const progress = aggTotal > 0 ? Math.round((aggDone / aggTotal) * 100) : 0;
 
           return (
             <div className="px-4 py-4">
@@ -1745,7 +1780,7 @@ function DetailPanelContent({
               {assigned.length > 0 && (
                 <div className="mb-4 px-3 py-2.5 rounded-lg" style={{ backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)" }}>
                   <div className="flex items-center justify-between mb-1.5">
-                    <span style={{ fontSize: 12, fontWeight: 600, color: "var(--color-body)" }}>{doneCount}/{assigned.length} complete</span>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: "var(--color-body)" }}>{aggDone} of {aggTotal} completed</span>
                     <span style={{ fontSize: 11, color: "var(--color-secondary)" }}>{progress}%</span>
                   </div>
                   <div style={{ height: 6, borderRadius: 3, backgroundColor: "var(--color-border)", overflow: "hidden" }}>
@@ -1759,9 +1794,9 @@ function DetailPanelContent({
                 : (
                   <div className="space-y-2 mb-4">
                     {assigned.map((a) => {
-                      const sc = STATUS_COLORS[a.readingStatus];
-                      // Peers see "—" if status is hidden and they're not the assignee or PI
-                      const canSeeStatus = a.assigneeId === currentUserId || isPISelf || !a.statusHidden;
+                      // readingStatus is null when the server masked it (hidden peer row)
+                      const sc = STATUS_COLORS[a.readingStatus ?? "not_started"];
+                      const canSeeStatus = a.readingStatus !== null;
                       return (
                         <div key={a.id} className="flex items-start gap-3 px-3 py-2.5 rounded-lg" style={{ backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)" }}>
                           <UserCheck size={14} color="var(--color-navy)" style={{ marginTop: 2, flexShrink: 0 }} />
@@ -1775,7 +1810,7 @@ function DetailPanelContent({
                             {a.assigneeId === currentUserId ? (
                               <div className="flex items-center gap-2 mt-1">
                                 <select
-                                  value={a.readingStatus}
+                                  value={a.readingStatus ?? "not_started"}
                                   onChange={async (e) => {
                                     const newStatus = e.target.value as AssignmentReadingStatus;
                                     const { error: updErr } = await supabase
@@ -1809,7 +1844,7 @@ function DetailPanelContent({
                               </div>
                             ) : (
                               <span style={{ display: "inline-block", marginTop: 4, fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 5, backgroundColor: canSeeStatus ? sc.bg : "#F1F5F9", color: canSeeStatus ? sc.color : "#64748B" }}>
-                                {canSeeStatus ? STATUS_LABELS[a.readingStatus] : "—"}
+                                {canSeeStatus ? STATUS_LABELS[a.readingStatus!] : "—"}
                               </span>
                             )}
                           </div>
