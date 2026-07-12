@@ -2,6 +2,10 @@
 -- Mirrors the tasks/bookmarks pattern from migration 004.
 -- Never drops lab-member access; only adds the external-member path.
 
+-- ── Ensure added_by exists (live DB may pre-date this column) ────────────────
+alter table literature_items
+  add column if not exists added_by uuid references auth.users(id);
+
 -- ── literature_items SELECT ──────────────────────────────────────────────────
 drop policy if exists "project members can read literature" on literature_items;
 create policy "project members can read literature" on literature_items
