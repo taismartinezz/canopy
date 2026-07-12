@@ -376,7 +376,12 @@ export default function TeamPage() {
           <div>
             <h1 style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 26, color: "var(--color-navy)", margin: 0, lineHeight: 1.2 }}>Team</h1>
             <p style={{ fontSize: 13, color: "var(--color-secondary)", marginTop: 4 }}>
-              {visibleTeam.length} member{visibleTeam.length !== 1 ? "s" : ""}{storedProjectName ? ` · ${storedProjectName}` : ""}
+              {visibleTeam.length} member{visibleTeam.length !== 1 ? "s" : ""}{(() => {
+                const displayName = activeScope === "project"
+                  ? (subProjects.find((sp) => sp.id === subProjectId)?.name ?? storedProjectName)
+                  : storedProjectName;
+                return displayName ? ` · ${displayName}` : "";
+              })()}
             </p>
           </div>
           <div className="flex items-center gap-2">
