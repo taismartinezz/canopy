@@ -59,9 +59,12 @@ export default function ProjectMembersModal({
   const [pendingInvites, setPendingInvites] = useState<PendingInvite[]>([]);
   const [loading, setLoading] = useState(true);
   const [emailInput, setEmailInput] = useState("");
+  const [emailTouched, setEmailTouched] = useState(false);
   const [adding, setAdding] = useState(false);
   const [addError, setAddError] = useState("");
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
+
+  const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailInput.trim());
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -267,24 +270,26 @@ export default function ProjectMembersModal({
                 <div className="flex gap-2">
                   <input
                     value={emailInput}
-                    onChange={(e) => { setEmailInput(e.target.value); setAddError(""); }}
+                    onChange={(e) => { setEmailInput(e.target.value); setAddError(""); if (!e.target.value) setEmailTouched(false); }}
                     onKeyDown={(e) => { if (e.key === "Enter") handleAdd(); }}
+                    onBlur={() => setEmailTouched(true)}
                     placeholder="colleague@university.edu"
                     type="email"
                     style={{ ...inputStyle, flex: 1 }}
                     onFocus={(e) => { e.currentTarget.style.borderColor = "var(--color-navy)"; }}
-                    onBlur={(e)  => { e.currentTarget.style.borderColor = "var(--color-border)"; }}
                   />
                   <button
                     onClick={handleAdd}
-                    disabled={adding}
+                    disabled={adding || (emailInput.trim().length > 0 && !emailValid)}
                     className="flex items-center gap-1.5 shrink-0"
                     style={{
                       height: 38, padding: "0 14px",
                       backgroundColor: "var(--color-navy)", color: "#fff",
                       border: "none", borderRadius: 7,
-                      fontSize: 13, fontWeight: 600, cursor: adding ? "default" : "pointer",
-                      opacity: adding ? 0.7 : 1, fontFamily: "var(--font-roboto)",
+                      fontSize: 13, fontWeight: 600,
+                      cursor: (adding || (emailInput.trim().length > 0 && !emailValid)) ? "default" : "pointer",
+                      opacity: (adding || (emailInput.trim().length > 0 && !emailValid)) ? 0.5 : 1,
+                      fontFamily: "var(--font-roboto)",
                     }}
                   >
                     <UserPlus size={13} />
@@ -293,6 +298,9 @@ export default function ProjectMembersModal({
                 </div>
                 {addError && (
                   <p style={{ fontSize: 12, color: "var(--color-error)", marginTop: 4 }}>{addError}</p>
+                )}
+                {!addError && emailTouched && emailInput.trim().length > 0 && !emailValid && (
+                  <p style={{ fontSize: 12, color: "var(--color-error)", marginTop: 4 }}>Enter a valid email address.</p>
                 )}
                 <p style={{ fontSize: 11, color: "var(--color-secondary)", marginTop: 5 }}>
                   Lab members are added immediately. External collaborators receive an invite link.
