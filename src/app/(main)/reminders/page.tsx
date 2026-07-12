@@ -380,7 +380,7 @@ function ReminderEditRow({ reminder, teamMembers, currentUserId, projectId, onSa
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "0 16px 6px 50px", flexWrap: "wrap" }}>
         {/* Scope toggle */}
-        {(["personal","lab"] as ReminderScope[]).map(s => (
+        {(["personal","lab"] as const).map(s => (
           <button key={s} onClick={() => setScope(s)} style={{ ...pillBase(scope === s, LIST_COLORS[s]), fontWeight: scope === s ? 700 : 400 }}>
             {s === "personal" ? "Personal" : "Lab"}
           </button>
@@ -461,7 +461,7 @@ function InlineAddRow({ defaultScope, accentColor, teamMembers, onAdd, onClose }
           style={{ flex: 1, border: "none", outline: "none", fontSize: 15, fontFamily: "var(--font-roboto)", backgroundColor: "transparent", color: "var(--color-body)" }} />
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "0 16px 6px 60px", flexWrap: "wrap" }}>
-        {(["personal","lab"] as ReminderScope[]).map(s => (
+        {(["personal","lab"] as const).map(s => (
           <button key={s} onClick={() => setScope(s)} style={{ ...pillBase(scope === s, LIST_COLORS[s]), fontWeight: scope === s ? 700 : 400 }}>
             {s === "personal" ? "Personal" : "Lab"}
           </button>
@@ -830,7 +830,7 @@ function UndoToast({ title, onUndo }: { title: string; onUndo: () => void }) {
 interface PendingUndo { reminder: Reminder; timerId: ReturnType<typeof setTimeout>; }
 
 export default function RemindersPage() {
-  const { projectId, isLoading: projectLoading } = useProject();
+  const { projectId, activeScope, subProjectId, isLoading: projectLoading } = useProject();
   const [currentUserId, setCurrentUserId] = useState("");
   const [teamMembers, setTeamMembers] = useState<User[]>([]);
   const [reminders, setReminders] = useState<Reminder[]>([]);
@@ -883,11 +883,17 @@ export default function RemindersPage() {
         }
       }
 
-      // Fetch: own personal, lab reminders for the project, and reminders assigned to me
-      const clauses = [`and(scope.eq.personal,user_id.eq.${currentUserId})`];
-      if (projectId) clauses.push(`and(scope.eq.lab,project_id.eq.${projectId})`);
-      clauses.push(`assignee_id.eq.${currentUserId}`);
-      const filter = clauses.join(",");
+      // Strict scope isolation — show only the active rail scope.
+      // Always include reminders assigned to me regardless of scope.
+      let scopeClause: string;
+      if (activeScope === "personal") {
+        scopeClause = `and(scope.eq.personal,user_id.eq.${currentUserId})`;
+      } else if (activeScope === "project" && subProjectId) {
+        scopeClause = `and(scope.eq.project,sub_project_id.eq.${subProjectId})`;
+      } else {
+        scopeClause = projectId ? `and(scope.eq.lab,project_id.eq.${projectId})` : `and(scope.eq.lab)`;
+      }
+      const filter = `${scopeClause},assignee_id.eq.${currentUserId}`;
 
       const { data, error } = await supabase
         .from("reminders")
@@ -919,7 +925,7 @@ export default function RemindersPage() {
       setLoading(false);
     }
     load();
-  }, [currentUserId, projectId, projectLoading]);
+  }, [currentUserId, projectId, activeScope, subProjectId, projectLoading]);
 
   function commitDelete(id: string) { if (isSupabaseConfigured) supabase.from("reminders").delete().eq("id", id).then(({ error }) => { if (error) console.error("[Reminders] delete:", error); }); }
   function commitComplete(id: string) { if (isSupabaseConfigured) supabase.from("reminders").update({ completed: true }).eq("id", id).then(({ error }) => { if (error) console.error("[Reminders] complete:", error); }); }
@@ -944,12 +950,15 @@ export default function RemindersPage() {
   }
 
   async function handleAdd(title: string, scope: ReminderScope, priority?: ReminderPriority, dueAt?: string, assigneeId?: string) {
+    // When the rail is in project mode, always save as project scope.
+    // Otherwise, respect whatever the user's scope toggle shows.
+    const effectiveScope: ReminderScope = activeScope === "project" ? "project" : scope;
     const now = Date.now();
     const tempId = crypto.randomUUID();
     const newReminder: Reminder = {
       id: tempId, userId: currentUserId,
-      projectId: scope === "lab" ? (projectId ?? undefined) : undefined,
-      scope, title, priority, dueAt, assigneeId,
+      projectId: effectiveScope !== "personal" ? (projectId ?? undefined) : undefined,
+      scope: effectiveScope, title, priority, dueAt, assigneeId,
       emailEnabled: false, sent: false, completed: false,
       createdAt: new Date().toISOString(),
       position: now,
@@ -958,7 +967,15 @@ export default function RemindersPage() {
 
     if (isSupabaseConfigured && currentUserId) {
       const { data, error } = await supabase.from("reminders")
-        .insert({ user_id: currentUserId, project_id: scope === "lab" ? (projectId ?? null) : null, scope, title, priority: priority ?? null, due_at: dueAt ?? null, email_enabled: false, sent: false, completed: false, position: now, assignee_id: assigneeId ?? null })
+        .insert({
+          user_id: currentUserId,
+          project_id: effectiveScope !== "personal" ? (projectId ?? null) : null,
+          sub_project_id: effectiveScope === "project" ? (subProjectId ?? null) : null,
+          scope: effectiveScope, title,
+          priority: priority ?? null, due_at: dueAt ?? null,
+          email_enabled: false, sent: false, completed: false,
+          position: now, assignee_id: assigneeId ?? null,
+        })
         .select().single();
       if (!error && data) setReminders(prev => prev.map(r => r.id === tempId ? { ...newReminder, id: data.id as string } : r));
       else if (error) console.error("[Reminders] add:", error);

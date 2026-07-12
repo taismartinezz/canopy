@@ -6,6 +6,7 @@ import {
   Lock, Trash2, ChevronLeft, ChevronRight, AlertCircle,
 } from "lucide-react";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
+import { useProject } from "@/context/ProjectContext";
 import { computeInitials } from "@/lib/utils";
 import type {
   User, WeeklyAvailability, MeetingProposal, MeetingResponse,
@@ -933,6 +934,8 @@ const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
 ];
 
 export default function SchedulingPage() {
+  const { projectId, activeScope, subProjectId } = useProject();
+
   const [tab, setTab] = useState<Tab>("calendar");
   const [showProposalModal, setShowProposalModal] = useState(false);
   const [googleConnected, setGoogleConnected] = useState(false);
@@ -940,7 +943,6 @@ export default function SchedulingPage() {
 
   // Resolved from auth
   const [currentUserId, setCurrentUserId] = useState("");
-  const [projectId, setProjectId] = useState("");
   const [teamMembers, setTeamMembers] = useState<User[]>([]);
 
   // Scheduling data
@@ -949,45 +951,30 @@ export default function SchedulingPage() {
   const [proposals, setProposals] = useState<MeetingProposal[]>([]);
   const [events, setEvents] = useState<ScheduleEvent[]>([]);
 
+  // Auth effect — resolve currentUserId once
   useEffect(() => {
-    async function init() {
-      if (!isSupabaseConfigured) {
-        try {
-          const stored = localStorage.getItem("canopy_user");
-          if (stored) {
-            const u = JSON.parse(stored);
-            setCurrentUserId(u.id ?? "demo");
-          }
-          const proj = localStorage.getItem("canopy_project");
-          if (proj) {
-            const p = JSON.parse(proj);
-            setProjectId(p.id ?? "demo-project");
-          }
-        } catch { /* ignore */ }
-        setLoading(false);
-        return;
-      }
+    if (!isSupabaseConfigured) {
+      try {
+        const stored = localStorage.getItem("canopy_user");
+        if (stored) { const u = JSON.parse(stored); setCurrentUserId(u.id ?? "demo"); }
+      } catch { /* ignore */ }
+      return;
+    }
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) setCurrentUserId(session.user.id);
+    });
+  }, []);
 
-      const { data: { session } } = await supabase.auth.getSession();
-      const user = session?.user;
-      if (!user) { setLoading(false); return; }
-      setCurrentUserId(user.id);
+  // Team + availability + proposals — re-run when projectId or currentUserId resolves
+  useEffect(() => {
+    if (!projectId || !currentUserId) return;
+    if (!isSupabaseConfigured) { setLoading(false); return; }
 
-      const { data: prof } = await supabase
-        .from("user_profiles")
-        .select("project_id")
-        .eq("id", user.id)
-        .maybeSingle();
-
-      const pid = prof?.project_id as string | undefined;
-      if (!pid) { setLoading(false); return; }
-      setProjectId(pid);
-
-      // Team members
+    async function fetchStaticData() {
       const { data: members } = await supabase
         .from("team_members")
         .select("user_id, role, user_profiles(name, avatar_color, avatar_initials, avatar_url)")
-        .eq("project_id", pid);
+        .eq("project_id", projectId);
 
       if (members) {
         setTeamMembers(
@@ -1008,11 +995,10 @@ export default function SchedulingPage() {
         );
       }
 
-      // Availability
       const { data: avData } = await supabase
         .from("user_availability")
         .select("*")
-        .eq("project_id", pid);
+        .eq("project_id", projectId);
 
       if (avData) {
         const mapped: WeeklyAvailability[] = avData.map((row) => ({
@@ -1022,15 +1008,14 @@ export default function SchedulingPage() {
           updatedAt: row.updated_at as string,
         }));
         setAllAvailabilities(mapped);
-        const mine = mapped.find((a) => a.userId === user.id);
+        const mine = mapped.find((a) => a.userId === currentUserId);
         if (mine) setSavedSlots(mine.slots);
       }
 
-      // Meeting proposals
       const { data: propData } = await supabase
         .from("meeting_proposals")
         .select("*")
-        .eq("project_id", pid)
+        .eq("project_id", projectId)
         .order("created_at", { ascending: false });
 
       if (propData) {
@@ -1051,13 +1036,32 @@ export default function SchedulingPage() {
         );
       }
 
-      // Schedule events
-      const { data: evData } = await supabase
+      setLoading(false);
+    }
+
+    fetchStaticData();
+  }, [projectId, currentUserId]);
+
+  // Events effect — re-runs on scope change for strict isolation
+  useEffect(() => {
+    if (!projectId || !currentUserId || !isSupabaseConfigured) return;
+
+    async function fetchEvents() {
+      // personal has no distinct calendar — fall back to lab view
+      const effectiveScope = activeScope === "project" ? "project" : "lab";
+
+      let q = supabase
         .from("schedule_events")
         .select("*")
-        .eq("project_id", pid)
-        .or(`scope.eq.lab,and(scope.eq.personal,created_by.eq.${user.id})`)
-        .order("date", { ascending: true });
+        .eq("project_id", projectId);
+
+      if (effectiveScope === "project" && subProjectId) {
+        q = q.eq("scope", "project").eq("sub_project_id", subProjectId);
+      } else {
+        q = q.eq("scope", "lab");
+      }
+
+      const { data: evData } = await q.order("date", { ascending: true });
 
       if (evData) {
         setEvents(
@@ -1071,15 +1075,14 @@ export default function SchedulingPage() {
             scope: row.scope as ScheduleEvent["scope"],
             createdBy: row.created_by as string,
             description: (row.description as string) ?? undefined,
+            subProjectId: (row.sub_project_id as string) ?? null,
           }))
         );
       }
-
-      setLoading(false);
     }
 
-    init();
-  }, []);
+    fetchEvents();
+  }, [projectId, currentUserId, activeScope, subProjectId]);
 
   // ── Write handlers ──────────────────────────────────────────────────────────
 
@@ -1087,7 +1090,7 @@ export default function SchedulingPage() {
     setSavedSlots(slots);
     const updated: WeeklyAvailability = {
       userId: currentUserId,
-      projectId,
+      projectId: projectId ?? "",
       slots,
       updatedAt: new Date().toISOString(),
     };
@@ -1143,7 +1146,7 @@ export default function SchedulingPage() {
     const tempId = crypto.randomUUID();
     const newProposal: MeetingProposal = {
       ...proposal,
-      projectId,
+      projectId: projectId ?? "",
       id: tempId,
       createdAt: new Date().toISOString(),
       responses: initialResponses,
@@ -1181,6 +1184,8 @@ export default function SchedulingPage() {
 
   async function handleAddEvent(event: Omit<ScheduleEvent, "id">) {
     const tempId = crypto.randomUUID();
+    const effectiveScope: ScheduleEvent["scope"] = activeScope === "project" ? "project" : event.scope;
+    const effectiveSubProjectId = activeScope === "project" ? subProjectId : null;
     if (isSupabaseConfigured && projectId && currentUserId) {
       const { data, error } = await supabase
         .from("schedule_events")
@@ -1190,20 +1195,21 @@ export default function SchedulingPage() {
           date: event.date,
           time: event.time ?? null,
           end_time: event.endTime ?? null,
-          scope: event.scope,
+          scope: effectiveScope,
+          sub_project_id: effectiveSubProjectId ?? null,
           created_by: currentUserId,
           description: event.description ?? null,
         })
         .select()
         .single();
       if (!error && data) {
-        setEvents((prev) => [...prev, { ...event, id: data.id as string }]);
+        setEvents((prev) => [...prev, { ...event, scope: effectiveScope, subProjectId: effectiveSubProjectId, id: data.id as string }]);
       } else {
         if (error) console.error("[Scheduling] add event:", error);
-        setEvents((prev) => [...prev, { ...event, id: tempId }]);
+        setEvents((prev) => [...prev, { ...event, scope: effectiveScope, subProjectId: effectiveSubProjectId, id: tempId }]);
       }
     } else {
-      setEvents((prev) => [...prev, { ...event, id: tempId }]);
+      setEvents((prev) => [...prev, { ...event, scope: effectiveScope, subProjectId: effectiveSubProjectId, id: tempId }]);
     }
   }
 
@@ -1278,7 +1284,7 @@ export default function SchedulingPage() {
             events={events}
             proposals={proposals}
             currentUserId={currentUserId}
-            projectId={projectId}
+            projectId={projectId ?? ""}
             onAddEvent={handleAddEvent}
             onDeleteEvent={handleDeleteEvent}
           />

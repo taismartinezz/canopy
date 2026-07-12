@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { CURRENT_USER_ID, TEAM_MEMBERS, formatRelativeTime, getStoredUser, getStoredProject } from "@/lib/mock-data";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
+import { useProject } from "@/context/ProjectContext";
 import type { TeamMember, TaskStatus } from "@/types";
 import Avatar from "@/components/ui/Avatar";
 import { Video, X, Edit3, Check, Minus } from "lucide-react";
@@ -223,6 +224,7 @@ function WeeklyUpdateBar({ current, onSave }: { current?: string; onSave: (v: st
 // ── Team page ─────────────────────────────────────────────────────────────────
 
 export default function TeamPage() {
+  const { activeScope, subProjectId } = useProject();
   const [selectedMember, setSelectedMember] = useState<TeamMember | null>(null);
   const [meetingModalOpen, setMeetingModalOpen] = useState(false);
   const [weeklyUpdate, setWeeklyUpdate] = useState<string | undefined>(undefined);
@@ -233,6 +235,7 @@ export default function TeamPage() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(
     isSupabaseConfigured ? null : CURRENT_USER_ID
   );
+  const [subProjectMemberIds, setSubProjectMemberIds] = useState<Set<string> | null>(null);
   const closeMemberPanel = useCallback(() => setSelectedMember(null), []);
   const closeMeetingModal = useCallback(() => setMeetingModalOpen(false), []);
 
@@ -341,6 +344,27 @@ export default function TeamPage() {
       });
   }, [currentUserId]);
 
+  // Fetch sub-project member ids when in project scope.
+  useEffect(() => {
+    if (activeScope !== "project" || !subProjectId || !isSupabaseConfigured) {
+      setSubProjectMemberIds(null);
+      return;
+    }
+    supabase
+      .from("sub_project_members")
+      .select("user_id")
+      .eq("sub_project_id", subProjectId)
+      .then(({ data }) => {
+        if (data) setSubProjectMemberIds(new Set(data.map((r) => r.user_id as string)));
+      });
+  }, [activeScope, subProjectId]);
+
+  // Effective team: filter by sub-project membership when in project scope.
+  // Personal scope falls back to full lab roster (team has no personal mode).
+  const visibleTeam = activeScope === "project" && subProjectMemberIds !== null
+    ? team.filter((m) => subProjectMemberIds.has(m.id))
+    : team;
+
   return (
     <div className="flex flex-col h-full overflow-auto" style={{ fontFamily: "var(--font-roboto)" }}>
       <div className="p-4 md:p-6" style={{ maxWidth: 1200 }}>
@@ -350,7 +374,7 @@ export default function TeamPage() {
           <div>
             <h1 style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 26, color: "var(--color-navy)", margin: 0, lineHeight: 1.2 }}>Team</h1>
             <p style={{ fontSize: 13, color: "var(--color-secondary)", marginTop: 4 }}>
-              {team.length} member{team.length !== 1 ? "s" : ""}{storedProjectName ? ` · ${storedProjectName}` : ""}
+              {visibleTeam.length} member{visibleTeam.length !== 1 ? "s" : ""}{storedProjectName ? ` · ${storedProjectName}` : ""}
             </p>
           </div>
           <button
@@ -377,13 +401,13 @@ export default function TeamPage() {
 
         {/* Team grid */}
         {loading && <p style={{ fontSize: 13, color: "var(--color-secondary)", marginBottom: 16 }}>Loading team…</p>}
-        {!loading && team.length === 0 && (
+        {!loading && visibleTeam.length === 0 && (
           <p style={{ fontSize: 13, color: "var(--color-secondary)", marginBottom: 16 }}>
-            Your team will appear here once collaborators join.
+            {activeScope === "project" ? "No members in this project yet." : "Your team will appear here once collaborators join."}
           </p>
         )}
         <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 280px), 1fr))" }}>
-          {team.map((member) => (
+          {visibleTeam.map((member) => (
             <MemberCard
               key={member.id}
               member={member}

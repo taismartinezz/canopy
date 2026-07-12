@@ -446,7 +446,7 @@ function BookmarkCard({ bm, canDelete, onDelete }: {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function BookmarksPage() {
-  const { projectId } = useProject();
+  const { projectId, activeScope, subProjectId } = useProject();
   const [bookmarks, setBookmarks] = useState<BookmarkRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -468,11 +468,15 @@ export default function BookmarksPage() {
   const fetchBookmarks = useCallback(async () => {
     if (!projectId) return;
     setLoading(true);
-    const { data, error } = await supabase
+    let q = supabase
       .from("bookmarks")
       .select("*, user_profiles!added_by(name)")
       .eq("project_id", projectId)
-      .order("added_at", { ascending: false });
+      .eq("scope", activeScope === "personal" ? "personal" : activeScope === "project" ? "project" : "lab");
+    if (activeScope === "project" && subProjectId) {
+      q = q.eq("sub_project_id", subProjectId);
+    }
+    const { data, error } = await q.order("added_at", { ascending: false });
 
     if (error) {
       console.error("[Bookmarks] fetch error:", error);
@@ -493,11 +497,11 @@ export default function BookmarksPage() {
       );
     }
     setLoading(false);
-  }, [projectId]);
+  }, [projectId, activeScope, subProjectId]);
 
   useEffect(() => {
     if (isSupabaseConfigured && projectId) fetchBookmarks();
-  }, [projectId, fetchBookmarks]);
+  }, [projectId, activeScope, subProjectId, fetchBookmarks]);
 
   async function handleAdd(url: string, title: string) {
     if (!projectId) return;
@@ -516,7 +520,14 @@ export default function BookmarksPage() {
 
     const { data, error } = await supabase
       .from("bookmarks")
-      .insert({ project_id: projectId, url, title, added_by: currentUserId })
+      .insert({
+        project_id: projectId,
+        url,
+        title,
+        added_by: currentUserId,
+        scope: activeScope === "personal" ? "personal" : activeScope === "project" ? "project" : "lab",
+        sub_project_id: activeScope === "project" ? (subProjectId ?? null) : null,
+      })
       .select("*, user_profiles!added_by(name)")
       .single();
 

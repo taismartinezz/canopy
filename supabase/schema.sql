@@ -88,6 +88,65 @@ create policy "members can read team" on team_members
 create policy "user can insert own membership" on team_members
   for insert with check (auth.uid() = user_id);
 
+-- ── Sub-projects ──────────────────────────────────────────────────────────────
+-- Named groupings within a lab (project_id = the lab).
+-- sub_project_members tracks which lab members belong to each sub-project.
+-- Exists in the live DB; added to schema.sql 2026-07-12.
+
+create table if not exists sub_projects (
+  id          uuid primary key default gen_random_uuid(),
+  project_id  uuid not null references projects(id) on delete cascade,
+  name        text not null,
+  description text,
+  created_by  uuid references user_profiles(id) on delete set null,
+  created_at  timestamptz not null default now(),
+  archived    boolean not null default false
+);
+
+alter table sub_projects enable row level security;
+
+create policy "lab members can read sub_projects" on sub_projects
+  for select using (
+    exists (
+      select 1 from team_members tm
+      where tm.project_id = sub_projects.project_id and tm.user_id = auth.uid()
+    )
+  );
+
+create policy "lab members can insert sub_projects" on sub_projects
+  for insert with check (
+    exists (
+      select 1 from team_members tm
+      where tm.project_id = sub_projects.project_id and tm.user_id = auth.uid()
+    )
+  );
+
+create policy "creator can update sub_projects" on sub_projects
+  for update using (created_by = auth.uid());
+
+create policy "creator can delete sub_projects" on sub_projects
+  for delete using (created_by = auth.uid());
+
+create table if not exists sub_project_members (
+  sub_project_id uuid not null references sub_projects(id) on delete cascade,
+  user_id        uuid not null references user_profiles(id) on delete cascade,
+  primary key (sub_project_id, user_id)
+);
+
+alter table sub_project_members enable row level security;
+
+create policy "lab members can read sub_project_members" on sub_project_members
+  for select using (
+    exists (
+      select 1 from sub_projects sp
+      join team_members tm on tm.project_id = sp.project_id
+      where sp.id = sub_project_members.sub_project_id and tm.user_id = auth.uid()
+    )
+  );
+
+create policy "lab members can manage own sub_project membership" on sub_project_members
+  for all using (user_id = auth.uid()) with check (user_id = auth.uid());
+
 -- ── Invite Codes ──────────────────────────────────────────────────────────────
 
 create table if not exists invite_codes (
@@ -199,7 +258,7 @@ create policy "project members can manage collections" on literature_collections
 create table if not exists literature_items (
   id              uuid primary key default gen_random_uuid(),
   project_id      uuid not null references projects(id) on delete cascade,
-  scope           text not null check (scope in ('lab','my')) default 'lab',
+  library         text not null check (library in ('lab','personal','project')) default 'lab',
   type            text not null check (type in ('article','book','preprint','report','thesis')) default 'article',
   title           text not null,
   authors         text[] not null default '{}',
@@ -296,17 +355,20 @@ create policy "project members can update proposal responses" on meeting_proposa
 -- Lab-wide events are visible to all project members.
 -- Personal events are visible only to their creator.
 
+-- NOTE: The live DB had a simpler `events` table instead of schedule_events.
+-- Migration 20260712002 creates schedule_events and migrates events rows into it.
 create table if not exists schedule_events (
-  id          uuid primary key default gen_random_uuid(),
-  project_id  uuid not null references projects(id) on delete cascade,
-  title       text not null,
-  date        date not null,
-  time        time,
-  end_time    time,
-  scope       text not null check (scope in ('lab', 'personal')) default 'lab',
-  created_by  uuid not null references auth.users(id),
-  description text,
-  created_at  timestamptz not null default now()
+  id             uuid primary key default gen_random_uuid(),
+  project_id     uuid not null references projects(id) on delete cascade,
+  title          text not null,
+  date           date not null,
+  time           time,
+  end_time       time,
+  scope          text not null check (scope in ('lab', 'personal', 'project')) default 'lab',
+  created_by     uuid references user_profiles(id) on delete set null,
+  description    text,
+  sub_project_id uuid references sub_projects(id) on delete set null,
+  created_at     timestamptz not null default now()
 );
 
 alter table schedule_events enable row level security;
@@ -335,7 +397,7 @@ create table if not exists reminders (
   id              uuid primary key default gen_random_uuid(),
   user_id         uuid not null references auth.users(id) on delete cascade,
   project_id      uuid references projects(id) on delete cascade,
-  scope           text not null check (scope in ('personal', 'lab')) default 'personal',
+  scope           text not null check (scope in ('personal', 'lab', 'project')) default 'personal',
   title           text not null,
   due_at          timestamptz,
   linked_task_id  uuid,
@@ -668,3 +730,57 @@ begin
   where lar.item_id = p_item_id;
 end;
 $$;
+
+-- ── Bookmarks ─────────────────────────────────────────────────────────────────
+-- Exists in the live DB but was absent from schema.sql. Added 2026-07-12.
+
+create table if not exists bookmarks (
+  id         uuid primary key default gen_random_uuid(),
+  project_id uuid not null references projects(id) on delete cascade,
+  url        text not null,
+  title      text not null,
+  added_by   uuid references user_profiles(id) on delete set null,
+  added_at   timestamptz not null default now()
+);
+
+alter table bookmarks enable row level security;
+
+create policy "project members can read bookmarks" on bookmarks
+  for select using (
+    exists (
+      select 1 from team_members tm
+      where tm.project_id = bookmarks.project_id and tm.user_id = auth.uid()
+    )
+  );
+
+create policy "project members can insert bookmarks" on bookmarks
+  for insert with check (
+    exists (
+      select 1 from team_members tm
+      where tm.project_id = bookmarks.project_id and tm.user_id = auth.uid()
+    )
+  );
+
+create policy "adder can delete bookmarks" on bookmarks
+  for delete using (added_by = auth.uid());
+
+-- ── Phase 1: Sub-project scope columns (migration 20260712002) ────────────────
+-- tasks.sub_project_id was pre-existing in live DB (reconciled in migration 001).
+
+alter table tasks
+  add column if not exists sub_project_id uuid references sub_projects(id) on delete set null,
+  add column if not exists scope text not null
+    check (scope in ('lab', 'project', 'personal'))
+    default 'lab';
+
+alter table bookmarks
+  add column if not exists scope text not null
+    check (scope in ('lab', 'project', 'personal'))
+    default 'lab',
+  add column if not exists sub_project_id uuid
+    references sub_projects(id) on delete set null;
+
+-- reminders already has scope ('personal', 'lab'); add FK only.
+alter table reminders
+  add column if not exists sub_project_id uuid
+    references sub_projects(id) on delete set null;

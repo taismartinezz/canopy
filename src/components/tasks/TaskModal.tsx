@@ -46,6 +46,8 @@ export interface TaskModalProps {
   teamMembers?: User[];
   currentUserId?: string;
   projectId?: string;
+  scope?: string;
+  subProjectId?: string | null;
 }
 
 export default function TaskModal({
@@ -57,6 +59,8 @@ export default function TaskModal({
   teamMembers = [],
   currentUserId = "",
   projectId = "",
+  scope = "lab",
+  subProjectId = null,
 }: TaskModalProps) {
   const [title, setTitle]             = useState(task?.title ?? "");
   const [description, setDescription] = useState(task?.description ?? "");
@@ -119,6 +123,8 @@ export default function TaskModal({
         priority,
         due_date: dueDate || null,
         archived: false,
+        scope,
+        sub_project_id: subProjectId ?? null,
       };
       const { data, error: insertError } = await supabase
         .from("tasks")

@@ -14,6 +14,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { LayoutGrid, List, Search, Plus, MoreHorizontal, ChevronDown } from "lucide-react";
 import { formatDate, TASKS as MOCK_TASKS, USERS, getStoredProject } from "@/lib/mock-data";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
+import { useProject } from "@/context/ProjectContext";
 import type { Task, TaskStatus, TaskPriority, User, UserRole } from "@/types";
 import Avatar from "@/components/ui/Avatar";
 import Toast, { showToast } from "@/components/ui/Toast";
@@ -426,6 +427,7 @@ export default function TasksPage() {
   const [filterPriority, setFilterPriority] = useState("all");
   const [activeId, setActiveId] = useState<string | null>(null);
   const [modalState, setModalState] = useState<ModalState>(null);
+  const { activeScope, subProjectId } = useProject();
   const [teamMembers, setTeamMembers] = useState<User[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string>("");
   const [projectId, setProjectId] = useState<string>("");
@@ -483,12 +485,17 @@ export default function TasksPage() {
         }));
       }
 
-      const { data, error } = await supabase
+      let taskQ = supabase
         .from("tasks")
         .select("*, task_assignees(user_id)")
         .eq("project_id", pid)
+        .eq("scope", activeScope === "personal" ? "personal" : activeScope === "project" ? "project" : "lab")
         .or("archived.is.null,archived.eq.false")
         .order("created_at", { ascending: false });
+      if (activeScope === "project" && subProjectId) {
+        taskQ = taskQ.eq("sub_project_id", subProjectId);
+      }
+      const { data, error } = await taskQ;
 
       if (error) console.error("[Tasks] fetch error:", error);
       if (!error && data) {
@@ -511,7 +518,7 @@ export default function TasksPage() {
       }
       setLoading(false);
     });
-  }, []);
+  }, [activeScope, subProjectId]);
 
   // Realtime: reflect task INSERTs/UPDATEs/DELETEs from other users
   useEffect(() => {
@@ -839,6 +846,8 @@ export default function TasksPage() {
           teamMembers={teamMembers}
           currentUserId={currentUserId}
           projectId={projectId}
+          scope={activeScope === "personal" ? "personal" : activeScope === "project" ? "project" : "lab"}
+          subProjectId={activeScope === "project" ? (subProjectId ?? null) : null}
         />
       )}
 

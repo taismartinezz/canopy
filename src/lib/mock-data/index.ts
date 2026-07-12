@@ -663,7 +663,7 @@ export const LITERATURE_ITEMS: LiteratureItem[] = [
   {
     id: "li6",
     projectId: "p1",
-    scope: "my",
+    scope: "personal",
     type: "preprint",
     title: "Digital consent procedures in sensitive research: A mixed-methods evaluation",
     authors: ["Chen, A.", "Okonkwo, B."],

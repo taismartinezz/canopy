@@ -6,7 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard, CheckSquare, BookOpen, BookMarked, Bookmark, Users,
   Bell, ChevronDown, ChevronLeft, ChevronRight, LogOut, User as UserIcon,
-  Menu, X, Settings, CalendarDays, CircleCheck,
+  Menu, X, Settings, CalendarDays, CircleCheck, Plus,
 } from "lucide-react";
 import { computeInitials } from "@/lib/utils";
 import type { User } from "@/types";
@@ -15,6 +15,7 @@ import { useProject } from "@/context/ProjectContext";
 import Toast from "@/components/ui/Toast";
 import Avatar from "@/components/ui/Avatar";
 import CanopyLogo from "@/components/ui/CanopyLogo";
+import CreateProjectModal from "@/components/projects/CreateProjectModal";
 const NAV_ITEMS = [
   { href: "/",            label: "Dashboard",  icon: LayoutDashboard },
   { href: "/tasks",       label: "Tasks",      icon: CheckSquare     },
@@ -309,8 +310,9 @@ function projectInitials(name: string): string {
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { projectId } = useProject();
-  const [navCollapsed, setNavCollapsed] = useState(false);
+  const { projectId, subProjectId, subProjects, activeScope, setActiveSubProject, setActiveScope } = useProject();
+  const [navCollapsed, setNavCollapsed]   = useState(false);
+  const [showCreate, setShowCreate]       = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -548,17 +550,87 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         />
       )}
 
-      {/* ── Layer 1: 40px icon strip — desktop only ── */}
+      {/* ── Layer 1: Slack-style project rail — desktop only ── */}
       <div
-        className="hidden md:flex flex-col items-center pt-3 pb-3 gap-3 shrink-0"
-        style={{ width: 40, backgroundColor: "var(--color-strip)", borderRight: "1px solid var(--color-border)" }}
+        className="hidden md:flex flex-col items-center shrink-0"
+        style={{ width: 52, backgroundColor: "var(--color-strip)", borderRight: "1px solid var(--color-border)" }}
       >
-        <div className="w-8 h-8 flex items-center justify-center mb-1"><CanopyLogo size={28} /></div>
-        <button aria-label={profile?.name ?? "Your profile"} title={profile?.name ?? "Your profile"}>
-          <div className="w-9 h-9 rounded-[10px] flex items-center justify-center" style={{ backgroundColor: "var(--color-navy)", color: "#fff", fontSize: 12, fontWeight: 700 }}>
+        {/* Lab home */}
+        <div className="pt-3 pb-1 flex flex-col items-center">
+          <button
+            onClick={() => { setActiveSubProject(null); setActiveScope("lab"); }}
+            title="Lab home"
+            aria-label="Lab home"
+            className="w-9 h-9 flex items-center justify-center rounded-[10px] transition-colors"
+            style={{ backgroundColor: activeScope === "lab" ? "var(--color-navy)" : "transparent", border: "none", cursor: "pointer" }}
+          >
+            <CanopyLogo size={22} color={activeScope === "lab" ? "#fff" : undefined} />
+          </button>
+        </div>
+
+        <div style={{ width: 28, height: 1, backgroundColor: "var(--color-border)", margin: "4px 0" }} />
+
+        {/* Sub-project icons — scrollable */}
+        <div className="flex-1 flex flex-col items-center py-1 gap-1.5 overflow-y-auto" style={{ scrollbarWidth: "none" }}>
+          {subProjects.map((sp) => {
+            const isActive = activeScope === "project" && subProjectId === sp.id;
+            return (
+              <button
+                key={sp.id}
+                onClick={() => { setActiveSubProject(sp.id); setActiveScope("project"); }}
+                title={sp.name}
+                aria-label={sp.name}
+                aria-current={isActive ? "true" : undefined}
+                className="w-9 h-9 rounded-[10px] flex items-center justify-center shrink-0 transition-colors"
+                style={{
+                  backgroundColor: isActive ? "var(--color-navy)" : "rgba(27,46,75,0.1)",
+                  color: isActive ? "#fff" : "var(--color-navy)",
+                  border: "none",
+                  cursor: "pointer",
+                  fontFamily: "var(--font-roboto)",
+                  fontSize: 11,
+                  fontWeight: 700,
+                  letterSpacing: "0.02em",
+                }}
+              >
+                {sp.name.slice(0, 2).toUpperCase()}
+              </button>
+            );
+          })}
+          {/* Create sub-project */}
+          <button
+            onClick={() => setShowCreate(true)}
+            title="New project"
+            aria-label="New project"
+            className="w-9 h-9 rounded-[10px] flex items-center justify-center shrink-0 transition-colors hover:bg-[rgba(27,46,75,0.08)]"
+            style={{ border: "1.5px dashed var(--color-border)", background: "none", cursor: "pointer", color: "var(--color-secondary)" }}
+          >
+            <Plus size={14} />
+          </button>
+        </div>
+
+        <div style={{ width: 28, height: 1, backgroundColor: "var(--color-border)", margin: "4px 0" }} />
+
+        {/* Personal */}
+        <div className="pb-3 pt-1 flex flex-col items-center">
+          <button
+            onClick={() => { setActiveSubProject(null); setActiveScope("personal"); }}
+            title={profile?.name ?? "Personal workspace"}
+            aria-label="Personal workspace"
+            className="w-9 h-9 rounded-[10px] flex items-center justify-center transition-colors"
+            style={{
+              backgroundColor: activeScope === "personal" ? "var(--color-navy)" : "rgba(27,46,75,0.1)",
+              color: activeScope === "personal" ? "#fff" : "var(--color-navy)",
+              border: activeScope === "personal" ? "none" : "2px solid var(--color-border)",
+              cursor: "pointer",
+              fontFamily: "var(--font-roboto)",
+              fontSize: 11,
+              fontWeight: 700,
+            }}
+          >
             {computeInitials(profile?.name ?? "") || (profile?.avatar_initials ?? "??")}
-          </div>
-        </button>
+          </button>
+        </div>
       </div>
 
       {/* ── Layer 2: Nav sidebar — animates between 52px rail and 210px full ── */}
@@ -716,6 +788,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       </div>
     </div>
     <Toast />
+    {showCreate && <CreateProjectModal onClose={() => setShowCreate(false)} />}
     </>
   );
 }
