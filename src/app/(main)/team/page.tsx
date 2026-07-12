@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { CURRENT_USER_ID, TEAM_MEMBERS, formatRelativeTime, getStoredUser, getStoredProject } from "@/lib/mock-data";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import type { TeamMember, TaskStatus } from "@/types";
@@ -181,6 +181,11 @@ function MemberCard({ member, onClick, isCurrentUser }: { member: TeamMember; on
 function WeeklyUpdateBar({ current, onSave }: { current?: string; onSave: (v: string) => void }) {
   const [editing, setEditing] = useState(false);
   const [value, setValue]     = useState(current ?? "");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (editing) inputRef.current?.focus();
+  }, [editing]);
 
   if (!editing) {
     return (
@@ -199,7 +204,7 @@ function WeeklyUpdateBar({ current, onSave }: { current?: string; onSave: (v: st
   return (
     <div className="flex items-center gap-3 px-4 py-3 mb-6 rounded-lg" style={{ backgroundColor: "var(--color-surface)", border: "1px solid var(--color-navy)", borderRadius: 8 }}>
       <input
-        autoFocus value={value} onChange={(e) => setValue(e.target.value)}
+        ref={inputRef} value={value} onChange={(e) => setValue(e.target.value)}
         placeholder="What are you working on this week?"
         style={{ flex: 1, fontSize: 13, color: "var(--color-body)", fontFamily: "var(--font-roboto)", backgroundColor: "transparent", border: "none", outline: "none" }}
         onKeyDown={(e) => {

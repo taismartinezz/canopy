@@ -454,13 +454,12 @@ export default function TaskDetailPanel({
               <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                 <button
                   ref={dueDateBtnRef}
-                  onClick={() => {
-                    if (!dueDateBtnRef.current) return;
-                    const r = dueDateBtnRef.current.getBoundingClientRect();
+                  onClick={(e) => {
+                    const r = e.currentTarget.getBoundingClientRect();
                     setCalPos({ top: r.bottom + 6, left: r.left });
                     setShowCal(v => !v);
                   }}
-                  style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 13, color: localDueDate ? "var(--color-body)" : "var(--color-secondary)", backgroundColor: "transparent", border: "1px solid transparent", borderRadius: 4, padding: "2px 4px", cursor: "pointer", fontFamily: "var(--font-roboto)" }}
+                  style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 13, color: localDueDate ? "var(--color-body)" : "var(--color-secondary)", backgroundColor: "transparent", border: "1px solid transparent", borderRadius: 4, padding: "2px 4px", cursor: "pointer", fontFamily: "var(--font-roboto)", userSelect: "none" }}
                   onMouseEnter={e => (e.currentTarget.style.borderColor = "var(--color-border)")}
                   onMouseLeave={e => (e.currentTarget.style.borderColor = "transparent")}
                 >

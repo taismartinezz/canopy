@@ -20,6 +20,9 @@ export function showToast(message: string, type: ToastType = "info") {
   setTimeout(() => {
     _set?.((prev) => prev.filter((t) => t.id !== id));
   }, 3000);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("canopy:toast", { detail: { id, message, type } }));
+  }
 }
 
 const BG: Record<ToastType, string> = {

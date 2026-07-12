@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useMemo } from "react";
+import { useProject } from "@/context/ProjectContext";
 import {
   CHECKIN_QUESTIONS, CHECKIN_LABELS, CHECKIN_COLORS,
 } from "@/lib/mock-data";
@@ -341,12 +342,27 @@ function CheckinCard({ question, response, onScore }: {
 
 // ── Support modal ─────────────────────────────────────────────────────────────
 
-function SupportModal({ onClose }: { onClose: () => void }) {
+function SupportModal({ onClose, userId, projectId }: { onClose: () => void; userId: string; projectId: string | null }) {
+  const [checkinState, setCheckinState] = useState<'idle' | 'loading' | 'sent' | 'error'>('idle');
+
   useEffect(() => {
     function onKey(e: KeyboardEvent) { if (e.key === "Escape") onClose(); }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
+
+  async function requestCheckin() {
+    if (!projectId || checkinState === 'loading' || checkinState === 'sent') return;
+    setCheckinState('loading');
+    const { error } = await supabase.from('reminders').insert({
+      user_id: userId,
+      project_id: projectId,
+      scope: 'lab',
+      title: 'Anonymous check-in requested',
+      priority: 'high',
+    });
+    setCheckinState(error ? 'error' : 'sent');
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in" style={{ backgroundColor: "rgba(27,46,75,0.4)" }} onClick={onClose}>
@@ -359,12 +375,16 @@ function SupportModal({ onClose }: { onClose: () => void }) {
           <button onClick={onClose} className="flex items-center justify-center rounded-lg hover:bg-[rgba(27,46,75,0.06)]" style={{ width: 44, height: 44 }} aria-label="Close"><X size={16} color="var(--color-secondary)" /></button>
         </div>
         <div className="space-y-3">
-          <button className="w-full text-left px-4 py-3.5 rounded-lg" style={{ backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)", borderRadius: 10 }}>
+          <button onClick={requestCheckin} disabled={checkinState === 'loading' || checkinState === 'sent'} className="w-full text-left px-4 py-3.5 rounded-lg" style={{ backgroundColor: checkinState === 'sent' ? "rgba(34,197,94,0.08)" : "var(--color-canvas)", border: `1px solid ${checkinState === 'sent' ? "#22c55e" : checkinState === 'error' ? "var(--color-error)" : "var(--color-border)"}`, borderRadius: 10, cursor: checkinState === 'sent' ? "default" : "pointer" }}>
             <div className="flex items-start gap-3">
-              <Users size={18} color="var(--color-navy)" style={{ marginTop: 2, flexShrink: 0 }} />
+              {checkinState === 'loading' ? <Loader2 size={18} color="var(--color-navy)" style={{ marginTop: 2, flexShrink: 0 }} className="animate-spin" /> : <Users size={18} color={checkinState === 'sent' ? "#22c55e" : "var(--color-navy)"} style={{ marginTop: 2, flexShrink: 0 }} />}
               <div>
-                <p style={{ fontSize: 13, fontWeight: 600, color: "var(--color-body)" }}>Request a check-in with your supervisor</p>
-                <p style={{ fontSize: 12, color: "var(--color-secondary)", marginTop: 3, lineHeight: 1.4 }}>Sends an anonymous notification to your PI. Your identity is never shared.</p>
+                <p style={{ fontSize: 13, fontWeight: 600, color: checkinState === 'sent' ? "#22c55e" : checkinState === 'error' ? "var(--color-error)" : "var(--color-body)" }}>
+                  {checkinState === 'sent' ? 'Check-in request sent' : checkinState === 'error' ? 'Failed to send — tap to retry' : 'Request a check-in with your supervisor'}
+                </p>
+                <p style={{ fontSize: 12, color: "var(--color-secondary)", marginTop: 3, lineHeight: 1.4 }}>
+                  {checkinState === 'sent' ? 'Your supervisor will be notified anonymously.' : 'Sends an anonymous notification to your PI. Your identity is never shared.'}
+                </p>
               </div>
             </div>
           </button>
@@ -555,6 +575,7 @@ function EntryListItem({ entry, selected, onClick }: { entry: JournalEntry; sele
 
 export default function JournalPage() {
   const todayISO = getTodayISO();
+  const { projectId } = useProject();
 
   const [entries, setEntries]               = useState<JournalEntry[]>([]);
   const [loadingEntries, setLoadingEntries] = useState(true);
@@ -711,6 +732,7 @@ export default function JournalPage() {
     };
 
     setEntries((prev) => [newEntry, ...prev]);
+    setAddedPrompts((prev) => prev.filter((p) => p.response.trim()));
     localStorage.removeItem(DRAFT_KEY);
 
     setSaveMsg({ text: "✓ Entry saved.", color: "var(--color-success)" });
@@ -1010,7 +1032,7 @@ export default function JournalPage() {
         )}
       </div>
 
-      {supportOpen      && <SupportModal onClose={() => setSupportOpen(false)} />}
+      {supportOpen      && <SupportModal onClose={() => setSupportOpen(false)} userId={authUserId} projectId={projectId} />}
       {discardModalOpen && <DiscardDraftModal onKeep={() => setDiscardModalOpen(false)} onDiscard={resetToNew} />}
     </div>
   );

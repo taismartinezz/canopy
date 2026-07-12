@@ -1077,23 +1077,42 @@ function AssignReadingForm({ itemId, projectId, assignedBy, onAssigned }: {
   const [error, setError]                   = useState("");
 
   async function handleAssign() {
-    if (!assigneeId.trim()) return;
+    const raw = assigneeId.trim();
+    if (!raw) return;
     setSaving(true);
     setError("");
+
+    if (raw.includes("@")) {
+      setError("Please enter the user's ID (UUID), not their email. You can find it in team settings.");
+      setSaving(false);
+      return;
+    }
+
+    const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRe.test(raw)) {
+      setError("Invalid format. Please enter a valid user ID (UUID).");
+      setSaving(false);
+      return;
+    }
+
     const newA: LitAssignedReading = {
       id: crypto.randomUUID(), itemId, projectId, assignedBy,
-      assigneeId: assigneeId.trim(), dueDate: dueDate || undefined,
+      assigneeId: raw, dueDate: dueDate || undefined,
       note: note.trim() || undefined, readingStatus: initialStatus,
       createdAt: new Date().toISOString(),
     };
     const { error: insertErr } = await supabase.from("lit_assigned_readings").insert({
       id: newA.id, item_id: itemId, project_id: projectId, assigned_by: assignedBy,
-      assignee_id: assigneeId.trim(), due_date: dueDate || null, note: note.trim() || null,
+      assignee_id: raw, due_date: dueDate || null, note: note.trim() || null,
       reading_status: initialStatus,
     });
     if (insertErr) {
       console.error("[Assign reading]", insertErr);
-      setError(`Failed to assign: ${insertErr.message}`);
+      const friendly =
+        insertErr.code === "23503" ? "User not found. Make sure they've joined the project." :
+        insertErr.code === "23505" ? "This reading is already assigned to that user." :
+        "Failed to assign. Please try again.";
+      setError(friendly);
       setSaving(false);
       return;
     }
@@ -1104,7 +1123,7 @@ function AssignReadingForm({ itemId, projectId, assignedBy, onAssigned }: {
     <div className="mt-2 p-3 rounded-lg" style={{ backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)" }}>
       <p style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-secondary)", marginBottom: 8 }}>Assign to a team member</p>
       <div className="space-y-2">
-        <input value={assigneeId} onChange={(e) => { setAssigneeId(e.target.value); setError(""); }} placeholder="User ID or email"
+        <input value={assigneeId} onChange={(e) => { setAssigneeId(e.target.value); setError(""); }} placeholder="User ID (UUID)"
           style={{ width: "100%", height: 34, border: "1px solid var(--color-border)", borderRadius: 6, padding: "0 10px", fontSize: 12, fontFamily: "var(--font-roboto)", outline: "none", boxSizing: "border-box" }}
           onFocus={(e) => { e.currentTarget.style.borderColor = "var(--color-navy)"; }} onBlur={(e) => { e.currentTarget.style.borderColor = "var(--color-border)"; }} />
         <div className="flex gap-2">

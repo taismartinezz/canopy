@@ -408,9 +408,24 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       if (event === "SIGNED_OUT") router.replace("/login");
     });
 
+    function onToastEvent(e: Event) {
+      const { id, message, type } = (e as CustomEvent<{ id: string; message: string; type: string }>).detail;
+      const notif: SupabaseNotif = {
+        id,
+        type: type === "error" ? "error" : "info",
+        title: message,
+        read: false,
+        created_at: new Date().toISOString(),
+      };
+      setNotifications((prev) => [notif, ...prev]);
+      setUnreadCount((prev) => prev + 1);
+    }
+    window.addEventListener("canopy:toast", onToastEvent);
+
     return () => {
       subscription.unsubscribe();
       notifChannel?.unsubscribe();
+      window.removeEventListener("canopy:toast", onToastEvent);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
