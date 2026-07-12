@@ -219,9 +219,11 @@ export interface LitAssignedReading {
   assigneeId: string;
   dueDate?: string;      // ISO date
   note?: string;
-  readingStatus: AssignmentReadingStatus;
+  readingStatus: AssignmentReadingStatus | null; // null = masked server-side (peer view of hidden row)
   createdAt: string;
   statusHidden?: boolean; // when true, peers see "—" instead of status; PI always sees real status
+  aggDone?: number;       // server-computed total done count (includes hidden entries)
+  aggTotal?: number;      // server-computed total assignee count
 }
 
 export interface ZoteroCredentials {

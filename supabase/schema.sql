@@ -560,3 +560,111 @@ create policy if not exists "project members can manage project libraries" on pr
 -- Link literature items to a named project library (optional, null = unassigned)
 alter table literature_items
   add column if not exists project_library_id uuid references project_libraries(id) on delete set null;
+
+-- ── RPC: email → user_id lookup ───────────────────────────────────────────────
+-- SECURITY DEFINER so it can read auth.users (email lives there, not in user_profiles).
+-- Restricted to team members of the given project so users can't enumerate all emails.
+create or replace function find_team_member_id_by_email(p_project_id uuid, p_email text)
+returns uuid
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select tm.user_id
+  from   team_members tm
+  join   auth.users u on u.id = tm.user_id
+  where  tm.project_id = p_project_id
+    and  lower(u.email) = lower(trim(p_email))
+  limit 1;
+$$;
+
+-- ── RPC: server-enforced status masking for assigned readings ─────────────────
+-- Peers receive reading_status = NULL and status_hidden = NULL for hidden rows,
+-- so the masked values are never sent over the wire.
+-- agg_done / agg_total carry the true aggregate (including hidden entries) so
+-- the client can display "X of Y completed" without leaking individual statuses.
+create or replace function get_item_assignments(p_item_id uuid)
+returns table (
+  id             uuid,
+  item_id        uuid,
+  project_id     uuid,
+  assigned_by    uuid,
+  assignee_id    uuid,
+  due_date       date,
+  note           text,
+  reading_status text,
+  status_hidden  boolean,
+  created_at     timestamptz,
+  agg_done       bigint,
+  agg_total      bigint
+)
+language plpgsql
+security invoker
+stable
+as $$
+declare
+  v_project uuid;
+  v_is_pi   boolean;
+  v_done    bigint;
+  v_total   bigint;
+begin
+  -- Resolve project_id from any assignment row for this item
+  select lar.project_id into v_project
+  from   lit_assigned_readings lar
+  where  lar.item_id = p_item_id
+  limit  1;
+
+  -- Guard: return nothing if no assignments or caller is not a project member
+  if v_project is null or not exists (
+    select 1 from team_members tm
+    where  tm.project_id = v_project and tm.user_id = auth.uid()
+  ) then
+    return;
+  end if;
+
+  -- Is the caller a PI in this project?
+  select exists (
+    select 1 from user_profiles up
+    join   team_members tm on tm.user_id = up.id
+    where  tm.project_id = v_project
+      and  up.id = auth.uid()
+      and  up.role = 'pi'
+  ) into v_is_pi;
+
+  -- True aggregate counts (all rows, regardless of status_hidden)
+  select count(*) filter (where reading_status = 'done'), count(*)
+  into   v_done, v_total
+  from   lit_assigned_readings
+  where  item_id = p_item_id;
+
+  return query
+  select
+    lar.id,
+    lar.item_id,
+    lar.project_id,
+    lar.assigned_by,
+    lar.assignee_id,
+    lar.due_date,
+    lar.note,
+    -- mask reading_status for rows where status is hidden from this caller
+    case
+      when not lar.status_hidden
+        or  lar.assignee_id = auth.uid()
+        or  v_is_pi
+      then lar.reading_status
+      else null
+    end,
+    -- mask the flag itself: only the assignee and PI need to see it
+    case
+      when lar.assignee_id = auth.uid() or v_is_pi
+      then lar.status_hidden
+      else null
+    end,
+    lar.created_at,
+    v_done,
+    v_total
+  from lit_assigned_readings lar
+  where lar.item_id = p_item_id;
+end;
+$$;
