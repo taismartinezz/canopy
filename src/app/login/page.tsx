@@ -194,6 +194,52 @@ function InstitutionModal({ onClose }: { onClose: () => void }) {
   );
 }
 
+// ── Project invite resolution ─────────────────────────────────────────────────
+// Called after any successful sign-in. Reads the pending token from localStorage,
+// looks it up in sub_project_invite_codes, and if email matches creates the
+// sub_project_members row WITHOUT adding a team_members row (external access only).
+
+async function resolveProjectInvite(userId: string, userEmail: string) {
+  if (typeof window === "undefined") return;
+  const token = localStorage.getItem("pendingProjectInviteToken");
+  if (!token) return;
+
+  const { data: invite } = await supabase
+    .from("sub_project_invite_codes")
+    .select("id, sub_project_id, invited_email, invited_by, status")
+    .eq("token", token)
+    .eq("status", "pending")
+    .maybeSingle();
+
+  if (!invite || invite.invited_email.toLowerCase() !== userEmail.toLowerCase()) {
+    localStorage.removeItem("pendingProjectInviteToken");
+    return;
+  }
+
+  // Insert sub_project membership (ON CONFLICT DO NOTHING — idempotent)
+  await supabase.from("sub_project_members").upsert(
+    {
+      sub_project_id: invite.sub_project_id as string,
+      user_id: userId,
+      joined_at: new Date().toISOString(),
+      invited_by: invite.invited_by as string,
+    },
+    { onConflict: "sub_project_id,user_id", ignoreDuplicates: true }
+  );
+
+  // Mark invite accepted
+  await supabase.from("sub_project_invite_codes").update({
+    status: "accepted",
+    used_by: userId,
+    used_at: new Date().toISOString(),
+  }).eq("id", invite.id as string);
+
+  // Land user in this project's scope on next load
+  localStorage.setItem("canopy_active_sub_project", invite.sub_project_id as string);
+  localStorage.setItem("canopy_scope_mode", "project");
+  localStorage.removeItem("pendingProjectInviteToken");
+}
+
 // ── Login page ────────────────────────────────────────────────────────────────
 
 export default function LoginPage() {
@@ -229,9 +275,11 @@ export default function LoginPage() {
     if (hasFetched.current) return;
     hasFetched.current = true;
 
-    // Capture invite code from URL before any redirect
+    // Capture lab and project invite codes from URL before any redirect
     const inviteParam = new URLSearchParams(window.location.search).get("invite");
     if (inviteParam) localStorage.setItem("pendingInviteCode", inviteParam);
+    const projectInviteParam = new URLSearchParams(window.location.search).get("project_invite");
+    if (projectInviteParam) localStorage.setItem("pendingProjectInviteToken", projectInviteParam);
 
     if (!isSupabaseConfigured) {
       if (localStorage.getItem("canopy_authed") === "true") router.replace("/");
@@ -243,13 +291,23 @@ export default function LoginPage() {
       try {
         const { data: member, error: memberError } = await supabase
           .from("team_members").select("id").eq("user_id", session.user.id).maybeSingle();
-        if (memberError) {
-          setChecking(false);
-          return;
+        if (memberError) { setChecking(false); return; }
+        if (member) {
+          // Normal lab member — resolve any pending project invite then go home
+          await resolveProjectInvite(session.user.id, session.user.email ?? "");
+          router.replace("/");
+        } else {
+          // No lab membership — check if they have a profile (external member or returning user)
+          const { data: profile } = await supabase
+            .from("user_profiles").select("id").eq("id", session.user.id).maybeSingle();
+          if (profile) {
+            await resolveProjectInvite(session.user.id, session.user.email ?? "");
+            router.replace("/");
+          } else {
+            router.replace("/onboarding");
+          }
         }
-        router.replace(member ? "/" : "/onboarding");
       } catch {
-        // On query error stay on /login — do not bounce to /onboarding
         setChecking(false);
       }
     });
@@ -292,11 +350,20 @@ export default function LoginPage() {
 
       const { data: member, error: memberError } = await supabase
         .from("team_members").select("id").eq("user_id", user.id).maybeSingle();
-      if (memberError) {
-        setLoading(false);
-        return;
+      if (memberError) { setLoading(false); return; }
+      if (member) {
+        await resolveProjectInvite(user.id, user.email ?? "");
+        router.push("/");
+      } else {
+        const { data: profile } = await supabase
+          .from("user_profiles").select("id").eq("id", user.id).maybeSingle();
+        if (profile) {
+          await resolveProjectInvite(user.id, user.email ?? "");
+          router.push("/");
+        } else {
+          router.push("/onboarding");
+        }
       }
-      router.push(member ? "/" : "/onboarding");
     } catch (err: unknown) {
       setFormError(err instanceof Error ? err.message : "An unexpected error occurred.");
       setLoading(false);

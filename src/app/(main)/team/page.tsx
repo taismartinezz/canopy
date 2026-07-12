@@ -6,7 +6,8 @@ import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { useProject } from "@/context/ProjectContext";
 import type { TeamMember, TaskStatus } from "@/types";
 import Avatar from "@/components/ui/Avatar";
-import { Video, X, Edit3, Check, Minus } from "lucide-react";
+import { Video, X, Edit3, Check, Minus, Users } from "lucide-react";
+import ProjectMembersModal from "@/components/projects/ProjectMembersModal";
 
 // ── Status labels ─────────────────────────────────────────────────────────────
 
@@ -224,7 +225,7 @@ function WeeklyUpdateBar({ current, onSave }: { current?: string; onSave: (v: st
 // ── Team page ─────────────────────────────────────────────────────────────────
 
 export default function TeamPage() {
-  const { activeScope, subProjectId } = useProject();
+  const { activeScope, subProjectId, subProjects, projectId } = useProject();
   const [selectedMember, setSelectedMember] = useState<TeamMember | null>(null);
   const [meetingModalOpen, setMeetingModalOpen] = useState(false);
   const [weeklyUpdate, setWeeklyUpdate] = useState<string | undefined>(undefined);
@@ -236,6 +237,7 @@ export default function TeamPage() {
     isSupabaseConfigured ? null : CURRENT_USER_ID
   );
   const [subProjectMemberIds, setSubProjectMemberIds] = useState<Set<string> | null>(null);
+  const [showMembersModal, setShowMembersModal] = useState(false);
   const closeMemberPanel = useCallback(() => setSelectedMember(null), []);
   const closeMeetingModal = useCallback(() => setMeetingModalOpen(false), []);
 
@@ -377,13 +379,35 @@ export default function TeamPage() {
               {visibleTeam.length} member{visibleTeam.length !== 1 ? "s" : ""}{storedProjectName ? ` · ${storedProjectName}` : ""}
             </p>
           </div>
-          <button
-            onClick={() => setMeetingModalOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg transition-opacity hover:opacity-90"
-            style={{ backgroundColor: "var(--color-navy)", color: "#fff", fontSize: 12, fontWeight: 700, border: "none", borderRadius: 7, cursor: "pointer", minHeight: 44 }}
-          >
-            <Video size={14} /> Start Meeting
-          </button>
+          <div className="flex items-center gap-2">
+            {/* Manage project members — visible to PI or project creator when in project scope */}
+            {activeScope === "project" && subProjectId && projectId && (() => {
+              const activeSp = subProjects.find((sp) => sp.id === subProjectId);
+              const canManage = isPi || (activeSp?.createdBy != null && activeSp.createdBy === currentUserId);
+              if (!canManage) return null;
+              return (
+                <button
+                  onClick={() => setShowMembersModal(true)}
+                  className="flex items-center gap-2 transition-opacity hover:opacity-80"
+                  style={{
+                    border: "1px solid var(--color-border)", borderRadius: 7,
+                    backgroundColor: "var(--color-surface)", color: "var(--color-navy)",
+                    fontSize: 12, fontWeight: 600, cursor: "pointer", minHeight: 44,
+                    padding: "0 14px",
+                  }}
+                >
+                  <Users size={13} /> Manage Members
+                </button>
+              );
+            })()}
+            <button
+              onClick={() => setMeetingModalOpen(true)}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg transition-opacity hover:opacity-90"
+              style={{ backgroundColor: "var(--color-navy)", color: "#fff", fontSize: 12, fontWeight: 700, border: "none", borderRadius: 7, cursor: "pointer", minHeight: 44 }}
+            >
+              <Video size={14} /> Start Meeting
+            </button>
+          </div>
         </div>
 
         <WeeklyUpdateBar current={weeklyUpdate} onSave={setWeeklyUpdate} />
@@ -421,6 +445,20 @@ export default function TeamPage() {
 
       {selectedMember && <MemberPanel member={selectedMember} onClose={closeMemberPanel} />}
       {meetingModalOpen && <MeetingModal onClose={closeMeetingModal} />}
+      {showMembersModal && activeScope === "project" && subProjectId && projectId && (() => {
+        const activeSp = subProjects.find((sp) => sp.id === subProjectId);
+        const canManage = isPi || (activeSp?.createdBy != null && activeSp.createdBy === currentUserId);
+        return (
+          <ProjectMembersModal
+            subProjectId={subProjectId}
+            subProjectName={activeSp?.name ?? "Project"}
+            labProjectId={projectId}
+            currentUserId={currentUserId ?? ""}
+            canManage={canManage}
+            onClose={() => setShowMembersModal(false)}
+          />
+        );
+      })()}
     </div>
   );
 }

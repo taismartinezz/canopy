@@ -671,6 +671,39 @@ export default function OnboardingPage() {
         setSubmitting(false);
         return;
       }
+
+      // After account is created, resolve any pending project invite.
+      // External invitees get sub_project_members access only — no team_members row added here.
+      const pendingToken = localStorage.getItem("pendingProjectInviteToken");
+      if (pendingToken) {
+        const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
+        if (user) {
+          const { data: invite } = await supabase
+            .from("sub_project_invite_codes")
+            .select("id, sub_project_id, invited_email, invited_by, status")
+            .eq("token", pendingToken)
+            .eq("status", "pending")
+            .maybeSingle();
+          if (invite && (invite.invited_email as string).toLowerCase() === (user.email ?? "").toLowerCase()) {
+            await supabase.from("sub_project_members").upsert(
+              {
+                sub_project_id: invite.sub_project_id as string,
+                user_id: user.id,
+                joined_at: new Date().toISOString(),
+                invited_by: invite.invited_by as string,
+              },
+              { onConflict: "sub_project_id,user_id", ignoreDuplicates: true }
+            );
+            await supabase.from("sub_project_invite_codes").update({
+              status: "accepted", used_by: user.id, used_at: new Date().toISOString(),
+            }).eq("id", invite.id as string);
+            localStorage.setItem("canopy_active_sub_project", invite.sub_project_id as string);
+            localStorage.setItem("canopy_scope_mode", "project");
+          }
+          localStorage.removeItem("pendingProjectInviteToken");
+        }
+      }
     }
 
     router.push("/profile");

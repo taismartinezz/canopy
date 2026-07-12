@@ -57,6 +57,20 @@ create policy "same-project members can read profiles" on user_profiles
     )
   );
 
+-- Co-members of a shared sub_project can read each other's profiles.
+-- Does NOT expose the full lab roster to external members — only profiles of
+-- users who share at least one sub_project with the caller.
+create policy "sub-project co-members can read profiles" on user_profiles
+  for select using (
+    exists (
+      select 1
+      from   sub_project_members a
+      join   sub_project_members b on b.sub_project_id = a.sub_project_id
+      where  a.user_id = auth.uid()
+        and  b.user_id = user_profiles.id
+    )
+  );
+
 create policy "user can upsert own profile" on user_profiles
   for all using (auth.uid() = id) with check (auth.uid() = id);
 
@@ -107,9 +121,15 @@ alter table sub_projects enable row level security;
 
 create policy "lab members can read sub_projects" on sub_projects
   for select using (
+    -- lab members see all sub_projects in their lab
     exists (
       select 1 from team_members tm
       where tm.project_id = sub_projects.project_id and tm.user_id = auth.uid()
+    )
+    -- external member sees only the sub_projects they belong to
+    or exists (
+      select 1 from sub_project_members spm
+      where spm.sub_project_id = sub_projects.id and spm.user_id = auth.uid()
     )
   );
 
@@ -128,8 +148,10 @@ create policy "creator can delete sub_projects" on sub_projects
   for delete using (created_by = auth.uid());
 
 create table if not exists sub_project_members (
-  sub_project_id uuid not null references sub_projects(id) on delete cascade,
-  user_id        uuid not null references user_profiles(id) on delete cascade,
+  sub_project_id uuid        not null references sub_projects(id) on delete cascade,
+  user_id        uuid        not null references user_profiles(id) on delete cascade,
+  joined_at      timestamptz not null default now(),    -- added migration 004
+  invited_by     uuid        references auth.users(id) on delete set null, -- added migration 004
   primary key (sub_project_id, user_id)
 );
 
@@ -137,26 +159,53 @@ alter table sub_project_members enable row level security;
 
 create policy "lab members can read sub_project_members" on sub_project_members
   for select using (
+    -- lab members see all membership rows for their lab's sub_projects
     exists (
       select 1 from sub_projects sp
       join team_members tm on tm.project_id = sp.project_id
       where sp.id = sub_project_members.sub_project_id and tm.user_id = auth.uid()
     )
+    -- any member (including external) can read their own row
+    or user_id = auth.uid()
   );
 
+-- Self-insert and self-delete (accepting invites / leaving a project)
 create policy "lab members can manage own sub_project membership" on sub_project_members
   for all using (user_id = auth.uid()) with check (user_id = auth.uid());
+
+-- PI (projects.owner_id) or sub_project creator can add any user_id
+create policy "privileged can insert sub_project_members" on sub_project_members
+  for insert with check (
+    exists (
+      select 1 from sub_projects sp
+      join projects p on p.id = sp.project_id
+      where sp.id = sub_project_members.sub_project_id
+        and (p.owner_id = auth.uid() or sp.created_by = auth.uid())
+    )
+  );
+
+-- PI or sub_project creator can remove any member
+create policy "privileged can delete sub_project_members" on sub_project_members
+  for delete using (
+    exists (
+      select 1 from sub_projects sp
+      join projects p on p.id = sp.project_id
+      where sp.id = sub_project_members.sub_project_id
+        and (p.owner_id = auth.uid() or sp.created_by = auth.uid())
+    )
+  );
 
 -- ── Invite Codes ──────────────────────────────────────────────────────────────
 
 create table if not exists invite_codes (
-  id          uuid primary key default gen_random_uuid(),
-  code        text not null unique,
-  project_id  uuid not null references projects(id) on delete cascade,
-  created_by  uuid not null references auth.users(id),
-  used_by     uuid references auth.users(id),
-  used_at     timestamptz,
-  created_at  timestamptz not null default now()
+  id            uuid primary key default gen_random_uuid(),
+  code          text not null unique,
+  project_id    uuid not null references projects(id) on delete cascade,
+  created_by    uuid not null references auth.users(id),
+  used_by       uuid references auth.users(id),
+  used_at       timestamptz,
+  invited_email text,                -- added migration 004 (existed in live DB, drift fix)
+  created_at    timestamptz not null default now()
 );
 
 alter table invite_codes enable row level security;
@@ -169,6 +218,36 @@ create policy "pi can insert invite code" on invite_codes
 
 create policy "user can claim unused code" on invite_codes
   for update using (used_by is null) with check (auth.uid() = used_by);
+
+-- ── Sub-project Invite Codes ──────────────────────────────────────────────────
+-- Mirrors invite_codes but scoped to a sub_project. Used for project-level
+-- invites by email, supporting external (non-lab) users.
+
+create table if not exists sub_project_invite_codes (
+  id             uuid        primary key default gen_random_uuid(),
+  token          text        not null unique,
+  sub_project_id uuid        not null references sub_projects(id) on delete cascade,
+  invited_email  text        not null,
+  invited_by     uuid        not null references auth.users(id),
+  status         text        not null check (status in ('pending','accepted','expired')) default 'pending',
+  used_by        uuid        references auth.users(id),
+  used_at        timestamptz,
+  created_at     timestamptz not null default now()
+);
+
+alter table sub_project_invite_codes enable row level security;
+
+create policy "anyone can look up a project invite" on sub_project_invite_codes
+  for select using (true);
+
+create policy "inviter can insert project invite" on sub_project_invite_codes
+  for insert with check (auth.uid() = invited_by);
+
+create policy "user can claim pending project invite" on sub_project_invite_codes
+  for update using (status = 'pending') with check (auth.uid() = used_by);
+
+create policy "inviter can update own project invite" on sub_project_invite_codes
+  for update using (auth.uid() = invited_by);
 
 -- ── Tasks ─────────────────────────────────────────────────────────────────────
 
@@ -193,13 +272,34 @@ alter table tasks enable row level security;
 
 create policy "project members can read tasks" on tasks
   for select using (
+    -- existing: lab members read all tasks in their lab project
     exists (select 1 from team_members tm where tm.project_id = tasks.project_id and tm.user_id = auth.uid())
+    -- new: external member reads project-scoped tasks in their sub_project only
+    or (
+      tasks.scope = 'project'
+      and tasks.sub_project_id is not null
+      and exists (
+        select 1 from sub_project_members spm
+        where spm.sub_project_id = tasks.sub_project_id and spm.user_id = auth.uid()
+      )
+    )
   );
 
 create policy "project members can insert tasks" on tasks
   for insert with check (
-    auth.uid() = created_by and
-    exists (select 1 from team_members tm where tm.project_id = tasks.project_id and tm.user_id = auth.uid())
+    auth.uid() = created_by and (
+      -- existing
+      exists (select 1 from team_members tm where tm.project_id = tasks.project_id and tm.user_id = auth.uid())
+      -- new
+      or (
+        tasks.scope = 'project'
+        and tasks.sub_project_id is not null
+        and exists (
+          select 1 from sub_project_members spm
+          where spm.sub_project_id = tasks.sub_project_id and spm.user_id = auth.uid()
+        )
+      )
+    )
   );
 
 create policy "project members can update tasks" on tasks
@@ -285,11 +385,29 @@ alter table literature_items enable row level security;
 create policy "project members can read literature" on literature_items
   for select using (
     exists (select 1 from team_members tm where tm.project_id = literature_items.project_id and tm.user_id = auth.uid())
+    or
+    (
+      literature_items.sub_project_id is not null
+      and exists (
+        select 1 from sub_project_members spm
+        where spm.sub_project_id = literature_items.sub_project_id
+          and spm.user_id = auth.uid()
+      )
+    )
   );
 
 create policy "project members can manage literature" on literature_items
   for all using (
     exists (select 1 from team_members tm where tm.project_id = literature_items.project_id and tm.user_id = auth.uid())
+    or
+    (
+      literature_items.sub_project_id is not null
+      and exists (
+        select 1 from sub_project_members spm
+        where spm.sub_project_id = literature_items.sub_project_id
+          and spm.user_id = auth.uid()
+      )
+    )
   ) with check (
     auth.uid() = added_by
   );
@@ -375,16 +493,38 @@ alter table schedule_events enable row level security;
 
 create policy "members can read lab events and own personal events" on schedule_events
   for select using (
+    -- existing: lab scope — lab members only
     (scope = 'lab' and exists (
       select 1 from team_members tm where tm.project_id = schedule_events.project_id and tm.user_id = auth.uid()
     ))
+    -- existing: personal scope — creator only
     or (scope = 'personal' and auth.uid() = created_by)
+    -- new: project scope — sub_project members (including external)
+    or (
+      scope = 'project'
+      and schedule_events.sub_project_id is not null
+      and exists (
+        select 1 from sub_project_members spm
+        where spm.sub_project_id = schedule_events.sub_project_id and spm.user_id = auth.uid()
+      )
+    )
   );
 
 create policy "project members can insert events" on schedule_events
   for insert with check (
-    auth.uid() = created_by and
-    exists (select 1 from team_members tm where tm.project_id = schedule_events.project_id and tm.user_id = auth.uid())
+    auth.uid() = created_by and (
+      -- existing
+      exists (select 1 from team_members tm where tm.project_id = schedule_events.project_id and tm.user_id = auth.uid())
+      -- new
+      or (
+        schedule_events.scope = 'project'
+        and schedule_events.sub_project_id is not null
+        and exists (
+          select 1 from sub_project_members spm
+          where spm.sub_project_id = schedule_events.sub_project_id and spm.user_id = auth.uid()
+        )
+      )
+    )
   );
 
 create policy "creator can delete own events" on schedule_events
@@ -414,13 +554,25 @@ create table if not exists reminders (
 alter table reminders enable row level security;
 
 -- Personal: own only. Lab: all project members can read + mark done; only creator can delete.
+-- Project: sub_project members only (including external members).
 create policy "reminders select" on reminders
   for select using (
+    -- own reminders (personal scope)
     auth.uid() = user_id
+    -- lab-scoped reminders visible to all lab members
     or (scope = 'lab' and exists (
       select 1 from team_members tm
       where tm.project_id = reminders.project_id and tm.user_id = auth.uid()
     ))
+    -- project-scoped reminders visible to sub_project members only
+    or (
+      scope = 'project'
+      and reminders.sub_project_id is not null
+      and exists (
+        select 1 from sub_project_members spm
+        where spm.sub_project_id = reminders.sub_project_id and spm.user_id = auth.uid()
+      )
+    )
   );
 
 create policy "reminders insert" on reminders
@@ -747,17 +899,37 @@ alter table bookmarks enable row level security;
 
 create policy "project members can read bookmarks" on bookmarks
   for select using (
+    -- existing
     exists (
       select 1 from team_members tm
       where tm.project_id = bookmarks.project_id and tm.user_id = auth.uid()
+    )
+    -- new: external member reads project-scoped bookmarks in their sub_project
+    or (
+      bookmarks.scope = 'project'
+      and bookmarks.sub_project_id is not null
+      and exists (
+        select 1 from sub_project_members spm
+        where spm.sub_project_id = bookmarks.sub_project_id and spm.user_id = auth.uid()
+      )
     )
   );
 
 create policy "project members can insert bookmarks" on bookmarks
   for insert with check (
+    -- existing
     exists (
       select 1 from team_members tm
       where tm.project_id = bookmarks.project_id and tm.user_id = auth.uid()
+    )
+    -- new
+    or (
+      bookmarks.scope = 'project'
+      and bookmarks.sub_project_id is not null
+      and exists (
+        select 1 from sub_project_members spm
+        where spm.sub_project_id = bookmarks.sub_project_id and spm.user_id = auth.uid()
+      )
     )
   );
 
@@ -784,3 +956,15 @@ alter table bookmarks
 alter table reminders
   add column if not exists sub_project_id uuid
     references sub_projects(id) on delete set null;
+
+-- ── Migration 20260712004: external project members ───────────────────────────
+
+alter table invite_codes
+  add column if not exists invited_email text;
+
+alter table sub_project_members
+  add column if not exists joined_at  timestamptz not null default now(),
+  add column if not exists invited_by uuid references auth.users(id) on delete set null;
+
+alter table literature_items
+  add column if not exists sub_project_id uuid references sub_projects(id) on delete set null;
