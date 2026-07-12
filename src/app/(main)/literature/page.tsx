@@ -92,6 +92,7 @@ const REAL_LIT_COLS = new Set([
   "id", "project_id", "user_id", "library",
   "title", "authors", "year", "journal",
   "doi", "abstract", "status", "tags", "type",
+  "sub_project_id",  // added Phase 1 — used for project-scope external member access
 ]);
 
 function buildLitInsert(
@@ -109,6 +110,7 @@ function buildLitInsert(
     tags?: string[];
     status?: "unread" | "reading" | "read";
     type?: LiteratureType | null;
+    sub_project_id?: string | null;
     [extra: string]: unknown;
   }
 ) {
@@ -135,6 +137,7 @@ function buildLitInsert(
     status: fields.status ?? "unread",
   };
   if (fields.id) payload.id = fields.id;
+  if (fields.sub_project_id != null) payload.sub_project_id = fields.sub_project_id;
   return payload;
 }
 
@@ -151,12 +154,13 @@ const labelStyle: React.CSSProperties = {
 };
 
 function AddItemModal({
-  onSave, onClose, projectId, currentUserId,
+  onSave, onClose, projectId, currentUserId, subProjectId,
 }: {
   onSave: (item: LiteratureItem) => void;
   onClose: () => void;
   projectId: string;
   currentUserId: string;
+  subProjectId: string | null;
 }) {
   const [type, setType]       = useState<LiteratureType>("article");
   const [title, setTitle]     = useState("");
@@ -193,6 +197,7 @@ function AddItemModal({
         doi: doi.trim() || null,
         tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
         status,
+        sub_project_id: scope === "project" ? subProjectId : null,
       }))
       .select()
       .single();
@@ -468,9 +473,9 @@ function parseCSLAuthors(a: CSLJsonItem["author"]): string[] {
   return (a ?? []).map((x) => x.literal ?? `${x.given ?? ""} ${x.family ?? ""}`.trim()).filter(Boolean);
 }
 
-function ZoteroImportModal({ existingItems, onImport, onClose, projectId, currentUserId }: {
+function ZoteroImportModal({ existingItems, onImport, onClose, projectId, currentUserId, subProjectId }: {
   existingItems: LiteratureItem[]; onImport: (items: LiteratureItem[]) => void;
-  onClose: () => void; projectId: string; currentUserId: string;
+  onClose: () => void; projectId: string; currentUserId: string; subProjectId: string | null;
 }) {
   const [tab, setTab]           = useState<"file" | "api">("file");
   const [parsed, setParsed]     = useState<LiteratureItem[]>([]);
@@ -550,6 +555,7 @@ function ZoteroImportModal({ existingItems, onImport, onClose, projectId, curren
         year: item.year || null, journal: item.journal ?? null,
         doi: item.doi ?? null, abstract: item.abstract ?? null,
         tags: [], status: "unread",
+        sub_project_id: scope === "project" ? subProjectId : null,
       })
     );
     const { error: insertErr } = await supabase.from("literature_items").insert(rows);
@@ -744,9 +750,9 @@ function parseBibTeX(bib: string): Partial<LiteratureItem> {
 
 type DOIMode = "doi" | "bibtex" | "url";
 
-function DOILookupModal({ onSave, onClose, projectId, currentUserId }: {
+function DOILookupModal({ onSave, onClose, projectId, currentUserId, subProjectId }: {
   onSave: (item: LiteratureItem) => void; onClose: () => void;
-  projectId: string; currentUserId: string;
+  projectId: string; currentUserId: string; subProjectId: string | null;
 }) {
   const [mode, setMode]       = useState<DOIMode>("doi");
   const [input, setInput]     = useState("");
@@ -873,6 +879,7 @@ function DOILookupModal({ onSave, onClose, projectId, currentUserId }: {
         year: item.year || null, journal: item.journal ?? null,
         doi: item.doi ?? null, abstract: item.abstract ?? null,
         tags: [], status: "unread",
+        sub_project_id: scope === "project" ? subProjectId : null,
       })
     );
     if (insertErr) {
@@ -1170,7 +1177,7 @@ const DETAIL_TABS = ["Info", "Abstract", "Notes", "Tags", "Files", "Cite", "Rela
 type DetailTab = typeof DETAIL_TABS[number];
 
 function DetailPanelContent({
-  item, onClose, onUpdateItem, allItems, currentUserId, projectId, onAddItem,
+  item, onClose, onUpdateItem, allItems, currentUserId, projectId, onAddItem, subProjectId,
 }: {
   item: LiteratureItem;
   onClose: () => void;
@@ -1179,6 +1186,7 @@ function DetailPanelContent({
   currentUserId: string;
   projectId: string;
   onAddItem: (item: LiteratureItem) => void;
+  subProjectId: string | null;
 }) {
   const [tab, setTab]                     = useState<DetailTab>("Info");
   const [citationStyle, setCitationStyle] = useState<"apa" | "mla" | "chicago">("apa");
@@ -1637,6 +1645,7 @@ function DetailPanelContent({
                           authors: rec.authors, year: rec.year || null,
                           journal: rec.journal ?? null, doi: rec.doi ?? null,
                           tags: [], status: "unread",
+                          sub_project_id: item.scope === "project" ? subProjectId : null,
                         })
                       );
                       if (e) { console.error("[Rec add]", e.code, e.message, e.details); setRecsError(`Failed to add: ${e.message}`); return; }
@@ -1878,7 +1887,7 @@ function DetailPanelContent({
 // ── Literature page ───────────────────────────────────────────────────────────
 
 export default function LiteraturePage() {
-  const { activeScope } = useProject();
+  const { activeScope, subProjectId } = useProject();
   const [items, setItems]               = useState<LiteratureItem[]>([]);
   const [loadingItems, setLoadingItems] = useState(true);
   const [scope, setScope]               = useState<LibraryScope>(
@@ -2178,19 +2187,19 @@ export default function LiteraturePage() {
         <>
           {isMobile ? (
             <div className="fixed inset-0 z-40 animate-slide-in-bottom" style={{ backgroundColor: "var(--color-surface)" }}>
-              <DetailPanelContent item={selectedItem} onClose={() => setSelectedItemId(null)} onUpdateItem={updateItem} allItems={items} currentUserId={currentUserId} projectId={projectId} onAddItem={addItem} />
+              <DetailPanelContent item={selectedItem} onClose={() => setSelectedItemId(null)} onUpdateItem={updateItem} allItems={items} currentUserId={currentUserId} projectId={projectId} onAddItem={addItem} subProjectId={subProjectId ?? null} />
             </div>
           ) : (
             <div className="flex flex-col shrink-0" style={{ width: 340, borderLeft: "1px solid var(--color-border)" }}>
-              <DetailPanelContent item={selectedItem} onClose={() => setSelectedItemId(null)} onUpdateItem={updateItem} allItems={items} currentUserId={currentUserId} projectId={projectId} onAddItem={addItem} />
+              <DetailPanelContent item={selectedItem} onClose={() => setSelectedItemId(null)} onUpdateItem={updateItem} allItems={items} currentUserId={currentUserId} projectId={projectId} onAddItem={addItem} subProjectId={subProjectId ?? null} />
             </div>
           )}
         </>
       )}
 
-      {addItemOpen && <AddItemModal onSave={addItem} onClose={() => setAddItemOpen(false)} projectId={projectId} currentUserId={currentUserId} />}
-      {zoteroImportOpen && <ZoteroImportModal existingItems={items} onImport={importItems} onClose={() => setZoteroImportOpen(false)} projectId={projectId} currentUserId={currentUserId} />}
-      {doiLookupOpen && <DOILookupModal onSave={addItemFromDOI} onClose={() => setDoiLookupOpen(false)} projectId={projectId} currentUserId={currentUserId} />}
+      {addItemOpen && <AddItemModal onSave={addItem} onClose={() => setAddItemOpen(false)} projectId={projectId} currentUserId={currentUserId} subProjectId={subProjectId ?? null} />}
+      {zoteroImportOpen && <ZoteroImportModal existingItems={items} onImport={importItems} onClose={() => setZoteroImportOpen(false)} projectId={projectId} currentUserId={currentUserId} subProjectId={subProjectId ?? null} />}
+      {doiLookupOpen && <DOILookupModal onSave={addItemFromDOI} onClose={() => setDoiLookupOpen(false)} projectId={projectId} currentUserId={currentUserId} subProjectId={subProjectId ?? null} />}
     </div>
   );
 }
