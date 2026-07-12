@@ -5,6 +5,7 @@ import {
   formatFileSize,
 } from "@/lib/mock-data";
 import { supabase } from "@/lib/supabase";
+import { useProject } from "@/context/ProjectContext";
 import type { LiteratureItem, ReadStatus, LiteratureType, LibraryScope, LiteratureFile, LitAnnotation, LitAssignedReading, LitRecommendation, AssignmentReadingStatus } from "@/types";
 import {
   Plus, Search, Download, FileText, File, X,
@@ -117,12 +118,10 @@ function buildLitInsert(
       console.warn(`[buildLitInsert] Dropping unrecognized field: "${key}"`);
     }
   }
-  // DB uses 'personal' for the user's own library; TypeScript type uses 'my'
-  const dbLibrary = fields.library === "my" ? "personal" : fields.library;
   const payload: Record<string, unknown> = {
     project_id: projectId,
     user_id: userId,
-    library: dbLibrary,
+    library: fields.library,
     type: fields.type ?? "article",
     title: fields.title,
     authors: Array.isArray(fields.authors)
@@ -208,7 +207,7 @@ function AddItemModal({
     const newItem: LiteratureItem = {
       id: data.id as string,
       projectId: data.project_id as string,
-      scope: (((data.library ?? data.scope) === "personal" ? "my" : (data.library ?? data.scope)) as LiteratureItem["scope"]) ?? scope,
+      scope: ((data.library ?? data.scope ?? scope) as LiteratureItem["scope"]),
       type: (data.type as LiteratureItem["type"]) ?? type,
       title: data.title as string,
       authors: toAuthorsArray(data.authors as string | string[]),
@@ -309,7 +308,7 @@ function AddItemModal({
           <div>
             <label style={labelStyle}>Library</label>
             <div className="flex rounded-lg p-0.5" style={{ backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)", width: "fit-content" }}>
-              {(["lab", "my"] as const).map((s) => (
+              {(["lab", "personal"] as const).map((s) => (
                 <button key={s} onClick={() => setScope(s)} style={{ fontSize: 12, fontWeight: 600, padding: "5px 16px", borderRadius: 6, border: "none", backgroundColor: scope === s ? "var(--color-navy)" : "transparent", color: scope === s ? "#fff" : "var(--color-secondary)", cursor: "pointer", fontFamily: "var(--font-roboto)" }}>
                   {s === "lab" ? "Lab Library" : "My Library"}
                 </button>
@@ -628,7 +627,7 @@ function ZoteroImportModal({ existingItems, onImport, onClose, projectId, curren
     } finally { setSyncing(false); }
   }
 
-  const SCOPE_LABELS: Record<LibraryScope, string> = { lab: "Lab Library", my: "My Library", project: "Project Library" };
+  const SCOPE_LABELS: Record<LibraryScope, string> = { lab: "Lab Library", personal: "My Library", project: "Project Library" };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: "rgba(27,46,75,0.35)" }} onClick={onClose}>
@@ -665,7 +664,7 @@ function ZoteroImportModal({ existingItems, onImport, onClose, projectId, curren
                 <div className="mt-3">
                   <label style={labelStyle}>Add to</label>
                   <div className="flex rounded-lg p-0.5 mt-1" style={{ backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", width: "fit-content" }}>
-                    {(["lab", "my", "project"] as const).map((s) => (
+                    {(["lab", "personal", "project"] as const).map((s) => (
                       <button key={s} onClick={() => setScope(s)} style={{ fontSize: 12, fontWeight: 600, padding: "5px 12px", borderRadius: 6, border: "none", backgroundColor: scope === s ? "var(--color-navy)" : "transparent", color: scope === s ? "#fff" : "var(--color-secondary)", cursor: "pointer" }}>
                         {SCOPE_LABELS[s]}
                       </button>
@@ -943,7 +942,7 @@ function DOILookupModal({ onSave, onClose, projectId, currentUserId }: {
             )}
             {preview.doi && <p style={{ fontSize: 11, color: "var(--color-secondary)" }}>DOI: {preview.doi}</p>}
             <div className="mt-3 flex rounded-lg p-0.5" style={{ backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", width: "fit-content" }}>
-              {(["lab", "my"] as const).map((s) => (
+              {(["lab", "personal"] as const).map((s) => (
                 <button key={s} onClick={() => setScope(s)} style={{ fontSize: 12, fontWeight: 600, padding: "4px 12px", borderRadius: 6, border: "none", backgroundColor: scope === s ? "var(--color-navy)" : "transparent", color: scope === s ? "#fff" : "var(--color-secondary)", cursor: "pointer" }}>
                   {s === "lab" ? "Lab" : "Mine"}
                 </button>
@@ -1010,10 +1009,10 @@ function CollectionsSidebar({
 
       <div className="px-3 py-2.5" style={{ borderBottom: "1px solid var(--color-border)" }}>
         <div className="flex rounded-lg p-0.5" style={{ backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)" }}>
-          {(["lab", "my", "project"] as const).map((s) => (
+          {(["lab", "personal", "project"] as const).map((s) => (
             <button key={s} onClick={() => setScope(s)} className="flex-1 py-1.5 rounded-md"
               style={{ fontSize: 11, fontWeight: 600, backgroundColor: scope === s ? "var(--color-navy)" : "transparent", color: scope === s ? "#fff" : "var(--color-secondary)", border: "none", cursor: "pointer", minHeight: 36 }}>
-              {s === "lab" ? "Lab" : s === "my" ? "Mine" : "Project"}
+              {s === "lab" ? "Lab" : s === "personal" ? "Mine" : "Project"}
             </button>
           ))}
         </div>
@@ -1879,9 +1878,17 @@ function DetailPanelContent({
 // ── Literature page ───────────────────────────────────────────────────────────
 
 export default function LiteraturePage() {
+  const { activeScope } = useProject();
   const [items, setItems]               = useState<LiteratureItem[]>([]);
   const [loadingItems, setLoadingItems] = useState(true);
-  const [scope, setScope]               = useState<LibraryScope>("lab");
+  const [scope, setScope]               = useState<LibraryScope>(
+    activeScope === "personal" ? "personal" : activeScope === "project" ? "project" : "lab"
+  );
+
+  // Keep local scope in sync when the rail selection changes.
+  useEffect(() => {
+    setScope(activeScope === "personal" ? "personal" : activeScope === "project" ? "project" : "lab");
+  }, [activeScope]);
   const [activeCollection, setActiveCollection] = useState("lc0");
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [search, setSearch]             = useState("");
@@ -1930,7 +1937,7 @@ export default function LiteraturePage() {
           if (data) setItems(data.map((row) => ({
             id: row.id as string,
             projectId: row.project_id as string,
-            scope: (((row.library ?? row.scope) === "personal" ? "my" : (row.library ?? row.scope)) as LiteratureItem["scope"]) ?? "lab",
+            scope: ((row.library ?? row.scope ?? "lab") as LiteratureItem["scope"]),
             type: (row.type as LiteratureItem["type"]) ?? "article",
             title: row.title as string,
             authors: toAuthorsArray(row.authors as string | string[]),
@@ -1983,7 +1990,7 @@ export default function LiteraturePage() {
   }
 
   const scopedItems = items.filter((item) =>
-    scope === "my" ? item.scope === "my"
+    scope === "personal" ? item.scope === "personal"
     : scope === "project" ? item.scope === "project"
     : item.scope === "lab"
   );

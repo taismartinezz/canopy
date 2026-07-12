@@ -144,7 +144,7 @@ export interface CheckinQuestion {
 
 export type LiteratureType = "article" | "book" | "preprint" | "report" | "thesis";
 export type ReadStatus = "read" | "reading" | "unread";
-export type LibraryScope = "my" | "lab" | "project";
+export type LibraryScope = "personal" | "lab" | "project";
 
 export interface LiteratureFile {
   id: string;
@@ -347,7 +347,7 @@ export interface MeetingProposal {
   createdAt: string;
 }
 
-export type ScheduleEventScope = "lab" | "personal";
+export type ScheduleEventScope = "lab" | "personal" | "project";
 
 export interface ScheduleEvent {
   id: string;
@@ -359,11 +359,12 @@ export interface ScheduleEvent {
   scope: ScheduleEventScope;
   createdBy: string;
   description?: string;
+  subProjectId?: string | null;
 }
 
 export type ReminderPriority = "low" | "medium" | "high";
 export type ReminderRecurrence = "daily" | "weekly" | "monthly";
-export type ReminderScope = "personal" | "lab";
+export type ReminderScope = "personal" | "lab" | "project";
 
 export interface Reminder {
   id: string;

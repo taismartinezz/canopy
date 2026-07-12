@@ -1,5 +1,5 @@
-export default function CanopyLogo({ size = 32 }: { size?: number }) {
-  const accent = "#1B2E4B";
+export default function CanopyLogo({ size = 32, color }: { size?: number; color?: string }) {
+  const accent = color ?? "#1B2E4B";
   return (
     <svg viewBox="0 0 80 80" width={size} height={size} fill="none" aria-hidden="true">
       <path

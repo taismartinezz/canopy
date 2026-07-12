@@ -12,15 +12,21 @@ import type { SubProject } from "@/types";
 
 // ── Context shape ─────────────────────────────────────────────────────────────
 
+export type ActiveScope = "lab" | "project" | "personal";
+
 interface ProjectContextValue {
   /** Lab-level projects.id — null until auth resolves */
   projectId: string | null;
-  /** Currently active sub-project filter — null means "All Lab" */
+  /** Currently active sub-project filter — null means lab or personal */
   subProjectId: string | null;
   /** All sub-projects the current user belongs to (excludes archived) */
   subProjects: SubProject[];
-  /** Switch the active sub-project; pass null to show all lab tasks */
+  /** Active scope: lab | project (sub-project selected) | personal */
+  activeScope: ActiveScope;
+  /** Switch the active sub-project; pass null to clear sub-project */
   setActiveSubProject: (id: string | null) => void;
+  /** Set the active scope independently (lab / project / personal) */
+  setActiveScope: (scope: ActiveScope) => void;
   /** Optimistically add a newly created sub-project to the list */
   addSubProject: (sp: SubProject) => void;
   isLoading: boolean;
@@ -30,22 +36,26 @@ const ProjectContext = createContext<ProjectContextValue>({
   projectId: null,
   subProjectId: null,
   subProjects: [],
+  activeScope: "lab",
   setActiveSubProject: () => {},
+  setActiveScope: () => {},
   addSubProject: () => {},
   isLoading: true,
 });
 
-// ── Storage key ───────────────────────────────────────────────────────────────
+// ── Storage keys ──────────────────────────────────────────────────────────────
 
-const STORAGE_KEY = "canopy_active_sub_project";
+const STORAGE_KEY       = "canopy_active_sub_project";
+const SCOPE_STORAGE_KEY = "canopy_scope_mode";
 
 // ── Provider ──────────────────────────────────────────────────────────────────
 
 export function ProjectProvider({ children }: { children: React.ReactNode }) {
-  const [projectId, setProjectId]       = useState<string | null>(null);
-  const [subProjectId, setSubProjectId] = useState<string | null>(null);
-  const [subProjects, setSubProjects]   = useState<SubProject[]>([]);
-  const [isLoading, setIsLoading]       = useState(true);
+  const [projectId, setProjectId]         = useState<string | null>(null);
+  const [subProjectId, setSubProjectId]   = useState<string | null>(null);
+  const [subProjects, setSubProjects]     = useState<SubProject[]>([]);
+  const [activeScopeState, setActiveScopeState] = useState<ActiveScope>("lab");
+  const [isLoading, setIsLoading]         = useState(true);
 
   useEffect(() => {
     if (!isSupabaseConfigured) {
@@ -117,9 +127,16 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
           setSubProjects(sps);
 
           // Restore persisted selection — validate it's still a valid sub-project
-          const stored = localStorage.getItem(STORAGE_KEY);
-          if (stored && sps.some((sp) => sp.id === stored)) {
+          const stored      = localStorage.getItem(STORAGE_KEY);
+          const storedScope = (localStorage.getItem(SCOPE_STORAGE_KEY) ?? "lab") as ActiveScope;
+
+          if (storedScope === "personal") {
+            setActiveScopeState("personal");
+          } else if (stored && sps.some((sp) => sp.id === stored)) {
             setSubProjectId(stored);
+            setActiveScopeState("project");
+          } else {
+            setActiveScopeState("lab");
           }
         }
       } catch (err) {
@@ -141,13 +158,18 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const setActiveScope = useCallback((scope: ActiveScope) => {
+    setActiveScopeState(scope);
+    localStorage.setItem(SCOPE_STORAGE_KEY, scope);
+  }, []);
+
   const addSubProject = useCallback((sp: SubProject) => {
     setSubProjects((prev) => [...prev, sp]);
   }, []);
 
   return (
     <ProjectContext.Provider
-      value={{ projectId, subProjectId, subProjects, setActiveSubProject, addSubProject, isLoading }}
+      value={{ projectId, subProjectId, subProjects, activeScope: activeScopeState, setActiveSubProject, setActiveScope, addSubProject, isLoading }}
     >
       {children}
     </ProjectContext.Provider>
