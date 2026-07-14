@@ -154,13 +154,14 @@ const labelStyle: React.CSSProperties = {
 };
 
 function AddItemModal({
-  onSave, onClose, projectId, currentUserId, subProjectId,
+  onSave, onClose, projectId, currentUserId, subProjectId, subProjects,
 }: {
   onSave: (item: LiteratureItem) => void;
   onClose: () => void;
   projectId: string;
   currentUserId: string;
   subProjectId: string | null;
+  subProjects?: SubProject[];
 }) {
   const [type, setType]       = useState<LiteratureType>("article");
   const [title, setTitle]     = useState("");
@@ -170,6 +171,7 @@ function AddItemModal({
   const [doi, setDoi]         = useState("");
   const [tags, setTags]       = useState("");
   const [scope, setScope]     = useState<LibraryScope>("lab");
+  const [modalSubProjectId, setModalSubProjectId] = useState<string | null>(subProjectId);
   const [status, setStatus]   = useState<ReadStatus>("unread");
   const [error, setError]     = useState("");
   const [saving, setSaving]   = useState(false);
@@ -197,7 +199,7 @@ function AddItemModal({
         doi: doi.trim() || null,
         tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
         status,
-        sub_project_id: scope === "project" ? subProjectId : null,
+        sub_project_id: scope === "project" ? (modalSubProjectId ?? subProjectId) : null,
       }))
       .select()
       .single();
@@ -312,12 +314,20 @@ function AddItemModal({
 
           <div>
             <label style={labelStyle}>Library</label>
-            <div className="flex rounded-lg p-0.5" style={{ backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)", width: "fit-content" }}>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
               {(["lab", "personal"] as const).map((s) => (
-                <button key={s} onClick={() => setScope(s)} style={{ fontSize: 12, fontWeight: 600, padding: "5px 16px", borderRadius: 6, border: "none", backgroundColor: scope === s ? "var(--color-navy)" : "transparent", color: scope === s ? "#fff" : "var(--color-secondary)", cursor: "pointer", fontFamily: "var(--font-roboto)" }}>
+                <button key={s} onClick={() => { setScope(s); setModalSubProjectId(null); }} style={{ fontSize: 12, fontWeight: 600, padding: "5px 14px", borderRadius: 6, border: `1px solid ${scope === s && !modalSubProjectId ? "var(--color-navy)" : "var(--color-border)"}`, backgroundColor: scope === s && !modalSubProjectId ? "var(--color-navy)" : "transparent", color: scope === s && !modalSubProjectId ? "#fff" : "var(--color-secondary)", cursor: "pointer", fontFamily: "var(--font-roboto)" }}>
                   {s === "lab" ? "Lab Library" : "My Library"}
                 </button>
               ))}
+              {(subProjects ?? []).map((sp) => {
+                const active = scope === "project" && modalSubProjectId === sp.id;
+                return (
+                  <button key={sp.id} onClick={() => { setScope("project"); setModalSubProjectId(sp.id); }} style={{ fontSize: 12, fontWeight: 600, padding: "5px 14px", borderRadius: 6, border: `1px solid ${active ? (sp.color ?? "#34A853") : "var(--color-border)"}`, backgroundColor: active ? (sp.color ?? "#34A853") : "transparent", color: active ? "#fff" : "var(--color-secondary)", cursor: "pointer", fontFamily: "var(--font-roboto)" }}>
+                    {sp.name}
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -2202,7 +2212,7 @@ export default function LiteraturePage() {
         </>
       )}
 
-      {addItemOpen && <AddItemModal onSave={addItem} onClose={() => setAddItemOpen(false)} projectId={projectId} currentUserId={currentUserId} subProjectId={subProjectId ?? null} />}
+      {addItemOpen && <AddItemModal onSave={addItem} onClose={() => setAddItemOpen(false)} projectId={projectId} currentUserId={currentUserId} subProjectId={subProjectId ?? null} subProjects={subProjects} />}
       {zoteroImportOpen && <ZoteroImportModal existingItems={items} onImport={importItems} onClose={() => setZoteroImportOpen(false)} projectId={projectId} currentUserId={currentUserId} subProjectId={subProjectId ?? null} />}
       {doiLookupOpen && <DOILookupModal onSave={addItemFromDOI} onClose={() => setDoiLookupOpen(false)} projectId={projectId} currentUserId={currentUserId} subProjectId={subProjectId ?? null} />}
     </div>
