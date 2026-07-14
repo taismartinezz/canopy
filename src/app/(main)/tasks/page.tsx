@@ -466,7 +466,7 @@ export default function TasksPage() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: members } = await (supabase
         .from("team_members")
-        .select("*, user_profiles(name, avatar_initials, avatar_color, role)")
+        .select("*, user_profiles(name, avatar_initials, avatar_color, avatar_url, role)")
         .eq("project_id", pid) as any);
 
       if (members) {
@@ -481,6 +481,7 @@ export default function TasksPage() {
             role: (p?.role ?? "researcher") as UserRole,
             avatarColor: p?.avatar_color ?? avatarColorFromId(id),
             avatarInitials: p?.avatar_initials ?? "??",
+            avatarUrl: p?.avatar_url ?? undefined,
           } as User;
         }));
       }
@@ -490,6 +491,7 @@ export default function TasksPage() {
         .select("*, task_assignees(user_id)")
         .eq("project_id", pid)
         .eq("scope", activeScope === "personal" ? "personal" : activeScope === "project" ? "project" : "lab")
+        .is("parent_id", null)
         .or("archived.is.null,archived.eq.false")
         .order("created_at", { ascending: false });
       if (activeScope === "project" && subProjectId) {
@@ -502,6 +504,7 @@ export default function TasksPage() {
         setTasks(data.map((row) => ({
           id: row.id as string,
           projectId: row.project_id as string,
+          parentId: (row.parent_id as string | null) ?? undefined,
           title: row.title as string,
           description: row.description as string,
           status: row.status as TaskStatus,

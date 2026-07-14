@@ -95,7 +95,7 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
         const { data: memberRows, error: memberError } = await supabase
           .from("sub_project_members")
           .select(
-            "sub_project_id, sub_projects(id, project_id, name, description, created_by, created_at, archived)"
+            "sub_project_id, sub_projects(id, project_id, name, description, created_by, created_at, archived, color)"
           )
           .eq("user_id", userId);
 
@@ -120,6 +120,7 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
                 createdBy:   (sp.created_by  as string | undefined) ?? undefined,
                 createdAt:   sp.created_at  as string,
                 archived:    (sp.archived   as boolean) ?? false,
+                color:       (sp.color as string | null) ?? undefined,
               } as SubProject;
             })
             .filter((sp): sp is SubProject => sp !== null && !sp.archived);
