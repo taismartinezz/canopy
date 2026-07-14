@@ -131,48 +131,37 @@ function SidebarRow({
   typeBg?: string;
   onClick: () => void;
 }) {
-  const [hovered, setHovered] = useState(false);
+  const color = typeBg ?? "var(--color-navy)";
   return (
     <button
       onClick={onClick}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
       style={{
         width: "100%",
         display: "flex",
         alignItems: "center",
-        gap: 10,
-        padding: "7px 10px",
-        borderRadius: 8,
+        gap: 8,
+        padding: "6px 10px 6px 11px",
+        borderRadius: 7,
         border: "none",
+        borderLeft: `3px solid ${active ? color : "transparent"}`,
         cursor: "pointer",
-        backgroundColor: active
-          ? "rgba(27,46,75,0.10)"
-          : hovered
-          ? "rgba(27,46,75,0.05)"
-          : "transparent",
-        marginBottom: 2,
-        transition: "background-color 120ms ease",
+        backgroundColor: active ? `${color}18` : "transparent",
+        marginBottom: 1,
+        transition: "background-color 120ms ease, border-left-color 120ms ease",
         textAlign: "left",
+        boxSizing: "border-box",
+        fontFamily: "var(--font-roboto)",
       }}
+      onMouseEnter={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "rgba(0,0,0,0.04)"; }}
+      onMouseLeave={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "transparent"; }}
     >
-      <div style={{
-        width: 28,
-        height: 28,
-        borderRadius: 6,
-        backgroundColor: active && typeBg ? typeBg : "rgba(27,46,75,0.06)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        flexShrink: 0,
-        transition: "background-color 120ms ease",
-      }}>
+      <span style={{ flexShrink: 0, display: "flex", alignItems: "center", color: active ? color : "var(--color-secondary)", opacity: active ? 1 : 0.7, transition: "color 120ms ease" }}>
         {icon}
-      </div>
+      </span>
       <span style={{
         flex: 1,
         fontSize: 13,
-        color: active ? "var(--color-navy)" : "var(--color-secondary)",
+        color: active ? color : "var(--color-body)",
         fontWeight: active ? 600 : 400,
         whiteSpace: "nowrap",
         overflow: "hidden",
@@ -184,11 +173,13 @@ function SidebarRow({
       <span style={{
         fontSize: 11,
         fontWeight: 600,
-        color: active ? "var(--color-navy)" : "var(--color-secondary)",
-        backgroundColor: active ? "rgba(27,46,75,0.12)" : "rgba(27,46,75,0.06)",
+        color: active ? color : "var(--color-secondary)",
+        backgroundColor: active ? `${color}20` : "rgba(0,0,0,0.06)",
         borderRadius: 10,
         padding: "1px 7px",
         flexShrink: 0,
+        minWidth: 20,
+        textAlign: "center",
         transition: "all 120ms ease",
       }}>
         {count}
