@@ -7,6 +7,29 @@ import { computeInitials } from "@/lib/utils";
 import Avatar from "@/components/ui/Avatar";
 import { showToast } from "@/components/ui/Toast";
 
+// Fire-and-forget — never throws, never blocks invite creation.
+// The copy-link is the guaranteed delivery path; email is best-effort.
+function sendInviteEmail(payload: {
+  to: string; token: string; inviterName: string; projectName: string;
+}) {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!supabaseUrl) return;
+  const anonKey =
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
+  fetch(`${supabaseUrl}/functions/v1/send-invite-email`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${anonKey}`,
+    },
+    body: JSON.stringify(payload),
+  })
+    .then((r) => r.json())
+    .then((d) => { if (!d.sent) console.info("[invite-email] not sent:", d.reason); })
+    .catch((e) => console.warn("[invite-email] edge function unreachable:", e));
+}
+
 interface ProjectMember {
   userId: string;
   name: string;
@@ -186,6 +209,10 @@ export default function ProjectMembersModal({
       if (error) {
         setAddError("Failed to create invite.");
       } else {
+        // Copy-link is the guaranteed fallback — fire email best-effort, never block on it.
+        const inviterName = members.find((m) => m.userId === currentUserId)?.name ?? "A collaborator";
+        sendInviteEmail({ to: email, token, inviterName, projectName: subProjectName });
+
         showToast("Invite created — copy the link below to share.", "success");
         setEmailInput("");
         await load();
