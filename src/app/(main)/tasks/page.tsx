@@ -448,6 +448,10 @@ export default function TasksPage() {
       return;
     }
 
+    // Stale-fetch guard: if scope/subProjectId changes while a fetch is in flight,
+    // the earlier response must not overwrite the later one.
+    let cancelled = false;
+
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       const user = session?.user ?? null;
       if (!user) { setLoading(false); return; }
@@ -486,19 +490,30 @@ export default function TasksPage() {
         }));
       }
 
+      // Build a single query that covers all visible scopes for this rail mode.
+      // In project mode: lab-wide tasks are still relevant alongside project tasks,
+      // so we OR the two conditions rather than firing two sequential setTasks calls
+      // which would race and overwrite each other.
       let taskQ = supabase
         .from("tasks")
         .select("*, task_assignees(user_id)")
         .eq("project_id", pid)
-        .eq("scope", activeScope === "personal" ? "personal" : activeScope === "project" ? "project" : "lab")
         .is("parent_id", null)
         .or("archived.is.null,archived.eq.false")
         .order("created_at", { ascending: false });
-      if (activeScope === "project" && subProjectId) {
-        taskQ = taskQ.eq("sub_project_id", subProjectId);
+
+      if (activeScope === "personal") {
+        taskQ = taskQ.eq("scope", "personal");
+      } else if (activeScope === "project" && subProjectId) {
+        // Show lab-wide tasks + tasks scoped to this specific sub-project
+        taskQ = taskQ.or(`scope.eq.lab,and(scope.eq.project,sub_project_id.eq.${subProjectId})`);
+      } else {
+        taskQ = taskQ.eq("scope", "lab");
       }
+
       const { data, error } = await taskQ;
 
+      if (cancelled) return;
       if (error) console.error("[Tasks] fetch error:", error);
       if (!error && data) {
         setTasks(data.map((row) => ({
@@ -521,6 +536,8 @@ export default function TasksPage() {
       }
       setLoading(false);
     });
+
+    return () => { cancelled = true; };
   }, [activeScope, subProjectId]);
 
   // Realtime: reflect task INSERTs/UPDATEs/DELETEs from other users
