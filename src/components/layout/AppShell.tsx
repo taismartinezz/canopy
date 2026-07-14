@@ -6,7 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard, CheckSquare, BookOpen, BookMarked, Bookmark, Users,
   Bell, ChevronDown, ChevronLeft, ChevronRight, LogOut, User as UserIcon,
-  Menu, X, Settings, CalendarDays, CircleCheck, Plus,
+  Menu, X, Settings, CalendarDays, CircleCheck, Plus, Home,
 } from "lucide-react";
 import { computeInitials } from "@/lib/utils";
 import type { User } from "@/types";
@@ -555,16 +555,27 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         className="hidden md:flex flex-col items-center shrink-0"
         style={{ width: 52, backgroundColor: "var(--color-strip)", borderRight: "1px solid var(--color-border)" }}
       >
-        {/* Lab home */}
-        <div className="pt-3 pb-1 flex flex-col items-center">
+        {/* Canopy logo — static branding, not interactive */}
+        <div className="pt-3 pb-0 flex flex-col items-center">
+          <div className="w-9 h-9 flex items-center justify-center">
+            <CanopyLogo size={22} />
+          </div>
+        </div>
+
+        {/* Lab home — separate from the logo */}
+        <div className="pb-1 flex flex-col items-center">
           <button
             onClick={() => { setActiveSubProject(null); setActiveScope("lab"); }}
             title="Lab home"
             aria-label="Lab home"
             className="w-9 h-9 flex items-center justify-center rounded-[10px] transition-colors"
-            style={{ backgroundColor: activeScope === "lab" ? "var(--color-navy)" : "transparent", border: "none", cursor: "pointer" }}
+            style={{
+              backgroundColor: activeScope === "lab" ? "rgba(27,46,75,0.12)" : "transparent",
+              border: activeScope === "lab" ? "1.5px solid rgba(27,46,75,0.25)" : "1.5px solid transparent",
+              cursor: "pointer",
+            }}
           >
-            <CanopyLogo size={22} color={activeScope === "lab" ? "#fff" : undefined} />
+            <Home size={15} color="var(--color-navy)" />
           </button>
         </div>
 

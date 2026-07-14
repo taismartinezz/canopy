@@ -855,8 +855,7 @@ export default function ProfilePage() {
                     autoFocus
                     value={nameInput}
                     onChange={(e) => setNameInput(e.target.value)}
-                    onBlur={handleSaveName}
-                    onKeyDown={(e) => { if (e.key === "Enter") handleSaveName(); if (e.key === "Escape") setEditingName(false); }}
+                    onKeyDown={(e) => { if (e.key === "Escape") setEditingName(false); }}
                     style={{
                       fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 24,
                       color: "#1B2E4B", border: "none", borderBottom: "2px solid #1B2E4B",
@@ -942,8 +941,7 @@ export default function ProfilePage() {
                 autoFocus
                 value={institutionInput}
                 onChange={(e) => setInstitutionInput(e.target.value)}
-                onBlur={handleSaveInstitution}
-                onKeyDown={(e) => { if (e.key === "Enter") handleSaveInstitution(); if (e.key === "Escape") setEditingInstitution(false); }}
+                onKeyDown={(e) => { if (e.key === "Escape") setEditingInstitution(false); }}
                 style={{
                   fontFamily: "var(--font-roboto)", fontWeight: 400, fontSize: 14,
                   color: "#6B6B6B", border: "none", borderBottom: "1px solid #1B2E4B",
