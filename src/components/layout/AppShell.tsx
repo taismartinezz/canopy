@@ -313,6 +313,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const { projectId, subProjectId, subProjects, activeScope, setActiveSubProject, setActiveScope } = useProject();
   const [navCollapsed, setNavCollapsed]   = useState(false);
   const [showCreate, setShowCreate]       = useState(false);
+  const [showSwitcher, setShowSwitcher]   = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -581,33 +582,81 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
         <div style={{ width: 28, height: 1, backgroundColor: "var(--color-border)", margin: "4px 0" }} />
 
-        {/* Sub-project icons — scrollable */}
+        {/* Sub-project icons + switcher */}
         <div className="flex-1 flex flex-col items-center py-1 gap-1.5 overflow-y-auto" style={{ scrollbarWidth: "none" }}>
-          {subProjects.map((sp) => {
+          {/* Show first 5 as icons; if more, show a switcher trigger */}
+          {subProjects.slice(0, 5).map((sp) => {
             const isActive = activeScope === "project" && subProjectId === sp.id;
+            const bg = sp.color ?? "var(--color-navy)";
             return (
               <button
                 key={sp.id}
-                onClick={() => { setActiveSubProject(sp.id); setActiveScope("project"); }}
+                onClick={() => { setActiveSubProject(sp.id); setActiveScope("project"); setShowSwitcher(false); }}
                 title={sp.name}
                 aria-label={sp.name}
                 aria-current={isActive ? "true" : undefined}
-                className="w-9 h-9 rounded-[10px] flex items-center justify-center shrink-0 transition-colors"
+                className="w-9 h-9 rounded-[10px] flex items-center justify-center shrink-0 transition-all"
                 style={{
-                  backgroundColor: isActive ? "var(--color-navy)" : "rgba(27,46,75,0.1)",
-                  color: isActive ? "#fff" : "var(--color-navy)",
-                  border: "none",
+                  backgroundColor: bg,
+                  color: "#fff",
+                  border: isActive ? `2.5px solid rgba(255,255,255,0.8)` : "2.5px solid transparent",
+                  outline: isActive ? `2px solid ${bg}` : "none",
+                  outlineOffset: 1,
                   cursor: "pointer",
                   fontFamily: "var(--font-roboto)",
                   fontSize: 11,
                   fontWeight: 700,
                   letterSpacing: "0.02em",
+                  opacity: isActive ? 1 : 0.75,
                 }}
               >
                 {sp.name.slice(0, 2).toUpperCase()}
               </button>
             );
           })}
+
+          {/* Project switcher — shown when >5 projects or as a picker */}
+          {subProjects.length > 5 && (
+            <div style={{ position: "relative" }}>
+              <button
+                onClick={() => setShowSwitcher((v) => !v)}
+                title="All projects"
+                aria-label="Switch project"
+                className="w-9 h-9 rounded-[10px] flex items-center justify-center shrink-0 transition-colors hover:bg-[rgba(27,46,75,0.12)]"
+                style={{ border: "1px solid var(--color-border)", background: "var(--color-canvas)", cursor: "pointer", color: "var(--color-secondary)", fontFamily: "var(--font-roboto)", fontSize: 10, fontWeight: 700 }}
+              >
+                +{subProjects.length - 5}
+              </button>
+              {showSwitcher && (
+                <div
+                  style={{
+                    position: "fixed", left: 58, zIndex: 50,
+                    backgroundColor: "var(--color-surface)",
+                    border: "1px solid var(--color-border)",
+                    borderRadius: 10, boxShadow: "0 8px 32px rgba(27,46,75,0.18)",
+                    padding: "8px 0", minWidth: 200, maxHeight: 320, overflowY: "auto",
+                  }}
+                >
+                  <p style={{ fontSize: 10, fontWeight: 700, color: "var(--color-secondary)", textTransform: "uppercase", letterSpacing: "0.05em", padding: "4px 14px 8px" }}>All projects</p>
+                  {subProjects.map((sp) => {
+                    const isActive = activeScope === "project" && subProjectId === sp.id;
+                    return (
+                      <button
+                        key={sp.id}
+                        onClick={() => { setActiveSubProject(sp.id); setActiveScope("project"); setShowSwitcher(false); }}
+                        className="flex items-center gap-2.5 w-full text-left transition-colors hover:bg-[rgba(27,46,75,0.05)]"
+                        style={{ padding: "7px 14px", border: "none", background: isActive ? "rgba(27,46,75,0.06)" : "transparent", cursor: "pointer", fontFamily: "var(--font-roboto)" }}
+                      >
+                        <span style={{ width: 10, height: 10, borderRadius: 3, backgroundColor: sp.color ?? "var(--color-navy)", flexShrink: 0 }} />
+                        <span style={{ fontSize: 13, fontWeight: isActive ? 700 : 400, color: "var(--color-body)" }}>{sp.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Create sub-project */}
           <button
             onClick={() => setShowCreate(true)}

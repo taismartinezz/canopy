@@ -30,8 +30,13 @@ const labelStyle: React.CSSProperties = {
   display: "block",
 };
 
+const MATERIAL_COLORS = [
+  "#4285F4", "#EA4335", "#34A853", "#FBBC05",
+  "#FF6D00", "#9C27B0", "#00BCD4", "#795548",
+];
+
 export default function CreateProjectModal({ onClose }: { onClose: () => void }) {
-  const { projectId, addSubProject, setActiveSubProject } = useProject();
+  const { projectId, addSubProject, setActiveSubProject, subProjects } = useProject();
   const [name, setName]             = useState("");
   const [description, setDescription] = useState("");
   const [saving, setSaving]         = useState(false);
@@ -53,6 +58,11 @@ export default function CreateProjectModal({ onClose }: { onClose: () => void })
       const { data: { session } } = await supabase.auth.getSession();
       const userId = session?.user?.id ?? null;
 
+      // Pick a color not yet used by existing projects; cycle if all taken
+      const usedColors = new Set(subProjects.map((sp) => sp.color).filter(Boolean));
+      const color = MATERIAL_COLORS.find((c) => !usedColors.has(c))
+        ?? MATERIAL_COLORS[subProjects.length % MATERIAL_COLORS.length];
+
       // Insert sub-project row
       const { data, error: insertError } = await supabase
         .from("sub_projects")
@@ -62,6 +72,7 @@ export default function CreateProjectModal({ onClose }: { onClose: () => void })
           description: description.trim() || null,
           created_by:  userId,
           archived:    false,
+          color,
         })
         .select()
         .single();
@@ -92,6 +103,7 @@ export default function CreateProjectModal({ onClose }: { onClose: () => void })
         createdBy:   (data.created_by  as string | null) ?? undefined,
         createdAt:   data.created_at  as string,
         archived:    false,
+        color,
       };
       addSubProject(newSp);
       setActiveSubProject(newSp.id);

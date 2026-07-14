@@ -13,7 +13,7 @@ import type { Reminder, ReminderScope, ReminderPriority, User } from "@/types";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-type ListType = "today" | "scheduled" | "priority" | "all" | "personal" | "lab";
+type ListType = "today" | "scheduled" | "priority" | "all" | "personal" | "lab" | "project";
 
 const PRIORITY_MARKS: Record<ReminderPriority, string> = { high: "!!!", medium: "!!", low: "!" };
 
@@ -24,10 +24,11 @@ const LIST_COLORS: Record<ListType, string> = {
   all:       "#475569",
   personal:  "#0EA5E9",
   lab:       "#0F2544",
+  project:   "#34A853",
 };
 const LIST_LABELS: Record<ListType, string> = {
   today: "Today", scheduled: "Scheduled", priority: "Priority",
-  all: "All", personal: "Personal", lab: "Lab",
+  all: "All", personal: "Personal", lab: "Lab", project: "Projects",
 };
 // No drag-reorder — all views use date-sorted grouped layout
 const DRAGGABLE_LISTS: ListType[] = [];
@@ -77,7 +78,7 @@ function sortByDate(list: Reminder[]): Reminder[] {
   });
 }
 
-function filterReminders(list: ListType, all: Reminder[]): Reminder[] {
+function filterReminders(list: ListType, all: Reminder[], subProjectId?: string | null): Reminder[] {
   const tomorrow = tomorrowStart();
   switch (list) {
     case "today":     return all.filter(r => r.dueAt && new Date(r.dueAt) < tomorrow);
@@ -85,6 +86,7 @@ function filterReminders(list: ListType, all: Reminder[]): Reminder[] {
     case "priority":  return all.filter(r => !!r.priority);
     case "personal":  return all.filter(r => r.scope === "personal");
     case "lab":       return all.filter(r => r.scope === "lab");
+    case "project":   return all.filter(r => r.scope === "project" && (!subProjectId || r.subProjectId === subProjectId));
     default:          return all;
   }
 }
@@ -489,7 +491,7 @@ function InlineAddRow({ defaultScope, accentColor, teamMembers, onAdd, onClose }
 
 // ── Smart list tiles ──────────────────────────────────────────────────────────
 
-function SmartListCard({ id, count, icon, selected, onClick }: { id: ListType; count: number; icon: React.ReactNode; selected: boolean; onClick: () => void }) {
+function SmartListCard({ id, count, icon, selected, onClick, labelOverride }: { id: ListType; count: number; icon: React.ReactNode; selected: boolean; onClick: () => void; labelOverride?: string }) {
   const color = LIST_COLORS[id];
   return (
     <button onClick={onClick} style={{ width: "100%", textAlign: "left", backgroundColor: color, borderRadius: 13, padding: "12px 14px", minHeight: 84, display: "flex", flexDirection: "column", justifyContent: "space-between", border: `2px solid ${selected ? "rgba(255,255,255,0.25)" : "transparent"}`, cursor: "pointer", transition: "opacity 0.1s", boxSizing: "border-box" }}
@@ -498,20 +500,21 @@ function SmartListCard({ id, count, icon, selected, onClick }: { id: ListType; c
       <div style={{ color: "rgba(255,255,255,0.9)", display: "flex" }}>{icon}</div>
       <div>
         <div style={{ fontSize: 24, fontWeight: 700, color: "#fff", lineHeight: 1, marginBottom: 3 }}>{count}</div>
-        <div style={{ fontSize: 13, color: "rgba(255,255,255,0.85)", fontWeight: 500, fontFamily: "var(--font-roboto)" }}>{LIST_LABELS[id]}</div>
+        <div style={{ fontSize: 13, color: "rgba(255,255,255,0.85)", fontWeight: 500, fontFamily: "var(--font-roboto)" }}>{labelOverride ?? LIST_LABELS[id]}</div>
       </div>
     </button>
   );
 }
 
-function LeftPanel({ selected, activeReminders, onSelect, collapsed, onToggleCollapse }: {
+function LeftPanel({ selected, activeReminders, onSelect, collapsed, onToggleCollapse, projectLabel }: {
   selected: ListType; activeReminders: Reminder[]; onSelect: (l: ListType) => void;
-  collapsed: boolean; onToggleCollapse: () => void;
+  collapsed: boolean; onToggleCollapse: () => void; projectLabel: string;
 }) {
   const counts = useMemo(() => ({
     all:      activeReminders.length,
     lab:      activeReminders.filter(r => r.scope === "lab").length,
     personal: activeReminders.filter(r => r.scope === "personal").length,
+    project:  activeReminders.filter(r => r.scope === "project").length,
   }), [activeReminders]);
 
   return (
@@ -541,7 +544,7 @@ function LeftPanel({ selected, activeReminders, onSelect, collapsed, onToggleCol
             </button>
           </div>
           <div className="flex flex-col items-center px-1.5 py-2 gap-0.5">
-            {([["all", <List key="all" size={17} />], ["personal", <UserIcon key="personal" size={17} />], ["lab", <Users key="lab" size={17} />]] as [ListType, React.ReactNode][]).map(([id, icon]) => (
+            {([["all", <List key="all" size={17} />], ["personal", <UserIcon key="personal" size={17} />], ["lab", <Users key="lab" size={17} />], ["project", <List key="project" size={17} />]] as [ListType, React.ReactNode][]).map(([id, icon]) => (
               <button
                 key={id}
                 onClick={() => onSelect(id)}
@@ -578,6 +581,9 @@ function LeftPanel({ selected, activeReminders, onSelect, collapsed, onToggleCol
               </div>
               <SmartListCard id="personal" count={counts.personal} icon={<UserIcon size={20} />} selected={selected === "personal"} onClick={() => onSelect("personal")} />
               <SmartListCard id="lab"      count={counts.lab}      icon={<Users size={20} />}   selected={selected === "lab"}      onClick={() => onSelect("lab")} />
+              <div style={{ gridColumn: "1 / -1" }}>
+                <SmartListCard id="project" count={counts.project} icon={<List size={20} />} selected={selected === "project"} onClick={() => onSelect("project")} labelOverride={projectLabel} />
+              </div>
             </div>
           </div>
         </>
@@ -830,7 +836,7 @@ function UndoToast({ title, onUndo }: { title: string; onUndo: () => void }) {
 interface PendingUndo { reminder: Reminder; timerId: ReturnType<typeof setTimeout>; }
 
 export default function RemindersPage() {
-  const { projectId, activeScope, subProjectId, isLoading: projectLoading } = useProject();
+  const { projectId, activeScope, subProjectId, subProjects, isLoading: projectLoading } = useProject();
   const [currentUserId, setCurrentUserId] = useState("");
   const [teamMembers, setTeamMembers] = useState<User[]>([]);
   const [reminders, setReminders] = useState<Reminder[]>([]);
@@ -883,22 +889,12 @@ export default function RemindersPage() {
         }
       }
 
-      // Strict scope isolation — show only the active rail scope.
-      // Always include reminders assigned to me regardless of scope.
-      let scopeClause: string;
-      if (activeScope === "personal") {
-        scopeClause = `and(scope.eq.personal,user_id.eq.${currentUserId})`;
-      } else if (activeScope === "project" && subProjectId) {
-        scopeClause = `and(scope.eq.project,sub_project_id.eq.${subProjectId})`;
-      } else {
-        scopeClause = projectId ? `and(scope.eq.lab,project_id.eq.${projectId})` : `and(scope.eq.lab)`;
-      }
-      const filter = `${scopeClause},assignee_id.eq.${currentUserId}`;
-
+      // Fetch all reminders created by or assigned to the current user.
+      // Local list-type tabs (personal/lab/project/all) then filter in memory.
       const { data, error } = await supabase
         .from("reminders")
         .select("*")
-        .or(filter)
+        .or(`user_id.eq.${currentUserId},assignee_id.eq.${currentUserId}`)
         .order("position", { ascending: true, nullsFirst: false })
         .order("created_at", { ascending: true });
 
@@ -907,6 +903,7 @@ export default function RemindersPage() {
         setReminders(data.map(row => ({
           id: row.id as string, userId: row.user_id as string,
           projectId: (row.project_id as string) ?? undefined,
+          subProjectId: (row.sub_project_id as string) ?? undefined,
           scope: (row.scope as ReminderScope) ?? "personal",
           title: row.title as string,
           dueAt: (row.due_at as string) ?? undefined,
@@ -925,7 +922,7 @@ export default function RemindersPage() {
       setLoading(false);
     }
     load();
-  }, [currentUserId, projectId, activeScope, subProjectId, projectLoading]);
+  }, [currentUserId, projectId, projectLoading]);
 
   function commitDelete(id: string) { if (isSupabaseConfigured) supabase.from("reminders").delete().eq("id", id).then(({ error }) => { if (error) console.error("[Reminders] delete:", error); }); }
   function commitComplete(id: string) { if (isSupabaseConfigured) supabase.from("reminders").update({ completed: true }).eq("id", id).then(({ error }) => { if (error) console.error("[Reminders] complete:", error); }); }
@@ -1032,15 +1029,17 @@ export default function RemindersPage() {
   const allActive = useMemo(() => reminders.filter(r => !r.completed), [reminders]);
   const allCompleted = useMemo(() => reminders.filter(r => r.completed), [reminders]);
 
+  const projectLabel = subProjects.length === 1 ? subProjects[0].name : "Projects";
+
   const visible = useMemo(() => {
-    const filtered = filterReminders(selectedList, allActive);
+    const filtered = filterReminders(selectedList, allActive, subProjectId);
     if (DRAGGABLE_LISTS.includes(selectedList)) return sortByPosition(filtered);
     return sortByDate(filtered);
-  }, [selectedList, allActive]);
+  }, [selectedList, allActive, subProjectId]);
 
-  const completedVisible = useMemo(() => filterReminders(selectedList, allCompleted), [selectedList, allCompleted]);
+  const completedVisible = useMemo(() => filterReminders(selectedList, allCompleted, subProjectId), [selectedList, allCompleted, subProjectId]);
   const panelColor = LIST_COLORS[selectedList];
-  const panelLabel = LIST_LABELS[selectedList];
+  const panelLabel = selectedList === "project" ? projectLabel : LIST_LABELS[selectedList];
   const isDraggable = DRAGGABLE_LISTS.includes(selectedList);
 
   if (loading || (isSupabaseConfigured && projectLoading)) {
@@ -1071,15 +1070,16 @@ export default function RemindersPage() {
       <div style={{ display: "flex", height: "100%", overflow: "hidden", backgroundColor: "var(--color-canvas)" }}>
 
         <div className="hidden md:block" style={{ height: "100%", flexShrink: 0 }}>
-          <LeftPanel selected={selectedList} activeReminders={allActive} onSelect={handleListSelect} collapsed={sidebarCollapsed} onToggleCollapse={handleToggleCollapse} />
+          <LeftPanel selected={selectedList} activeReminders={allActive} onSelect={handleListSelect} collapsed={sidebarCollapsed} onToggleCollapse={handleToggleCollapse} projectLabel={projectLabel} />
         </div>
 
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
 
           <div className="flex md:hidden" style={{ overflowX: "auto", padding: "12px 16px", gap: 8, borderBottom: "1px solid var(--color-border)", flexShrink: 0 }}>
-            {(["all","personal","lab"] as ListType[]).map(id => {
+            {(["all","personal","lab","project"] as ListType[]).map(id => {
               const isAct = selectedList === id;
-              return <button key={id} onClick={() => handleListSelect(id)} style={{ height: 32, paddingInline: 14, borderRadius: 20, flexShrink: 0, border: "none", backgroundColor: isAct ? LIST_COLORS[id] : "rgba(0,0,0,0.06)", color: isAct ? "#fff" : "var(--color-secondary)", fontSize: 13, fontWeight: isAct ? 700 : 400, cursor: "pointer", fontFamily: "var(--font-roboto)" }}>{LIST_LABELS[id]}</button>;
+              const label = id === "project" ? projectLabel : LIST_LABELS[id];
+              return <button key={id} onClick={() => handleListSelect(id)} style={{ height: 32, paddingInline: 14, borderRadius: 20, flexShrink: 0, border: "none", backgroundColor: isAct ? LIST_COLORS[id] : "rgba(0,0,0,0.06)", color: isAct ? "#fff" : "var(--color-secondary)", fontSize: 13, fontWeight: isAct ? 700 : 400, cursor: "pointer", fontFamily: "var(--font-roboto)" }}>{label}</button>;
             })}
           </div>
 

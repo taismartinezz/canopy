@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import {
   X, Send, Paperclip, Download, Trash2, FileText, File, Image, Table,
-  ExternalLink, Plus, Copy, MoreHorizontal, CalendarDays,
+  ExternalLink, Plus, Copy, MoreHorizontal, CalendarDays, Check,
 } from "lucide-react";
 import {
   CURRENT_USER_ID, formatRelativeTime, formatDate, formatFileSize, getUser,
@@ -145,6 +145,13 @@ export default function TaskDetailPanel({
   const [localFiles, setLocalFiles]       = useState<TaskFile[]>(task.files);
   const [localAssigneeIds, setLocalAssigneeIds] = useState<string[]>(task.assigneeIds);
 
+  // Subtasks
+  type SubtaskRow = { id: string; title: string; status: "todo" | "done" };
+  const [subtasks, setSubtasks] = useState<SubtaskRow[]>([]);
+  const [addingSubtask, setAddingSubtask] = useState(false);
+  const [subtaskInput, setSubtaskInput] = useState("");
+  const subtaskInputRef = useRef<HTMLInputElement>(null);
+
   // Sync all local state when task switches
   useEffect(() => {
     setLocalTitle(task.title);
@@ -154,7 +161,57 @@ export default function TaskDetailPanel({
     setLocalComments(task.comments);
     setLocalFiles(task.files);
     setLocalAssigneeIds(task.assigneeIds);
+    setSubtasks([]);
+    setAddingSubtask(false);
+    setSubtaskInput("");
   }, [task.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!isSupabaseConfigured) return;
+    supabase
+      .from("tasks")
+      .select("id, title, status")
+      .eq("parent_id", task.id)
+      .order("created_at", { ascending: true })
+      .then(({ data }) => {
+        if (data) setSubtasks(data.map(r => ({ id: r.id as string, title: r.title as string, status: (r.status as string) === "done" ? "done" : "todo" })));
+      });
+  }, [task.id]);
+
+  async function handleAddSubtask() {
+    const title = subtaskInput.trim();
+    if (!title) { setAddingSubtask(false); return; }
+    const tempId = `temp-${Date.now()}`;
+    const optimistic: SubtaskRow = { id: tempId, title, status: "todo" };
+    setSubtasks(prev => [...prev, optimistic]);
+    setSubtaskInput("");
+    setAddingSubtask(false);
+    if (!isSupabaseConfigured) return;
+    const { data, error } = await supabase
+      .from("tasks")
+      .insert({ title, parent_id: task.id, project_id: task.projectId, status: "todo", priority: task.priority })
+      .select("id")
+      .single();
+    if (error) { console.error("[Subtask] create error:", error); setSubtasks(prev => prev.filter(s => s.id !== tempId)); return; }
+    setSubtasks(prev => prev.map(s => s.id === tempId ? { ...s, id: data.id as string } : s));
+  }
+
+  async function handleToggleSubtask(id: string) {
+    const current = subtasks.find(s => s.id === id);
+    if (!current) return;
+    const newStatus: SubtaskRow["status"] = current.status === "done" ? "todo" : "done";
+    setSubtasks(prev => prev.map(s => s.id === id ? { ...s, status: newStatus } : s));
+    if (isSupabaseConfigured) {
+      await supabase.from("tasks").update({ status: newStatus }).eq("id", id);
+    }
+  }
+
+  async function handleDeleteSubtask(id: string) {
+    setSubtasks(prev => prev.filter(s => s.id !== id));
+    if (isSupabaseConfigured) {
+      await supabase.from("tasks").delete().eq("id", id);
+    }
+  }
 
   // Auto-resize description textarea
   useEffect(() => {
@@ -560,6 +617,77 @@ export default function TaskDetailPanel({
             style={{ fontSize: 13, color: "var(--color-body)", lineHeight: 1.6, backgroundColor: "transparent", border: "none", outline: "none", padding: 0, fontFamily: "var(--font-roboto)", width: "100%", resize: "none", display: "block" }}
           />
         </div>
+
+        {/* Subtasks */}
+        {(subtasks.length > 0 || addingSubtask) && (
+          <div className="px-6 py-3" style={{ borderBottom: "1px solid var(--color-border)" }}>
+            <p style={{ fontSize: 11, fontWeight: 700, color: "var(--color-secondary)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>
+              Subtasks
+              {subtasks.length > 0 && (
+                <span style={{ marginLeft: 6, fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>
+                  {subtasks.filter(s => s.status === "done").length}/{subtasks.length}
+                </span>
+              )}
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+              {subtasks.map(sub => (
+                <div key={sub.id} className="group/subtask flex items-center gap-2 py-1">
+                  <button
+                    onClick={() => handleToggleSubtask(sub.id)}
+                    style={{
+                      width: 18, height: 18, borderRadius: "50%", flexShrink: 0,
+                      border: `2px solid ${sub.status === "done" ? "#2E7D52" : "var(--color-border)"}`,
+                      backgroundColor: sub.status === "done" ? "#2E7D52" : "transparent",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      cursor: "pointer", transition: "all 0.12s",
+                    }}
+                    aria-label={sub.status === "done" ? "Mark incomplete" : "Mark complete"}
+                  >
+                    {sub.status === "done" && <Check size={10} color="#fff" strokeWidth={3} />}
+                  </button>
+                  <span style={{ fontSize: 13, color: sub.status === "done" ? "var(--color-secondary)" : "var(--color-body)", flex: 1, textDecoration: sub.status === "done" ? "line-through" : "none", fontFamily: "var(--font-roboto)" }}>
+                    {sub.title}
+                  </span>
+                  <button
+                    onClick={() => handleDeleteSubtask(sub.id)}
+                    className="opacity-0 group-hover/subtask:opacity-100 transition-opacity"
+                    style={{ background: "none", border: "none", cursor: "pointer", padding: 2, display: "flex", color: "var(--color-secondary)" }}
+                    aria-label="Delete subtask"
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+              ))}
+              {addingSubtask && (
+                <div style={{ display: "flex", alignItems: "center", gap: 8, paddingTop: 2 }}>
+                  <div style={{ width: 18, height: 18, borderRadius: "50%", border: "2px solid var(--color-border)", flexShrink: 0 }} />
+                  <input
+                    ref={subtaskInputRef}
+                    autoFocus
+                    value={subtaskInput}
+                    onChange={e => setSubtaskInput(e.target.value)}
+                    onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); handleAddSubtask(); } if (e.key === "Escape") { setAddingSubtask(false); setSubtaskInput(""); } }}
+                    onBlur={handleAddSubtask}
+                    placeholder="Subtask title"
+                    style={{ flex: 1, fontSize: 13, border: "none", outline: "none", backgroundColor: "transparent", fontFamily: "var(--font-roboto)", color: "var(--color-body)" }}
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+        {/* Add subtask row — always shown if no subtasks yet, or after list */}
+        {!addingSubtask && (
+          <div className="px-6" style={{ borderBottom: subtasks.length === 0 && task.links.length === 0 ? "1px solid var(--color-border)" : "none", paddingTop: 6, paddingBottom: 6 }}>
+            <button
+              onClick={() => { setAddingSubtask(true); setTimeout(() => subtaskInputRef.current?.focus(), 0); }}
+              className="flex items-center gap-1.5 hover:opacity-70 transition-opacity"
+              style={{ fontSize: 12, color: "var(--color-secondary)", background: "none", border: "none", cursor: "pointer", padding: "4px 0", fontFamily: "var(--font-roboto)" }}
+            >
+              <Plus size={12} /> Add subtask
+            </button>
+          </div>
+        )}
 
         {/* Linked docs */}
         {task.links.length > 0 && (

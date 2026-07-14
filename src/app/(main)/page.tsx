@@ -662,7 +662,7 @@ export default function DashboardPage() {
         // Fetch team members for avatar display
         const { data: members } = await supabase
           .from("team_members")
-          .select("*, user_profiles(name, avatar_color, avatar_initials, role)")
+          .select("*, user_profiles(name, avatar_color, avatar_initials, avatar_url, role)")
           .eq("project_id", pid);
 
         if (members) {
@@ -676,6 +676,7 @@ export default function DashboardPage() {
               role: (row.role ?? "researcher") as User["role"],
               avatarColor: profile?.avatar_color ?? "#B4D4E3",
               avatarInitials: profile?.avatar_initials ?? "??",
+              avatarUrl: profile?.avatar_url ?? undefined,
             } as User;
           }));
         }

@@ -446,7 +446,14 @@ function BookmarkCard({ bm, canDelete, onDelete }: {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function BookmarksPage() {
-  const { projectId, activeScope, subProjectId } = useProject();
+  const { projectId, activeScope, subProjectId, subProjects } = useProject();
+  type BmScope = "personal" | "lab" | "project";
+  const [localScope, setLocalScope] = useState<BmScope>(
+    activeScope === "personal" ? "personal" : activeScope === "project" ? "project" : "lab"
+  );
+  useEffect(() => {
+    setLocalScope(activeScope === "personal" ? "personal" : activeScope === "project" ? "project" : "lab");
+  }, [activeScope]);
   const [bookmarks, setBookmarks] = useState<BookmarkRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -472,8 +479,8 @@ export default function BookmarksPage() {
       .from("bookmarks")
       .select("*, user_profiles!added_by(name)")
       .eq("project_id", projectId)
-      .eq("scope", activeScope === "personal" ? "personal" : activeScope === "project" ? "project" : "lab");
-    if (activeScope === "project" && subProjectId) {
+      .eq("scope", localScope);
+    if (localScope === "project" && subProjectId) {
       q = q.eq("sub_project_id", subProjectId);
     }
     const { data, error } = await q.order("added_at", { ascending: false });
@@ -497,11 +504,11 @@ export default function BookmarksPage() {
       );
     }
     setLoading(false);
-  }, [projectId, activeScope, subProjectId]);
+  }, [projectId, localScope, subProjectId]);
 
   useEffect(() => {
     if (isSupabaseConfigured && projectId) fetchBookmarks();
-  }, [projectId, activeScope, subProjectId, fetchBookmarks]);
+  }, [projectId, localScope, subProjectId, fetchBookmarks]);
 
   async function handleAdd(url: string, title: string) {
     if (!projectId) return;
@@ -525,8 +532,8 @@ export default function BookmarksPage() {
         url,
         title,
         added_by: currentUserId,
-        scope: activeScope === "personal" ? "personal" : activeScope === "project" ? "project" : "lab",
-        sub_project_id: activeScope === "project" ? (subProjectId ?? null) : null,
+        scope: localScope,
+        sub_project_id: localScope === "project" ? (subProjectId ?? null) : null,
       })
       .select("*, user_profiles!added_by(name)")
       .single();
@@ -697,6 +704,36 @@ export default function BookmarksPage() {
             );
           })}
         </div>
+        {/* Scope tab row */}
+        <div style={{ display: "flex", gap: 0, borderBottom: "1px solid var(--color-border)", padding: "0 28px" }}>
+          {(["personal", "lab", "project"] as BmScope[]).map((s) => {
+            const label = s === "project"
+              ? (subProjects.length === 1 ? subProjects[0].name : "Projects")
+              : s === "personal" ? "Mine" : "Lab";
+            const active = localScope === s;
+            return (
+              <button
+                key={s}
+                onClick={() => setLocalScope(s)}
+                style={{
+                  fontSize: 13,
+                  fontWeight: active ? 700 : 500,
+                  color: active ? "var(--color-navy)" : "var(--color-secondary)",
+                  background: "none",
+                  border: "none",
+                  borderBottom: active ? "2px solid var(--color-navy)" : "2px solid transparent",
+                  padding: "12px 16px 10px",
+                  cursor: "pointer",
+                  fontFamily: "var(--font-roboto)",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+
         <div style={{ padding: "28px 28px 40px" }}>
 
           {/* Content header */}

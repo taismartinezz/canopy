@@ -272,7 +272,7 @@ function ProjectForm({
 }) {
   return (
     <>
-      <Field label="Project / Lab name">
+      <Field label="Lab name">
         <TextInput value={projectName} onChange={setProjectName} placeholder="e.g. Moral Injury & Resilience Lab" />
       </Field>
 
@@ -391,14 +391,7 @@ async function syncOnboardingToSupabase({
         localStorage.removeItem("pendingInviteCode");
       }
     } else {
-      // Researcher creating own workspace (no invite code)
-      const { data: created, error: createErr2 } = await supabase
-        .from("projects")
-        .insert({ name: projectName, institution, research_type: researchType, owner_id: user.id })
-        .select("id")
-        .single();
-      if (createErr2 || !created) return `Project creation failed: ${createErr2?.message ?? "unknown error"}`;
-      projectId = created.id as string;
+      return "No invite code provided. Please ask your PI for a lab invite link.";
     }
 
     const profilePayload = {
@@ -453,8 +446,6 @@ export default function OnboardingPage() {
 
   // Researcher step 2
   const [inviteCode, setInviteCode] = useState("");
-  const [resProjectName, setResProjectName] = useState("");
-  const [resInstitution, setResInstitution] = useState("");
   const [resUserName, setResUserName] = useState("");
   const [isJoining, setIsJoining] = useState(false);
 
@@ -543,14 +534,9 @@ export default function OnboardingPage() {
   }
 
   function handleResearcherStep2Continue() {
-    if (inviteCode.length >= 6) {
+    if (inviteCode.trim().length >= 6) {
       setIsJoining(true);
-      setTimeout(() => {
-        setIsJoining(false);
-        setStep(3);
-      }, 1500);
-    } else {
-      setStep(3);
+      setTimeout(() => { setIsJoining(false); setStep(3); }, 1500);
     }
   }
 
@@ -605,8 +591,8 @@ export default function OnboardingPage() {
       userRole      = "pi";
       userRoleTitle = piRoleTitle || undefined;
     } else {
-      projectName   = usedInvite ? "Lab Workspace" : resProjectName;
-      institution   = usedInvite ? "" : resInstitution;
+      projectName   = "Lab Workspace";
+      institution   = "";
       researchType  = "";
       userName      = profileName || resUserName;
       userRole      = "researcher";
@@ -800,8 +786,8 @@ export default function OnboardingPage() {
                     }}
                   >
                     {r === "pi"
-                      ? "I manage a research team and want to create a project workspace."
-                      : "I've been invited to join a lab or want to create my own workspace."}
+                      ? "I manage a research team and want to set up a lab workspace."
+                      : "I've been invited to join a lab by my PI."}
                   </span>
                 </button>
               );
@@ -851,28 +837,17 @@ export default function OnboardingPage() {
     );
   }
 
-  // ── Step 2B: Researcher joins or creates ───────────────────────────────────
+  // ── Step 2B: Researcher enters invite code ─────────────────────────────────
 
   if (step === 2 && role === "researcher") {
-    const inviteValid = inviteCode.length >= 6;
-    const createValid = resProjectName.trim().length > 0 && resUserName.trim().length > 0;
-    const canContinue = inviteValid || createValid;
+    const inviteValid = inviteCode.trim().length >= 6;
 
     if (isJoining) {
       return (
         <div style={PAGE_WRAP}>
           <div style={{ ...CARD_STYLE, textAlign: "center", padding: "56px 40px" }}>
             <CanopyLogo size={28} />
-            <p
-              style={{
-                fontFamily: "var(--font-lora)",
-                fontWeight: 600,
-                fontSize: 18,
-                color: "#1B2E4B",
-                marginTop: 20,
-                marginBottom: 0,
-              }}
-            >
+            <p style={{ fontFamily: "var(--font-lora)", fontWeight: 600, fontSize: 18, color: "#1B2E4B", marginTop: 20, marginBottom: 0 }}>
               Joined! Setting up your workspace...
             </p>
           </div>
@@ -885,64 +860,24 @@ export default function OnboardingPage() {
         <div style={CARD_STYLE}>
           <BackButton onClick={() => setStep(1)} />
           <StepDots current={2} total={3} />
-          <SectionTitle title="How are you joining Canopy?" />
+          <SectionTitle
+            title="Join your lab"
+            subtitle="Enter the invite code or paste the invite link your PI shared with you."
+          />
 
-          {/* Option A: join an existing lab */}
-          <div
-            style={{
-              border: `${inviteCode.length >= 6 ? 2 : 1}px solid ${inviteCode.length >= 6 ? "#1B2E4B" : "#DDE1E7"}`,
-              borderRadius: 10,
-              padding: "20px 20px 16px",
-              marginBottom: 16,
-              backgroundColor: inviteCode.length >= 6 ? "rgba(27,46,75,0.03)" : "#fff",
-              transition: "border-color 150ms ease, background-color 150ms ease",
-            }}
-          >
-            <p style={{ fontFamily: "var(--font-lora)", fontWeight: 600, fontSize: 14, color: "#1B2E4B", margin: "0 0 4px" }}>
-              Join an existing lab
-            </p>
-            <p style={{ fontFamily: "var(--font-roboto)", fontSize: 12, color: "#6B6B6B", margin: "0 0 12px" }}>
-              Your PI shared an invite code or link.
-            </p>
+          <Field label="Invite code">
             <TextInput
               value={inviteCode}
               onChange={setInviteCode}
               placeholder="e.g. CANOPY-XXXX"
             />
-          </div>
+          </Field>
 
-          {/* Or divider */}
-          <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "4px 0 16px" }}>
-            <div style={{ flex: 1, height: 1, backgroundColor: "#DDE1E7" }} />
-            <span style={{ fontFamily: "var(--font-roboto)", fontSize: 12, color: "#6B6B6B" }}>or</span>
-            <div style={{ flex: 1, height: 1, backgroundColor: "#DDE1E7" }} />
-          </div>
+          <p style={{ fontFamily: "var(--font-roboto)", fontSize: 12, color: "#6B6B6B", margin: "-8px 0 0" }}>
+            Don&apos;t have a code? Ask your PI to share an invite link from their Lab Settings.
+          </p>
 
-          {/* Option B: create own workspace */}
-          <div
-            style={{
-              border: `${resProjectName.trim().length > 0 ? 2 : 1}px solid ${resProjectName.trim().length > 0 ? "#1B2E4B" : "#DDE1E7"}`,
-              borderRadius: 10,
-              padding: "20px 20px 4px",
-              backgroundColor: resProjectName.trim().length > 0 ? "rgba(27,46,75,0.03)" : "#fff",
-              transition: "border-color 150ms ease, background-color 150ms ease",
-            }}
-          >
-            <p style={{ fontFamily: "var(--font-lora)", fontWeight: 600, fontSize: 14, color: "#1B2E4B", margin: "0 0 4px" }}>
-              Create my own workspace
-            </p>
-            <p style={{ fontFamily: "var(--font-roboto)", fontSize: 12, color: "#6B6B6B", margin: "0 0 12px" }}>
-              Start fresh — you can invite collaborators later.
-            </p>
-            <ProjectForm
-              projectName={resProjectName} setProjectName={setResProjectName}
-              institution={resInstitution} setInstitution={setResInstitution}
-              userName={resUserName} setUserName={setResUserName}
-              showResearchType={false}
-            />
-          </div>
-
-          <NavButton onClick={handleResearcherStep2Continue} disabled={!canContinue}>
+          <NavButton onClick={handleResearcherStep2Continue} disabled={!inviteValid}>
             Continue
           </NavButton>
         </div>

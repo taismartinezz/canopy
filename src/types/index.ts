@@ -24,6 +24,7 @@ export interface SubProject {
   createdBy?: string;
   createdAt: string;
   archived: boolean;
+  color?: string;        // Material palette hex, auto-assigned on creation
 }
 
 export type ResearchType =
@@ -83,6 +84,7 @@ export interface TaskLink {
 export interface Task {
   id: string;
   projectId: string;
+  parentId?: string | null; // null = top-level task; set = subtask
   title: string;
   description?: string;
   status: TaskStatus;
@@ -370,6 +372,7 @@ export interface Reminder {
   id: string;
   userId: string;         // creator
   projectId?: string;     // required when scope = "lab"
+  subProjectId?: string;  // required when scope = "project"
   scope?: ReminderScope;  // defaults to "personal"
   title: string;
   dueAt?: string;         // ISO datetime — optional (untimed reminders allowed)
