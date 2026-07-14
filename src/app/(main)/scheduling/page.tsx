@@ -594,7 +594,7 @@ function CalendarTab({
 
 // ── Tab: Availability ─────────────────────────────────────────────────────────
 
-type AvailScope = "mine" | "all" | "custom";
+type AvailScope = "mine" | "all";
 
 function AvailabilityTab({
   savedSlots,
@@ -650,7 +650,7 @@ function AvailabilityTab({
     <div className="space-y-4">
       {/* Scope pills */}
       <div className="flex items-center gap-2 flex-wrap">
-        {([["mine", "Mine"], ["all", "My Team"], ["custom", "Custom"]] as [AvailScope, string][]).map(([s, label]) => (
+        {([["mine", "Mine"], ["all", "My Team"]] as [AvailScope, string][]).map(([s, label]) => (
           <button
             key={s}
             onClick={() => setScope(s)}
@@ -667,8 +667,8 @@ function AvailabilityTab({
         ))}
       </div>
 
-      {/* Per-person chips (shown when not "mine") */}
-      {scope !== "mine" && teamMembers.length > 0 && (
+      {/* Per-person chips — shown in My Team view; deselect to customise */}
+      {scope === "all" && teamMembers.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {teamMembers.map(m => {
             const checked = selectedIds.includes(m.id);
@@ -693,6 +693,13 @@ function AvailabilityTab({
             );
           })}
         </div>
+      )}
+
+      {/* Privacy gate: require ≥2 people before showing overlap view */}
+      {scope === "all" && selectedIds.length < 2 && (
+        <p style={{ fontSize: 13, color: "var(--color-secondary)", fontStyle: "italic" }}>
+          Select at least 2 people to compare availability.
+        </p>
       )}
 
       {scope === "mine" ? (
@@ -775,9 +782,9 @@ function AvailabilityTab({
         <Card>
           <SectionHeader title={overlapTitle} />
           <div className="p-5">
-            {filteredMembers.length === 0 ? (
+            {filteredMembers.length < 2 ? (
               <p style={{ fontSize: 13, color: "var(--color-secondary)", textAlign: "center", padding: "24px 0" }}>
-                Select at least one person above to see their availability.
+                Select at least 2 people to compare availability.
               </p>
             ) : filteredAvailabilities.length === 0 ? (
               <p style={{ fontSize: 13, color: "var(--color-secondary)", textAlign: "center", padding: "24px 0" }}>

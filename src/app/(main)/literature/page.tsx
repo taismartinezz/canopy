@@ -6,7 +6,7 @@ import {
 } from "@/lib/mock-data";
 import { supabase } from "@/lib/supabase";
 import { useProject } from "@/context/ProjectContext";
-import type { LiteratureItem, ReadStatus, LiteratureType, LibraryScope, LiteratureFile, LitAnnotation, LitAssignedReading, LitRecommendation, AssignmentReadingStatus } from "@/types";
+import type { LiteratureItem, ReadStatus, LiteratureType, LibraryScope, LiteratureFile, LitAnnotation, LitAssignedReading, LitRecommendation, AssignmentReadingStatus, SubProject } from "@/types";
 import {
   Plus, Search, Download, FileText, File, X,
   Tag, Star, ExternalLink, Copy, Check, ChevronLeft, ChevronRight,
@@ -974,7 +974,7 @@ function DOILookupModal({ onSave, onClose, projectId, currentUserId, subProjectI
 
 function CollectionsSidebar({
   scope, setScope, activeCollection, setActiveCollection, allTags, activeTag, setActiveTag, items,
-  showClose, onClose, onAddItem, onCollapse, onImportZotero, onAddByDOI,
+  showClose, onClose, onAddItem, onCollapse, onImportZotero, onAddByDOI, subProjects,
 }: {
   scope: LibraryScope; setScope: (s: LibraryScope) => void;
   activeCollection: string; setActiveCollection: (id: string) => void;
@@ -985,6 +985,7 @@ function CollectionsSidebar({
   onCollapse?: () => void;
   onImportZotero?: () => void;
   onAddByDOI?: () => void;
+  subProjects?: SubProject[];
 }) {
   const totalRead   = items.filter((i) => i.status === "read").length;
   const totalUnread = items.filter((i) => i.status === "unread").length;
@@ -1016,12 +1017,16 @@ function CollectionsSidebar({
 
       <div className="px-3 py-2.5" style={{ borderBottom: "1px solid var(--color-border)" }}>
         <div className="flex rounded-lg p-0.5" style={{ backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)" }}>
-          {(["lab", "personal", "project"] as const).map((s) => (
-            <button key={s} onClick={() => setScope(s)} className="flex-1 py-1.5 rounded-md"
-              style={{ fontSize: 11, fontWeight: 600, backgroundColor: scope === s ? "var(--color-navy)" : "transparent", color: scope === s ? "#fff" : "var(--color-secondary)", border: "none", cursor: "pointer", minHeight: 36 }}>
-              {s === "lab" ? "Lab" : s === "personal" ? "Mine" : "Project"}
-            </button>
-          ))}
+          {(["personal", "lab", "project"] as const).map((s) => {
+            let label = s === "lab" ? "Lab" : s === "personal" ? "Mine" : "Project";
+            if (s === "project" && subProjects && subProjects.length === 1) label = subProjects[0].name;
+            return (
+              <button key={s} onClick={() => setScope(s)} className="flex-1 py-1.5 rounded-md"
+                style={{ fontSize: 11, fontWeight: 600, backgroundColor: scope === s ? "var(--color-navy)" : "transparent", color: scope === s ? "#fff" : "var(--color-secondary)", border: "none", cursor: "pointer", minHeight: 36 }}>
+                {label}
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -1887,7 +1892,7 @@ function DetailPanelContent({
 // ── Literature page ───────────────────────────────────────────────────────────
 
 export default function LiteraturePage() {
-  const { activeScope, subProjectId } = useProject();
+  const { activeScope, subProjectId, subProjects } = useProject();
   const [items, setItems]               = useState<LiteratureItem[]>([]);
   const [loadingItems, setLoadingItems] = useState(true);
   const [scope, setScope]               = useState<LibraryScope>(
@@ -2047,7 +2052,7 @@ export default function LiteraturePage() {
           scope={scope} setScope={setScope}
           activeCollection={activeCollection} setActiveCollection={setActiveCollection}
           allTags={allTags} activeTag={activeTag} setActiveTag={setActiveTag}
-          items={scopedItems} onAddItem={() => setAddItemOpen(true)}
+          items={scopedItems} subProjects={subProjects} onAddItem={() => setAddItemOpen(true)}
           onCollapse={() => {
             setPanelTransitionActive(true);
             setPanelCollapsed(true);

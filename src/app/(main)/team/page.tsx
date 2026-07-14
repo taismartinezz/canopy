@@ -237,6 +237,7 @@ export default function TeamPage() {
     isSupabaseConfigured ? null : CURRENT_USER_ID
   );
   const [subProjectMemberIds, setSubProjectMemberIds] = useState<Set<string> | null>(null);
+  const [projectTeam, setProjectTeam] = useState<TeamMember[]>([]);
   const [showMembersModal, setShowMembersModal] = useState(false);
   const closeMemberPanel = useCallback(() => setSelectedMember(null), []);
   const closeMeetingModal = useCallback(() => setMeetingModalOpen(false), []);
@@ -346,26 +347,43 @@ export default function TeamPage() {
       });
   }, [currentUserId]);
 
-  // Fetch sub-project member ids when in project scope.
+  // In project scope, fetch the full sub-project member list (includes external members
+  // who may not be in team_members) directly from sub_project_members + user_profiles.
   useEffect(() => {
     if (activeScope !== "project" || !subProjectId || !isSupabaseConfigured) {
       setSubProjectMemberIds(null);
+      setProjectTeam([]);
       return;
     }
     supabase
       .from("sub_project_members")
-      .select("user_id")
+      .select("user_id, user_profiles(name, avatar_color, avatar_initials, avatar_url, role, institution)")
       .eq("sub_project_id", subProjectId)
       .then(({ data }) => {
-        if (data) setSubProjectMemberIds(new Set(data.map((r) => r.user_id as string)));
+        if (!data) return;
+        setSubProjectMemberIds(new Set(data.map((r) => r.user_id as string)));
+        setProjectTeam(data.map((row) => {
+          const p = Array.isArray(row.user_profiles) ? row.user_profiles[0] : row.user_profiles;
+          const prof = p as Record<string, string> | null;
+          const name = prof?.name ?? "Unknown";
+          return {
+            id:              row.user_id as string,
+            name,
+            email:           "",
+            role:            (prof?.role as "pi" | "researcher") ?? "researcher",
+            avatarColor:     prof?.avatar_color ?? "#B4D4E3",
+            avatarInitials:  prof?.avatar_initials ?? name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase(),
+            avatarUrl:       prof?.avatar_url ?? undefined,
+            institution:     prof?.institution ?? undefined,
+            taskCounts:      { todo: 0, in_progress: 0, in_review: 0, done: 0 },
+          } satisfies TeamMember;
+        }));
       });
   }, [activeScope, subProjectId]);
 
-  // Effective team: filter by sub-project membership when in project scope.
-  // Personal scope falls back to full lab roster (team has no personal mode).
-  const visibleTeam = activeScope === "project" && subProjectMemberIds !== null
-    ? team.filter((m) => subProjectMemberIds.has(m.id))
-    : team;
+  // In project scope use the directly-fetched list (includes external members).
+  // In lab/personal scope fall back to the lab team roster.
+  const visibleTeam = activeScope === "project" ? projectTeam : team;
 
   return (
     <div className="flex flex-col h-full overflow-auto" style={{ fontFamily: "var(--font-roboto)" }}>

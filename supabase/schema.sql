@@ -109,7 +109,8 @@ create table if not exists sub_projects (
   description text,
   created_by  uuid references user_profiles(id) on delete set null,
   created_at  timestamptz not null default now(),
-  archived    boolean not null default false
+  archived    boolean not null default false,
+  color       text
 );
 
 alter table sub_projects enable row level security;
@@ -258,7 +259,8 @@ create table if not exists tasks (
   links         jsonb not null default '[]',
   created_by    uuid not null references auth.users(id),
   created_at    timestamptz not null default now(),
-  updated_at    timestamptz not null default now()
+  updated_at    timestamptz not null default now(),
+  parent_id     uuid references tasks(id) on delete cascade
 );
 
 alter table tasks enable row level security;
