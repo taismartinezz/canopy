@@ -4,10 +4,11 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import {
   Plus, ExternalLink, Trash2, Bookmark, X, Check,
   FileText, BookOpen, FlaskConical, ClipboardList, Link2, Code2, Play, Table,
-  ChevronLeft, ChevronRight,
+  ChevronLeft, ChevronRight, Users, User as UserIcon,
 } from "lucide-react";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { useProject } from "@/context/ProjectContext";
+import type { SubProject } from "@/types";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -22,6 +23,8 @@ interface BookmarkRow {
   added_by: string | null;
   added_at: string;
   adder_name?: string;
+  scope?: string;
+  sub_project_id?: string | null;
 }
 
 // ── Type config ───────────────────────────────────────────────────────────────
@@ -41,6 +44,14 @@ const TYPE_CONFIG: Record<BookmarkType, {
   video:    { label: "Videos",    badge: "video",    icon: Play,         color: "#B91C1C", bg: "rgba(185,28,28,0.10)" },
   sheet:    { label: "Sheets",    badge: "sheet",    icon: Table,        color: "#15803D", bg: "rgba(21,128,61,0.10)" },
   link:     { label: "Links",     badge: "link",     icon: Link2,        color: "#475569", bg: "rgba(71,85,105,0.10)" },
+};
+
+type BmScope = "all" | "personal" | "lab" | "project";
+
+const SCOPE_CONFIG: Record<"all" | "personal" | "lab", { label: string; color: string; icon: React.ElementType }> = {
+  all:      { label: "All",      color: "#475569", icon: Bookmark  },
+  personal: { label: "Personal", color: "#0EA5E9", icon: UserIcon  },
+  lab:      { label: "Lab",      color: "#0F2544", icon: Users     },
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -437,20 +448,22 @@ function BookmarkCard({ bm, canDelete, onDelete }: {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function BookmarksPage() {
-  const { projectId, activeScope, subProjectId, subProjects } = useProject();
-  type BmScope = "personal" | "lab" | "project";
-  const [localScope, setLocalScope] = useState<BmScope>(
-    activeScope === "personal" ? "personal" : activeScope === "project" ? "project" : "lab"
-  );
-  useEffect(() => {
-    setLocalScope(activeScope === "personal" ? "personal" : activeScope === "project" ? "project" : "lab");
-  }, [activeScope]);
+  const { projectId, subProjectId, subProjects } = useProject();
+  const [bmScope, setBmScope] = useState<BmScope>("all");
+  const [selectedSubProjectId, setSelectedSubProjectId] = useState<string | null>(null);
   const [bookmarks, setBookmarks] = useState<BookmarkRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [activeCategory, setActiveCategory] = useState<FilterCategory>("all");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+  function handleScopeSelect(scope: BmScope, spId?: string) {
+    setBmScope(scope);
+    setSelectedSubProjectId(spId ?? null);
+    setShowForm(false);
+    setActiveCategory("all");
+  }
 
   useEffect(() => {
     if (!isSupabaseConfigured) {
@@ -466,15 +479,11 @@ export default function BookmarksPage() {
   const fetchBookmarks = useCallback(async () => {
     if (!projectId) return;
     setLoading(true);
-    let q = supabase
+    const { data, error } = await supabase
       .from("bookmarks")
       .select("*, user_profiles!added_by(name)")
       .eq("project_id", projectId)
-      .eq("scope", localScope);
-    if (localScope === "project" && subProjectId) {
-      q = q.eq("sub_project_id", subProjectId);
-    }
-    const { data, error } = await q.order("added_at", { ascending: false });
+      .order("added_at", { ascending: false });
 
     if (error) {
       console.error("[Bookmarks] fetch error:", error);
@@ -483,35 +492,42 @@ export default function BookmarksPage() {
         data.map((row) => {
           const prof = row.user_profiles as { name?: string } | null;
           return {
-            id:         row.id as string,
-            project_id: row.project_id as string,
-            url:        row.url as string,
-            title:      row.title as string,
-            added_by:   row.added_by as string | null,
-            added_at:   row.added_at as string,
-            adder_name: prof?.name ?? undefined,
+            id:             row.id as string,
+            project_id:     row.project_id as string,
+            url:            row.url as string,
+            title:          row.title as string,
+            added_by:       row.added_by as string | null,
+            added_at:       row.added_at as string,
+            adder_name:     prof?.name ?? undefined,
+            scope:          (row.scope as string | undefined) ?? "lab",
+            sub_project_id: (row.sub_project_id as string | null | undefined) ?? null,
           };
         })
       );
     }
     setLoading(false);
-  }, [projectId, localScope, subProjectId]);
+  }, [projectId]);
 
   useEffect(() => {
     if (isSupabaseConfigured && projectId) fetchBookmarks();
-  }, [projectId, localScope, subProjectId, fetchBookmarks]);
+  }, [projectId, fetchBookmarks]);
 
   async function handleAdd(url: string, title: string) {
     if (!projectId) return;
 
+    const effectiveScope = bmScope === "all" ? "lab" : bmScope;
+    const effectiveSubProjectId = bmScope === "project" ? (selectedSubProjectId ?? subProjectId ?? null) : null;
+
     const optimistic: BookmarkRow = {
-      id:         `optimistic-${Date.now()}`,
-      project_id: projectId,
+      id:             `optimistic-${Date.now()}`,
+      project_id:     projectId,
       url,
       title,
-      added_by:   currentUserId,
-      added_at:   new Date().toISOString(),
-      adder_name: "You",
+      added_by:       currentUserId,
+      added_at:       new Date().toISOString(),
+      adder_name:     "You",
+      scope:          effectiveScope,
+      sub_project_id: effectiveSubProjectId,
     };
     setBookmarks((prev) => [optimistic, ...prev]);
     setShowForm(false);
@@ -519,12 +535,12 @@ export default function BookmarksPage() {
     const { data, error } = await supabase
       .from("bookmarks")
       .insert({
-        project_id: projectId,
+        project_id:     projectId,
         url,
         title,
-        added_by: currentUserId,
-        scope: localScope,
-        sub_project_id: localScope === "project" ? (subProjectId ?? null) : null,
+        added_by:       currentUserId,
+        scope:          effectiveScope,
+        sub_project_id: effectiveSubProjectId,
       })
       .select("*, user_profiles!added_by(name)")
       .single();
@@ -537,13 +553,15 @@ export default function BookmarksPage() {
 
     const prof = data.user_profiles as { name?: string } | null;
     const confirmed: BookmarkRow = {
-      id:         data.id as string,
-      project_id: data.project_id as string,
-      url:        data.url as string,
-      title:      data.title as string,
-      added_by:   data.added_by as string | null,
-      added_at:   data.added_at as string,
-      adder_name: prof?.name ?? undefined,
+      id:             data.id as string,
+      project_id:     data.project_id as string,
+      url:            data.url as string,
+      title:          data.title as string,
+      added_by:       data.added_by as string | null,
+      added_at:       data.added_at as string,
+      adder_name:     prof?.name ?? undefined,
+      scope:          effectiveScope,
+      sub_project_id: effectiveSubProjectId,
     };
     setBookmarks((prev) => prev.map((b) => b.id === optimistic.id ? confirmed : b));
   }
@@ -557,9 +575,27 @@ export default function BookmarksPage() {
     }
   }
 
-  // Derive category counts from current bookmarks
+  // Local scope filter (runs in-memory — no extra network calls)
+  const scopedBookmarks = bookmarks.filter((bm) => {
+    if (bmScope === "all") return true;
+    if (bmScope === "project") return bm.scope === "project" && (!selectedSubProjectId || bm.sub_project_id === selectedSubProjectId);
+    return bm.scope === bmScope;
+  });
+
+  // Scope counts for sidebar
+  const scopeCounts = {
+    all:      bookmarks.length,
+    personal: bookmarks.filter((b) => b.scope === "personal").length,
+    lab:      bookmarks.filter((b) => b.scope === "lab").length,
+  };
+  const projectCounts: Record<string, number> = {};
+  for (const sp of subProjects) {
+    projectCounts[sp.id] = bookmarks.filter((b) => b.scope === "project" && b.sub_project_id === sp.id).length;
+  }
+
+  // Derive category counts from scoped bookmarks
   const categoryCounts = Object.entries(
-    bookmarks.reduce((acc, bm) => {
+    scopedBookmarks.reduce((acc, bm) => {
       const t = inferType(bm.url);
       acc[t] = (acc[t] ?? 0) + 1;
       return acc;
@@ -568,10 +604,10 @@ export default function BookmarksPage() {
     .map(([type, count]) => ({ type: type as BookmarkType, count }))
     .sort((a, b) => b.count - a.count);
 
-  // Apply active filter
+  // Apply category filter on top of scoped list
   const filtered = activeCategory === "all"
-    ? bookmarks
-    : bookmarks.filter((bm) => inferType(bm.url) === activeCategory);
+    ? scopedBookmarks
+    : scopedBookmarks.filter((bm) => inferType(bm.url) === activeCategory);
 
   const emptyLabel = activeCategory === "all"
     ? "No bookmarks yet"
@@ -617,37 +653,69 @@ export default function BookmarksPage() {
           </button>
         </div>
 
-        {/* Thin divider */}
-        <div style={{ height: 1, backgroundColor: "var(--color-border)", marginBottom: 8, marginLeft: 16, marginRight: 16 }} />
+        {/* Nav list */}
+        <nav style={{ padding: "4px 8px 16px", flex: 1, minWidth: 220, overflowY: "auto" }} aria-label="Filter bookmarks">
 
-        {/* Category list */}
-        <nav style={{ padding: "0 8px 16px", flex: 1, minWidth: 220 }} aria-label="Filter bookmarks by type">
-          {/* All */}
-          <SidebarRow
-            icon={<Bookmark size={14} color={activeCategory === "all" ? "var(--color-navy)" : "var(--color-secondary)"} />}
-            label="All"
-            count={bookmarks.length}
-            active={activeCategory === "all"}
-            onClick={() => setActiveCategory("all")}
-          />
-
-          {/* Dynamic type rows */}
-          {categoryCounts.map(({ type, count }) => {
-            const cfg = TYPE_CONFIG[type];
+          {/* Scope rows */}
+          {(["all", "personal", "lab"] as const).map((s) => {
+            const cfg = SCOPE_CONFIG[s];
             const Icon = cfg.icon;
-            const active = activeCategory === type;
+            const isActive = bmScope === s;
             return (
               <SidebarRow
-                key={type}
-                icon={<Icon size={14} color={active ? cfg.color : "var(--color-secondary)"} />}
+                key={s}
+                icon={<Icon size={14} />}
                 label={cfg.label}
-                count={count}
-                active={active}
-                typeBg={cfg.bg}
-                onClick={() => setActiveCategory(type)}
+                count={scopeCounts[s]}
+                active={isActive}
+                typeBg={cfg.color}
+                onClick={() => handleScopeSelect(s)}
               />
             );
           })}
+
+          {/* Per-project rows */}
+          {subProjects.length > 0 && (
+            <>
+              <div style={{ height: 1, backgroundColor: "var(--color-border)", margin: "5px 2px" }} />
+              <p style={{ fontSize: 10, fontWeight: 700, color: "var(--color-secondary)", textTransform: "uppercase", letterSpacing: "0.08em", padding: "3px 11px 4px", margin: 0 }}>Projects</p>
+              {subProjects.map((sp) => (
+                <SidebarRow
+                  key={sp.id}
+                  icon={<Bookmark size={14} />}
+                  label={sp.name}
+                  count={projectCounts[sp.id] ?? 0}
+                  active={bmScope === "project" && selectedSubProjectId === sp.id}
+                  typeBg={sp.color ?? "#34A853"}
+                  onClick={() => handleScopeSelect("project", sp.id)}
+                />
+              ))}
+            </>
+          )}
+
+          {/* Type filter rows */}
+          {categoryCounts.length > 0 && (
+            <>
+              <div style={{ height: 1, backgroundColor: "var(--color-border)", margin: "5px 2px" }} />
+              <p style={{ fontSize: 10, fontWeight: 700, color: "var(--color-secondary)", textTransform: "uppercase", letterSpacing: "0.08em", padding: "3px 11px 4px", margin: 0 }}>Types</p>
+              {categoryCounts.map(({ type, count }) => {
+                const cfg = TYPE_CONFIG[type];
+                const Icon = cfg.icon;
+                const active = activeCategory === type;
+                return (
+                  <SidebarRow
+                    key={type}
+                    icon={<Icon size={14} />}
+                    label={cfg.label}
+                    count={count}
+                    active={active}
+                    typeBg={cfg.color}
+                    onClick={() => setActiveCategory(active ? "all" : type)}
+                  />
+                );
+              })}
+            </>
+          )}
         </nav>
       </div>
 
@@ -667,59 +735,23 @@ export default function BookmarksPage() {
       {/* ── Right content area ───────────────────────────────────────────────── */}
       <div style={{ flex: 1, overflowY: "auto", backgroundColor: "var(--color-canvas)" }}>
 
-        {/* Mobile category filter row — replaces sidebar on small screens */}
+        {/* Mobile scope + type chips */}
         <div className="md:hidden flex items-center gap-2 px-4 pt-4 pb-2 overflow-x-auto" style={{ borderBottom: "1px solid var(--color-border)", scrollbarWidth: "none" }}>
-          {[{ type: "all" as FilterCategory, label: "All", count: bookmarks.length }, ...categoryCounts.map(({ type, count }) => ({ type: type as FilterCategory, label: TYPE_CONFIG[type].label, count }))].map(({ type, label, count }) => {
-            const active = activeCategory === type;
-            const cfg = type !== "all" ? TYPE_CONFIG[type as BookmarkType] : null;
+          {(["all", "personal", "lab"] as const).map((s) => {
+            const cfg = SCOPE_CONFIG[s];
+            const isAct = bmScope === s && !selectedSubProjectId;
             return (
-              <button
-                key={type}
-                onClick={() => setActiveCategory(type)}
-                style={{
-                  flexShrink: 0,
-                  fontSize: 12,
-                  fontWeight: active ? 700 : 500,
-                  padding: "5px 12px",
-                  borderRadius: 20,
-                  border: `1px solid ${active ? (cfg?.color ?? "var(--color-navy)") : "var(--color-border)"}`,
-                  backgroundColor: active ? (cfg?.bg ?? "rgba(27,46,75,0.08)") : "transparent",
-                  color: active ? (cfg?.color ?? "var(--color-navy)") : "var(--color-secondary)",
-                  cursor: "pointer",
-                  whiteSpace: "nowrap",
-                  fontFamily: "var(--font-roboto)",
-                }}
-              >
-                {label} {count}
+              <button key={s} onClick={() => handleScopeSelect(s)} style={{ flexShrink: 0, fontSize: 12, fontWeight: isAct ? 700 : 500, padding: "5px 12px", borderRadius: 20, border: `1px solid ${isAct ? cfg.color : "var(--color-border)"}`, backgroundColor: isAct ? `${cfg.color}18` : "transparent", color: isAct ? cfg.color : "var(--color-secondary)", cursor: "pointer", whiteSpace: "nowrap", fontFamily: "var(--font-roboto)" }}>
+                {cfg.label} {scopeCounts[s]}
               </button>
             );
           })}
-        </div>
-        {/* Scope tab row */}
-        <div style={{ display: "flex", gap: 0, borderBottom: "1px solid var(--color-border)", padding: "0 28px" }}>
-          {(["personal", "lab", "project"] as BmScope[]).map((s) => {
-            const label = s === "project"
-              ? (subProjects.length === 1 ? subProjects[0].name : "Projects")
-              : s === "personal" ? "Mine" : "Lab";
-            const active = localScope === s;
+          {subProjects.map((sp) => {
+            const isAct = bmScope === "project" && selectedSubProjectId === sp.id;
+            const color = sp.color ?? "#34A853";
             return (
-              <button
-                key={s}
-                onClick={() => setLocalScope(s)}
-                style={{
-                  fontSize: 13,
-                  fontWeight: active ? 700 : 500,
-                  color: active ? "var(--color-navy)" : "var(--color-secondary)",
-                  background: "none",
-                  border: "none",
-                  borderBottom: active ? "2px solid var(--color-navy)" : "2px solid transparent",
-                  padding: "12px 16px 10px",
-                  cursor: "pointer",
-                  fontFamily: "var(--font-roboto)",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {label}
+              <button key={sp.id} onClick={() => handleScopeSelect("project", sp.id)} style={{ flexShrink: 0, fontSize: 12, fontWeight: isAct ? 700 : 500, padding: "5px 12px", borderRadius: 20, border: `1px solid ${isAct ? color : "var(--color-border)"}`, backgroundColor: isAct ? `${color}18` : "transparent", color: isAct ? color : "var(--color-secondary)", cursor: "pointer", whiteSpace: "nowrap", fontFamily: "var(--font-roboto)" }}>
+                {sp.name} {projectCounts[sp.id] ?? 0}
               </button>
             );
           })}
