@@ -531,6 +531,7 @@ export default function TasksPage() {
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "tasks", filter: `project_id=eq.${projectId}` }, (payload) => {
         const row = payload.new as Record<string, unknown>;
         if (row.archived) return;
+        if (row.parent_id) return; // subtasks are not shown on the board
         setTasks((prev) => {
           if (prev.find((t) => t.id === row.id)) return prev;
           return [{

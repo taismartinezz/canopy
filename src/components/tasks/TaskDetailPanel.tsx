@@ -666,9 +666,11 @@ export default function TaskDetailPanel({
                     autoFocus
                     value={subtaskInput}
                     onChange={e => setSubtaskInput(e.target.value)}
-                    onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); handleAddSubtask(); } if (e.key === "Escape") { setAddingSubtask(false); setSubtaskInput(""); } }}
-                    onBlur={handleAddSubtask}
-                    placeholder="Subtask title"
+                    onKeyDown={e => {
+                      if (e.key === "Enter") { e.preventDefault(); handleAddSubtask(); }
+                      if (e.key === "Escape") { e.preventDefault(); setAddingSubtask(false); setSubtaskInput(""); }
+                    }}
+                    placeholder="Subtask title — Enter to save, Esc to cancel"
                     style={{ flex: 1, fontSize: 13, border: "none", outline: "none", backgroundColor: "transparent", fontFamily: "var(--font-roboto)", color: "var(--color-body)" }}
                   />
                 </div>
