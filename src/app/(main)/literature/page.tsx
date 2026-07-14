@@ -211,10 +211,11 @@ function AddItemModal({
       return;
     }
 
-    const newItem: LiteratureItem = {
+    const newItem: LiteratureItem & { subProjectId?: string } = {
       id: data.id as string,
       projectId: data.project_id as string,
       scope: ((data.library ?? data.scope ?? scope) as LiteratureItem["scope"]),
+      subProjectId: scope === "project" ? (modalSubProjectId ?? subProjectId ?? undefined) : undefined,
       type: (data.type as LiteratureItem["type"]) ?? type,
       title: data.title as string,
       authors: toAuthorsArray(data.authors as string | string[]),
@@ -982,14 +983,43 @@ function DOILookupModal({ onSave, onClose, projectId, currentUserId, subProjectI
 
 // ── Left panel ────────────────────────────────────────────────────────────────
 
+type LitScope = "all" | LibraryScope;
+
+const LIT_SCOPE_COLORS: Record<LitScope, string> = {
+  all:      "#475569",
+  personal: "#0EA5E9",
+  lab:      "#0F2544",
+  project:  "#34A853",
+};
+
+function LitSidebarRow({ label, count, active, color, onClick }: {
+  label: string; count: number; active: boolean; color: string; onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "6px 10px 6px 11px", borderRadius: 7, border: "none", borderLeft: `3px solid ${active ? color : "transparent"}`, cursor: "pointer", backgroundColor: active ? `${color}18` : "transparent", marginBottom: 1, transition: "background-color 120ms ease, border-left-color 120ms ease", textAlign: "left", boxSizing: "border-box", fontFamily: "var(--font-roboto)" }}
+      onMouseEnter={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "rgba(0,0,0,0.04)"; }}
+      onMouseLeave={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "transparent"; }}
+    >
+      <span style={{ flex: 1, fontSize: 13, color: active ? color : "var(--color-body)", fontWeight: active ? 600 : 400, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{label}</span>
+      <span style={{ fontSize: 11, fontWeight: 600, color: active ? color : "var(--color-secondary)", backgroundColor: active ? `${color}20` : "rgba(0,0,0,0.06)", borderRadius: 10, padding: "1px 7px", flexShrink: 0, minWidth: 20, textAlign: "center" }}>{count}</span>
+    </button>
+  );
+}
+
 function CollectionsSidebar({
-  scope, setScope, activeCollection, setActiveCollection, allTags, activeTag, setActiveTag, items,
+  scope, setScope, selectedSubProjectId, setSelectedSubProjectId,
+  activeCollection, setActiveCollection, allTags, activeTag, setActiveTag,
+  items, allItems,
   showClose, onClose, onAddItem, onCollapse, onImportZotero, onAddByDOI, subProjects,
 }: {
-  scope: LibraryScope; setScope: (s: LibraryScope) => void;
+  scope: LitScope; setScope: (s: LitScope) => void;
+  selectedSubProjectId: string | null; setSelectedSubProjectId: (id: string | null) => void;
   activeCollection: string; setActiveCollection: (id: string) => void;
   allTags: string[]; activeTag: string | null; setActiveTag: (t: string | null) => void;
-  items: LiteratureItem[];
+  items: LiteratureItem[];    // scoped (for collections/tags/stats)
+  allItems: LiteratureItem[]; // unscoped (for scope counts in sidebar)
   showClose?: boolean; onClose?: () => void;
   onAddItem: () => void;
   onCollapse?: () => void;
@@ -999,6 +1029,16 @@ function CollectionsSidebar({
 }) {
   const totalRead   = items.filter((i) => i.status === "read").length;
   const totalUnread = items.filter((i) => i.status === "unread").length;
+
+  const scopeCounts = {
+    all:      allItems.length,
+    personal: allItems.filter((i) => i.scope === "personal").length,
+    lab:      allItems.filter((i) => i.scope === "lab").length,
+  };
+  const projectCounts: Record<string, number> = {};
+  for (const sp of (subProjects ?? [])) {
+    projectCounts[sp.id] = allItems.filter((i) => i.scope === "project" && (i as LiteratureItem & { subProjectId?: string }).subProjectId === sp.id).length;
+  }
 
   return (
     <div className="flex flex-col h-full" style={{ backgroundColor: "var(--color-surface)" }}>
@@ -1025,19 +1065,26 @@ function CollectionsSidebar({
         </div>
       </div>
 
-      <div className="px-3 py-2.5" style={{ borderBottom: "1px solid var(--color-border)" }}>
-        <div className="flex rounded-lg p-0.5" style={{ backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)" }}>
-          {(["personal", "lab", "project"] as const).map((s) => {
-            let label = s === "lab" ? "Lab" : s === "personal" ? "Mine" : "Project";
-            if (s === "project" && subProjects && subProjects.length === 1) label = subProjects[0].name;
-            return (
-              <button key={s} onClick={() => setScope(s)} className="flex-1 py-1.5 rounded-md"
-                style={{ fontSize: 11, fontWeight: 600, backgroundColor: scope === s ? "var(--color-navy)" : "transparent", color: scope === s ? "#fff" : "var(--color-secondary)", border: "none", cursor: "pointer", minHeight: 36 }}>
-                {label}
-              </button>
-            );
-          })}
-        </div>
+      <div style={{ padding: "4px 8px 6px", borderBottom: "1px solid var(--color-border)" }}>
+        <LitSidebarRow label="All Items" count={scopeCounts.all} active={scope === "all"} color={LIT_SCOPE_COLORS.all} onClick={() => { setScope("all"); setSelectedSubProjectId(null); }} />
+        <LitSidebarRow label="Personal"  count={scopeCounts.personal} active={scope === "personal"} color={LIT_SCOPE_COLORS.personal} onClick={() => { setScope("personal"); setSelectedSubProjectId(null); }} />
+        <LitSidebarRow label="Lab"       count={scopeCounts.lab}      active={scope === "lab"}      color={LIT_SCOPE_COLORS.lab}      onClick={() => { setScope("lab");      setSelectedSubProjectId(null); }} />
+        {(subProjects ?? []).length > 0 && (
+          <>
+            <div style={{ height: 1, backgroundColor: "var(--color-border)", margin: "4px 2px" }} />
+            <p style={{ fontSize: 10, fontWeight: 700, color: "var(--color-secondary)", textTransform: "uppercase", letterSpacing: "0.08em", padding: "3px 11px 2px", margin: 0 }}>Projects</p>
+            {(subProjects ?? []).map((sp) => (
+              <LitSidebarRow
+                key={sp.id}
+                label={sp.name}
+                count={projectCounts[sp.id] ?? 0}
+                active={scope === "project" && selectedSubProjectId === sp.id}
+                color={sp.color ?? LIT_SCOPE_COLORS.project}
+                onClick={() => { setScope("project"); setSelectedSubProjectId(sp.id); }}
+              />
+            ))}
+          </>
+        )}
       </div>
 
       <div className="flex-1 overflow-y-auto py-2">
@@ -1902,17 +1949,11 @@ function DetailPanelContent({
 // ── Literature page ───────────────────────────────────────────────────────────
 
 export default function LiteraturePage() {
-  const { activeScope, subProjectId, subProjects } = useProject();
+  const { subProjectId, subProjects } = useProject();
   const [items, setItems]               = useState<LiteratureItem[]>([]);
   const [loadingItems, setLoadingItems] = useState(true);
-  const [scope, setScope]               = useState<LibraryScope>(
-    activeScope === "personal" ? "personal" : activeScope === "project" ? "project" : "lab"
-  );
-
-  // Keep local scope in sync when the rail selection changes.
-  useEffect(() => {
-    setScope(activeScope === "personal" ? "personal" : activeScope === "project" ? "project" : "lab");
-  }, [activeScope]);
+  const [scope, setScope]               = useState<LitScope>("all");
+  const [selectedSubProjectId, setSelectedSubProjectId] = useState<string | null>(null);
   const [activeCollection, setActiveCollection] = useState("lc0");
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [search, setSearch]             = useState("");
@@ -1962,6 +2003,7 @@ export default function LiteraturePage() {
             id: row.id as string,
             projectId: row.project_id as string,
             scope: ((row.library ?? row.scope ?? "lab") as LiteratureItem["scope"]),
+            subProjectId: (row.sub_project_id as string | null | undefined) ?? undefined,
             type: (row.type as LiteratureItem["type"]) ?? "article",
             title: row.title as string,
             authors: toAuthorsArray(row.authors as string | string[]),
@@ -2013,11 +2055,12 @@ export default function LiteraturePage() {
     setDoiLookupOpen(false);
   }
 
-  const scopedItems = items.filter((item) =>
-    scope === "personal" ? item.scope === "personal"
-    : scope === "project" ? item.scope === "project"
-    : item.scope === "lab"
-  );
+  const scopedItems = items.filter((item) => {
+    if (scope === "all") return true;
+    if (scope === "personal") return item.scope === "personal";
+    if (scope === "project") return item.scope === "project" && (!selectedSubProjectId || (item as LiteratureItem & { subProjectId?: string }).subProjectId === selectedSubProjectId);
+    return item.scope === "lab";
+  });
 
   const availableYears = [...new Set(scopedItems.map((i) => i.year).filter(Boolean))].sort((a, b) => b - a);
 
@@ -2060,9 +2103,10 @@ export default function LiteraturePage() {
       >
         <CollectionsSidebar
           scope={scope} setScope={setScope}
+          selectedSubProjectId={selectedSubProjectId} setSelectedSubProjectId={setSelectedSubProjectId}
           activeCollection={activeCollection} setActiveCollection={setActiveCollection}
           allTags={allTags} activeTag={activeTag} setActiveTag={setActiveTag}
-          items={scopedItems} subProjects={subProjects} onAddItem={() => setAddItemOpen(true)}
+          items={scopedItems} allItems={items} subProjects={subProjects} onAddItem={() => setAddItemOpen(true)}
           onCollapse={() => {
             setPanelTransitionActive(true);
             setPanelCollapsed(true);
@@ -2097,9 +2141,10 @@ export default function LiteraturePage() {
       >
         <CollectionsSidebar
           scope={scope} setScope={setScope}
+          selectedSubProjectId={selectedSubProjectId} setSelectedSubProjectId={setSelectedSubProjectId}
           activeCollection={activeCollection} setActiveCollection={(id) => { setActiveCollection(id); setCollectionsOpen(false); }}
           allTags={allTags} activeTag={activeTag} setActiveTag={(t) => { setActiveTag(t); setCollectionsOpen(false); }}
-          items={scopedItems} showClose onClose={() => setCollectionsOpen(false)}
+          items={scopedItems} allItems={items} showClose onClose={() => setCollectionsOpen(false)}
           onAddItem={() => { setAddItemOpen(true); setCollectionsOpen(false); }}
           onImportZotero={() => { setZoteroImportOpen(true); setCollectionsOpen(false); }}
           onAddByDOI={() => { setDoiLookupOpen(true); setCollectionsOpen(false); }}
