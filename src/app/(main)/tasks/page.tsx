@@ -129,7 +129,7 @@ function TaskCard({
           setMenuOpen((o) => !o);
           setDeleteConfirm(false);
         }}
-        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity w-6 h-6 flex items-center justify-center rounded"
+        className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity w-8 h-8 flex items-center justify-center rounded"
         style={{ backgroundColor: "rgba(255,255,255,0.9)" }}
         aria-label="Task options"
       >
@@ -366,9 +366,9 @@ function TaskRow({
       <td className="py-2.5 pr-5" style={{ fontSize: "12.4px", color: "var(--color-secondary)", whiteSpace: "nowrap" }}>
         {task.dueDate ? formatDate(task.dueDate) : "—"}
       </td>
-      <td className="py-2.5 pr-5">
-        <button onClick={(e) => e.stopPropagation()} className="w-7 h-7 flex items-center justify-center rounded hover:bg-[rgba(27,46,75,0.06)]">
-          <MoreHorizontal size={13} color="var(--color-secondary)" />
+      <td className="py-1.5 pr-3">
+        <button onClick={(e) => e.stopPropagation()} className="w-9 h-9 flex items-center justify-center rounded hover:bg-[rgba(27,46,75,0.06)]" aria-label="Task options">
+          <MoreHorizontal size={14} color="var(--color-secondary)" />
         </button>
       </td>
     </tr>
@@ -728,7 +728,7 @@ export default function TasksPage() {
             {(["board", "list"] as const).map((v) => (
               <button
                 key={v}
-                onClick={() => setView(v)}
+                onClick={() => { setView(v); setSelectedTask(null); }}
                 className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md transition-all"
                 style={{ fontSize: 12, fontWeight: 600, backgroundColor: view === v ? "var(--color-navy)" : "transparent", color: view === v ? "#fff" : "var(--color-secondary)", minHeight: 36, minWidth: 44, justifyContent: "center" }}
               >
@@ -783,7 +783,7 @@ export default function TasksPage() {
         {!loading && view === "board" ? (
           <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
             <div className="overflow-x-auto" style={{ WebkitOverflowScrolling: "touch" }}>
-              <div className="grid gap-4 md:gap-5" style={{ gridTemplateColumns: "repeat(4, minmax(240px, 1fr))", alignItems: "start", minWidth: 960 }}>
+              <div className="grid gap-4 md:gap-5" style={{ gridTemplateColumns: "repeat(4, minmax(210px, 1fr))", alignItems: "start", minWidth: 880 }}>
                 {STATUS_ORDER.map((status) => (
                   <KanbanColumn
                     key={status}
@@ -835,10 +835,17 @@ export default function TasksPage() {
                     key={task.id}
                     task={task}
                     onClick={() => setSelectedTask(task)}
-                    onToggleDone={() => moveTask(task.id, task.status === "done" ? "in_progress" : "done")}
+                    onToggleDone={() => moveTask(task.id, task.status === "done" ? "todo" : "done")}
                     teamMembers={teamMembers}
                   />
                 ))}
+                {filteredTasks.length === 0 && (
+                  <tr>
+                    <td colSpan={7} style={{ textAlign: "center", padding: "52px 16px", color: "var(--color-secondary)", fontSize: 13, fontFamily: "var(--font-roboto)" }}>
+                      No tasks match your filters.
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>

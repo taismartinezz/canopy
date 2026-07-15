@@ -87,7 +87,7 @@ function SidebarBody({
             <ChevronRight size={15} color="var(--color-secondary)" />
           </button>
         </div>
-        <nav className="flex-1 flex flex-col items-center px-1.5 py-2 gap-0.5 overflow-y-auto" aria-label="Main navigation">
+        <nav className="flex-1 flex flex-col items-center px-1.5 py-2 gap-1 overflow-y-auto" aria-label="Main navigation">
           {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
             const active = isActive(href);
             return (
