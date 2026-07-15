@@ -9,6 +9,7 @@ import {
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { useProject } from "@/context/ProjectContext";
 import type { SubProject } from "@/types";
+import EmptyState from "@/components/ui/EmptyState";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -799,32 +800,20 @@ export default function BookmarksPage() {
 
           {/* Empty state */}
           {!loading && filtered.length === 0 && (
-            <div style={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: "center",
-              padding: "64px 16px",
-              border: "1px dashed var(--color-border)",
-              borderRadius: 12,
-            }}>
-              <Bookmark size={28} color="var(--color-secondary)" style={{ marginBottom: 12, opacity: 0.4 }} />
-              <p style={{ fontSize: 14, fontWeight: 600, color: "var(--color-body)", marginBottom: 4 }}>
-                {emptyLabel}
-              </p>
-              <p style={{ fontSize: 13, color: "var(--color-secondary)" }}>
-                Add one to share a useful link with your lab.
-              </p>
-              {activeCategory === "all" && (
+            <EmptyState
+              variant="bookmarks"
+              title={emptyLabel}
+              description="Add one to share a useful link with your lab."
+              action={activeCategory === "all" ? (
                 <button
                   onClick={() => setShowForm(true)}
-                  style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 20, padding: "0 16px", height: 40, backgroundColor: "var(--color-navy)", color: "#fff", fontSize: 13, fontWeight: 700, border: "none", borderRadius: 7, cursor: "pointer" }}
+                  style={{ display: "flex", alignItems: "center", gap: 6, padding: "0 16px", height: 36, backgroundColor: "var(--color-navy)", color: "#fff", fontSize: 13, fontWeight: 600, border: "none", borderRadius: 7, cursor: "pointer" }}
                 >
-                  <Plus size={14} />
+                  <Plus size={13} />
                   Add bookmark
                 </button>
-              )}
-            </div>
+              ) : undefined}
+            />
           )}
 
           {/* Card grid */}

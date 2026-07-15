@@ -2225,9 +2225,17 @@ export default function LiteraturePage() {
             {loadingItems
               ? <div className="flex items-center justify-center h-40"><p style={{ fontSize: 13, color: "var(--color-secondary)" }}>Loading…</p></div>
               : filtered.length === 0 && items.length === 0
-              ? <div className="flex items-center justify-center h-40"><p style={{ fontSize: 13, color: "var(--color-secondary)" }}>No items yet. Add your first paper.</p></div>
+              ? <div className="flex flex-col items-center justify-center py-12 gap-3 text-center px-4">
+                  <svg width="64" height="52" viewBox="0 0 80 64" fill="none" aria-hidden="true" style={{ opacity: 0.6 }}>
+                    <rect x="14" y="12" width="22" height="40" rx="3" stroke="var(--color-border)" strokeWidth="1.5" fill="var(--color-canvas)" />
+                    <rect x="42" y="16" width="22" height="36" rx="3" stroke="var(--color-border)" strokeWidth="1.5" fill="var(--color-canvas)" />
+                    <path d="M18 20h14M18 26h10M18 32h12" stroke="var(--color-border)" strokeWidth="1.2" strokeLinecap="round" />
+                    <path d="M46 24h14M46 30h10M46 36h12" stroke="var(--color-border)" strokeWidth="1.2" strokeLinecap="round" />
+                  </svg>
+                  <div><p style={{ fontSize: 14, fontWeight: 600, color: "var(--color-body)", margin: 0 }}>Your library is empty</p><p style={{ fontSize: 12, color: "var(--color-secondary)", margin: "4px 0 0" }}>Add your first paper or import from Zotero.</p></div>
+                </div>
               : filtered.length === 0
-              ? <div className="flex items-center justify-center h-40"><p style={{ fontSize: 13, color: "var(--color-secondary)" }}>No items found.</p></div>
+              ? <div className="flex items-center justify-center h-40"><p style={{ fontSize: 13, color: "var(--color-secondary)" }}>No items match your filters.</p></div>
               : filtered.map((item) => {
                   const isSelected = selectedItem?.id === item.id && !isMobile;
                   return (
