@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import {
   X, Send, Paperclip, Download, Trash2, FileText, File, Image, Table,
   ExternalLink, Plus, Copy, MoreHorizontal, CalendarDays, Check,
+  ArrowLeft, GripVertical, ChevronDown, ChevronRight,
 } from "lucide-react";
 import {
   CURRENT_USER_ID, formatRelativeTime, formatDate, formatFileSize, getUser,
@@ -13,6 +14,13 @@ import Avatar from "@/components/ui/Avatar";
 import { showToast } from "@/components/ui/Toast";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { CalendarPicker, formatDateLabel } from "@/components/ui/DateTimePicker";
+import {
+  DndContext, DragEndEvent, PointerSensor, useSensor, useSensors, closestCenter,
+} from "@dnd-kit/core";
+import {
+  SortableContext, arrayMove, useSortable, verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 // ── Shared config ─────────────────────────────────────────────────────────────
 
@@ -29,6 +37,22 @@ export const PRIORITY_CONFIG: Record<TaskPriority, { label: string; color: strin
   high:   { label: "High",   color: "#C0392B", bg: "#FDDCDC", symbol: "▲" },
   medium: { label: "Medium", color: "#A0622A", bg: "#FDEFD4", symbol: "●" },
   low:    { label: "Low",    color: "#2E7D52", bg: "#D4EDE0", symbol: "▼" },
+};
+
+// ── Subtask row type (exported for use in tasks/page.tsx) ─────────────────────
+
+export type SubtaskRow = {
+  id: string;
+  title: string;
+  status: TaskStatus;
+  priority: TaskPriority;
+  assigneeIds: string[];
+  dueDate?: string;
+  description: string;
+  displayOrder: number;
+  comments: Task["comments"];
+  files: Task["files"];
+  links: Task["links"];
 };
 
 // ── Shared sub-components ─────────────────────────────────────────────────────
@@ -101,24 +125,258 @@ function guessFileType(name: string): TaskFile["type"] {
   return "other";
 }
 
+// ── SortableSubtaskRow ────────────────────────────────────────────────────────
+
+const DROPDOWN_STYLE: React.CSSProperties = {
+  backgroundColor: "var(--color-surface)",
+  border: "1px solid var(--color-border)",
+  borderRadius: 7,
+  boxShadow: "0 4px 16px rgba(27,46,75,0.12)",
+  padding: "3px 0",
+};
+
+function SortableSubtaskRow({
+  sub, teamMembers, lookupUser,
+  isStatusMenuOpen, isAssigneeMenuOpen, isMoreMenuOpen,
+  onOpenDetail, onUpdateStatus, onUpdateAssignees,
+  onDelete, onPromote,
+  onToggleStatusMenu, onToggleAssigneeMenu, onOpenCal, onToggleMoreMenu,
+}: {
+  sub: SubtaskRow;
+  teamMembers: User[];
+  lookupUser: (id: string) => User | undefined;
+  isStatusMenuOpen: boolean;
+  isAssigneeMenuOpen: boolean;
+  isMoreMenuOpen: boolean;
+  onOpenDetail: () => void;
+  onUpdateStatus: (status: TaskStatus) => void;
+  onUpdateAssignees: (ids: string[]) => void;
+  onDelete: () => void;
+  onPromote: () => void;
+  onToggleStatusMenu: () => void;
+  onToggleAssigneeMenu: () => void;
+  onOpenCal: (e: React.MouseEvent<HTMLButtonElement>) => void;
+  onToggleMoreMenu: () => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: sub.id });
+  const statusCfg = STATUS_CONFIG[sub.status];
+  const unassigned = teamMembers.filter(u => !sub.assigneeIds.includes(u.id));
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 }}
+      className="group/subtask flex items-center gap-1 py-0.5 px-0.5 rounded hover:bg-[rgba(27,46,75,0.03)]"
+      {...attributes}
+    >
+      {/* Drag grip */}
+      <button
+        {...listeners}
+        style={{
+          cursor: isDragging ? "grabbing" : "grab",
+          padding: "2px 1px", color: "var(--color-secondary)",
+          flexShrink: 0, background: "none", border: "none",
+          display: "flex", alignItems: "center", opacity: 0,
+        }}
+        className="group-hover/subtask:!opacity-50 transition-opacity"
+        tabIndex={-1}
+        aria-label="Drag to reorder"
+      >
+        <GripVertical size={12} />
+      </button>
+
+      {/* Status dot → dropdown */}
+      <div style={{ position: "relative", flexShrink: 0 }}>
+        <button
+          onClick={(e) => { e.stopPropagation(); onToggleStatusMenu(); }}
+          title={`Status: ${statusCfg.label}`}
+          style={{
+            width: 11, height: 11, borderRadius: "50%",
+            backgroundColor: statusCfg.dot, border: "none",
+            cursor: "pointer", flexShrink: 0, display: "block",
+          }}
+        />
+        {isStatusMenuOpen && (
+          <div className="absolute left-0 z-40 animate-fade-in" style={{ top: 16, width: 140, ...DROPDOWN_STYLE }}>
+            {STATUS_ORDER.map(s => (
+              <button
+                key={s}
+                onClick={(e) => { e.stopPropagation(); onUpdateStatus(s); }}
+                className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-[rgba(27,46,75,0.06)]"
+                style={{ fontSize: 12, color: "var(--color-body)", border: "none", background: "none", cursor: "pointer", textAlign: "left", fontFamily: "var(--font-roboto)" }}
+              >
+                <span style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: STATUS_CONFIG[s].dot, flexShrink: 0 }} />
+                {STATUS_CONFIG[s].label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Title — click to open full detail */}
+      <button
+        onClick={(e) => { e.stopPropagation(); onOpenDetail(); }}
+        style={{
+          flex: 1, fontSize: 13, cursor: "pointer",
+          color: sub.status === "done" ? "var(--color-secondary)" : "var(--color-body)",
+          textDecoration: sub.status === "done" ? "line-through" : "none",
+          fontFamily: "var(--font-roboto)",
+          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+          background: "none", border: "none", textAlign: "left", padding: "3px 4px",
+        }}
+        title={sub.title}
+      >
+        {sub.title}
+      </button>
+
+      {/* Assignees */}
+      <div style={{ position: "relative", flexShrink: 0 }}>
+        <button
+          onClick={(e) => { e.stopPropagation(); onToggleAssigneeMenu(); }}
+          style={{ display: "flex", alignItems: "center", gap: 2, background: "none", border: "none", cursor: "pointer", padding: "1px 2px", borderRadius: 4 }}
+          title="Assignees"
+        >
+          {sub.assigneeIds.length === 0 ? (
+            <span
+              className="opacity-0 group-hover/subtask:opacity-100 transition-opacity"
+              style={{ width: 18, height: 18, borderRadius: "50%", border: "1px dashed var(--color-border)", display: "flex", alignItems: "center", justifyContent: "center" }}
+            >
+              <Plus size={9} color="var(--color-secondary)" />
+            </span>
+          ) : (
+            <div className="flex">
+              {sub.assigneeIds.slice(0, 2).map((id, i) => {
+                const u = lookupUser(id);
+                if (!u) return null;
+                return <div key={id} style={{ marginLeft: i > 0 ? -4 : 0 }}><Avatar user={u} size={18} /></div>;
+              })}
+              {sub.assigneeIds.length > 2 && (
+                <span style={{ marginLeft: -4, width: 18, height: 18, borderRadius: "50%", backgroundColor: "var(--color-border)", fontSize: 9, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--color-secondary)" }}>
+                  +{sub.assigneeIds.length - 2}
+                </span>
+              )}
+            </div>
+          )}
+        </button>
+        {isAssigneeMenuOpen && (
+          <div className="absolute right-0 z-40 animate-fade-in" style={{ top: 24, width: 164, ...DROPDOWN_STYLE }}>
+            {sub.assigneeIds.length > 0 && (
+              <>
+                <p style={{ fontSize: 10, fontWeight: 700, color: "var(--color-secondary)", padding: "4px 10px 2px", textTransform: "uppercase", letterSpacing: "0.04em" }}>Assigned</p>
+                {sub.assigneeIds.map(id => {
+                  const u = lookupUser(id);
+                  if (!u) return null;
+                  return (
+                    <button key={id} onClick={(e) => { e.stopPropagation(); onUpdateAssignees(sub.assigneeIds.filter(x => x !== id)); }}
+                      className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-[rgba(27,46,75,0.06)]"
+                      style={{ fontSize: 12, color: "var(--color-body)", border: "none", background: "none", cursor: "pointer", textAlign: "left" }}
+                    >
+                      <Avatar user={u} size={16} />
+                      <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis" }}>{u.name.split(" ")[0]}</span>
+                      <X size={10} color="var(--color-secondary)" />
+                    </button>
+                  );
+                })}
+                {unassigned.length > 0 && <div style={{ height: 1, backgroundColor: "var(--color-border)", margin: "3px 0" }} />}
+              </>
+            )}
+            {unassigned.length > 0 ? (
+              unassigned.map(u => (
+                <button key={u.id} onClick={(e) => { e.stopPropagation(); onUpdateAssignees([...sub.assigneeIds, u.id]); }}
+                  className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-[rgba(27,46,75,0.06)]"
+                  style={{ fontSize: 12, color: "var(--color-body)", border: "none", background: "none", cursor: "pointer", textAlign: "left" }}
+                >
+                  <Avatar user={u} size={16} />
+                  {u.name.split(" ")[0]}
+                </button>
+              ))
+            ) : sub.assigneeIds.length === 0 ? (
+              <p style={{ fontSize: 12, color: "var(--color-secondary)", padding: "8px 12px" }}>No team members</p>
+            ) : null}
+          </div>
+        )}
+      </div>
+
+      {/* Due date */}
+      <button
+        onClick={onOpenCal}
+        title={sub.dueDate ? formatDateLabel(sub.dueDate) : "Set due date"}
+        style={{
+          flexShrink: 0, display: "flex", alignItems: "center", gap: 3,
+          fontSize: 11, background: "none", border: "none", cursor: "pointer",
+          padding: "2px 4px", borderRadius: 3, fontFamily: "var(--font-roboto)",
+          color: sub.dueDate ? "var(--color-body)" : "transparent",
+          transition: "color 0.12s, background-color 0.12s",
+          whiteSpace: "nowrap",
+        }}
+        className="group-hover/subtask:!text-[color:var(--color-secondary)] hover:!text-[color:var(--color-body)] hover:bg-[rgba(27,46,75,0.06)]"
+      >
+        <CalendarDays size={11} />
+        {sub.dueDate && <span>{formatDateLabel(sub.dueDate)}</span>}
+      </button>
+
+      {/* More (...) menu */}
+      <div style={{ position: "relative", flexShrink: 0 }}>
+        <button
+          onClick={(e) => { e.stopPropagation(); onToggleMoreMenu(); }}
+          className="opacity-0 group-hover/subtask:opacity-100 transition-opacity flex items-center justify-center rounded"
+          style={{ width: 24, height: 24, background: "none", border: "none", cursor: "pointer" }}
+          aria-label="Subtask options"
+        >
+          <MoreHorizontal size={13} color="var(--color-secondary)" />
+        </button>
+        {isMoreMenuOpen && (
+          <div className="absolute right-0 z-40 animate-fade-in" style={{ top: 28, width: 172, ...DROPDOWN_STYLE }}>
+            <button onClick={(e) => { e.stopPropagation(); onOpenDetail(); }}
+              className="w-full flex items-center gap-2 px-3 py-2 hover:bg-[rgba(27,46,75,0.06)]"
+              style={{ fontSize: 12, color: "var(--color-body)", border: "none", background: "none", cursor: "pointer", textAlign: "left" }}>
+              Open full detail
+            </button>
+            <button onClick={(e) => { e.stopPropagation(); onPromote(); }}
+              className="w-full flex items-center gap-2 px-3 py-2 hover:bg-[rgba(27,46,75,0.06)]"
+              style={{ fontSize: 12, color: "var(--color-body)", border: "none", background: "none", cursor: "pointer", textAlign: "left" }}>
+              Promote to task
+            </button>
+            <div style={{ height: 1, backgroundColor: "var(--color-border)", margin: "3px 0" }} />
+            <button onClick={(e) => { e.stopPropagation(); onDelete(); }}
+              className="w-full flex items-center gap-2 px-3 py-2 hover:bg-[rgba(27,46,75,0.06)]"
+              style={{ fontSize: 12, color: "var(--color-error)", border: "none", background: "none", cursor: "pointer", textAlign: "left" }}>
+              <Trash2 size={12} />
+              Delete subtask
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Task detail panel ─────────────────────────────────────────────────────────
 
 export default function TaskDetailPanel({
   task,
+  parentTask,
   onClose,
+  onNavigateBack,
   onUpdateStatus,
   onUpdateTask,
   onDeleteTask,
   onDuplicateTask,
+  onOpenSubtask,
+  onPromoteSubtask,
   teamMembers = [],
   currentUserId = "",
 }: {
   task: Task;
+  parentTask?: Task;
   onClose: () => void;
+  onNavigateBack?: () => void;
   onUpdateStatus: (status: TaskStatus) => void;
   onUpdateTask?: (updates: Partial<Task>) => void;
   onDeleteTask?: (taskId: string) => void;
   onDuplicateTask?: (task: Task) => void;
+  onOpenSubtask?: (subtask: Task) => void;
+  onPromoteSubtask?: (subtask: Task) => void;
   teamMembers?: User[];
   currentUserId?: string;
 }) {
@@ -146,13 +404,28 @@ export default function TaskDetailPanel({
   const [localAssigneeIds, setLocalAssigneeIds] = useState<string[]>(task.assigneeIds);
 
   // Subtasks
-  type SubtaskRow = { id: string; title: string; status: "todo" | "done" };
   const [subtasks, setSubtasks] = useState<SubtaskRow[]>([]);
   const [addingSubtask, setAddingSubtask] = useState(false);
   const [subtaskInput, setSubtaskInput] = useState("");
   const subtaskInputRef = useRef<HTMLInputElement>(null);
+  const [subtasksOpen, setSubtasksOpen] = useState(true);
+  // Per-subtask menu open tracking — null means none open
+  const [openSubtaskMenus, setOpenSubtaskMenus] = useState<{
+    status: string | null;
+    assignee: string | null;
+    more: string | null;
+  }>({ status: null, assignee: null, more: null });
+  const [subtaskCalState, setSubtaskCalState] = useState<{
+    id: string;
+    pos: { top: number; left: number };
+  } | null>(null);
+  const subtaskSectionRef = useRef<HTMLDivElement>(null);
 
-  // Sync all local state when task switches
+  const subtaskSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
+  );
+
+  // Sync all local state when task changes
   useEffect(() => {
     setLocalTitle(task.title);
     setEditingTitle(false);
@@ -164,25 +437,91 @@ export default function TaskDetailPanel({
     setSubtasks([]);
     setAddingSubtask(false);
     setSubtaskInput("");
+    setOpenSubtaskMenus({ status: null, assignee: null, more: null });
+    setSubtaskCalState(null);
+    // Restore collapse state for this task
+    try {
+      const stored = localStorage.getItem(`subtasks-open:${task.id}`);
+      setSubtasksOpen(stored === null ? true : stored !== "false");
+    } catch {
+      setSubtasksOpen(true);
+    }
   }, [task.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Fetch subtasks for this task
   useEffect(() => {
     if (!isSupabaseConfigured) return;
     supabase
       .from("tasks")
-      .select("id, title, status")
+      .select("id, title, status, priority, assignee_ids, due_date, description, display_order, comments, files, links")
       .eq("parent_id", task.id)
+      .order("display_order", { ascending: true })
       .order("created_at", { ascending: true })
       .then(({ data }) => {
-        if (data) setSubtasks(data.map(r => ({ id: r.id as string, title: r.title as string, status: (r.status as string) === "done" ? "done" : "todo" })));
+        if (data) {
+          setSubtasks(data.map(r => ({
+            id: r.id as string,
+            title: r.title as string,
+            status: r.status as TaskStatus,
+            priority: (r.priority as TaskPriority) ?? "medium",
+            assigneeIds: (r.assignee_ids as string[] | null) ?? [],
+            dueDate: (r.due_date as string | null) ?? undefined,
+            description: (r.description as string) ?? "",
+            displayOrder: (r.display_order as number) ?? 0,
+            comments: (r.comments as Task["comments"]) ?? [],
+            files: (r.files as Task["files"]) ?? [],
+            links: (r.links as Task["links"]) ?? [],
+          })));
+        }
       });
   }, [task.id]);
+
+  // Close subtask menus when clicking outside the subtask section
+  useEffect(() => {
+    const anyOpen = openSubtaskMenus.status || openSubtaskMenus.assignee || openSubtaskMenus.more;
+    if (!anyOpen) return;
+    function handleDown(e: MouseEvent) {
+      if (!subtaskSectionRef.current?.contains(e.target as Node)) {
+        setOpenSubtaskMenus({ status: null, assignee: null, more: null });
+      }
+    }
+    document.addEventListener("mousedown", handleDown);
+    return () => document.removeEventListener("mousedown", handleDown);
+  }, [openSubtaskMenus]);
+
+  function closeAllSubtaskMenus() {
+    setOpenSubtaskMenus({ status: null, assignee: null, more: null });
+    setSubtaskCalState(null);
+  }
+
+  function toggleSubtaskMenu(type: "status" | "assignee" | "more", id: string) {
+    setOpenSubtaskMenus(prev => ({
+      status: null, assignee: null, more: null,
+      [type]: prev[type] === id ? null : id,
+    }));
+    setSubtaskCalState(null);
+  }
+
+  function toggleSubtasksOpen() {
+    setSubtasksOpen(open => {
+      const next = !open;
+      try { localStorage.setItem(`subtasks-open:${task.id}`, next.toString()); } catch {}
+      return next;
+    });
+  }
+
+  // ── Subtask CRUD ──────────────────────────────────────────────────────────
 
   async function handleAddSubtask() {
     const title = subtaskInput.trim();
     if (!title) { setAddingSubtask(false); return; }
     const tempId = `temp-${Date.now()}`;
-    const optimistic: SubtaskRow = { id: tempId, title, status: "todo" };
+    const nextOrder = subtasks.length;
+    const optimistic: SubtaskRow = {
+      id: tempId, title, status: "todo", priority: task.priority,
+      assigneeIds: [], dueDate: undefined, description: "",
+      displayOrder: nextOrder, comments: [], files: [], links: [],
+    };
     setSubtasks(prev => [...prev, optimistic]);
     setSubtaskInput("");
     setAddingSubtask(false);
@@ -198,6 +537,7 @@ export default function TaskDetailPanel({
         priority: task.priority,
         description: "",
         scope: "lab",
+        display_order: nextOrder,
       })
       .select("id")
       .single();
@@ -210,24 +550,95 @@ export default function TaskDetailPanel({
     setSubtasks(prev => prev.map(s => s.id === tempId ? { ...s, id: data.id as string } : s));
   }
 
-  async function handleToggleSubtask(id: string) {
-    const current = subtasks.find(s => s.id === id);
-    if (!current) return;
-    const newStatus: SubtaskRow["status"] = current.status === "done" ? "todo" : "done";
-    setSubtasks(prev => prev.map(s => s.id === id ? { ...s, status: newStatus } : s));
-    if (isSupabaseConfigured) {
-      await supabase.from("tasks").update({ status: newStatus }).eq("id", id);
+  async function handleUpdateSubtask(id: string, updates: Partial<SubtaskRow>) {
+    setSubtasks(prev => prev.map(s => s.id === id ? { ...s, ...updates } : s));
+    if (!isSupabaseConfigured) return;
+    const db: Record<string, unknown> = {};
+    if (updates.status      !== undefined) db.status       = updates.status;
+    if (updates.priority    !== undefined) db.priority     = updates.priority;
+    if (updates.assigneeIds !== undefined) db.assignee_ids = updates.assigneeIds;
+    if ("dueDate" in updates)              db.due_date     = updates.dueDate ?? null;
+    if (updates.displayOrder !== undefined) db.display_order = updates.displayOrder;
+    if (Object.keys(db).length === 0) return;
+    const { error } = await supabase.from("tasks").update(db).eq("id", id);
+    if (error) {
+      console.error("[Subtask] update error:", error);
+      showToast("Failed to update subtask.", "error");
     }
   }
 
   async function handleDeleteSubtask(id: string) {
     setSubtasks(prev => prev.filter(s => s.id !== id));
+    closeAllSubtaskMenus();
     if (isSupabaseConfigured) {
       await supabase.from("tasks").delete().eq("id", id);
     }
   }
 
-  // Auto-resize description textarea
+  async function handleSubtaskDragEnd(e: DragEndEvent) {
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    const oldIdx = subtasks.findIndex(s => s.id === (active.id as string));
+    const newIdx = subtasks.findIndex(s => s.id === (over.id as string));
+    if (oldIdx === -1 || newIdx === -1) return;
+    const reordered = arrayMove(subtasks, oldIdx, newIdx);
+    setSubtasks(reordered);
+    if (!isSupabaseConfigured) return;
+    await Promise.all(
+      reordered.map((s, i) =>
+        supabase.from("tasks").update({ display_order: i }).eq("id", s.id)
+      )
+    );
+  }
+
+  function handleClickSubtask(sub: SubtaskRow) {
+    if (!onOpenSubtask) return;
+    closeAllSubtaskMenus();
+    onOpenSubtask({
+      id: sub.id,
+      projectId: task.projectId,
+      parentId: task.id,
+      title: sub.title,
+      description: sub.description,
+      status: sub.status,
+      priority: sub.priority,
+      assigneeIds: sub.assigneeIds,
+      dueDate: sub.dueDate,
+      createdAt: "",
+      updatedAt: "",
+      comments: sub.comments,
+      files: sub.files,
+      links: sub.links,
+    });
+  }
+
+  async function handlePromoteSubtask(id: string) {
+    const sub = subtasks.find(s => s.id === id);
+    if (!sub) return;
+    setSubtasks(prev => prev.filter(s => s.id !== id));
+    closeAllSubtaskMenus();
+    if (isSupabaseConfigured) {
+      const { error } = await supabase.from("tasks").update({ parent_id: null }).eq("id", id);
+      if (error) {
+        console.error("[Subtask] promote error:", error);
+        showToast("Failed to promote subtask.", "error");
+        setSubtasks(prev => [...prev, sub].sort((a, b) => a.displayOrder - b.displayOrder));
+        return;
+      }
+    }
+    onPromoteSubtask?.({
+      id: sub.id, projectId: task.projectId, parentId: null,
+      title: sub.title, description: sub.description,
+      status: sub.status, priority: sub.priority,
+      assigneeIds: sub.assigneeIds, dueDate: sub.dueDate,
+      createdAt: "", updatedAt: "",
+      comments: sub.comments, files: sub.files, links: sub.links,
+    });
+    showToast(`"${sub.title}" promoted to task.`, "info");
+  }
+
+  // ── Auto-resize description textarea ─────────────────────────────────────
+
   useEffect(() => {
     if (descRef.current) {
       descRef.current.style.height = "auto";
@@ -316,13 +727,9 @@ export default function TaskDetailPanel({
     }
 
     const newFile: TaskFile = {
-      id: fileId,
-      name: file.name,
-      size: file.size,
+      id: fileId, name: file.name, size: file.size,
       uploaderId: currentUserId || CURRENT_USER_ID,
-      uploadedAt: new Date().toISOString(),
-      url,
-      storagePath,
+      uploadedAt: new Date().toISOString(), url, storagePath,
       type: guessFileType(file.name),
     };
     const updated = [...localFiles, newFile];
@@ -359,6 +766,11 @@ export default function TaskDetailPanel({
 
   const unassignedUsers = teamMembers.filter((u: User) => !localAssigneeIds.includes(u.id));
 
+  // ── Progress bar values ───────────────────────────────────────────────────
+
+  const doneCount = subtasks.filter(s => s.status === "done").length;
+  const totalCount = subtasks.length;
+
   return (
     <>
       {/* Backdrop */}
@@ -379,12 +791,31 @@ export default function TaskDetailPanel({
       >
         {/* Header */}
         <div className="px-6 pt-5 pb-4" style={{ borderBottom: "1px solid var(--color-border)" }}>
+          {/* Back to parent breadcrumb */}
+          {parentTask && onNavigateBack && (
+            <button
+              onClick={onNavigateBack}
+              className="flex items-center gap-1.5 mb-3 hover:opacity-70 transition-opacity"
+              style={{ fontSize: 12, color: "var(--color-secondary)", background: "none", border: "none", cursor: "pointer", padding: 0, fontFamily: "var(--font-roboto)", maxWidth: "100%" }}
+            >
+              <ArrowLeft size={13} />
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 360 }}>
+                {parentTask.title}
+              </span>
+            </button>
+          )}
+
           <div className="flex items-start justify-between gap-3">
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-2">
                 <span className="px-2.5 py-0.5" style={{ backgroundColor: `${cfg.dot}20`, color: cfg.dot, borderRadius: 5, fontSize: 11, fontWeight: 700 }}>
                   {cfg.label}
                 </span>
+                {parentTask && (
+                  <span style={{ fontSize: 11, color: "var(--color-secondary)", backgroundColor: "rgba(27,46,75,0.06)", padding: "2px 8px", borderRadius: 5 }}>
+                    Subtask
+                  </span>
+                )}
               </div>
               {editingTitle ? (
                 <input
@@ -431,11 +862,7 @@ export default function TaskDetailPanel({
                     <button
                       onClick={() => {
                         setMenuOpen(false);
-                        if (onDuplicateTask) {
-                          onDuplicateTask(task);
-                        } else {
-                          showToast("Duplicate task coming soon.", "info");
-                        }
+                        if (onDuplicateTask) { onDuplicateTask(task); } else { showToast("Duplicate task coming soon.", "info"); }
                       }}
                       className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-[rgba(27,46,75,0.06)] transition-colors"
                       style={{ fontSize: 13, color: "var(--color-body)", border: "none", background: "none", cursor: "pointer", textAlign: "left", fontFamily: "var(--font-roboto)" }}
@@ -500,16 +927,7 @@ export default function TaskDetailPanel({
                       .then(({ error }) => { if (error) console.error("[TaskDetail] priority update error:", error); });
                   }}
                   className="cursor-pointer"
-                  style={{
-                    fontSize: 13,
-                    color: PRIORITY_CONFIG[task.priority].color,
-                    backgroundColor: PRIORITY_CONFIG[task.priority].bg,
-                    border: "none",
-                    borderRadius: 5,
-                    padding: "3px 8px",
-                    fontWeight: 600,
-                    fontFamily: "var(--font-roboto)",
-                  }}
+                  style={{ fontSize: 13, color: PRIORITY_CONFIG[task.priority].color, backgroundColor: PRIORITY_CONFIG[task.priority].bg, border: "none", borderRadius: 5, padding: "3px 8px", fontWeight: 600, fontFamily: "var(--font-roboto)" }}
                 >
                   {(["high", "medium", "low"] as TaskPriority[]).map((p) => (
                     <option key={p} value={p}>{PRIORITY_CONFIG[p].symbol} {PRIORITY_CONFIG[p].label}</option>
@@ -582,7 +1000,6 @@ export default function TaskDetailPanel({
                     );
                   })
                 )}
-                {/* + Add assignee */}
                 {unassignedUsers.length > 0 && (
                   <div className="relative">
                     <button
@@ -632,49 +1049,104 @@ export default function TaskDetailPanel({
           />
         </div>
 
-        {/* Subtasks */}
-        {(subtasks.length > 0 || addingSubtask) && (
-          <div className="px-6 py-3" style={{ borderBottom: "1px solid var(--color-border)" }}>
-            <p style={{ fontSize: 11, fontWeight: 700, color: "var(--color-secondary)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>
-              Subtasks
-              {subtasks.length > 0 && (
-                <span style={{ marginLeft: 6, fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>
-                  {subtasks.filter(s => s.status === "done").length}/{subtasks.length}
+        {/* ── Subtasks section ───────────────────────────────────────────────── */}
+        <div ref={subtaskSectionRef} style={{ borderBottom: "1px solid var(--color-border)" }}>
+          {/* Header row */}
+          <div className="px-6 pt-3 pb-1 flex items-center gap-2">
+            <button
+              onClick={toggleSubtasksOpen}
+              className="flex items-center gap-1.5 flex-1 min-w-0 hover:opacity-70 transition-opacity"
+              style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}
+              aria-expanded={subtasksOpen}
+            >
+              {subtasksOpen
+                ? <ChevronDown size={13} color="var(--color-secondary)" />
+                : <ChevronRight size={13} color="var(--color-secondary)" />}
+              <span style={{ fontSize: 11, fontWeight: 700, color: "var(--color-secondary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                Subtasks
+              </span>
+              {totalCount > 0 && (
+                <span style={{ fontSize: 11, fontWeight: 400, color: "var(--color-secondary)" }}>
+                  {doneCount}/{totalCount}
                 </span>
               )}
-            </p>
-            <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-              {subtasks.map(sub => (
-                <div key={sub.id} className="group/subtask flex items-center gap-2 py-1">
-                  <button
-                    onClick={() => handleToggleSubtask(sub.id)}
-                    style={{
-                      width: 18, height: 18, borderRadius: "50%", flexShrink: 0,
-                      border: `2px solid ${sub.status === "done" ? "#2E7D52" : "var(--color-border)"}`,
-                      backgroundColor: sub.status === "done" ? "#2E7D52" : "transparent",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      cursor: "pointer", transition: "all 0.12s",
-                    }}
-                    aria-label={sub.status === "done" ? "Mark incomplete" : "Mark complete"}
-                  >
-                    {sub.status === "done" && <Check size={10} color="#fff" strokeWidth={3} />}
-                  </button>
-                  <span style={{ fontSize: 13, color: sub.status === "done" ? "var(--color-secondary)" : "var(--color-body)", flex: 1, textDecoration: sub.status === "done" ? "line-through" : "none", fontFamily: "var(--font-roboto)" }}>
-                    {sub.title}
-                  </span>
-                  <button
-                    onClick={() => handleDeleteSubtask(sub.id)}
-                    className="opacity-0 group-hover/subtask:opacity-100 transition-opacity"
-                    style={{ background: "none", border: "none", cursor: "pointer", padding: 2, display: "flex", color: "var(--color-secondary)" }}
-                    aria-label="Delete subtask"
-                  >
-                    <Trash2 size={12} />
-                  </button>
-                </div>
-              ))}
+            </button>
+            {!addingSubtask && (
+              <button
+                onClick={() => {
+                  if (!subtasksOpen) {
+                    setSubtasksOpen(true);
+                    try { localStorage.setItem(`subtasks-open:${task.id}`, "true"); } catch {}
+                  }
+                  setAddingSubtask(true);
+                  setTimeout(() => subtaskInputRef.current?.focus(), 50);
+                }}
+                className="flex items-center gap-1 hover:opacity-70 transition-opacity shrink-0"
+                style={{ fontSize: 12, color: "var(--color-secondary)", background: "none", border: "none", cursor: "pointer", padding: "2px 0", fontFamily: "var(--font-roboto)" }}
+              >
+                <Plus size={12} /> Add subtask
+              </button>
+            )}
+          </div>
+
+          {/* Progress bar — always visible when there are subtasks */}
+          {totalCount > 0 && (
+            <div className="px-6 pb-1.5">
+              <div style={{ height: 3, backgroundColor: "rgba(27,46,75,0.08)", borderRadius: 2 }}>
+                <div style={{
+                  height: "100%",
+                  width: `${(doneCount / totalCount) * 100}%`,
+                  backgroundColor: doneCount === totalCount ? "#2E7D52" : "var(--color-navy)",
+                  borderRadius: 2,
+                  transition: "width 0.3s ease",
+                }} />
+              </div>
+            </div>
+          )}
+
+          {/* Collapsible subtask list */}
+          {subtasksOpen && (
+            <div className="px-6 pb-3">
+              <DndContext
+                sensors={subtaskSensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleSubtaskDragEnd}
+              >
+                <SortableContext items={subtasks.map(s => s.id)} strategy={verticalListSortingStrategy}>
+                  {subtasks.map(sub => (
+                    <SortableSubtaskRow
+                      key={sub.id}
+                      sub={sub}
+                      teamMembers={teamMembers}
+                      lookupUser={lookupUser}
+                      isStatusMenuOpen={openSubtaskMenus.status === sub.id}
+                      isAssigneeMenuOpen={openSubtaskMenus.assignee === sub.id}
+                      isMoreMenuOpen={openSubtaskMenus.more === sub.id}
+                      onOpenDetail={() => handleClickSubtask(sub)}
+                      onUpdateStatus={(status) => { handleUpdateSubtask(sub.id, { status }); closeAllSubtaskMenus(); }}
+                      onUpdateAssignees={(ids) => handleUpdateSubtask(sub.id, { assigneeIds: ids })}
+                      onDelete={() => handleDeleteSubtask(sub.id)}
+                      onPromote={() => handlePromoteSubtask(sub.id)}
+                      onToggleStatusMenu={() => toggleSubtaskMenu("status", sub.id)}
+                      onToggleAssigneeMenu={() => toggleSubtaskMenu("assignee", sub.id)}
+                      onOpenCal={(e) => {
+                        e.stopPropagation();
+                        const rect = (e.currentTarget as HTMLButtonElement).getBoundingClientRect();
+                        setSubtaskCalState({
+                          id: sub.id,
+                          pos: { top: rect.bottom + 6, left: Math.max(8, rect.left - 200) },
+                        });
+                        setOpenSubtaskMenus({ status: null, assignee: null, more: null });
+                      }}
+                      onToggleMoreMenu={() => toggleSubtaskMenu("more", sub.id)}
+                    />
+                  ))}
+                </SortableContext>
+              </DndContext>
+
               {addingSubtask && (
-                <div style={{ display: "flex", alignItems: "center", gap: 8, paddingTop: 2 }}>
-                  <div style={{ width: 18, height: 18, borderRadius: "50%", border: "2px solid var(--color-border)", flexShrink: 0 }} />
+                <div style={{ display: "flex", alignItems: "center", gap: 8, paddingTop: 4, paddingLeft: 20 }}>
+                  <div style={{ width: 11, height: 11, borderRadius: "50%", border: "2px solid var(--color-border)", flexShrink: 0 }} />
                   <input
                     ref={subtaskInputRef}
                     autoFocus
@@ -684,25 +1156,26 @@ export default function TaskDetailPanel({
                       if (e.key === "Enter") { e.preventDefault(); handleAddSubtask(); }
                       if (e.key === "Escape") { e.preventDefault(); setAddingSubtask(false); setSubtaskInput(""); }
                     }}
+                    onBlur={() => { if (!subtaskInput.trim()) setAddingSubtask(false); }}
                     placeholder="Subtask title — Enter to save, Esc to cancel"
                     style={{ flex: 1, fontSize: 13, border: "none", outline: "none", backgroundColor: "transparent", fontFamily: "var(--font-roboto)", color: "var(--color-body)" }}
                   />
                 </div>
               )}
             </div>
-          </div>
-        )}
-        {/* Add subtask row — always shown if no subtasks yet, or after list */}
-        {!addingSubtask && (
-          <div className="px-6" style={{ borderBottom: subtasks.length === 0 && task.links.length === 0 ? "1px solid var(--color-border)" : "none", paddingTop: 6, paddingBottom: 6 }}>
-            <button
-              onClick={() => { setAddingSubtask(true); setTimeout(() => subtaskInputRef.current?.focus(), 0); }}
-              className="flex items-center gap-1.5 hover:opacity-70 transition-opacity"
-              style={{ fontSize: 12, color: "var(--color-secondary)", background: "none", border: "none", cursor: "pointer", padding: "4px 0", fontFamily: "var(--font-roboto)" }}
-            >
-              <Plus size={12} /> Add subtask
-            </button>
-          </div>
+          )}
+        </div>
+
+        {/* Calendar for subtask due dates */}
+        {subtaskCalState && (
+          <CalendarPicker
+            value={subtasks.find(s => s.id === subtaskCalState.id)?.dueDate || undefined}
+            accentColor="#1B2E4B"
+            pos={subtaskCalState.pos}
+            onSelect={d => { handleUpdateSubtask(subtaskCalState.id, { dueDate: d }); setSubtaskCalState(null); }}
+            onClear={() => { handleUpdateSubtask(subtaskCalState.id, { dueDate: undefined }); setSubtaskCalState(null); }}
+            onClose={() => setSubtaskCalState(null)}
+          />
         )}
 
         {/* Linked docs */}
@@ -864,7 +1337,6 @@ export default function TaskDetailPanel({
             </div>
           )}
         </div>
-
       </div>
     </>
   );
