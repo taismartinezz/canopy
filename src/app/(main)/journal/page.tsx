@@ -653,6 +653,8 @@ export default function JournalPage() {
   function handleSelectEntry(id: string | "new") {
     setSelectedEntryId(id);
     setEntryListOpen(false);
+    // Auto-collapse list when opening an existing entry so the full width is available for reading/writing
+    if (id !== "new") setListCollapsed(true);
   }
 
   function handleNewEntry() {
@@ -859,7 +861,7 @@ export default function JournalPage() {
           {/* Header */}
           <div className="flex items-start justify-between mb-7 gap-3">
             <div>
-              <h1 style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 26, color: "var(--color-navy)", margin: 0, lineHeight: 1.2 }}>
+              <h1 style={{ fontWeight: 700, fontSize: 24, color: "var(--color-navy)", margin: 0, lineHeight: 1.2 }}>
                 {isViewingEntry && viewedEntry ? formatEntryDate(viewedEntry.date) : "Today's Entry"}
               </h1>
               <p style={{ fontSize: 13, color: "var(--color-secondary)", marginTop: 5 }}>

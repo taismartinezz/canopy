@@ -7,7 +7,9 @@ import {
   LayoutDashboard, CheckSquare, BookOpen, BookMarked, Bookmark, Users,
   Bell, ChevronDown, ChevronLeft, ChevronRight, LogOut, User as UserIcon,
   Menu, X, Settings, CalendarDays, CircleCheck, Plus, Home,
+  AlignJustify, LayoutList,
 } from "lucide-react";
+import { useDensity } from "@/context/DensityContext";
 import { computeInitials } from "@/lib/utils";
 import type { User } from "@/types";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
@@ -101,16 +103,17 @@ function SidebarBody({
                 style={{
                   width: 36,
                   height: 36,
-                  backgroundColor: active ? "var(--color-navy)" : "transparent",
-                  color: active ? "#fff" : "var(--color-body)",
+                  backgroundColor: active ? "rgba(27,46,75,0.08)" : "transparent",
+                  color: active ? "var(--color-navy)" : "var(--color-secondary)",
                   textDecoration: "none",
                   transition: "background-color 0.12s",
+                  borderLeft: active ? "2.5px solid var(--color-navy)" : "2.5px solid transparent",
                 }}
                 aria-current={active ? "page" : undefined}
-                onMouseEnter={(e) => { if (!active) (e.currentTarget as HTMLElement).style.backgroundColor = "rgba(27,46,75,0.06)"; }}
-                onMouseLeave={(e) => { if (!active) (e.currentTarget as HTMLElement).style.backgroundColor = active ? "var(--color-navy)" : "transparent"; }}
+                onMouseEnter={(e) => { if (!active) (e.currentTarget as HTMLElement).style.backgroundColor = "rgba(27,46,75,0.04)"; }}
+                onMouseLeave={(e) => { if (!active) (e.currentTarget as HTMLElement).style.backgroundColor = active ? "rgba(27,46,75,0.08)" : "transparent"; }}
               >
-                <Icon size={17} strokeWidth={active ? 2.5 : 2} />
+                <Icon size={16} strokeWidth={active ? 2.5 : 1.8} fill={active ? "rgba(27,46,75,0.12)" : "none"} />
               </Link>
             );
           })}
@@ -161,23 +164,26 @@ function SidebarBody({
               key={href}
               href={href}
               onClick={onLinkClick}
-              className="flex items-center gap-2.5 px-3 rounded-lg transition-colors"
+              className="flex items-center gap-2.5 rounded-lg transition-colors"
               style={{
-                backgroundColor: active ? "var(--color-navy)" : undefined,
-                color: active ? "#fff" : "var(--color-body)",
+                backgroundColor: active ? "rgba(27,46,75,0.08)" : undefined,
+                color: active ? "var(--color-navy)" : "var(--color-secondary)",
                 fontWeight: active ? 600 : 400,
-                fontSize: 14,
+                fontSize: 13,
                 borderRadius: 8,
                 textDecoration: "none",
-                minHeight: 44,
+                minHeight: 38,
                 display: "flex",
                 alignItems: "center",
+                paddingLeft: 10,
+                paddingRight: 10,
+                borderLeft: active ? "2.5px solid var(--color-navy)" : "2.5px solid transparent",
               }}
               aria-current={active ? "page" : undefined}
-              onMouseEnter={(e) => { if (!active) (e.currentTarget as HTMLElement).style.backgroundColor = "rgba(27,46,75,0.06)"; }}
+              onMouseEnter={(e) => { if (!active) (e.currentTarget as HTMLElement).style.backgroundColor = "rgba(27,46,75,0.04)"; }}
               onMouseLeave={(e) => { if (!active) (e.currentTarget as HTMLElement).style.backgroundColor = ""; }}
             >
-              <Icon size={16} strokeWidth={active ? 2.5 : 2} />
+              <Icon size={15} strokeWidth={active ? 2.5 : 1.8} fill={active ? "rgba(27,46,75,0.12)" : "none"} />
               {label}
             </Link>
           );
@@ -311,6 +317,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { projectId, subProjectId, subProjects, activeScope, setActiveSubProject, setActiveScope } = useProject();
+  const { density, toggle: toggleDensity } = useDensity();
   const [navCollapsed, setNavCollapsed]   = useState(false);
   const [showCreate, setShowCreate]       = useState(false);
   const [showSwitcher, setShowSwitcher]   = useState(false);
@@ -779,6 +786,21 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 {project.institution}
               </span>
             )}
+
+            {/* Density toggle */}
+            <button
+              onClick={toggleDensity}
+              className="hidden md:flex items-center justify-center rounded-lg transition-colors hover:bg-[rgba(27,46,75,0.06)]"
+              style={{ width: 40, height: 40 }}
+              title={density === "comfortable" ? "Switch to compact density" : "Switch to comfortable density"}
+              aria-label={density === "comfortable" ? "Compact view" : "Comfortable view"}
+            >
+              {density === "comfortable" ? (
+                <LayoutList size={16} color="var(--color-secondary)" />
+              ) : (
+                <AlignJustify size={16} color="var(--color-secondary)" />
+              )}
+            </button>
 
             {/* Notification bell */}
             <div className="relative">

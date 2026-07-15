@@ -9,7 +9,7 @@
   --color-strip:    #D8DCE3;
   --color-surface:  #FFFFFF;
 
-  /* Navy — the ONLY accent color */
+  /* Navy — primary accent for chrome, buttons, links, focus rings */
   --color-navy:       #1B2E4B;
   --color-navy-hover: #2E4A6F;
   --color-navy-dim:   rgba(27, 46, 75, 0.06);
@@ -27,20 +27,49 @@
   --color-warning:    #A0622A;
   --color-error:      #C0392B;
 
-  /* Status / priority background tints */
+  /* Semantic backgrounds */
   --color-error-bg:   #FDDCDC;
   --color-warning-bg: #FDEFD4;
   --color-success-bg: #D4EDE0;
 
-  /* Task status column dots */
-  --color-todo:       #64748B;
-  --color-inprogress: #1B2E4B;
-  --color-inreview:   #A0622A;
-  --color-done:       #2E7D52;
+  /* ── Task status — unified palette used everywhere ── */
+  /* dot = small indicator, text = label text, bg = badge background */
+  --status-todo-dot:        #94A3B8;
+  --status-todo-text:       #64748B;
+  --status-todo-bg:         #F1F5F9;
+  --status-inprogress-dot:  #1B2E4B;
+  --status-inprogress-text: #1B2E4B;
+  --status-inprogress-bg:   rgba(27,46,75,0.09);
+  --status-inreview-dot:    #A0622A;
+  --status-inreview-text:   #A0622A;
+  --status-inreview-bg:     rgba(160,98,42,0.10);
+  --status-done-dot:        #2E7D52;
+  --status-done-text:       #2E7D52;
+  --status-done-bg:         rgba(46,125,82,0.10);
 
-  /* Fonts */
-  --font-lora:   var(--font-lora), serif;
-  --font-roboto: var(--font-roboto), sans-serif;
+  /* ── Priority colors — unified ── */
+  --priority-high-dot:    #C0392B;
+  --priority-high-text:   #C0392B;
+  --priority-high-bg:     #FDDCDC;
+  --priority-medium-dot:  #A0622A;
+  --priority-medium-text: #A0622A;
+  --priority-medium-bg:   #FDEFD4;
+  --priority-low-dot:     #2E7D52;
+  --priority-low-text:    #2E7D52;
+  --priority-low-bg:      #D4EDE0;
+
+  /* Typography — Inter, 4 sizes */
+  --font-inter: var(--font-inter), system-ui, sans-serif;
+  /* Kept for backwards-compat with any remaining Lora/Roboto refs */
+  --font-lora:   var(--font-inter), system-ui, sans-serif;
+  --font-roboto: var(--font-inter), system-ui, sans-serif;
+
+  /* Font sizes (used semantically) */
+  --text-xs:   11px;  /* captions, counts, badge labels */
+  --text-sm:   13px;  /* body text, row labels */
+  --text-base: 14px;  /* default body */
+  --text-lg:   16px;  /* section/card headings */
+  --text-xl:   20px;  /* page titles */
 
   /* Border radii */
   --radius-card:    10px;
@@ -50,6 +79,20 @@
 
   /* Shadows */
   --shadow-card: 0 3px 10px rgba(27, 46, 75, 0.09);
+}
+
+/* ── Density: comfortable (default) / compact ── */
+:root {
+  --density-row:     44px;  /* row min-height */
+  --density-card-py: 10px;  /* card vertical padding */
+  --density-card-px: 12px;  /* card horizontal padding */
+  --density-gap:     8px;   /* gap between list items */
+}
+html.density-compact {
+  --density-row:     32px;
+  --density-card-py: 6px;
+  --density-card-px: 10px;
+  --density-gap:     4px;
 }
 
 /* ── Reset & Base ── */
@@ -62,17 +105,27 @@ html, body {
 }
 
 body {
-  font-family: var(--font-roboto);
-  font-size: 14px;
+  font-family: var(--font-inter);
+  font-size: var(--text-base);
   color: var(--color-body);
   background: var(--color-canvas);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* ── Typography helpers ── */
-.font-lora   { font-family: var(--font-lora); }
-.font-roboto { font-family: var(--font-roboto); }
+/* ── Typography helpers (all point to Inter now) ── */
+.font-inter  { font-family: var(--font-inter); }
+.font-lora   { font-family: var(--font-inter); }
+.font-roboto { font-family: var(--font-inter); }
+
+/* ── Section label — used for SUBTASKS, DESCRIPTION etc. ── */
+.label-section {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-secondary);
+}
 
 /* ── Scrollbar ── */
 ::-webkit-scrollbar        { width: 6px; height: 6px; }

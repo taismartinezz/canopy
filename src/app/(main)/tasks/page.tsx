@@ -11,7 +11,7 @@ import {
   SortableContext, useSortable, verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { LayoutGrid, List, Search, Plus, MoreHorizontal, ChevronDown } from "lucide-react";
+import { LayoutGrid, List, Search, Plus, MoreHorizontal, ChevronDown, Bookmark, X as XIcon } from "lucide-react";
 import { formatDate, TASKS as MOCK_TASKS, USERS, getStoredProject } from "@/lib/mock-data";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { useProject } from "@/context/ProjectContext";
@@ -22,6 +22,9 @@ import TaskDetailPanel, {
   STATUS_CONFIG, STATUS_ORDER, PriorityBadge, AssigneeStack,
 } from "@/components/tasks/TaskDetailPanel";
 import TaskModal from "@/components/tasks/TaskModal";
+import ProjectFilterTabs from "@/components/ui/ProjectFilterTabs";
+import EmptyState from "@/components/ui/EmptyState";
+import { CalendarPicker } from "@/components/ui/DateTimePicker";
 
 // ── Modal state ───────────────────────────────────────────────────────────────
 
@@ -290,9 +293,11 @@ function KanbanColumn({
         <SortableContext items={tasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
           <div className="flex flex-col gap-2">
             {tasks.length === 0 && (
-              <p style={{ fontSize: 12, color: "var(--color-secondary)", padding: "8px 4px" }}>
-                No tasks yet. Add your first one.
-              </p>
+              <EmptyState
+                variant="column"
+                title="No tasks yet"
+                compact
+              />
             )}
             {tasks.map((task) => (
               <TaskCard
@@ -321,86 +326,273 @@ function KanbanColumn({
   );
 }
 
-// ── List view row ─────────────────────────────────────────────────────────────
+// ── List view row — with inline status, assignee, and due-date editing ────────
 
 function TaskRow({
   task,
   onClick,
   onToggleDone,
+  onMoveStatus,
+  onUpdateAssignees,
+  onUpdateDueDate,
   teamMembers = [],
   subtaskProgress,
 }: {
   task: Task;
   onClick: () => void;
   onToggleDone: () => void;
+  onMoveStatus: (status: TaskStatus) => void;
+  onUpdateAssignees: (ids: string[]) => void;
+  onUpdateDueDate: (date: string | undefined) => void;
   teamMembers?: User[];
   subtaskProgress?: { total: number; done: number };
 }) {
+  const [statusOpen, setStatusOpen] = useState(false);
+  const [assigneeOpen, setAssigneeOpen] = useState(false);
+  const [calOpen, setCalOpen] = useState(false);
+  const [calPos, setCalPos] = useState({ top: 0, left: 0 });
+  const statusBtnRef = useRef<HTMLButtonElement>(null);
+  const statusMenuRef = useRef<HTMLDivElement>(null);
+  const assigneeBtnRef = useRef<HTMLButtonElement>(null);
+  const assigneeMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!statusOpen && !assigneeOpen) return;
+    function onDown(e: MouseEvent) {
+      const inStatus = statusBtnRef.current?.contains(e.target as Node) || statusMenuRef.current?.contains(e.target as Node);
+      const inAssignee = assigneeBtnRef.current?.contains(e.target as Node) || assigneeMenuRef.current?.contains(e.target as Node);
+      if (!inStatus) setStatusOpen(false);
+      if (!inAssignee) setAssigneeOpen(false);
+    }
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [statusOpen, assigneeOpen]);
+
+  const cfg = STATUS_CONFIG[task.status];
+
+  function openCal(e: React.MouseEvent) {
+    e.stopPropagation();
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    setCalPos({ top: rect.bottom + 4, left: rect.left });
+    setCalOpen(true);
+  }
+
   return (
     <tr
       onClick={onClick}
       className="cursor-pointer transition-colors hover:bg-[#F8FAFF]"
-      style={{ opacity: task.status === "done" ? 0.7 : 1 }}
+      style={{ opacity: task.status === "done" ? 0.7 : 1, height: "var(--density-row)" }}
     >
-      <td className="pl-5 py-2.5 pr-2">
+      {/* Checkbox */}
+      <td className="pl-5 pr-2" style={{ width: 36 }}>
         <input
           type="checkbox"
           checked={task.status === "done"}
           onChange={(e) => { e.stopPropagation(); onToggleDone(); }}
+          onClick={(e) => e.stopPropagation()}
           className="w-4 h-4 cursor-pointer"
           style={{ accentColor: "var(--color-navy)" }}
-          onClick={(e) => e.stopPropagation()}
         />
       </td>
-      <td className="py-2.5 pr-3" style={{ maxWidth: 280 }}>
-        <span
-          style={{
-            fontSize: "12.4px",
-            fontWeight: 500,
-            color: "var(--color-body)",
-            textDecoration: task.status === "done" ? "line-through" : undefined,
-            whiteSpace: "nowrap",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            display: "block",
-          }}
-        >
+
+      {/* Title */}
+      <td className="pr-3" style={{ maxWidth: 280 }}>
+        <span style={{
+          fontSize: 13,
+          fontWeight: 500,
+          color: "var(--color-body)",
+          textDecoration: task.status === "done" ? "line-through" : undefined,
+          whiteSpace: "nowrap",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          display: "block",
+        }}>
           {task.title}
         </span>
       </td>
-      <td className="py-2.5 pr-3">
-        <span
-          className="inline-flex items-center gap-1.5 px-2 py-0.5"
+
+      {/* Status — inline dropdown */}
+      <td className="pr-3" style={{ position: "relative" }}>
+        <button
+          ref={statusBtnRef}
+          onClick={(e) => { e.stopPropagation(); setStatusOpen((o) => !o); setAssigneeOpen(false); setCalOpen(false); }}
+          className="inline-flex items-center gap-1.5 px-2 py-0.5 hover:opacity-80 transition-opacity"
           style={{
-            backgroundColor: `${STATUS_CONFIG[task.status].dot}18`,
-            color: STATUS_CONFIG[task.status].dot,
+            backgroundColor: `${cfg.dot}18`,
+            color: cfg.dot,
             borderRadius: 5,
-            fontSize: "12.4px",
+            fontSize: 12,
             fontWeight: 600,
+            border: "none",
+            cursor: "pointer",
             whiteSpace: "nowrap",
           }}
+          aria-label={`Status: ${cfg.label}`}
         >
-          <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: STATUS_CONFIG[task.status].dot }} />
-          {STATUS_CONFIG[task.status].label}
-        </span>
+          <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: cfg.dot }} />
+          {cfg.label}
+        </button>
+        {statusOpen && createPortal(
+          <div
+            ref={statusMenuRef}
+            className="animate-fade-in"
+            style={{
+              position: "fixed",
+              top: (statusBtnRef.current?.getBoundingClientRect().bottom ?? 0) + 4,
+              left: statusBtnRef.current?.getBoundingClientRect().left ?? 0,
+              zIndex: 9999,
+              backgroundColor: "var(--color-surface)",
+              border: "1px solid var(--color-border)",
+              borderRadius: 8,
+              boxShadow: "0 4px 16px rgba(27,46,75,0.12)",
+              padding: "4px 0",
+              minWidth: 148,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {STATUS_ORDER.map((s) => {
+              const sc = STATUS_CONFIG[s];
+              return (
+                <button
+                  key={s}
+                  onClick={() => { onMoveStatus(s); setStatusOpen(false); }}
+                  className="w-full flex items-center gap-2 px-3 py-2 hover:bg-[rgba(27,46,75,0.06)] transition-colors"
+                  style={{ fontSize: 12, color: "var(--color-body)", border: "none", background: "none", cursor: "pointer" }}
+                >
+                  <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: sc.dot }} />
+                  {sc.label}
+                  {s === task.status && <span style={{ marginLeft: "auto", color: "var(--color-navy)", fontSize: 10 }}>✓</span>}
+                </button>
+              );
+            })}
+          </div>,
+          document.body
+        )}
       </td>
-      <td className="py-2.5 pr-3"><PriorityBadge priority={task.priority} /></td>
-      <td className="py-2.5 pr-3"><AssigneeStack ids={task.assigneeIds} size={22} users={teamMembers} /></td>
-      <td className="py-2.5 pr-3" style={{ fontSize: "12.4px", color: "var(--color-secondary)", whiteSpace: "nowrap" }}>
-        {task.dueDate ? formatDate(task.dueDate) : "—"}
+
+      {/* Priority */}
+      <td className="pr-3"><PriorityBadge priority={task.priority} /></td>
+
+      {/* Assignees — inline picker */}
+      <td className="pr-3" style={{ position: "relative" }}>
+        <button
+          ref={assigneeBtnRef}
+          onClick={(e) => { e.stopPropagation(); setAssigneeOpen((o) => !o); setStatusOpen(false); setCalOpen(false); }}
+          style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}
+          aria-label="Edit assignees"
+        >
+          {task.assigneeIds.length === 0
+            ? <span style={{ fontSize: 12, color: "var(--color-secondary)" }}>—</span>
+            : <AssigneeStack ids={task.assigneeIds} size={22} users={teamMembers} />}
+        </button>
+        {assigneeOpen && createPortal(
+          <div
+            ref={assigneeMenuRef}
+            className="animate-fade-in"
+            style={{
+              position: "fixed",
+              top: (assigneeBtnRef.current?.getBoundingClientRect().bottom ?? 0) + 4,
+              left: assigneeBtnRef.current?.getBoundingClientRect().left ?? 0,
+              zIndex: 9999,
+              backgroundColor: "var(--color-surface)",
+              border: "1px solid var(--color-border)",
+              borderRadius: 8,
+              boxShadow: "0 4px 16px rgba(27,46,75,0.12)",
+              padding: "4px 0",
+              minWidth: 180,
+              maxHeight: 240,
+              overflowY: "auto",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {teamMembers.map((u) => {
+              const checked = task.assigneeIds.includes(u.id);
+              return (
+                <button
+                  key={u.id}
+                  onClick={() => {
+                    const newIds = checked
+                      ? task.assigneeIds.filter((id) => id !== u.id)
+                      : [...task.assigneeIds, u.id];
+                    onUpdateAssignees(newIds);
+                  }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-[rgba(27,46,75,0.06)] transition-colors"
+                  style={{ fontSize: 12, color: "var(--color-body)", border: "none", background: "none", cursor: "pointer" }}
+                >
+                  <Avatar user={u} size={18} />
+                  <span style={{ flex: 1, textAlign: "left" }}>{u.name.split(" ")[0]}</span>
+                  {checked && <span style={{ color: "var(--color-navy)", fontSize: 11 }}>✓</span>}
+                </button>
+              );
+            })}
+            {teamMembers.length === 0 && (
+              <p style={{ fontSize: 12, color: "var(--color-secondary)", padding: "8px 12px" }}>No team members</p>
+            )}
+          </div>,
+          document.body
+        )}
       </td>
-      <td className="py-2.5 pr-3">
+
+      {/* Due date — inline date picker */}
+      <td className="pr-3">
+        <button
+          onClick={openCal}
+          className="hover:bg-[rgba(27,46,75,0.06)] transition-colors"
+          style={{
+            fontSize: 12,
+            color: task.dueDate ? "var(--color-body)" : "var(--color-secondary)",
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            padding: "2px 4px",
+            borderRadius: 4,
+            whiteSpace: "nowrap",
+          }}
+          aria-label="Edit due date"
+        >
+          {task.dueDate ? formatDate(task.dueDate) : "—"}
+        </button>
+        {calOpen && createPortal(
+          <div onClick={(e) => e.stopPropagation()}>
+            <CalendarPicker
+              value={task.dueDate}
+              accentColor="var(--color-navy)"
+              pos={calPos}
+              onSelect={(d) => { onUpdateDueDate(d); setCalOpen(false); }}
+              onClear={() => { onUpdateDueDate(undefined); setCalOpen(false); }}
+              onClose={() => setCalOpen(false)}
+            />
+          </div>,
+          document.body
+        )}
+      </td>
+
+      {/* Subtask progress */}
+      <td className="pr-3">
         {subtaskProgress && subtaskProgress.total > 0 ? (
           <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-            <div style={{ width: 40, height: 3, backgroundColor: "rgba(27,46,75,0.08)", borderRadius: 2, flexShrink: 0 }}>
-              <div style={{ height: "100%", width: `${(subtaskProgress.done / subtaskProgress.total) * 100}%`, backgroundColor: subtaskProgress.done === subtaskProgress.total ? "#2E7D52" : "var(--color-navy)", borderRadius: 2 }} />
+            <div style={{ width: 40, height: 3, backgroundColor: "var(--status-todo-bg)", borderRadius: 2, flexShrink: 0 }}>
+              <div style={{
+                height: "100%",
+                width: `${(subtaskProgress.done / subtaskProgress.total) * 100}%`,
+                backgroundColor: subtaskProgress.done === subtaskProgress.total ? "var(--status-done-dot)" : "var(--color-navy)",
+                borderRadius: 2,
+              }} />
             </div>
-            <span style={{ fontSize: 11, color: "var(--color-secondary)", whiteSpace: "nowrap" }}>{subtaskProgress.done}/{subtaskProgress.total}</span>
+            <span style={{ fontSize: 11, color: "var(--color-secondary)", whiteSpace: "nowrap" }}>
+              {subtaskProgress.done}/{subtaskProgress.total}
+            </span>
           </div>
         ) : null}
       </td>
-      <td className="py-1.5 pr-3">
-        <button onClick={(e) => e.stopPropagation()} className="w-9 h-9 flex items-center justify-center rounded hover:bg-[rgba(27,46,75,0.06)]" aria-label="Task options">
+
+      {/* Actions */}
+      <td className="pr-3">
+        <button
+          onClick={(e) => e.stopPropagation()}
+          className="w-9 h-9 flex items-center justify-center rounded hover:bg-[rgba(27,46,75,0.06)]"
+          aria-label="Task options"
+        >
           <MoreHorizontal size={14} color="var(--color-secondary)" />
         </button>
       </td>
@@ -460,12 +652,58 @@ export default function TasksPage() {
   const [filterPriority, setFilterPriority] = useState("all");
   const [activeId, setActiveId] = useState<string | null>(null);
   const [modalState, setModalState] = useState<ModalState>(null);
-  const { activeScope, subProjectId } = useProject();
+  const { activeScope, subProjectId, subProjects, setActiveSubProject, setActiveScope } = useProject();
   const [teamMembers, setTeamMembers] = useState<User[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string>("");
   const [projectId, setProjectId] = useState<string>("");
   const [subtaskCounts, setSubtaskCounts] = useState<Record<string, { total: number; done: number }>>({});
   const [taskNavStack, setTaskNavStack] = useState<Task[]>([]);
+
+  // ── Saved views (localStorage) ────────────────────────────────────────────────
+  type SavedView = { id: string; name: string; filters: { member: string; priority: string; search: string } };
+  const [savedViews, setSavedViews] = useState<SavedView[]>([]);
+  const [activeViewId, setActiveViewId] = useState<string | null>(null);
+  const [namingView, setNamingView] = useState(false);
+  const [viewNameInput, setViewNameInput] = useState("");
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("canopy_saved_views_tasks");
+      if (stored) setSavedViews(JSON.parse(stored) as SavedView[]);
+    } catch { /* ignore */ }
+  }, []);
+
+  function saveCurrentView() {
+    if (!viewNameInput.trim()) return;
+    const view: SavedView = {
+      id: crypto.randomUUID(),
+      name: viewNameInput.trim(),
+      filters: { member: filterMember, priority: filterPriority, search },
+    };
+    const next = [...savedViews, view];
+    setSavedViews(next);
+    localStorage.setItem("canopy_saved_views_tasks", JSON.stringify(next));
+    setNamedView(view.id);
+    setNamingView(false);
+    setViewNameInput("");
+  }
+
+  function setNamedView(id: string | null) {
+    setActiveViewId(id);
+    if (id === null) { return; }
+    const v = savedViews.find((sv) => sv.id === id);
+    if (!v) return;
+    setFilterMember(v.filters.member);
+    setFilterPriority(v.filters.priority);
+    setSearch(v.filters.search);
+  }
+
+  function deleteView(id: string) {
+    const next = savedViews.filter((v) => v.id !== id);
+    setSavedViews(next);
+    localStorage.setItem("canopy_saved_views_tasks", JSON.stringify(next));
+    if (activeViewId === id) setActiveViewId(null);
+  }
 
   useEffect(() => {
     if (!isSupabaseConfigured) {
@@ -782,6 +1020,24 @@ export default function TasksPage() {
     });
   }, []);
 
+  const handleUpdateTaskAssignees = useCallback(async (taskId: string, ids: string[]) => {
+    setTasks((prev) => prev.map((t) => t.id === taskId ? { ...t, assigneeIds: ids } : t));
+    if (!isSupabaseConfigured) return;
+    const { error: delErr } = await supabase.from("task_assignees").delete().eq("task_id", taskId);
+    if (delErr) { console.error("[Tasks] assignee delete:", delErr); showToast("Failed to update assignees.", "error"); return; }
+    if (ids.length > 0) {
+      const { error: insErr } = await supabase.from("task_assignees").insert(ids.map((uid) => ({ task_id: taskId, user_id: uid })));
+      if (insErr) { console.error("[Tasks] assignee insert:", insErr); showToast("Failed to update assignees.", "error"); }
+    }
+  }, []);
+
+  const handleUpdateTaskDueDate = useCallback((taskId: string, date: string | undefined) => {
+    setTasks((prev) => prev.map((t) => t.id === taskId ? { ...t, dueDate: date } : t));
+    if (!isSupabaseConfigured) return;
+    supabase.from("tasks").update({ due_date: date ?? null }).eq("id", taskId)
+      .then(({ error }) => { if (error) { console.error("[Tasks] due_date update:", error); showToast("Failed to update due date.", "error"); } });
+  }, []);
+
   const filteredTasks = tasks.filter((t) => {
     if (search && !t.title.toLowerCase().includes(search.toLowerCase())) return false;
     if (filterMember !== "all" && !t.assigneeIds.includes(filterMember)) return false;
@@ -806,34 +1062,112 @@ export default function TasksPage() {
     <div className="flex flex-col h-full" style={{ fontFamily: "var(--font-roboto)" }}>
 
       {/* Toolbar */}
-      <div className="px-4 md:px-6 pt-3 pb-2" style={{ backgroundColor: "var(--color-surface)", borderBottom: "1px solid var(--color-border)" }}>
+      <div className="px-4 md:px-6 pt-3 pb-0" style={{ backgroundColor: "var(--color-surface)", borderBottom: "1px solid var(--color-border)" }}>
         <div className="flex items-center gap-3 mb-2">
-          <h1 style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 22, color: "var(--color-navy)", margin: 0, flex: 1 }}>Tasks</h1>
+          <h1 style={{ fontWeight: 700, fontSize: 20, color: "var(--color-navy)", margin: 0, flex: 1 }}>Tasks</h1>
           <div className="flex items-center rounded-lg p-0.5 shrink-0" style={{ backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)" }}>
             {(["board", "list"] as const).map((v) => (
               <button
                 key={v}
                 onClick={() => { setView(v); setSelectedTask(null); }}
                 className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md transition-all"
-                style={{ fontSize: 12, fontWeight: 600, backgroundColor: view === v ? "var(--color-navy)" : "transparent", color: view === v ? "#fff" : "var(--color-secondary)", minHeight: 36, minWidth: 44, justifyContent: "center" }}
+                style={{ fontSize: 12, fontWeight: 600, backgroundColor: view === v ? "var(--color-navy)" : "transparent", color: view === v ? "#fff" : "var(--color-secondary)", minHeight: 32, minWidth: 40, justifyContent: "center" }}
               >
-                {v === "board" ? <LayoutGrid size={14} /> : <List size={14} />}
+                {v === "board" ? <LayoutGrid size={13} /> : <List size={13} />}
                 <span className="hidden sm:inline">{v === "board" ? "Board" : "List"}</span>
               </button>
             ))}
           </div>
           <button
             onClick={() => setModalState({ mode: "add", status: "todo" })}
-            className="flex items-center gap-1.5 px-3 md:px-4 py-2 shrink-0 transition-opacity hover:opacity-90"
-            style={{ backgroundColor: "var(--color-navy)", color: "#fff", fontSize: 12, fontWeight: 700, borderRadius: 7, border: "none", cursor: "pointer", minHeight: 44 }}
+            className="flex items-center gap-1.5 px-3 md:px-4 shrink-0 transition-opacity hover:opacity-90"
+            style={{ backgroundColor: "var(--color-navy)", color: "#fff", fontSize: 12, fontWeight: 600, borderRadius: 7, border: "none", cursor: "pointer", height: 36 }}
           >
             <Plus size={13} />
             <span className="hidden sm:inline">Add Task</span>
           </button>
         </div>
 
+        {/* Saved views strip */}
+        <div className="flex items-center gap-1 overflow-x-auto pb-0" style={{ scrollbarWidth: "none" }}>
+          <button
+            onClick={() => { setActiveViewId(null); setSearch(""); setFilterMember("all"); setFilterPriority("all"); }}
+            style={{
+              fontSize: 12, fontWeight: activeViewId === null ? 600 : 400,
+              color: activeViewId === null ? "var(--color-navy)" : "var(--color-secondary)",
+              padding: "4px 10px", border: "none", background: "none", cursor: "pointer",
+              borderBottom: activeViewId === null ? "2px solid var(--color-navy)" : "2px solid transparent",
+              marginBottom: -1, whiteSpace: "nowrap",
+            }}
+          >
+            Default
+          </button>
+          {savedViews.map((v) => (
+            <div key={v.id} className="relative group/viewtab flex items-center" style={{ marginBottom: -1 }}>
+              <button
+                onClick={() => setNamedView(v.id)}
+                style={{
+                  fontSize: 12, fontWeight: activeViewId === v.id ? 600 : 400,
+                  color: activeViewId === v.id ? "var(--color-navy)" : "var(--color-secondary)",
+                  padding: "4px 10px", border: "none", background: "none", cursor: "pointer",
+                  borderBottom: activeViewId === v.id ? "2px solid var(--color-navy)" : "2px solid transparent",
+                  whiteSpace: "nowrap",
+                  paddingRight: 22,
+                }}
+              >
+                {v.name}
+              </button>
+              <button
+                onClick={() => deleteView(v.id)}
+                className="absolute right-1 opacity-0 group-hover/viewtab:opacity-100 transition-opacity"
+                style={{ padding: 2, border: "none", background: "none", cursor: "pointer", lineHeight: 1 }}
+                aria-label="Delete view"
+              >
+                <XIcon size={10} color="var(--color-secondary)" />
+              </button>
+            </div>
+          ))}
+          {namingView ? (
+            <form
+              onSubmit={(e) => { e.preventDefault(); saveCurrentView(); }}
+              className="flex items-center gap-1"
+            >
+              <input
+                autoFocus
+                value={viewNameInput}
+                onChange={(e) => setViewNameInput(e.target.value)}
+                placeholder="View name…"
+                onKeyDown={(e) => { if (e.key === "Escape") { setNamingView(false); setViewNameInput(""); } }}
+                style={{ fontSize: 12, height: 26, padding: "0 8px", border: "1px solid var(--color-border)", borderRadius: 5, outline: "none", width: 120 }}
+              />
+              <button type="submit" style={{ fontSize: 11, fontWeight: 600, color: "var(--color-navy)", background: "none", border: "none", cursor: "pointer", padding: "2px 6px" }}>Save</button>
+              <button type="button" onClick={() => { setNamingView(false); setViewNameInput(""); }} style={{ fontSize: 11, color: "var(--color-secondary)", background: "none", border: "none", cursor: "pointer", padding: "2px 4px" }}>Cancel</button>
+            </form>
+          ) : (
+            <button
+              onClick={() => setNamingView(true)}
+              style={{ fontSize: 12, color: "var(--color-secondary)", padding: "4px 8px", border: "none", background: "none", cursor: "pointer", whiteSpace: "nowrap", marginBottom: -1 }}
+              title="Save current filters as a view"
+            >
+              + Save view
+            </button>
+          )}
+        </div>
+
+        {/* Per-project filter tabs */}
+        {subProjects.length > 0 && (
+          <ProjectFilterTabs
+            subProjects={subProjects}
+            selected={activeScope === "project" ? (subProjectId ?? null) : null}
+            onChange={(id) => {
+              if (id === null) { setActiveSubProject(null); setActiveScope("lab"); }
+              else { setActiveSubProject(id); setActiveScope("project"); }
+            }}
+          />
+        )}
+
         {/* Search + filters row */}
-        <div className="flex items-center gap-2 pb-2 flex-wrap">
+        <div className="flex items-center gap-2 py-2 flex-wrap">
           <div className="relative flex-1 min-w-0" style={{ minWidth: 120 }}>
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2" color="var(--color-secondary)" />
             <input
@@ -922,14 +1256,21 @@ export default function TasksPage() {
                     task={task}
                     onClick={() => setSelectedTask(task)}
                     onToggleDone={() => moveTask(task.id, task.status === "done" ? "todo" : "done")}
+                    onMoveStatus={(s) => moveTask(task.id, s)}
+                    onUpdateAssignees={(ids) => handleUpdateTaskAssignees(task.id, ids)}
+                    onUpdateDueDate={(d) => handleUpdateTaskDueDate(task.id, d)}
                     teamMembers={teamMembers}
                     subtaskProgress={subtaskCounts[task.id]}
                   />
                 ))}
                 {filteredTasks.length === 0 && (
                   <tr>
-                    <td colSpan={8} style={{ textAlign: "center", padding: "52px 16px", color: "var(--color-secondary)", fontSize: 13, fontFamily: "var(--font-roboto)" }}>
-                      No tasks match your filters.
+                    <td colSpan={8} style={{ padding: "8px 0" }}>
+                      <EmptyState
+                        variant="tasks"
+                        title="No tasks match your filters"
+                        description="Try adjusting the search or filter options above."
+                      />
                     </td>
                   </tr>
                 )}

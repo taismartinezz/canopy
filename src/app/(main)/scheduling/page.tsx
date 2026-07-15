@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { useProject } from "@/context/ProjectContext";
+import ProjectFilterTabs from "@/components/ui/ProjectFilterTabs";
 import { computeInitials } from "@/lib/utils";
 import type {
   User, WeeklyAvailability, MeetingProposal, MeetingResponse,
@@ -941,7 +942,7 @@ const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
 ];
 
 export default function SchedulingPage() {
-  const { projectId, activeScope, subProjectId } = useProject();
+  const { projectId, activeScope, subProjectId, subProjects, setActiveSubProject, setActiveScope } = useProject();
 
   const [tab, setTab] = useState<Tab>("calendar");
   const [showProposalModal, setShowProposalModal] = useState(false);
@@ -1247,14 +1248,27 @@ export default function SchedulingPage() {
   return (
     <ClientOnly>
       <div className="px-4 md:px-8 py-6 max-w-5xl mx-auto">
-        <div className="mb-6">
-          <h1 style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 22, color: "var(--color-navy)", margin: 0 }}>
+        <div className="mb-4">
+          <h1 style={{ fontWeight: 700, fontSize: 20, color: "var(--color-navy)", margin: 0 }}>
             Scheduling
           </h1>
           <p style={{ fontSize: 13, color: "var(--color-secondary)", marginTop: 3 }}>
             Calendar, availability, and meetings with your lab.
           </p>
         </div>
+
+        {subProjects.length > 0 && (
+          <div className="mb-4 -mx-4 md:-mx-8 px-4 md:px-8" style={{ borderTop: "1px solid var(--color-border)" }}>
+            <ProjectFilterTabs
+              subProjects={subProjects}
+              selected={activeScope === "project" ? (subProjectId ?? null) : null}
+              onChange={(id) => {
+                if (id === null) { setActiveSubProject(null); setActiveScope("lab"); }
+                else { setActiveSubProject(id); setActiveScope("project"); }
+              }}
+            />
+          </div>
+        )}
 
         {/* Tab bar */}
         <div className="flex gap-0.5 mb-6 overflow-x-auto" style={{ backgroundColor: "rgba(27,46,75,0.06)", borderRadius: 9, padding: 3 }}>

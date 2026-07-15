@@ -1124,14 +1124,19 @@ export default function RemindersPage() {
 function EmptyState({ panelColor, onAdd }: { panelColor: string; onAdd: () => void }) {
   return (
     <div style={{ margin: "0 24px" }}>
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "56px 0", textAlign: "center", backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 12 }}>
-        <div style={{ width: 40, height: 40, borderRadius: "50%", backgroundColor: `${panelColor}18`, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 12 }}>
-          <Check size={20} color={panelColor} />
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "48px 16px", textAlign: "center", gap: 12 }}>
+        <svg width="64" height="52" viewBox="0 0 80 64" fill="none" aria-hidden="true" style={{ opacity: 0.65 }}>
+          <circle cx="40" cy="28" r="18" stroke="var(--color-border)" strokeWidth="1.5" fill="var(--color-canvas)" />
+          <path d="M40 18v10l6 4" stroke={panelColor} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" opacity="0.5" />
+          <path d="M32 47c2.5 2 5 3 8 3s5.5-1 8-3" stroke="var(--color-border)" strokeWidth="1.5" strokeLinecap="round" />
+          <circle cx="40" cy="12" r="2" fill="var(--color-border)" />
+        </svg>
+        <div>
+          <p style={{ fontSize: 14, fontWeight: 600, color: "var(--color-body)", margin: "0 0 4px" }}>No reminders here</p>
+          <p style={{ fontSize: 13, color: "var(--color-secondary)", margin: 0 }}>Set one to stay on top of what matters.</p>
         </div>
-        <p style={{ fontSize: 15, fontWeight: 600, color: "var(--color-body)", margin: "0 0 4px" }}>No Reminders</p>
-        <p style={{ fontSize: 13, color: "var(--color-secondary)", margin: "0 0 20px" }}>Nothing here.</p>
-        <button onClick={onAdd} style={{ display: "flex", alignItems: "center", gap: 6, height: 34, paddingInline: 16, backgroundColor: panelColor, color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "var(--font-roboto)" }}>
-          <Plus size={14} /> New Reminder
+        <button onClick={onAdd} style={{ display: "flex", alignItems: "center", gap: 6, height: 34, paddingInline: 16, backgroundColor: panelColor, color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+          <Plus size={13} /> New Reminder
         </button>
       </div>
     </div>
