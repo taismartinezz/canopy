@@ -165,8 +165,15 @@ function SortableSubtaskRow({
   return (
     <div
       ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 }}
-      className="group/subtask flex items-center gap-1 py-0.5 px-0.5 rounded hover:bg-[rgba(27,46,75,0.03)]"
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.4 : 1,
+        borderLeft: `2px solid ${statusCfg.dot}40`,
+        marginBottom: 2,
+        borderRadius: "0 5px 5px 0",
+      }}
+      className="group/subtask flex items-center gap-1.5 py-1.5 pl-1 pr-1 hover:bg-[rgba(27,46,75,0.03)] transition-colors"
       {...attributes}
     >
       {/* Drag grip */}
@@ -191,9 +198,10 @@ function SortableSubtaskRow({
           onClick={(e) => { e.stopPropagation(); onToggleStatusMenu(); }}
           title={`Status: ${statusCfg.label}`}
           style={{
-            width: 11, height: 11, borderRadius: "50%",
+            width: 13, height: 13, borderRadius: "50%",
             backgroundColor: statusCfg.dot, border: "none",
             cursor: "pointer", flexShrink: 0, display: "block",
+            boxShadow: `0 0 0 2px ${statusCfg.dot}20`,
           }}
         />
         {isStatusMenuOpen && (
@@ -448,29 +456,31 @@ export default function TaskDetailPanel({
     }
   }, [task.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Fetch subtasks for this task
+  // Fetch subtasks for this task.
+  // Use * so the query works regardless of which optional columns exist in the live DB
+  // (display_order may not be migrated yet; assignees come from task_assignees join table).
   useEffect(() => {
     if (!isSupabaseConfigured) return;
     supabase
       .from("tasks")
-      .select("id, title, status, priority, assignee_ids, due_date, description, display_order, comments, files, links")
+      .select("*, task_assignees(user_id)")
       .eq("parent_id", task.id)
-      .order("display_order", { ascending: true })
       .order("created_at", { ascending: true })
-      .then(({ data }) => {
+      .then(({ data, error }) => {
+        if (error) { console.error("[Subtask] fetch error:", error); return; }
         if (data) {
           setSubtasks(data.map(r => ({
             id: r.id as string,
             title: r.title as string,
             status: r.status as TaskStatus,
             priority: (r.priority as TaskPriority) ?? "medium",
-            assigneeIds: (r.assignee_ids as string[] | null) ?? [],
+            assigneeIds: ((r.task_assignees as Array<{ user_id: string }> | null) ?? []).map(ta => ta.user_id as string),
             dueDate: (r.due_date as string | null) ?? undefined,
             description: (r.description as string) ?? "",
-            displayOrder: (r.display_order as number) ?? 0,
-            comments: (r.comments as Task["comments"]) ?? [],
-            files: (r.files as Task["files"]) ?? [],
-            links: (r.links as Task["links"]) ?? [],
+            displayOrder: (r.display_order as number | undefined) ?? 0,
+            comments: (r.comments as Task["comments"] | null) ?? [],
+            files: (r.files as Task["files"] | null) ?? [],
+            links: (r.links as Task["links"] | null) ?? [],
           })));
         }
       });
@@ -537,7 +547,6 @@ export default function TaskDetailPanel({
         priority: task.priority,
         description: "",
         scope: "lab",
-        display_order: nextOrder,
       })
       .select("id")
       .single();
@@ -1052,10 +1061,10 @@ export default function TaskDetailPanel({
         {/* ── Subtasks section ───────────────────────────────────────────────── */}
         <div ref={subtaskSectionRef} style={{ borderBottom: "1px solid var(--color-border)" }}>
           {/* Header row */}
-          <div className="px-6 pt-3 pb-1 flex items-center gap-2">
+          <div className="px-6 pt-4 pb-2 flex items-center gap-2">
             <button
               onClick={toggleSubtasksOpen}
-              className="flex items-center gap-1.5 flex-1 min-w-0 hover:opacity-70 transition-opacity"
+              className="flex items-center gap-2 flex-1 min-w-0 hover:opacity-70 transition-opacity"
               style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}
               aria-expanded={subtasksOpen}
             >
@@ -1065,11 +1074,16 @@ export default function TaskDetailPanel({
               <span style={{ fontSize: 11, fontWeight: 700, color: "var(--color-secondary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
                 Subtasks
               </span>
-              {totalCount > 0 && (
-                <span style={{ fontSize: 11, fontWeight: 400, color: "var(--color-secondary)" }}>
-                  {doneCount}/{totalCount}
-                </span>
-              )}
+              {/* Count badge — always visible regardless of open/collapsed state */}
+              <span style={{
+                fontSize: 11, fontWeight: 600,
+                color: doneCount === totalCount && totalCount > 0 ? "#2E7D52" : "var(--color-secondary)",
+                backgroundColor: totalCount > 0 ? "rgba(27,46,75,0.06)" : "transparent",
+                padding: totalCount > 0 ? "1px 6px" : 0,
+                borderRadius: 10,
+              }}>
+                {doneCount}/{totalCount}
+              </span>
             </button>
             {!addingSubtask && (
               <button
@@ -1082,24 +1096,29 @@ export default function TaskDetailPanel({
                   setTimeout(() => subtaskInputRef.current?.focus(), 50);
                 }}
                 className="flex items-center gap-1 hover:opacity-70 transition-opacity shrink-0"
-                style={{ fontSize: 12, color: "var(--color-secondary)", background: "none", border: "none", cursor: "pointer", padding: "2px 0", fontFamily: "var(--font-roboto)" }}
+                style={{ fontSize: 12, color: "var(--color-navy)", background: "none", border: "none", cursor: "pointer", padding: "3px 6px", fontFamily: "var(--font-roboto)", borderRadius: 5 }}
               >
                 <Plus size={12} /> Add subtask
               </button>
             )}
           </div>
 
-          {/* Progress bar — always visible when there are subtasks */}
+          {/* Progress bar — always visible when there are subtasks, even when collapsed */}
           {totalCount > 0 && (
-            <div className="px-6 pb-1.5">
-              <div style={{ height: 3, backgroundColor: "rgba(27,46,75,0.08)", borderRadius: 2 }}>
-                <div style={{
-                  height: "100%",
-                  width: `${(doneCount / totalCount) * 100}%`,
-                  backgroundColor: doneCount === totalCount ? "#2E7D52" : "var(--color-navy)",
-                  borderRadius: 2,
-                  transition: "width 0.3s ease",
-                }} />
+            <div className="px-6 pb-2">
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <div style={{ flex: 1, height: 5, backgroundColor: "rgba(27,46,75,0.08)", borderRadius: 3 }}>
+                  <div style={{
+                    height: "100%",
+                    width: `${(doneCount / totalCount) * 100}%`,
+                    backgroundColor: doneCount === totalCount ? "#2E7D52" : "var(--color-navy)",
+                    borderRadius: 3,
+                    transition: "width 0.35s ease",
+                  }} />
+                </div>
+                <span style={{ fontSize: 11, color: "var(--color-secondary)", whiteSpace: "nowrap", flexShrink: 0 }}>
+                  {Math.round((doneCount / totalCount) * 100)}%
+                </span>
               </div>
             </div>
           )}
@@ -1145,8 +1164,15 @@ export default function TaskDetailPanel({
               </DndContext>
 
               {addingSubtask && (
-                <div style={{ display: "flex", alignItems: "center", gap: 8, paddingTop: 4, paddingLeft: 20 }}>
-                  <div style={{ width: 11, height: 11, borderRadius: "50%", border: "2px solid var(--color-border)", flexShrink: 0 }} />
+                <div style={{
+                  display: "flex", alignItems: "center", gap: 8,
+                  marginTop: 4,
+                  paddingLeft: 6, paddingTop: 6, paddingBottom: 6, paddingRight: 6,
+                  borderLeft: "2px solid rgba(27,46,75,0.15)",
+                  borderRadius: "0 5px 5px 0",
+                  backgroundColor: "rgba(27,46,75,0.02)",
+                }}>
+                  <div style={{ width: 13, height: 13, borderRadius: "50%", border: "2px solid var(--color-border)", flexShrink: 0 }} />
                   <input
                     ref={subtaskInputRef}
                     autoFocus
