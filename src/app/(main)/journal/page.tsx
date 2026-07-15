@@ -209,11 +209,11 @@ function PromptCard({
           >
             {isRecording ? (
               <>
-                <MicOff size={14} />
+                <MicOff size={20} />
                 <span className="absolute inset-0 rounded-full animate-pulse-ring" style={{ border: "2px solid #C0392B" }} />
               </>
             ) : (
-              <Mic size={14} />
+              <Mic size={20} />
             )}
           </button>
         )}
@@ -225,7 +225,7 @@ function PromptCard({
             className="shrink-0 flex items-center justify-center rounded-full ml-3"
             style={{ width: 44, height: 44, backgroundColor: "var(--color-border)", color: "var(--color-secondary)", border: "none", cursor: "not-allowed", opacity: 0.6 }}
           >
-            <Mic size={14} />
+            <Mic size={20} />
           </button>
         )}
       </div>

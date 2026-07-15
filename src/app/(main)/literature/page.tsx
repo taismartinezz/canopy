@@ -4,11 +4,11 @@ import { useState, useEffect, useRef } from "react";
 import {
   formatFileSize,
 } from "@/lib/mock-data";
-import { supabase } from "@/lib/supabase";
+import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { useProject } from "@/context/ProjectContext";
 import type { LiteratureItem, ReadStatus, LiteratureType, LibraryScope, LiteratureFile, LitAnnotation, LitAssignedReading, LitRecommendation, AssignmentReadingStatus, SubProject } from "@/types";
 import {
-  Plus, Search, Download, FileText, File, X,
+  Plus, Search, Download, FileText, File, X, Trash2,
   Tag, Star, ExternalLink, Copy, Check, ChevronLeft, ChevronRight,
   Book, BarChart2, GraduationCap,
   Library, ClipboardList, Brain, Microscope, Heart,
@@ -647,8 +647,8 @@ function ZoteroImportModal({ existingItems, onImport, onClose, projectId, curren
   const SCOPE_LABELS: Record<LibraryScope, string> = { lab: "Lab Library", personal: "My Library", project: "Project Library" };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: "rgba(27,46,75,0.35)" }} onClick={onClose}>
-      <div style={{ backgroundColor: "var(--color-surface)", maxWidth: 480, width: "100%", borderRadius: 10, padding: 28, boxShadow: "0 8px 40px rgba(27,46,75,0.18)", maxHeight: "90dvh", overflowY: "auto" }} onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: "rgba(27,46,75,0.35)" }}>
+      <div style={{ backgroundColor: "var(--color-surface)", maxWidth: 480, width: "100%", borderRadius: 10, padding: 28, boxShadow: "0 8px 40px rgba(27,46,75,0.18)", maxHeight: "90dvh", overflowY: "auto" }}>
         <div className="flex items-center justify-between mb-4">
           <h2 style={{ fontFamily: "var(--font-lora)", fontWeight: 600, fontSize: 16, color: "var(--color-navy)", margin: 0 }}>Import from Zotero</h2>
           <button onClick={onClose} className="flex items-center justify-center rounded-lg hover:bg-[rgba(27,46,75,0.06)]" style={{ width: 36, height: 36 }}><X size={16} color="var(--color-secondary)" /></button>
@@ -1245,11 +1245,12 @@ const DETAIL_TABS = ["Info", "Abstract", "Notes", "Tags", "Files", "Cite", "Rela
 type DetailTab = typeof DETAIL_TABS[number];
 
 function DetailPanelContent({
-  item, onClose, onUpdateItem, allItems, currentUserId, projectId, onAddItem, subProjectId,
+  item, onClose, onUpdateItem, onDeleteItem, allItems, currentUserId, projectId, onAddItem, subProjectId,
 }: {
   item: LiteratureItem;
   onClose: () => void;
   onUpdateItem: (id: string, updates: Partial<LiteratureItem>) => void;
+  onDeleteItem?: (id: string) => void;
   allItems: LiteratureItem[];
   currentUserId: string;
   projectId: string;
@@ -1269,6 +1270,7 @@ function DetailPanelContent({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [annotations, setAnnotations]   = useState<LitAnnotation[]>([]);
+  const [annotAuthors, setAnnotAuthors] = useState<Record<string, string>>({});
   const [newAnnotText, setNewAnnotText] = useState("");
   const [newAnnotComment, setNewAnnotComment] = useState("");
   const [newAnnotColor, setNewAnnotColor] = useState<string | undefined>(undefined);
@@ -1295,15 +1297,29 @@ function DetailPanelContent({
   useEffect(() => {
     if (tab === "Annotations") {
       supabase.from("lit_annotations").select("*").eq("item_id", item.id).order("created_at")
-        .then(({ data }) => {
-          if (data) setAnnotations(data.map((r) => ({
+        .then(async ({ data }) => {
+          if (!data) return;
+          const mapped = data.map((r) => ({
             id: r.id as string, itemId: r.item_id as string, authorId: r.author_id as string,
             text: r.text as string, comment: r.comment as string,
             pageRef: r.page_ref as string | undefined,
             parentId: r.parent_id as string | undefined,
             createdAt: r.created_at as string,
             color: r.color as string | undefined,
-          })));
+          }));
+          setAnnotations(mapped);
+          // Resolve author IDs to names
+          const unknownIds = [...new Set(mapped.map((a) => a.authorId))].filter((id) => id !== currentUserId);
+          if (unknownIds.length > 0) {
+            const { data: profiles } = await supabase.from("user_profiles").select("id, name").in("id", unknownIds);
+            if (profiles) {
+              setAnnotAuthors((prev) => {
+                const next = { ...prev };
+                for (const p of profiles) next[p.id as string] = (p.name as string) ?? p.id;
+                return next;
+              });
+            }
+          }
         });
     }
     if (tab === "Assigned") {
@@ -1476,7 +1492,21 @@ function DetailPanelContent({
             </div>
             <p style={{ fontFamily: "var(--font-lora)", fontWeight: 600, fontSize: 13, color: "var(--color-body)", lineHeight: 1.4, margin: 0 }}>{item.title}</p>
           </div>
-          <button onClick={onClose} className="flex items-center justify-center rounded-lg hover:bg-[rgba(27,46,75,0.06)]" style={{ width: 44, height: 44 }} aria-label="Close"><X size={15} color="var(--color-secondary)" /></button>
+          <div className="flex items-center gap-1 shrink-0">
+            {onDeleteItem && (
+              <button
+                onClick={() => { if (window.confirm("Remove this paper from the library?")) onDeleteItem(item.id); }}
+                className="flex items-center justify-center rounded-lg"
+                style={{ width: 36, height: 36, color: "var(--color-secondary)", background: "none", border: "none", cursor: "pointer" }}
+                aria-label="Delete paper"
+                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--color-error)"; (e.currentTarget as HTMLElement).style.backgroundColor = "rgba(192,57,43,0.08)"; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--color-secondary)"; (e.currentTarget as HTMLElement).style.backgroundColor = "transparent"; }}
+              >
+                <Trash2 size={14} />
+              </button>
+            )}
+            <button onClick={onClose} className="flex items-center justify-center rounded-lg hover:bg-[rgba(27,46,75,0.06)]" style={{ width: 44, height: 44 }} aria-label="Close"><X size={15} color="var(--color-secondary)" /></button>
+          </div>
         </div>
       </div>
 
@@ -1780,7 +1810,7 @@ function DetailPanelContent({
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <span style={{ fontSize: 10, color: "var(--color-secondary)" }}>
-                          {a.authorId === currentUserId ? "You" : a.authorId.slice(0, 8)} · {new Date(a.createdAt).toLocaleDateString()}
+                          {a.authorId === currentUserId ? "You" : (annotAuthors[a.authorId] ?? a.authorId.slice(0, 8))} · {new Date(a.createdAt).toLocaleDateString()}
                         </span>
                         {/* Inline color tag change for annotation author */}
                         {a.authorId === currentUserId && (
@@ -1811,7 +1841,7 @@ function DetailPanelContent({
                     <div key={reply.id} className="ml-4 mt-1.5 px-3 py-2.5 rounded-lg" style={{ backgroundColor: "rgba(27,46,75,0.03)", border: "1px solid var(--color-border)" }}>
                       <p style={{ fontSize: 12, color: "var(--color-body)", lineHeight: 1.5, marginBottom: 4 }}>{reply.comment}</p>
                       <div className="flex items-center justify-between">
-                        <span style={{ fontSize: 10, color: "var(--color-secondary)" }}>{reply.authorId === currentUserId ? "You" : reply.authorId.slice(0, 8)} · {new Date(reply.createdAt).toLocaleDateString()}</span>
+                        <span style={{ fontSize: 10, color: "var(--color-secondary)" }}>{reply.authorId === currentUserId ? "You" : (annotAuthors[reply.authorId] ?? reply.authorId.slice(0, 8))} · {new Date(reply.createdAt).toLocaleDateString()}</span>
                         {reply.authorId === currentUserId && (
                           <button onClick={() => deleteAnnotation(reply.id)} style={{ background: "none", border: "none", cursor: "pointer", padding: 2 }}><X size={11} color="var(--color-secondary)" /></button>
                         )}
@@ -2044,6 +2074,25 @@ export default function LiteraturePage() {
 
   function updateItem(id: string, updates: Partial<LiteratureItem>) {
     setItems((prev) => prev.map((item) => item.id === id ? { ...item, ...updates } : item));
+    if (!isSupabaseConfigured) return;
+    const colMap: Record<string, string> = { notes: "notes", tags: "tags", status: "status", rating: "rating" };
+    const payload: Record<string, unknown> = {};
+    for (const [k, col] of Object.entries(colMap)) {
+      if (k in updates) payload[col] = (updates as Record<string, unknown>)[k];
+    }
+    if (Object.keys(payload).length > 0) {
+      supabase.from("literature_items").update(payload).eq("id", id)
+        .then(({ error }) => { if (error) console.error("[Literature] update:", error); });
+    }
+  }
+
+  async function deleteItem(id: string) {
+    setItems((prev) => prev.filter((item) => item.id !== id));
+    setSelectedItemId(null);
+    if (isSupabaseConfigured) {
+      const { error } = await supabase.from("literature_items").delete().eq("id", id);
+      if (error) console.error("[Literature] delete:", error);
+    }
   }
 
   function addItem(item: LiteratureItem) {
@@ -2261,11 +2310,11 @@ export default function LiteraturePage() {
         <>
           {isMobile ? (
             <div className="fixed inset-0 z-40 animate-slide-in-bottom" style={{ backgroundColor: "var(--color-surface)" }}>
-              <DetailPanelContent item={selectedItem} onClose={() => setSelectedItemId(null)} onUpdateItem={updateItem} allItems={items} currentUserId={currentUserId} projectId={projectId} onAddItem={addItem} subProjectId={subProjectId ?? null} />
+              <DetailPanelContent item={selectedItem} onClose={() => setSelectedItemId(null)} onUpdateItem={updateItem} onDeleteItem={deleteItem} allItems={items} currentUserId={currentUserId} projectId={projectId} onAddItem={addItem} subProjectId={subProjectId ?? null} />
             </div>
           ) : (
             <div className="flex flex-col shrink-0" style={{ width: 340, borderLeft: "1px solid var(--color-border)" }}>
-              <DetailPanelContent item={selectedItem} onClose={() => setSelectedItemId(null)} onUpdateItem={updateItem} allItems={items} currentUserId={currentUserId} projectId={projectId} onAddItem={addItem} subProjectId={subProjectId ?? null} />
+              <DetailPanelContent item={selectedItem} onClose={() => setSelectedItemId(null)} onUpdateItem={updateItem} onDeleteItem={deleteItem} allItems={items} currentUserId={currentUserId} projectId={projectId} onAddItem={addItem} subProjectId={subProjectId ?? null} />
             </div>
           )}
         </>

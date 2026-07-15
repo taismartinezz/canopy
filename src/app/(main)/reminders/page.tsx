@@ -901,12 +901,12 @@ export default function RemindersPage() {
         }
       }
 
-      // Fetch all reminders created by or assigned to the current user.
-      // Local list-type tabs (personal/lab/project/all) then filter in memory.
+      // Fetch reminders: own, assigned, or lab-scope within current project.
+      const projectFilter = projectId ? `,and(scope.eq.lab,project_id.eq.${projectId})` : "";
       const { data, error } = await supabase
         .from("reminders")
         .select("*")
-        .or(`user_id.eq.${currentUserId},assignee_id.eq.${currentUserId}`)
+        .or(`user_id.eq.${currentUserId},assignee_id.eq.${currentUserId}${projectFilter}`)
         .order("position", { ascending: true, nullsFirst: false })
         .order("created_at", { ascending: true });
 
@@ -935,6 +935,60 @@ export default function RemindersPage() {
     }
     load();
   }, [currentUserId, projectId, projectLoading]);
+
+  // Realtime subscription: pick up lab reminders created/updated by other members
+  useEffect(() => {
+    if (!isSupabaseConfigured || !projectId || !currentUserId) return;
+    const channel = supabase
+      .channel(`reminders:project:${projectId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "reminders", filter: `project_id=eq.${projectId}` },
+        (payload) => {
+          if (payload.eventType === "INSERT") {
+            const row = payload.new;
+            // avoid duplication for own inserts (already added optimistically)
+            if ((row.user_id as string) === currentUserId) return;
+            setReminders((prev) => {
+              if (prev.some((r) => r.id === row.id)) return prev;
+              return [...prev, {
+                id: row.id as string, userId: row.user_id as string,
+                projectId: (row.project_id as string) ?? undefined,
+                subProjectId: (row.sub_project_id as string) ?? undefined,
+                scope: (row.scope as ReminderScope) ?? "personal",
+                title: row.title as string,
+                dueAt: (row.due_at as string) ?? undefined,
+                linkedTaskId: (row.linked_task_id as string) ?? undefined,
+                linkedEventId: (row.linked_event_id as string) ?? undefined,
+                emailEnabled: (row.email_enabled as boolean) ?? false,
+                sent: (row.sent as boolean) ?? false,
+                completed: (row.completed as boolean) ?? false,
+                priority: (row.priority as ReminderPriority) ?? undefined,
+                recurrence: (row.recurrence as Reminder["recurrence"]) ?? undefined,
+                createdAt: row.created_at as string,
+                position: (row.position as number) ?? undefined,
+                assigneeId: (row.assignee_id as string) ?? undefined,
+              }];
+            });
+          } else if (payload.eventType === "UPDATE") {
+            const row = payload.new;
+            setReminders((prev) => prev.map((r) => r.id !== row.id ? r : {
+              ...r,
+              title: row.title as string,
+              dueAt: (row.due_at as string) ?? undefined,
+              completed: (row.completed as boolean) ?? false,
+              priority: (row.priority as ReminderPriority) ?? undefined,
+              assigneeId: (row.assignee_id as string) ?? undefined,
+              scope: (row.scope as ReminderScope) ?? r.scope,
+            }));
+          } else if (payload.eventType === "DELETE") {
+            setReminders((prev) => prev.filter((r) => r.id !== payload.old.id));
+          }
+        }
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [isSupabaseConfigured, projectId, currentUserId]);
 
   function commitDelete(id: string) { if (isSupabaseConfigured) supabase.from("reminders").delete().eq("id", id).then(({ error }) => { if (error) console.error("[Reminders] delete:", error); }); }
   function commitComplete(id: string) { if (isSupabaseConfigured) supabase.from("reminders").update({ completed: true }).eq("id", id).then(({ error }) => { if (error) console.error("[Reminders] complete:", error); }); }
