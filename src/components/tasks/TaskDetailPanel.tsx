@@ -189,10 +189,24 @@ export default function TaskDetailPanel({
     if (!isSupabaseConfigured) return;
     const { data, error } = await supabase
       .from("tasks")
-      .insert({ title, parent_id: task.id, project_id: task.projectId, status: "todo", priority: task.priority })
+      .insert({
+        title,
+        parent_id: task.id,
+        project_id: task.projectId,
+        created_by: currentUserId || CURRENT_USER_ID,
+        status: "todo",
+        priority: task.priority,
+        description: "",
+        scope: "lab",
+      })
       .select("id")
       .single();
-    if (error) { console.error("[Subtask] create error:", error); setSubtasks(prev => prev.filter(s => s.id !== tempId)); return; }
+    if (error) {
+      console.error("[Subtask] create error:", error);
+      setSubtasks(prev => prev.filter(s => s.id !== tempId));
+      showToast("Failed to save subtask. Please try again.", "error");
+      return;
+    }
     setSubtasks(prev => prev.map(s => s.id === tempId ? { ...s, id: data.id as string } : s));
   }
 

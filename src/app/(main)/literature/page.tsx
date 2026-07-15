@@ -1027,8 +1027,9 @@ function CollectionsSidebar({
   onAddByDOI?: () => void;
   subProjects?: SubProject[];
 }) {
-  const totalRead   = items.filter((i) => i.status === "read").length;
-  const totalUnread = items.filter((i) => i.status === "unread").length;
+  const totalRead    = items.filter((i) => i.status === "read").length;
+  const totalReading = items.filter((i) => i.status === "reading").length;
+  const totalUnread  = items.filter((i) => i.status === "unread").length;
 
   const scopeCounts = {
     all:      allItems.length,
@@ -1119,8 +1120,13 @@ function CollectionsSidebar({
         )}
       </div>
 
-      <div className="px-4 py-3 grid grid-cols-3 gap-1" style={{ borderTop: "1px solid var(--color-border)" }}>
-        {[{ label: "Total", value: items.length }, { label: "Read", value: totalRead }, { label: "Unread", value: totalUnread }].map(({ label, value }) => (
+      <div className="px-4 py-3 grid gap-1" style={{ borderTop: "1px solid var(--color-border)", gridTemplateColumns: totalReading > 0 ? "repeat(4,1fr)" : "repeat(3,1fr)" }}>
+        {[
+          { label: "Total",   value: items.length },
+          { label: "Read",    value: totalRead    },
+          ...(totalReading > 0 ? [{ label: "Reading", value: totalReading }] : []),
+          { label: "Unread",  value: totalUnread  },
+        ].map(({ label, value }) => (
           <div key={label} className="text-center">
             <p style={{ fontSize: 14, fontWeight: 700, color: "var(--color-navy)" }}>{value}</p>
             <p style={{ fontSize: 10, color: "var(--color-secondary)" }}>{label}</p>

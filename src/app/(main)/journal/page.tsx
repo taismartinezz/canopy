@@ -61,7 +61,10 @@ function formatFullDate(isoDate: string) {
   return d.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
 }
 
-function getTodayISO() { return new Date().toISOString().split("T")[0]; }
+function getTodayISO() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 
 // Returns "Monday, July 14" style label for 7 days after lastDate
 function nextCheckinDay(lastDate: string) {
@@ -542,14 +545,22 @@ function JournalSidebarContent({
             {groupedEntries.earlier.map((e) => <EntryListItem key={e.id} entry={e} selected={selectedEntryId === e.id} onClick={() => onSelectEntry(e.id)} />)}
           </div>
         )}
-        {groupedEntries.older.length > 0 && (
-          <div>
-            <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--color-secondary)", padding: "10px 16px 4px" }}>
-              {new Date().toLocaleDateString("en-US", { month: "long", year: "numeric" })}
-            </p>
-            {groupedEntries.older.map((e) => <EntryListItem key={e.id} entry={e} selected={selectedEntryId === e.id} onClick={() => onSelectEntry(e.id)} />)}
-          </div>
-        )}
+        {groupedEntries.older.length > 0 && (() => {
+          const byMonth: Record<string, JournalEntry[]> = {};
+          for (const e of groupedEntries.older) {
+            const d = new Date(e.date + "T00:00:00");
+            const key = d.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+            (byMonth[key] ??= []).push(e);
+          }
+          return Object.entries(byMonth).map(([monthLabel, monthEntries]) => (
+            <div key={monthLabel}>
+              <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--color-secondary)", padding: "10px 16px 4px" }}>
+                {monthLabel}
+              </p>
+              {monthEntries.map((e) => <EntryListItem key={e.id} entry={e} selected={selectedEntryId === e.id} onClick={() => onSelectEntry(e.id)} />)}
+            </div>
+          ));
+        })()}
       </div>
       <div className="flex items-center gap-2 px-4 py-3" style={{ borderTop: "1px solid var(--color-border)", backgroundColor: "var(--color-canvas)" }}>
         <Lock size={12} color="var(--color-secondary)" />
