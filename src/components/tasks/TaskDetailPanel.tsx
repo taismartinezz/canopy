@@ -465,7 +465,8 @@ export default function TaskDetailPanel({
       .from("tasks")
       .select("*, task_assignees(user_id)")
       .eq("parent_id", task.id)
-      .order("created_at", { ascending: true })
+      .order("display_order", { ascending: true })
+      .order("created_at",    { ascending: true })
       .then(({ data, error }) => {
         if (error) { console.error("[Subtask] fetch error:", error); return; }
         if (data) {
@@ -562,17 +563,32 @@ export default function TaskDetailPanel({
   async function handleUpdateSubtask(id: string, updates: Partial<SubtaskRow>) {
     setSubtasks(prev => prev.map(s => s.id === id ? { ...s, ...updates } : s));
     if (!isSupabaseConfigured) return;
+
+    // Fields that live directly on the tasks table
     const db: Record<string, unknown> = {};
-    if (updates.status      !== undefined) db.status       = updates.status;
-    if (updates.priority    !== undefined) db.priority     = updates.priority;
-    if (updates.assigneeIds !== undefined) db.assignee_ids = updates.assigneeIds;
-    if ("dueDate" in updates)              db.due_date     = updates.dueDate ?? null;
+    if (updates.status       !== undefined) db.status        = updates.status;
+    if (updates.priority     !== undefined) db.priority      = updates.priority;
+    if ("dueDate" in updates)               db.due_date      = updates.dueDate ?? null;
     if (updates.displayOrder !== undefined) db.display_order = updates.displayOrder;
-    if (Object.keys(db).length === 0) return;
-    const { error } = await supabase.from("tasks").update(db).eq("id", id);
-    if (error) {
-      console.error("[Subtask] update error:", error);
-      showToast("Failed to update subtask.", "error");
+    if (Object.keys(db).length > 0) {
+      const { error } = await supabase.from("tasks").update(db).eq("id", id);
+      if (error) {
+        console.error("[Subtask] update error:", error);
+        showToast("Failed to update subtask.", "error");
+        return;
+      }
+    }
+
+    // Assignees live in the task_assignees join table — replace all rows for this task
+    if (updates.assigneeIds !== undefined) {
+      const { error: delErr } = await supabase.from("task_assignees").delete().eq("task_id", id);
+      if (delErr) { console.error("[Subtask] assignee delete:", delErr); showToast("Failed to update assignees.", "error"); return; }
+      if (updates.assigneeIds.length > 0) {
+        const { error: insErr } = await supabase.from("task_assignees").insert(
+          updates.assigneeIds.map(userId => ({ task_id: id, user_id: userId }))
+        );
+        if (insErr) { console.error("[Subtask] assignee insert:", insErr); showToast("Failed to update assignees.", "error"); }
+      }
     }
   }
 
@@ -636,7 +652,7 @@ export default function TaskDetailPanel({
       }
     }
     onPromoteSubtask?.({
-      id: sub.id, projectId: task.projectId, parentId: null,
+      id: sub.id, projectId: task.projectId, parentId: task.id, // page.tsx reads this for count update, then clears it
       title: sub.title, description: sub.description,
       status: sub.status, priority: sub.priority,
       assigneeIds: sub.assigneeIds, dueDate: sub.dueDate,
@@ -677,8 +693,29 @@ export default function TaskDetailPanel({
     return () => window.removeEventListener("resize", check);
   }, []);
 
+  // Track whether any popover is open so Escape dismisses it before closing the panel
+  const anyPopoverOpenRef = useRef(false);
   useEffect(() => {
-    function onKey(e: KeyboardEvent) { if (e.key === "Escape") onClose(); }
+    anyPopoverOpenRef.current = !!(
+      openSubtaskMenus.status || openSubtaskMenus.assignee || openSubtaskMenus.more ||
+      subtaskCalState || addAssigneeOpen || showCal || menuOpen
+    );
+  }, [openSubtaskMenus, subtaskCalState, addAssigneeOpen, showCal, menuOpen]);
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== "Escape") return;
+      if (anyPopoverOpenRef.current) {
+        // Close only the popover, keep the panel open
+        setOpenSubtaskMenus({ status: null, assignee: null, more: null });
+        setSubtaskCalState(null);
+        setAddAssigneeOpen(false);
+        setShowCal(false);
+        setMenuOpen(false);
+        return;
+      }
+      onClose();
+    }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
