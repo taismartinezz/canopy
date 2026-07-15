@@ -618,6 +618,8 @@ function AvailabilityTab({
   const [selectedIds, setSelectedIds] = useState<string[]>(() => teamMembers.map(m => m.id));
   const [slots, setSlots] = useState<string[]>(savedSlots);
   const [saved, setSaved] = useState(false);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isFirstMount = useRef(true);
 
   useEffect(() => { setSlots(savedSlots); }, [savedSlots]);
 
@@ -625,11 +627,18 @@ function AvailabilityTab({
     if (scope === "all") setSelectedIds(teamMembers.map(m => m.id));
   }, [scope, teamMembers]);
 
-  function handleSave() {
-    onSave(slots);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
-  }
+  // Auto-save 800ms after the user stops dragging
+  useEffect(() => {
+    if (isFirstMount.current) { isFirstMount.current = false; return; }
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      onSave(slots);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    }, 800);
+    return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slots]);
 
   const hasChanges = JSON.stringify([...slots].sort()) !== JSON.stringify([...savedSlots].sort());
 
@@ -710,20 +719,11 @@ function AvailabilityTab({
               title="My Weekly Availability"
               action={
                 <div className="flex items-center gap-2">
-                  {saved && <span style={{ fontSize: 12, color: "var(--color-success)", fontWeight: 600 }}>✓ Saved</span>}
-                  <button
-                    onClick={handleSave}
-                    disabled={!hasChanges}
-                    style={{
-                      backgroundColor: hasChanges ? "var(--color-navy)" : "transparent",
-                      color: hasChanges ? "#fff" : "var(--color-secondary)",
-                      border: hasChanges ? "none" : "1px solid var(--color-border)",
-                      borderRadius: 7, fontSize: 12, fontWeight: 600, padding: "6px 14px",
-                      cursor: hasChanges ? "pointer" : "not-allowed", fontFamily: "var(--font-roboto)",
-                    }}
-                  >
-                    Save Changes
-                  </button>
+                  {saved ? (
+                    <span style={{ fontSize: 12, color: "var(--color-success)", fontWeight: 600 }}>✓ Saved</span>
+                  ) : hasChanges ? (
+                    <span style={{ fontSize: 12, color: "var(--color-secondary)" }}>Saving…</span>
+                  ) : null}
                 </div>
               }
             />

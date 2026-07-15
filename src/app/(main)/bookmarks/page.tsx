@@ -324,86 +324,69 @@ function BookmarkCard({ bm, canDelete, onDelete }: {
   const cfg = TYPE_CONFIG[type];
   const Icon = cfg.icon;
 
-  async function handleDelete() {
+  async function handleDelete(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
     setDeleting(true);
     await onDelete(bm.id);
     setDeleting(false);
   }
 
   return (
-    <div
+    <a
+      href={bm.url}
+      target="_blank"
+      rel="noopener noreferrer"
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
+        display: "flex",
+        flexDirection: "column",
+        textDecoration: "none",
         backgroundColor: "var(--color-surface)",
         border: `1px solid ${hovered ? "#C0CBD8" : "var(--color-border)"}`,
         borderRadius: 10,
         padding: 16,
-        display: "flex",
-        flexDirection: "column",
         minHeight: 148,
         boxShadow: hovered ? "var(--shadow-card)" : "none",
         transition: "border-color 150ms ease, box-shadow 150ms ease",
+        cursor: "pointer",
       }}
     >
       {/* Top row: type icon + badge */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
         <div style={{
-          width: 36,
-          height: 36,
-          borderRadius: 8,
-          backgroundColor: cfg.bg,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          flexShrink: 0,
+          width: 36, height: 36, borderRadius: 8,
+          backgroundColor: cfg.bg, display: "flex",
+          alignItems: "center", justifyContent: "center", flexShrink: 0,
         }}>
           <Icon size={16} color={cfg.color} />
         </div>
         <span style={{
-          fontSize: 10,
-          fontWeight: 700,
-          color: cfg.color,
-          backgroundColor: cfg.bg,
-          borderRadius: 5,
-          padding: "3px 8px",
-          letterSpacing: "0.05em",
-          textTransform: "uppercase",
-          flexShrink: 0,
+          fontSize: 10, fontWeight: 700, color: cfg.color,
+          backgroundColor: cfg.bg, borderRadius: 5,
+          padding: "3px 8px", letterSpacing: "0.05em",
+          textTransform: "uppercase", flexShrink: 0,
         }}>
           {cfg.badge}
         </span>
       </div>
 
       {/* Title */}
-      <a
-        href={bm.url}
-        target="_blank"
-        rel="noopener noreferrer"
-        style={{
-          fontSize: 13,
-          fontWeight: 700,
-          color: "var(--color-body)",
-          textDecoration: "none",
-          lineHeight: 1.45,
-          display: "-webkit-box",
-          WebkitLineClamp: 2,
-          WebkitBoxOrient: "vertical" as const,
-          overflow: "hidden",
-          marginBottom: 5,
-        }}
-      >
+      <p style={{
+        fontSize: 13, fontWeight: 700, color: "var(--color-body)",
+        lineHeight: 1.45,
+        display: "-webkit-box", WebkitLineClamp: 2,
+        WebkitBoxOrient: "vertical" as const, overflow: "hidden",
+        margin: "0 0 5px",
+      }}>
         {bm.title}
-      </a>
+      </p>
 
       {/* Domain */}
       <p style={{
-        fontSize: 11,
-        color: "var(--color-secondary)",
-        marginBottom: 0,
-        overflow: "hidden",
-        textOverflow: "ellipsis",
-        whiteSpace: "nowrap",
+        fontSize: 11, color: "var(--color-secondary)", marginBottom: 0,
+        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
       }}>
         {hostname(bm.url)}
       </p>
@@ -411,23 +394,12 @@ function BookmarkCard({ bm, canDelete, onDelete }: {
       {/* Spacer */}
       <div style={{ flex: 1 }} />
 
-      {/* Bottom row: contributor · time + actions */}
+      {/* Bottom row: contributor · time + delete */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 14 }}>
         <span style={{ fontSize: 11, color: "var(--color-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0, paddingRight: 8 }}>
           {bm.adder_name ?? "Unknown"} · {relTime(bm.added_at)}
         </span>
         <div style={{ display: "flex", alignItems: "center", gap: 2, flexShrink: 0 }}>
-          <a
-            href={bm.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{ width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 6, color: "var(--color-secondary)", textDecoration: "none", transition: "background-color 120ms ease, color 120ms ease" }}
-            onMouseEnter={(e) => { const el = e.currentTarget as HTMLElement; el.style.color = "var(--color-navy)"; el.style.backgroundColor = "rgba(27,46,75,0.06)"; }}
-            onMouseLeave={(e) => { const el = e.currentTarget as HTMLElement; el.style.color = "var(--color-secondary)"; el.style.backgroundColor = "transparent"; }}
-            aria-label="Open link"
-          >
-            <ExternalLink size={12} />
-          </a>
           {canDelete && (
             <button
               onClick={handleDelete}
@@ -442,7 +414,7 @@ function BookmarkCard({ bm, canDelete, onDelete }: {
           )}
         </div>
       </div>
-    </div>
+    </a>
   );
 }
 
