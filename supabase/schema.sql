@@ -963,3 +963,7 @@ alter table sub_project_members
 
 alter table literature_items
   add column if not exists sub_project_id uuid references sub_projects(id) on delete set null;
+
+-- ── Migration 20260715001: subtask display order ──────────────────────────────
+alter table tasks
+  add column if not exists display_order integer not null default 0;

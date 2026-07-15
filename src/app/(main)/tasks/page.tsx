@@ -40,6 +40,7 @@ function TaskCard({
   onDelete,
   isDragging = false,
   teamMembers = [],
+  subtaskProgress,
 }: {
   task: Task;
   onClick: () => void;
@@ -48,6 +49,7 @@ function TaskCard({
   onDelete: () => void;
   isDragging?: boolean;
   teamMembers?: User[];
+  subtaskProgress?: { total: number; done: number };
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
@@ -117,6 +119,22 @@ function TaskCard({
           <PriorityBadge priority={task.priority} />
           <AssigneeStack ids={task.assigneeIds} size={20} users={teamMembers} />
         </div>
+        {subtaskProgress && subtaskProgress.total > 0 && (
+          <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid rgba(27,46,75,0.07)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
+              <span style={{ fontSize: 10, fontWeight: 600, color: "var(--color-secondary)", letterSpacing: "0.03em", textTransform: "uppercase" }}>Subtasks</span>
+              <span style={{ fontSize: 10, color: "var(--color-secondary)" }}>{subtaskProgress.done}/{subtaskProgress.total}</span>
+            </div>
+            <div style={{ height: 3, backgroundColor: "rgba(27,46,75,0.08)", borderRadius: 2 }}>
+              <div style={{
+                height: "100%",
+                width: `${(subtaskProgress.done / subtaskProgress.total) * 100}%`,
+                backgroundColor: subtaskProgress.done === subtaskProgress.total ? "#2E7D52" : "var(--color-navy)",
+                borderRadius: 2, transition: "width 0.3s ease",
+              }} />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ⋯ menu button */}
@@ -221,6 +239,7 @@ function KanbanColumn({
   onAddTask,
   onArchiveDone,
   teamMembers = [],
+  subtaskCounts = {},
 }: {
   status: TaskStatus;
   tasks: Task[];
@@ -231,6 +250,7 @@ function KanbanColumn({
   onAddTask: (status: TaskStatus) => void;
   onArchiveDone?: () => void;
   teamMembers?: User[];
+  subtaskCounts?: Record<string, { total: number; done: number }>;
 }) {
   const cfg = STATUS_CONFIG[status];
   const { setNodeRef: setDropRef, isOver } = useDroppable({ id: status });
@@ -283,6 +303,7 @@ function KanbanColumn({
                 onEdit={() => onEditTask(task)}
                 onDelete={() => onDeleteTask(task.id)}
                 teamMembers={teamMembers}
+                subtaskProgress={subtaskCounts[task.id]}
               />
             ))}
           </div>
@@ -307,11 +328,13 @@ function TaskRow({
   onClick,
   onToggleDone,
   teamMembers = [],
+  subtaskProgress,
 }: {
   task: Task;
   onClick: () => void;
   onToggleDone: () => void;
   teamMembers?: User[];
+  subtaskProgress?: { total: number; done: number };
 }) {
   return (
     <tr
@@ -363,8 +386,18 @@ function TaskRow({
       </td>
       <td className="py-2.5 pr-3"><PriorityBadge priority={task.priority} /></td>
       <td className="py-2.5 pr-3"><AssigneeStack ids={task.assigneeIds} size={22} users={teamMembers} /></td>
-      <td className="py-2.5 pr-5" style={{ fontSize: "12.4px", color: "var(--color-secondary)", whiteSpace: "nowrap" }}>
+      <td className="py-2.5 pr-3" style={{ fontSize: "12.4px", color: "var(--color-secondary)", whiteSpace: "nowrap" }}>
         {task.dueDate ? formatDate(task.dueDate) : "—"}
+      </td>
+      <td className="py-2.5 pr-3">
+        {subtaskProgress && subtaskProgress.total > 0 ? (
+          <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+            <div style={{ width: 40, height: 3, backgroundColor: "rgba(27,46,75,0.08)", borderRadius: 2, flexShrink: 0 }}>
+              <div style={{ height: "100%", width: `${(subtaskProgress.done / subtaskProgress.total) * 100}%`, backgroundColor: subtaskProgress.done === subtaskProgress.total ? "#2E7D52" : "var(--color-navy)", borderRadius: 2 }} />
+            </div>
+            <span style={{ fontSize: 11, color: "var(--color-secondary)", whiteSpace: "nowrap" }}>{subtaskProgress.done}/{subtaskProgress.total}</span>
+          </div>
+        ) : null}
       </td>
       <td className="py-1.5 pr-3">
         <button onClick={(e) => e.stopPropagation()} className="w-9 h-9 flex items-center justify-center rounded hover:bg-[rgba(27,46,75,0.06)]" aria-label="Task options">
@@ -431,6 +464,8 @@ export default function TasksPage() {
   const [teamMembers, setTeamMembers] = useState<User[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string>("");
   const [projectId, setProjectId] = useState<string>("");
+  const [subtaskCounts, setSubtaskCounts] = useState<Record<string, { total: number; done: number }>>({});
+  const [taskNavStack, setTaskNavStack] = useState<Task[]>([]);
 
   useEffect(() => {
     if (!isSupabaseConfigured) {
@@ -516,6 +551,23 @@ export default function TasksPage() {
       if (cancelled) return;
       if (error) console.error("[Tasks] fetch error:", error);
       if (!error && data) {
+        // Fetch subtask counts for progress bars
+        const { data: scData } = await supabase
+          .from("tasks")
+          .select("parent_id, status")
+          .eq("project_id", pid)
+          .not("parent_id", "is", null)
+          .or("archived.is.null,archived.eq.false");
+        if (!cancelled && scData) {
+          const counts: Record<string, { total: number; done: number }> = {};
+          for (const r of scData) {
+            const parentId = r.parent_id as string;
+            if (!counts[parentId]) counts[parentId] = { total: 0, done: 0 };
+            counts[parentId].total++;
+            if (r.status === "done") counts[parentId].done++;
+          }
+          setSubtaskCounts(counts);
+        }
         setTasks(data.map((row) => ({
           id: row.id as string,
           projectId: row.project_id as string,
@@ -697,6 +749,39 @@ export default function TasksPage() {
     setSelectedTask((prev) => prev?.status === "done" ? null : prev);
   }, []);
 
+  // ── Subtask navigation & promotion ───────────────────────────────────────────
+
+  const handleOpenSubtask = useCallback((subtask: Task) => {
+    setTaskNavStack(prev => [...prev, selectedTask!]);
+    setSelectedTask(subtask);
+  }, [selectedTask]);
+
+  const handleNavigateBack = useCallback(() => {
+    setTaskNavStack(prev => {
+      const parent = prev[prev.length - 1] ?? null;
+      setSelectedTask(parent);
+      return prev.slice(0, -1);
+    });
+  }, []);
+
+  const handlePromoteSubtask = useCallback((subtask: Task) => {
+    setTasks(prev => {
+      if (prev.find(t => t.id === subtask.id)) return prev;
+      return [{ ...subtask, parentId: undefined }, ...prev];
+    });
+    setSubtaskCounts(prev => {
+      if (!subtask.parentId) return prev;
+      const curr = prev[subtask.parentId] ?? { total: 0, done: 0 };
+      return {
+        ...prev,
+        [subtask.parentId]: {
+          total: Math.max(0, curr.total - 1),
+          done: subtask.status === "done" ? Math.max(0, curr.done - 1) : curr.done,
+        },
+      };
+    });
+  }, []);
+
   const filteredTasks = tasks.filter((t) => {
     if (search && !t.title.toLowerCase().includes(search.toLowerCase())) return false;
     if (filterMember !== "all" && !t.assigneeIds.includes(filterMember)) return false;
@@ -796,6 +881,7 @@ export default function TasksPage() {
                     onAddTask={(s) => setModalState({ mode: "add", status: s })}
                     onArchiveDone={archiveDoneTasks}
                     teamMembers={teamMembers}
+                    subtaskCounts={subtaskCounts}
                   />
                 ))}
               </div>
@@ -821,8 +907,8 @@ export default function TasksPage() {
             <table className="border-collapse" style={{ width: "100%", minWidth: 600 }}>
               <thead>
                 <tr style={{ borderBottom: "1px solid var(--color-border)" }}>
-                  {["", "Title", "Status", "Priority", "Assignees", "Due Date", ""].map((col, i) => (
-                    <th key={i} className={i === 0 ? "pl-5 py-3 pr-2" : i === 6 ? "pr-5 py-3" : "py-3 pr-3"}
+                  {["", "Title", "Status", "Priority", "Assignees", "Due Date", "Subtasks", ""].map((col, i) => (
+                    <th key={i} className={i === 0 ? "pl-5 py-3 pr-2" : i === 7 ? "pr-5 py-3" : "py-3 pr-3"}
                       style={{ textAlign: "left", fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-secondary)", fontFamily: "var(--font-roboto)" }}>
                       {col}
                     </th>
@@ -837,11 +923,12 @@ export default function TasksPage() {
                     onClick={() => setSelectedTask(task)}
                     onToggleDone={() => moveTask(task.id, task.status === "done" ? "todo" : "done")}
                     teamMembers={teamMembers}
+                    subtaskProgress={subtaskCounts[task.id]}
                   />
                 ))}
                 {filteredTasks.length === 0 && (
                   <tr>
-                    <td colSpan={7} style={{ textAlign: "center", padding: "52px 16px", color: "var(--color-secondary)", fontSize: 13, fontFamily: "var(--font-roboto)" }}>
+                    <td colSpan={8} style={{ textAlign: "center", padding: "52px 16px", color: "var(--color-secondary)", fontSize: 13, fontFamily: "var(--font-roboto)" }}>
                       No tasks match your filters.
                     </td>
                   </tr>
@@ -855,10 +942,14 @@ export default function TasksPage() {
       {selectedTask && (
         <TaskDetailPanel
           task={selectedTask}
-          onClose={() => setSelectedTask(null)}
+          parentTask={taskNavStack.length > 0 ? taskNavStack[taskNavStack.length - 1] : undefined}
+          onClose={() => { setSelectedTask(null); setTaskNavStack([]); }}
+          onNavigateBack={taskNavStack.length > 0 ? handleNavigateBack : undefined}
           onUpdateStatus={(status) => moveTask(selectedTask.id, status)}
           onUpdateTask={(updates) => updateTask(selectedTask.id, updates)}
           onDeleteTask={deleteTask}
+          onOpenSubtask={handleOpenSubtask}
+          onPromoteSubtask={handlePromoteSubtask}
           teamMembers={teamMembers}
           currentUserId={currentUserId}
         />
