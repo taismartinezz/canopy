@@ -61,7 +61,10 @@ function inferType(url: string): BookmarkType {
   try {
     const { hostname: h, pathname: p } = new URL(url);
     const host = h.replace(/^www\./, "");
-    if (host === "docs.google.com") return "doc";
+    if (host === "docs.google.com") {
+      if (p.startsWith("/spreadsheets/")) return "sheet";
+      return "doc";
+    }
     if (host === "sheets.google.com") return "sheet";
     if (host.includes("notion.so") || host.includes("confluence") || host.includes("sharepoint.com")) return "doc";
     if (host.includes("protocols.io") || p.toLowerCase().includes("protocol")) return "protocol";
@@ -333,16 +336,13 @@ function BookmarkCard({ bm, canDelete, onDelete }: {
   }
 
   return (
-    <a
-      href={bm.url}
-      target="_blank"
-      rel="noopener noreferrer"
+    <div
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
+        position: "relative",
         display: "flex",
         flexDirection: "column",
-        textDecoration: "none",
         backgroundColor: "var(--color-surface)",
         border: `1px solid ${hovered ? "#C0CBD8" : "var(--color-border)"}`,
         borderRadius: 10,
@@ -350,11 +350,19 @@ function BookmarkCard({ bm, canDelete, onDelete }: {
         minHeight: 148,
         boxShadow: hovered ? "var(--shadow-card)" : "none",
         transition: "border-color 150ms ease, box-shadow 150ms ease",
-        cursor: "pointer",
       }}
     >
+      {/* Cover link — makes the whole card clickable without nesting button inside a */}
+      <a
+        href={bm.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label={bm.title}
+        style={{ position: "absolute", inset: 0, borderRadius: 10 }}
+      />
+
       {/* Top row: type icon + badge */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
+      <div style={{ position: "relative", zIndex: 1, display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
         <div style={{
           width: 36, height: 36, borderRadius: 8,
           backgroundColor: cfg.bg, display: "flex",
@@ -374,6 +382,7 @@ function BookmarkCard({ bm, canDelete, onDelete }: {
 
       {/* Title */}
       <p style={{
+        position: "relative", zIndex: 1,
         fontSize: 13, fontWeight: 700, color: "var(--color-body)",
         lineHeight: 1.45,
         display: "-webkit-box", WebkitLineClamp: 2,
@@ -385,6 +394,7 @@ function BookmarkCard({ bm, canDelete, onDelete }: {
 
       {/* Domain */}
       <p style={{
+        position: "relative", zIndex: 1,
         fontSize: 11, color: "var(--color-secondary)", marginBottom: 0,
         overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
       }}>
@@ -395,26 +405,24 @@ function BookmarkCard({ bm, canDelete, onDelete }: {
       <div style={{ flex: 1 }} />
 
       {/* Bottom row: contributor · time + delete */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 14 }}>
+      <div style={{ position: "relative", zIndex: 1, display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 14 }}>
         <span style={{ fontSize: 11, color: "var(--color-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0, paddingRight: 8 }}>
           {bm.adder_name ?? "Unknown"} · {relTime(bm.added_at)}
         </span>
-        <div style={{ display: "flex", alignItems: "center", gap: 2, flexShrink: 0 }}>
-          {canDelete && (
-            <button
-              onClick={handleDelete}
-              disabled={deleting}
-              style={{ width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 6, border: "none", background: "none", cursor: deleting ? "not-allowed" : "pointer", color: "var(--color-secondary)", transition: "background-color 120ms ease, color 120ms ease" }}
-              onMouseEnter={(e) => { const el = e.currentTarget as HTMLElement; el.style.color = "var(--color-error)"; el.style.backgroundColor = "rgba(192,57,43,0.08)"; }}
-              onMouseLeave={(e) => { const el = e.currentTarget as HTMLElement; el.style.color = "var(--color-secondary)"; el.style.backgroundColor = "transparent"; }}
-              aria-label="Delete bookmark"
-            >
-              <Trash2 size={12} />
-            </button>
-          )}
-        </div>
+        {canDelete && (
+          <button
+            onClick={handleDelete}
+            disabled={deleting}
+            style={{ flexShrink: 0, width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 6, border: "none", background: "none", cursor: deleting ? "not-allowed" : "pointer", color: "var(--color-secondary)", transition: "background-color 120ms ease, color 120ms ease" }}
+            onMouseEnter={(e) => { const el = e.currentTarget as HTMLElement; el.style.color = "var(--color-error)"; el.style.backgroundColor = "rgba(192,57,43,0.08)"; }}
+            onMouseLeave={(e) => { const el = e.currentTarget as HTMLElement; el.style.color = "var(--color-secondary)"; el.style.backgroundColor = "transparent"; }}
+            aria-label="Delete bookmark"
+          >
+            <Trash2 size={12} />
+          </button>
+        )}
       </div>
-    </a>
+    </div>
   );
 }
 
