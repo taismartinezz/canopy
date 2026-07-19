@@ -44,6 +44,7 @@ function TaskCard({
   isDragging = false,
   teamMembers = [],
   subtaskProgress,
+  showLabBadge = false,
 }: {
   task: Task;
   onClick: () => void;
@@ -53,6 +54,7 @@ function TaskCard({
   isDragging?: boolean;
   teamMembers?: User[];
   subtaskProgress?: { total: number; done: number };
+  showLabBadge?: boolean;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
@@ -119,7 +121,14 @@ function TaskCard({
           <span style={{ fontSize: 12, color: "var(--color-secondary)" }}>
             {task.dueDate ? formatDate(task.dueDate) : "—"}
           </span>
-          <PriorityBadge priority={task.priority} />
+          <div className="flex items-center gap-1.5">
+            {showLabBadge && task.scope === "lab" && (
+              <span style={{ fontSize: 10, fontWeight: 700, backgroundColor: "rgba(27,46,75,0.08)", color: "var(--color-navy)", padding: "1px 6px", borderRadius: 4, whiteSpace: "nowrap" }}>
+                Lab
+              </span>
+            )}
+            <PriorityBadge priority={task.priority} />
+          </div>
           <AssigneeStack ids={task.assigneeIds} size={20} users={teamMembers} />
         </div>
         {subtaskProgress && subtaskProgress.total > 0 && (
@@ -243,6 +252,7 @@ function KanbanColumn({
   onArchiveDone,
   teamMembers = [],
   subtaskCounts = {},
+  showLabBadge = false,
 }: {
   status: TaskStatus;
   tasks: Task[];
@@ -254,6 +264,7 @@ function KanbanColumn({
   onArchiveDone?: () => void;
   teamMembers?: User[];
   subtaskCounts?: Record<string, { total: number; done: number }>;
+  showLabBadge?: boolean;
 }) {
   const cfg = STATUS_CONFIG[status];
   const { setNodeRef: setDropRef, isOver } = useDroppable({ id: status });
@@ -309,6 +320,7 @@ function KanbanColumn({
                 onDelete={() => onDeleteTask(task.id)}
                 teamMembers={teamMembers}
                 subtaskProgress={subtaskCounts[task.id]}
+                showLabBadge={showLabBadge}
               />
             ))}
           </div>
@@ -337,6 +349,7 @@ function TaskRow({
   onUpdateDueDate,
   teamMembers = [],
   subtaskProgress,
+  showLabBadge = false,
 }: {
   task: Task;
   onClick: () => void;
@@ -346,6 +359,7 @@ function TaskRow({
   onUpdateDueDate: (date: string | undefined) => void;
   teamMembers?: User[];
   subtaskProgress?: { total: number; done: number };
+  showLabBadge?: boolean;
 }) {
   const [statusOpen, setStatusOpen] = useState(false);
   const [assigneeOpen, setAssigneeOpen] = useState(false);
@@ -397,18 +411,26 @@ function TaskRow({
 
       {/* Title */}
       <td className="pr-3" style={{ maxWidth: 280 }}>
-        <span style={{
-          fontSize: 13,
-          fontWeight: 500,
-          color: "var(--color-body)",
-          textDecoration: task.status === "done" ? "line-through" : undefined,
-          whiteSpace: "nowrap",
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          display: "block",
-        }}>
-          {task.title}
-        </span>
+        <div className="flex items-center gap-1.5" style={{ minWidth: 0 }}>
+          <span style={{
+            fontSize: 13,
+            fontWeight: 500,
+            color: "var(--color-body)",
+            textDecoration: task.status === "done" ? "line-through" : undefined,
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            flex: "1 1 0",
+            minWidth: 0,
+          }}>
+            {task.title}
+          </span>
+          {showLabBadge && task.scope === "lab" && (
+            <span style={{ flexShrink: 0, fontSize: 10, fontWeight: 700, backgroundColor: "rgba(27,46,75,0.08)", color: "var(--color-navy)", padding: "1px 6px", borderRadius: 4 }}>
+              Lab
+            </span>
+          )}
+        </div>
       </td>
 
       {/* Status — inline dropdown */}
@@ -778,10 +800,11 @@ export default function TasksPage() {
       if (activeScope === "personal") {
         taskQ = taskQ.eq("scope", "personal");
       } else if (activeScope === "project" && subProjectId) {
-        // Show lab-wide tasks + tasks scoped to this specific sub-project
-        taskQ = taskQ.or(`scope.eq.lab,and(scope.eq.project,sub_project_id.eq.${subProjectId})`);
+        // Layer tab: only tasks explicitly filed under this layer
+        taskQ = taskQ.eq("sub_project_id", subProjectId);
       } else {
-        taskQ = taskQ.eq("scope", "lab");
+        // "All" tab: lab-wide tasks + any layer-specific tasks (exclude personal)
+        taskQ = taskQ.neq("scope", "personal");
       }
 
       const { data, error } = await taskQ;
@@ -817,6 +840,8 @@ export default function TasksPage() {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           assigneeIds: ((row.task_assignees as any[]) ?? []).map((ta) => ta.user_id as string),
           dueDate: row.due_date as string | undefined,
+          scope: (row.scope as Task["scope"]) ?? "lab",
+          subProjectId: (row.sub_project_id as string | null) ?? undefined,
           createdAt: row.created_at as string,
           updatedAt: row.updated_at as string,
           comments: (row.comments as Task["comments"]) ?? [],
@@ -846,6 +871,8 @@ export default function TasksPage() {
             title: row.title as string, description: (row.description as string) ?? "",
             status: row.status as TaskStatus, priority: row.priority as Task["priority"],
             assigneeIds: [], dueDate: row.due_date as string | undefined,
+            scope: (row.scope as Task["scope"]) ?? "lab",
+            subProjectId: (row.sub_project_id as string | null) ?? undefined,
             createdAt: row.created_at as string, updatedAt: row.updated_at as string,
             comments: [], files: [], links: [],
           }, ...prev];
@@ -1216,6 +1243,7 @@ export default function TasksPage() {
                     onArchiveDone={archiveDoneTasks}
                     teamMembers={teamMembers}
                     subtaskCounts={subtaskCounts}
+                    showLabBadge={activeScope === "project"}
                   />
                 ))}
               </div>
@@ -1231,6 +1259,7 @@ export default function TasksPage() {
                     onDelete={() => {}}
                     isDragging
                     teamMembers={teamMembers}
+                    showLabBadge={activeScope === "project"}
                   />
                 </div>
               )}
@@ -1261,6 +1290,7 @@ export default function TasksPage() {
                     onUpdateDueDate={(d) => handleUpdateTaskDueDate(task.id, d)}
                     teamMembers={teamMembers}
                     subtaskProgress={subtaskCounts[task.id]}
+                    showLabBadge={activeScope === "project"}
                   />
                 ))}
                 {filteredTasks.length === 0 && (

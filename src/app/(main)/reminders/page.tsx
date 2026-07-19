@@ -980,6 +980,14 @@ export default function RemindersPage() {
               priority: (row.priority as ReminderPriority) ?? undefined,
               assigneeId: (row.assignee_id as string) ?? undefined,
               scope: (row.scope as ReminderScope) ?? r.scope,
+              projectId: (row.project_id as string) ?? undefined,
+              subProjectId: (row.sub_project_id as string) ?? undefined,
+              linkedTaskId: (row.linked_task_id as string) ?? undefined,
+              linkedEventId: (row.linked_event_id as string) ?? undefined,
+              emailEnabled: (row.email_enabled as boolean) ?? false,
+              sent: (row.sent as boolean) ?? false,
+              recurrence: (row.recurrence as Reminder["recurrence"]) ?? undefined,
+              position: (row.position as number) ?? undefined,
             }));
           } else if (payload.eventType === "DELETE") {
             setReminders((prev) => prev.filter((r) => r.id !== payload.old.id));

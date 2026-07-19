@@ -1558,10 +1558,24 @@ function DetailPanelContent({
             </div>
 
             <div className="flex gap-2 pt-2">
-              <button className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg" style={{ backgroundColor: "var(--color-navy)", color: "#fff", fontSize: 12, fontWeight: 700, border: "none", borderRadius: 7, cursor: "pointer", minHeight: 44 }}>
-                <FileText size={13} /> Open PDF
-              </button>
-              {item.doi && (
+              {(item.url || item.doi) ? (
+                <a
+                  href={item.url ?? `https://doi.org/${item.doi}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg"
+                  style={{ backgroundColor: "var(--color-navy)", color: "#fff", fontSize: 12, fontWeight: 700, border: "none", borderRadius: 7, cursor: "pointer", minHeight: 44, textDecoration: "none" }}
+                >
+                  <FileText size={13} /> {item.url ? "Open PDF" : "Open via DOI"}
+                </a>
+              ) : (
+                <button disabled className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg"
+                  style={{ backgroundColor: "var(--color-border)", color: "var(--color-secondary)", fontSize: 12, fontWeight: 700, border: "none", borderRadius: 7, cursor: "not-allowed", minHeight: 44 }}
+                  title="No URL or DOI available for this paper">
+                  <FileText size={13} /> Open PDF
+                </button>
+              )}
+              {item.doi && item.url && (
                 <a href={`https://doi.org/${item.doi}`} target="_blank" rel="noopener noreferrer"
                   className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg"
                   style={{ backgroundColor: "transparent", color: "var(--color-navy)", fontSize: 12, fontWeight: 700, border: "1px solid var(--color-navy)", borderRadius: 7, cursor: "pointer", minHeight: 44, textDecoration: "none" }}>
@@ -2046,11 +2060,12 @@ export default function LiteraturePage() {
             year: (row.year as number | null) ?? 0,
             journal: (row.journal as string | null) ?? undefined,
             doi: (row.doi as string | null) ?? undefined,
+            url: (row.url as string | null) ?? undefined,
             abstract: (row.abstract as string | null) ?? undefined,
             tags: Array.isArray(row.tags) ? (row.tags as string[]) : [],
             status: (row.status as LiteratureItem["status"]) ?? "unread",
-            rating: 0,
-            notes: "",
+            rating: (row.rating as number | null) ?? 0,
+            notes: (row.notes as string | null) ?? "",
             files: [],
             addedById: (row.user_id ?? row.added_by) as string,
             addedAt: (row.created_at ?? row.added_at) as string,

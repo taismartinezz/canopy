@@ -91,6 +91,8 @@ export interface Task {
   priority: TaskPriority;
   assigneeIds: string[];
   dueDate?: string;       // ISO date string
+  scope?: "personal" | "project" | "lab";
+  subProjectId?: string;
   createdAt: string;
   updatedAt: string;
   comments: TaskComment[];
