@@ -22,6 +22,7 @@ interface Props {
   onSelectSubProject?: (id: string) => void;
   collapsed: boolean;
   onToggleCollapse: () => void;
+  extraContent?: ReactNode;
 }
 
 function NavRow({ color, label, count, selected, onClick }: {
@@ -83,6 +84,7 @@ export default function ScopeSidebar({
   onSelectSubProject,
   collapsed,
   onToggleCollapse,
+  extraContent,
 }: Props) {
   return (
     <div
@@ -160,6 +162,7 @@ export default function ScopeSidebar({
                 ))}
               </>
             )}
+            {extraContent}
           </div>
         </>
       )}

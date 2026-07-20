@@ -325,6 +325,7 @@ export interface DashboardPost {
 export interface WeeklyAvailability {
   userId: string;
   projectId: string;
+  subProjectId?: string | null;
   slots: string[];
   updatedAt: string;
 }

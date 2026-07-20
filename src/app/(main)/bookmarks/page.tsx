@@ -4,8 +4,9 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import {
   Plus, ExternalLink, Trash2, Bookmark, X, Check,
   FileText, BookOpen, FlaskConical, ClipboardList, Link2, Code2, Play, Table,
-  ChevronLeft, ChevronRight, Users, User as UserIcon,
+  Users, User as UserIcon,
 } from "lucide-react";
+import ScopeSidebar, { type ScopeSection } from "@/components/ui/ScopeSidebar";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { useProject } from "@/context/ProjectContext";
 import type { SubProject } from "@/types";
@@ -134,74 +135,6 @@ const DEMO_BOOKMARKS: BookmarkRow[] = [
   { id: "d8", project_id: "demo", url: "https://github.com/osei-lab/interview-analysis", title: "interview-analysis — GitHub", added_by: null, added_at: new Date(Date.now() - 1000 * 60 * 60 * 48).toISOString(), adder_name: "Tais Martinez" },
 ];
 
-// ── Sidebar row ───────────────────────────────────────────────────────────────
-
-function SidebarRow({
-  icon, label, count, active, typeBg, onClick,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  count: number;
-  active: boolean;
-  typeBg?: string;
-  onClick: () => void;
-}) {
-  const color = typeBg ?? "var(--color-navy)";
-  return (
-    <button
-      onClick={onClick}
-      style={{
-        width: "100%",
-        display: "flex",
-        alignItems: "center",
-        gap: 8,
-        padding: "6px 10px 6px 11px",
-        borderRadius: 7,
-        border: "none",
-        borderLeft: `3px solid ${active ? color : "transparent"}`,
-        cursor: "pointer",
-        backgroundColor: active ? `${color}18` : "transparent",
-        marginBottom: 1,
-        transition: "background-color 120ms ease, border-left-color 120ms ease",
-        textAlign: "left",
-        boxSizing: "border-box",
-        fontFamily: "var(--font-roboto)",
-      }}
-      onMouseEnter={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "rgba(0,0,0,0.04)"; }}
-      onMouseLeave={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "transparent"; }}
-    >
-      <span style={{ flexShrink: 0, display: "flex", alignItems: "center", color: active ? color : "var(--color-secondary)", opacity: active ? 1 : 0.7, transition: "color 120ms ease" }}>
-        {icon}
-      </span>
-      <span style={{
-        flex: 1,
-        fontSize: 13,
-        color: active ? color : "var(--color-body)",
-        fontWeight: active ? 600 : 400,
-        whiteSpace: "nowrap",
-        overflow: "hidden",
-        textOverflow: "ellipsis",
-        fontFamily: "var(--font-roboto)",
-      }}>
-        {label}
-      </span>
-      <span style={{
-        fontSize: 11,
-        fontWeight: 600,
-        color: active ? color : "var(--color-secondary)",
-        backgroundColor: active ? `${color}20` : "rgba(0,0,0,0.06)",
-        borderRadius: 10,
-        padding: "1px 7px",
-        flexShrink: 0,
-        minWidth: 20,
-        textAlign: "center",
-        transition: "all 120ms ease",
-      }}>
-        {count}
-      </span>
-    </button>
-  );
-}
 
 // ── Add form ──────────────────────────────────────────────────────────────────
 
@@ -594,124 +527,53 @@ export default function BookmarksPage() {
     ? "No bookmarks yet"
     : `No ${TYPE_CONFIG[activeCategory as BookmarkType]?.label.toLowerCase() ?? "bookmarks"} yet`;
 
+  const sidebarSections: ScopeSection[] = [
+    { id: "all",      label: "All",      color: SCOPE_CONFIG.all.color,      icon: <SCOPE_CONFIG.all.icon size={14} />,      count: scopeCounts.all,      isActive: bmScope === "all",      onClick: () => handleScopeSelect("all") },
+    { id: "personal", label: "Personal", color: SCOPE_CONFIG.personal.color, icon: <SCOPE_CONFIG.personal.icon size={14} />, count: scopeCounts.personal, isActive: bmScope === "personal", onClick: () => handleScopeSelect("personal") },
+    { id: "lab",      label: "Lab",      color: SCOPE_CONFIG.lab.color,      icon: <SCOPE_CONFIG.lab.icon size={14} />,      count: scopeCounts.lab,      isActive: bmScope === "lab",      onClick: () => handleScopeSelect("lab") },
+  ];
+
+  const typesExtra = categoryCounts.length > 0 ? (
+    <>
+      <div style={{ height: 1, backgroundColor: "var(--color-border)", margin: "5px 2px" }} />
+      <p style={{ fontSize: 10, fontWeight: 700, color: "var(--color-secondary)", textTransform: "uppercase", letterSpacing: "0.08em", padding: "3px 11px 4px", margin: 0 }}>Types</p>
+      {categoryCounts.map(({ type, count }) => {
+        const cfg = TYPE_CONFIG[type];
+        const Icon = cfg.icon;
+        const active = activeCategory === type;
+        return (
+          <button
+            key={type}
+            onClick={() => setActiveCategory(active ? "all" : type)}
+            style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "6px 10px 6px 11px", borderRadius: 7, border: "none", borderLeft: `3px solid ${active ? cfg.color : "transparent"}`, cursor: "pointer", backgroundColor: active ? `${cfg.color}18` : "transparent", marginBottom: 1, transition: "background-color 120ms ease, border-left-color 120ms ease", textAlign: "left", boxSizing: "border-box", fontFamily: "var(--font-roboto)" }}
+            onMouseEnter={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "rgba(0,0,0,0.04)"; }}
+            onMouseLeave={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "transparent"; }}
+          >
+            <span style={{ flexShrink: 0, color: active ? cfg.color : "var(--color-secondary)", display: "flex", alignItems: "center" }}><Icon size={14} /></span>
+            <span style={{ flex: 1, fontSize: 13, color: active ? cfg.color : "var(--color-body)", fontWeight: active ? 600 : 400, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{cfg.label}</span>
+            <span style={{ fontSize: 11, fontWeight: 600, color: active ? cfg.color : "var(--color-secondary)", backgroundColor: active ? `${cfg.color}20` : "rgba(0,0,0,0.06)", borderRadius: 10, padding: "1px 7px", flexShrink: 0, minWidth: 20, textAlign: "center" }}>{count}</span>
+          </button>
+        );
+      })}
+    </>
+  ) : null;
+
   return (
     <div style={{ display: "flex", height: "100%", overflow: "hidden", fontFamily: "var(--font-roboto)" }}>
 
-      {/* ── Left sidebar — desktop only, animated ───────────────────────────── */}
-      <div
-        className="hidden md:flex group/bkpanel"
-        style={{
-          width: sidebarCollapsed ? 0 : 220,
-          flexShrink: 0,
-          backgroundColor: "var(--color-sidebar)",
-          flexDirection: "column",
-          overflowY: "auto",
-          borderRight: sidebarCollapsed ? "none" : "1px solid var(--color-border)",
-          overflow: "hidden",
-          transition: "width 200ms ease",
-        }}
-      >
-        {/* Sidebar header */}
-        <div style={{ padding: "24px 16px 14px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <h2 style={{
-            fontFamily: "var(--font-lora)",
-            fontWeight: 700,
-            fontSize: 16,
-            color: "var(--color-navy)",
-            margin: 0,
-            letterSpacing: "-0.01em",
-          }}>
-            Bookmarks
-          </h2>
-          <button
-            onClick={() => setSidebarCollapsed(true)}
-            className="opacity-0 group-hover/bkpanel:opacity-100 transition-opacity flex items-center justify-center rounded-lg hover:bg-[rgba(27,46,75,0.06)]"
-            style={{ width: 32, height: 32, border: "none", background: "none", cursor: "pointer", flexShrink: 0 }}
-            title="Collapse sidebar"
-            aria-label="Collapse sidebar"
-          >
-            <ChevronLeft size={15} color="var(--color-secondary)" />
-          </button>
-        </div>
-
-        {/* Nav list */}
-        <nav style={{ padding: "4px 8px 16px", flex: 1, minWidth: 220, overflowY: "auto" }} aria-label="Filter bookmarks">
-
-          {/* Scope rows */}
-          {(["all", "personal", "lab"] as const).map((s) => {
-            const cfg = SCOPE_CONFIG[s];
-            const Icon = cfg.icon;
-            const isActive = bmScope === s;
-            return (
-              <SidebarRow
-                key={s}
-                icon={<Icon size={14} />}
-                label={cfg.label}
-                count={scopeCounts[s]}
-                active={isActive}
-                typeBg={cfg.color}
-                onClick={() => handleScopeSelect(s)}
-              />
-            );
-          })}
-
-          {/* Per-project rows */}
-          {subProjects.length > 0 && (
-            <>
-              <div style={{ height: 1, backgroundColor: "var(--color-border)", margin: "5px 2px" }} />
-              <p style={{ fontSize: 10, fontWeight: 700, color: "var(--color-secondary)", textTransform: "uppercase", letterSpacing: "0.08em", padding: "3px 11px 4px", margin: 0 }}>Projects</p>
-              {subProjects.map((sp) => (
-                <SidebarRow
-                  key={sp.id}
-                  icon={<Bookmark size={14} />}
-                  label={sp.name}
-                  count={projectCounts[sp.id] ?? 0}
-                  active={bmScope === "project" && selectedSubProjectId === sp.id}
-                  typeBg={sp.color ?? "#34A853"}
-                  onClick={() => handleScopeSelect("project", sp.id)}
-                />
-              ))}
-            </>
-          )}
-
-          {/* Type filter rows */}
-          {categoryCounts.length > 0 && (
-            <>
-              <div style={{ height: 1, backgroundColor: "var(--color-border)", margin: "5px 2px" }} />
-              <p style={{ fontSize: 10, fontWeight: 700, color: "var(--color-secondary)", textTransform: "uppercase", letterSpacing: "0.08em", padding: "3px 11px 4px", margin: 0 }}>Types</p>
-              {categoryCounts.map(({ type, count }) => {
-                const cfg = TYPE_CONFIG[type];
-                const Icon = cfg.icon;
-                const active = activeCategory === type;
-                return (
-                  <SidebarRow
-                    key={type}
-                    icon={<Icon size={14} />}
-                    label={cfg.label}
-                    count={count}
-                    active={active}
-                    typeBg={cfg.color}
-                    onClick={() => setActiveCategory(active ? "all" : type)}
-                  />
-                );
-              })}
-            </>
-          )}
-        </nav>
+      {/* ── Left sidebar — desktop only ───────────────────────────────────── */}
+      <div className="hidden md:flex">
+        <ScopeSidebar
+          sections={sidebarSections}
+          subProjects={subProjects}
+          selectedSubProjectId={bmScope === "project" ? selectedSubProjectId : null}
+          projectCounts={projectCounts}
+          onSelectSubProject={(id) => handleScopeSelect("project", id)}
+          collapsed={sidebarCollapsed}
+          onToggleCollapse={() => setSidebarCollapsed((c) => !c)}
+          extraContent={typesExtra}
+        />
       </div>
-
-      {/* Peek strip — desktop only, when sidebar is collapsed */}
-      {sidebarCollapsed && (
-        <button
-          className="hidden md:flex shrink-0 items-center justify-center transition-colors hover:bg-[rgba(27,46,75,0.04)]"
-          style={{ width: 16, border: "none", borderRight: "1px solid var(--color-border)", backgroundColor: "var(--color-sidebar)", cursor: "pointer", padding: 0 }}
-          onClick={() => setSidebarCollapsed(false)}
-          title="Expand sidebar"
-          aria-label="Expand sidebar"
-        >
-          <ChevronRight size={10} color="var(--color-secondary)" />
-        </button>
-      )}
 
       {/* ── Right content area ───────────────────────────────────────────────── */}
       <div style={{ flex: 1, overflowY: "auto", backgroundColor: "var(--color-canvas)" }}>
