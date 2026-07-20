@@ -420,6 +420,21 @@ create table if not exists user_availability (
   unique (project_id, user_id)
 );
 
+-- Migration: make availability per-sub-project (NULL = lab-wide)
+alter table user_availability
+  add column if not exists sub_project_id uuid references sub_projects(id) on delete set null;
+alter table user_availability
+  drop constraint if exists user_availability_project_id_user_id_key;
+do $$ begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'user_availability_project_user_subproject_key'
+  ) then
+    alter table user_availability
+      add constraint user_availability_project_user_subproject_key
+      unique nulls not distinct (project_id, user_id, sub_project_id);
+  end if;
+end $$;
+
 alter table user_availability enable row level security;
 
 create policy "project members can read availability" on user_availability

@@ -10,7 +10,7 @@ import { useProject } from "@/context/ProjectContext";
 import { computeInitials } from "@/lib/utils";
 import type {
   User, WeeklyAvailability, MeetingProposal, MeetingResponse,
-  ScheduleEvent, MeetingResponseStatus,
+  ScheduleEvent, MeetingResponseStatus, SubProject,
 } from "@/types";
 import AvailabilityGrid from "@/components/scheduling/AvailabilityGrid";
 import TeamOverlapView from "@/components/scheduling/TeamOverlapView";
@@ -597,30 +597,39 @@ function CalendarTab({
 type AvailScope = "mine" | "all";
 
 function AvailabilityTab({
-  savedSlots,
   onSave,
   allAvailabilities,
   teamMembers,
   currentUserId,
   googleConnected,
   onToggleGoogle,
+  subProjects,
 }: {
-  savedSlots: string[];
-  onSave: (slots: string[]) => void;
+  onSave: (slots: string[], subProjectId: string | null) => void;
   allAvailabilities: WeeklyAvailability[];
   teamMembers: User[];
   currentUserId: string;
   googleConnected: boolean;
   onToggleGoogle: () => void;
+  subProjects: SubProject[];
 }) {
   const [scope, setScope] = useState<AvailScope>("mine");
   const [selectedIds, setSelectedIds] = useState<string[]>(() => teamMembers.map(m => m.id));
-  const [slots, setSlots] = useState<string[]>(savedSlots);
+  const [availSubProjectId, setAvailSubProjectId] = useState<string | null>(null); // null = Lab
+  const [slots, setSlots] = useState<string[]>([]);
   const [saved, setSaved] = useState(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isFirstMount = useRef(true);
+  const skipSaveRef = useRef(false);
 
-  useEffect(() => { setSlots(savedSlots); }, [savedSlots]);
+  // Sync slots when sub-project selection or loaded availabilities change
+  useEffect(() => {
+    skipSaveRef.current = true;
+    const entry = allAvailabilities.find(
+      a => a.userId === currentUserId && (a.subProjectId ?? null) === availSubProjectId
+    );
+    setSlots(entry?.slots ?? []);
+  }, [availSubProjectId, allAvailabilities, currentUserId]);
 
   useEffect(() => {
     if (scope === "all") setSelectedIds(teamMembers.map(m => m.id));
@@ -629,9 +638,10 @@ function AvailabilityTab({
   // Auto-save 800ms after the user stops dragging
   useEffect(() => {
     if (isFirstMount.current) { isFirstMount.current = false; return; }
+    if (skipSaveRef.current) { skipSaveRef.current = false; return; }
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
-      onSave(slots);
+      onSave(slots, availSubProjectId);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     }, 800);
@@ -639,11 +649,14 @@ function AvailabilityTab({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slots]);
 
-  const hasChanges = JSON.stringify([...slots].sort()) !== JSON.stringify([...savedSlots].sort());
+  const derivedSavedSlots = allAvailabilities.find(
+    a => a.userId === currentUserId && (a.subProjectId ?? null) === availSubProjectId
+  )?.slots ?? [];
+  const hasChanges = JSON.stringify([...slots].sort()) !== JSON.stringify([...derivedSavedSlots].sort());
 
   const filteredAvailabilities = scope === "mine"
-    ? allAvailabilities.filter(a => a.userId === currentUserId)
-    : allAvailabilities.filter(a => selectedIds.includes(a.userId));
+    ? allAvailabilities.filter(a => a.userId === currentUserId && (a.subProjectId ?? null) === availSubProjectId)
+    : allAvailabilities.filter(a => selectedIds.includes(a.userId) && (a.subProjectId ?? null) === availSubProjectId);
 
   const filteredMembers = scope === "mine"
     ? teamMembers.filter(m => m.id === currentUserId)
@@ -727,6 +740,36 @@ function AvailabilityTab({
               }
             />
             <div className="p-5">
+              {subProjects.length > 0 && (
+                <div className="flex items-center gap-2 flex-wrap mb-4">
+                  <span style={{ fontSize: 12, color: "var(--color-secondary)", fontWeight: 600, flexShrink: 0 }}>Scope:</span>
+                  <button
+                    onClick={() => setAvailSubProjectId(null)}
+                    style={{
+                      height: 28, paddingInline: 12, borderRadius: 20,
+                      border: `1.5px solid ${availSubProjectId === null ? "var(--color-navy)" : "var(--color-border)"}`,
+                      backgroundColor: availSubProjectId === null ? "var(--color-navy)" : "transparent",
+                      color: availSubProjectId === null ? "#fff" : "var(--color-secondary)",
+                      fontSize: 12, fontWeight: availSubProjectId === null ? 600 : 400,
+                      cursor: "pointer", fontFamily: "var(--font-roboto)",
+                    }}
+                  >Lab</button>
+                  {subProjects.map(sp => (
+                    <button
+                      key={sp.id}
+                      onClick={() => setAvailSubProjectId(sp.id)}
+                      style={{
+                        height: 28, paddingInline: 12, borderRadius: 20,
+                        border: `1.5px solid ${availSubProjectId === sp.id ? (sp.color ?? "#34A853") : "var(--color-border)"}`,
+                        backgroundColor: availSubProjectId === sp.id ? (sp.color ?? "#34A853") : "transparent",
+                        color: availSubProjectId === sp.id ? "#fff" : "var(--color-secondary)",
+                        fontSize: 12, fontWeight: availSubProjectId === sp.id ? 600 : 400,
+                        cursor: "pointer", fontFamily: "var(--font-roboto)",
+                      }}
+                    >{sp.name}</button>
+                  ))}
+                </div>
+              )}
               <div className="flex items-start gap-2 mb-4 px-3 py-2 rounded-lg" style={{ backgroundColor: "rgba(27,46,75,0.05)", border: "1px solid rgba(27,46,75,0.10)" }}>
                 <Lock size={13} style={{ marginTop: 2, color: "var(--color-navy)", flexShrink: 0 }} />
                 <p style={{ fontSize: 12, color: "var(--color-body)", margin: 0, lineHeight: 1.5 }}>
@@ -941,7 +984,7 @@ const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
 ];
 
 export default function SchedulingPage() {
-  const { projectId } = useProject();
+  const { projectId, subProjects } = useProject();
 
   const [tab, setTab] = useState<Tab>("calendar");
   const [showProposalModal, setShowProposalModal] = useState(false);
@@ -953,7 +996,6 @@ export default function SchedulingPage() {
   const [teamMembers, setTeamMembers] = useState<User[]>([]);
 
   // Scheduling data
-  const [savedSlots, setSavedSlots] = useState<string[]>([]);
   const [allAvailabilities, setAllAvailabilities] = useState<WeeklyAvailability[]>([]);
   const [proposals, setProposals] = useState<MeetingProposal[]>([]);
   const [events, setEvents] = useState<ScheduleEvent[]>([]);
@@ -1008,15 +1050,13 @@ export default function SchedulingPage() {
         .eq("project_id", projectId);
 
       if (avData) {
-        const mapped: WeeklyAvailability[] = avData.map((row) => ({
+        setAllAvailabilities(avData.map((row) => ({
           userId: row.user_id as string,
           projectId: row.project_id as string,
+          subProjectId: (row.sub_project_id as string | null) ?? null,
           slots: (row.slots as string[]) ?? [],
           updatedAt: row.updated_at as string,
-        }));
-        setAllAvailabilities(mapped);
-        const mine = mapped.find((a) => a.userId === currentUserId);
-        if (mine) setSavedSlots(mine.slots);
+        })));
       }
 
       const { data: propData } = await supabase
@@ -1084,18 +1124,22 @@ export default function SchedulingPage() {
 
   // ── Write handlers ──────────────────────────────────────────────────────────
 
-  function handleSaveAvailability(slots: string[]) {
-    setSavedSlots(slots);
+  function handleSaveAvailability(slots: string[], subProjectId: string | null) {
     const updated: WeeklyAvailability = {
       userId: currentUserId,
       projectId: projectId ?? "",
+      subProjectId,
       slots,
       updatedAt: new Date().toISOString(),
     };
     setAllAvailabilities((prev) => {
-      const exists = prev.some((a) => a.userId === currentUserId);
+      const exists = prev.some(
+        (a) => a.userId === currentUserId && (a.subProjectId ?? null) === subProjectId
+      );
       return exists
-        ? prev.map((a) => (a.userId === currentUserId ? updated : a))
+        ? prev.map((a) =>
+            a.userId === currentUserId && (a.subProjectId ?? null) === subProjectId ? updated : a
+          )
         : [...prev, updated];
     });
 
@@ -1103,8 +1147,14 @@ export default function SchedulingPage() {
       supabase
         .from("user_availability")
         .upsert(
-          { project_id: projectId, user_id: currentUserId, slots, updated_at: updated.updatedAt },
-          { onConflict: "project_id,user_id" }
+          {
+            project_id: projectId,
+            user_id: currentUserId,
+            sub_project_id: subProjectId,
+            slots,
+            updated_at: updated.updatedAt,
+          },
+          { onConflict: "project_id,user_id,sub_project_id" }
         )
         .then(({ error }) => { if (error) console.error("[Scheduling] save availability:", error); });
     }
@@ -1287,13 +1337,13 @@ export default function SchedulingPage() {
         )}
         {tab === "availability" && (
           <AvailabilityTab
-            savedSlots={savedSlots}
             onSave={handleSaveAvailability}
             allAvailabilities={allAvailabilities}
             teamMembers={teamMembers}
             currentUserId={currentUserId}
             googleConnected={googleConnected}
             onToggleGoogle={() => setGoogleConnected(c => !c)}
+            subProjects={subProjects}
           />
         )}
         {tab === "meetings" && (

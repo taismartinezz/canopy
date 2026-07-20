@@ -172,6 +172,7 @@ function AddItemModal({
   const [tags, setTags]       = useState("");
   const [scope, setScope]     = useState<LibraryScope>("lab");
   const [modalSubProjectId, setModalSubProjectId] = useState<string | null>(subProjectId);
+  const [personalSubProjectId, setPersonalSubProjectId] = useState<string | null>(null);
   const [status, setStatus]   = useState<ReadStatus>("unread");
   const [error, setError]     = useState("");
   const [saving, setSaving]   = useState(false);
@@ -199,7 +200,7 @@ function AddItemModal({
         doi: doi.trim() || null,
         tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
         status,
-        sub_project_id: scope === "project" ? (modalSubProjectId ?? subProjectId) : null,
+        sub_project_id: scope === "project" ? (modalSubProjectId ?? subProjectId) : scope === "personal" ? personalSubProjectId : null,
       }))
       .select()
       .single();
@@ -215,7 +216,7 @@ function AddItemModal({
       id: data.id as string,
       projectId: data.project_id as string,
       scope: ((data.library ?? data.scope ?? scope) as LiteratureItem["scope"]),
-      subProjectId: scope === "project" ? (modalSubProjectId ?? subProjectId ?? undefined) : undefined,
+      subProjectId: scope === "project" ? (modalSubProjectId ?? subProjectId ?? undefined) : scope === "personal" ? (personalSubProjectId ?? undefined) : undefined,
       type: (data.type as LiteratureItem["type"]) ?? type,
       title: data.title as string,
       authors: toAuthorsArray(data.authors as string | string[]),
@@ -317,19 +318,35 @@ function AddItemModal({
             <label style={labelStyle}>Library</label>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
               {(["lab", "personal"] as const).map((s) => (
-                <button key={s} onClick={() => { setScope(s); setModalSubProjectId(null); }} style={{ fontSize: 12, fontWeight: 600, padding: "5px 14px", borderRadius: 6, border: `1px solid ${scope === s && !modalSubProjectId ? "var(--color-navy)" : "var(--color-border)"}`, backgroundColor: scope === s && !modalSubProjectId ? "var(--color-navy)" : "transparent", color: scope === s && !modalSubProjectId ? "#fff" : "var(--color-secondary)", cursor: "pointer", fontFamily: "var(--font-roboto)" }}>
+                <button key={s} onClick={() => { setScope(s); setModalSubProjectId(null); setPersonalSubProjectId(null); }} style={{ fontSize: 12, fontWeight: 600, padding: "5px 14px", borderRadius: 6, border: `1px solid ${scope === s ? "var(--color-navy)" : "var(--color-border)"}`, backgroundColor: scope === s ? "var(--color-navy)" : "transparent", color: scope === s ? "#fff" : "var(--color-secondary)", cursor: "pointer", fontFamily: "var(--font-roboto)" }}>
                   {s === "lab" ? "Lab Library" : "My Library"}
                 </button>
               ))}
               {(subProjects ?? []).map((sp) => {
                 const active = scope === "project" && modalSubProjectId === sp.id;
                 return (
-                  <button key={sp.id} onClick={() => { setScope("project"); setModalSubProjectId(sp.id); }} style={{ fontSize: 12, fontWeight: 600, padding: "5px 14px", borderRadius: 6, border: `1px solid ${active ? (sp.color ?? "#34A853") : "var(--color-border)"}`, backgroundColor: active ? (sp.color ?? "#34A853") : "transparent", color: active ? "#fff" : "var(--color-secondary)", cursor: "pointer", fontFamily: "var(--font-roboto)" }}>
+                  <button key={sp.id} onClick={() => { setScope("project"); setModalSubProjectId(sp.id); setPersonalSubProjectId(null); }} style={{ fontSize: 12, fontWeight: 600, padding: "5px 14px", borderRadius: 6, border: `1px solid ${active ? (sp.color ?? "#34A853") : "var(--color-border)"}`, backgroundColor: active ? (sp.color ?? "#34A853") : "transparent", color: active ? "#fff" : "var(--color-secondary)", cursor: "pointer", fontFamily: "var(--font-roboto)" }}>
                     {sp.name}
                   </button>
                 );
               })}
             </div>
+            {scope === "personal" && (subProjects ?? []).length > 0 && (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 7, paddingLeft: 2 }}>
+                <span style={{ fontSize: 11, color: "var(--color-secondary)", alignSelf: "center", marginRight: 2 }}>Tag to:</span>
+                <button
+                  onClick={() => setPersonalSubProjectId(null)}
+                  style={{ fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 5, border: `1px solid ${personalSubProjectId === null ? "var(--color-navy)" : "var(--color-border)"}`, backgroundColor: personalSubProjectId === null ? "rgba(27,46,75,0.08)" : "transparent", color: personalSubProjectId === null ? "var(--color-navy)" : "var(--color-secondary)", cursor: "pointer", fontFamily: "var(--font-roboto)" }}
+                >General</button>
+                {(subProjects ?? []).map((sp) => (
+                  <button
+                    key={sp.id}
+                    onClick={() => setPersonalSubProjectId(sp.id)}
+                    style={{ fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 5, border: `1px solid ${personalSubProjectId === sp.id ? (sp.color ?? "#34A853") : "var(--color-border)"}`, backgroundColor: personalSubProjectId === sp.id ? (sp.color ?? "#34A853") : "transparent", color: personalSubProjectId === sp.id ? "#fff" : "var(--color-secondary)", cursor: "pointer", fontFamily: "var(--font-roboto)" }}
+                  >{sp.name}</button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
@@ -484,9 +501,10 @@ function parseCSLAuthors(a: CSLJsonItem["author"]): string[] {
   return (a ?? []).map((x) => x.literal ?? `${x.given ?? ""} ${x.family ?? ""}`.trim()).filter(Boolean);
 }
 
-function ZoteroImportModal({ existingItems, onImport, onClose, projectId, currentUserId, subProjectId }: {
+function ZoteroImportModal({ existingItems, onImport, onClose, projectId, currentUserId, subProjectId, subProjects }: {
   existingItems: LiteratureItem[]; onImport: (items: LiteratureItem[]) => void;
   onClose: () => void; projectId: string; currentUserId: string; subProjectId: string | null;
+  subProjects?: SubProject[];
 }) {
   const [tab, setTab]           = useState<"file" | "api">("file");
   const [parsed, setParsed]     = useState<LiteratureItem[]>([]);
@@ -496,6 +514,7 @@ function ZoteroImportModal({ existingItems, onImport, onClose, projectId, curren
   const [error, setError]       = useState("");
   const [importing, setImporting] = useState(false);
   const [scope, setScope]       = useState<LibraryScope>("lab");
+  const [personalSubProjectId, setPersonalSubProjectId] = useState<string | null>(null);
 
   // Zotero API tab state
   const [apiKey, setApiKey]     = useState("");
@@ -562,11 +581,11 @@ function ZoteroImportModal({ existingItems, onImport, onClose, projectId, curren
     setImporting(true);
     const rows = parsed.map((item) =>
       buildLitInsert(projectId, currentUserId, {
-        id: item.id, library: item.scope, type: item.type, title: item.title, authors: item.authors,
+        id: item.id, library: scope, type: item.type, title: item.title, authors: item.authors,
         year: item.year || null, journal: item.journal ?? null,
         doi: item.doi ?? null, abstract: item.abstract ?? null,
         tags: [], status: "unread",
-        sub_project_id: scope === "project" ? subProjectId : null,
+        sub_project_id: scope === "project" ? subProjectId : scope === "personal" ? personalSubProjectId : null,
       })
     );
     const { error: insertErr } = await supabase.from("literature_items").insert(rows);
@@ -682,11 +701,20 @@ function ZoteroImportModal({ existingItems, onImport, onClose, projectId, curren
                   <label style={labelStyle}>Add to</label>
                   <div className="flex rounded-lg p-0.5 mt-1" style={{ backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", width: "fit-content" }}>
                     {(["lab", "personal", "project"] as const).map((s) => (
-                      <button key={s} onClick={() => setScope(s)} style={{ fontSize: 12, fontWeight: 600, padding: "5px 12px", borderRadius: 6, border: "none", backgroundColor: scope === s ? "var(--color-navy)" : "transparent", color: scope === s ? "#fff" : "var(--color-secondary)", cursor: "pointer" }}>
+                      <button key={s} onClick={() => { setScope(s); setPersonalSubProjectId(null); }} style={{ fontSize: 12, fontWeight: 600, padding: "5px 12px", borderRadius: 6, border: "none", backgroundColor: scope === s ? "var(--color-navy)" : "transparent", color: scope === s ? "#fff" : "var(--color-secondary)", cursor: "pointer" }}>
                         {SCOPE_LABELS[s]}
                       </button>
                     ))}
                   </div>
+                  {scope === "personal" && (subProjects ?? []).length > 0 && (
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 7 }}>
+                      <span style={{ fontSize: 11, color: "var(--color-secondary)", alignSelf: "center", marginRight: 2 }}>Tag to:</span>
+                      <button onClick={() => setPersonalSubProjectId(null)} style={{ fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 5, border: `1px solid ${personalSubProjectId === null ? "var(--color-navy)" : "var(--color-border)"}`, backgroundColor: personalSubProjectId === null ? "rgba(27,46,75,0.08)" : "transparent", color: personalSubProjectId === null ? "var(--color-navy)" : "var(--color-secondary)", cursor: "pointer", fontFamily: "var(--font-roboto)" }}>General</button>
+                      {(subProjects ?? []).map((sp) => (
+                        <button key={sp.id} onClick={() => setPersonalSubProjectId(sp.id)} style={{ fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 5, border: `1px solid ${personalSubProjectId === sp.id ? (sp.color ?? "#34A853") : "var(--color-border)"}`, backgroundColor: personalSubProjectId === sp.id ? (sp.color ?? "#34A853") : "transparent", color: personalSubProjectId === sp.id ? "#fff" : "var(--color-secondary)", cursor: "pointer", fontFamily: "var(--font-roboto)" }}>{sp.name}</button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -761,9 +789,10 @@ function parseBibTeX(bib: string): Partial<LiteratureItem> {
 
 type DOIMode = "doi" | "bibtex" | "url";
 
-function DOILookupModal({ onSave, onClose, projectId, currentUserId, subProjectId }: {
+function DOILookupModal({ onSave, onClose, projectId, currentUserId, subProjectId, subProjects }: {
   onSave: (item: LiteratureItem) => void; onClose: () => void;
   projectId: string; currentUserId: string; subProjectId: string | null;
+  subProjects?: SubProject[];
 }) {
   const [mode, setMode]       = useState<DOIMode>("doi");
   const [input, setInput]     = useState("");
@@ -772,6 +801,7 @@ function DOILookupModal({ onSave, onClose, projectId, currentUserId, subProjectI
   const [error, setError]     = useState("");
   const [saving, setSaving]   = useState(false);
   const [scope, setScope]     = useState<LibraryScope>("lab");
+  const [personalSubProjectId, setPersonalSubProjectId] = useState<string | null>(null);
 
   useEffect(() => { setInput(""); setPreview(null); setError(""); }, [mode]);
   useEffect(() => {
@@ -890,7 +920,7 @@ function DOILookupModal({ onSave, onClose, projectId, currentUserId, subProjectI
         year: item.year || null, journal: item.journal ?? null,
         doi: item.doi ?? null, abstract: item.abstract ?? null,
         tags: [], status: "unread",
-        sub_project_id: scope === "project" ? subProjectId : null,
+        sub_project_id: scope === "project" ? subProjectId : scope === "personal" ? personalSubProjectId : null,
       })
     );
     if (insertErr) {
@@ -961,11 +991,20 @@ function DOILookupModal({ onSave, onClose, projectId, currentUserId, subProjectI
             {preview.doi && <p style={{ fontSize: 11, color: "var(--color-secondary)" }}>DOI: {preview.doi}</p>}
             <div className="mt-3 flex rounded-lg p-0.5" style={{ backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", width: "fit-content" }}>
               {(["lab", "personal"] as const).map((s) => (
-                <button key={s} onClick={() => setScope(s)} style={{ fontSize: 12, fontWeight: 600, padding: "4px 12px", borderRadius: 6, border: "none", backgroundColor: scope === s ? "var(--color-navy)" : "transparent", color: scope === s ? "#fff" : "var(--color-secondary)", cursor: "pointer" }}>
+                <button key={s} onClick={() => { setScope(s); setPersonalSubProjectId(null); }} style={{ fontSize: 12, fontWeight: 600, padding: "4px 12px", borderRadius: 6, border: "none", backgroundColor: scope === s ? "var(--color-navy)" : "transparent", color: scope === s ? "#fff" : "var(--color-secondary)", cursor: "pointer" }}>
                   {s === "lab" ? "Lab" : "Mine"}
                 </button>
               ))}
             </div>
+            {scope === "personal" && (subProjects ?? []).length > 0 && (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 7 }}>
+                <span style={{ fontSize: 11, color: "var(--color-secondary)", alignSelf: "center", marginRight: 2 }}>Tag to:</span>
+                <button onClick={() => setPersonalSubProjectId(null)} style={{ fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 5, border: `1px solid ${personalSubProjectId === null ? "var(--color-navy)" : "var(--color-border)"}`, backgroundColor: personalSubProjectId === null ? "rgba(27,46,75,0.08)" : "transparent", color: personalSubProjectId === null ? "var(--color-navy)" : "var(--color-secondary)", cursor: "pointer", fontFamily: "var(--font-roboto)" }}>General</button>
+                {(subProjects ?? []).map((sp) => (
+                  <button key={sp.id} onClick={() => setPersonalSubProjectId(sp.id)} style={{ fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 5, border: `1px solid ${personalSubProjectId === sp.id ? (sp.color ?? "#34A853") : "var(--color-border)"}`, backgroundColor: personalSubProjectId === sp.id ? (sp.color ?? "#34A853") : "transparent", color: personalSubProjectId === sp.id ? "#fff" : "var(--color-secondary)", cursor: "pointer", fontFamily: "var(--font-roboto)" }}>{sp.name}</button>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -1068,7 +1107,28 @@ function CollectionsSidebar({
 
       <div style={{ padding: "4px 8px 6px", borderBottom: "1px solid var(--color-border)" }}>
         <LitSidebarRow label="All Items" count={scopeCounts.all} active={scope === "all"} color={LIT_SCOPE_COLORS.all} onClick={() => { setScope("all"); setSelectedSubProjectId(null); }} />
-        <LitSidebarRow label="Personal"  count={scopeCounts.personal} active={scope === "personal"} color={LIT_SCOPE_COLORS.personal} onClick={() => { setScope("personal"); setSelectedSubProjectId(null); }} />
+        <LitSidebarRow label="Personal"  count={scopeCounts.personal} active={scope === "personal" && selectedSubProjectId === null} color={LIT_SCOPE_COLORS.personal} onClick={() => { setScope("personal"); setSelectedSubProjectId(null); }} />
+        {scope === "personal" && (subProjects ?? []).length > 0 && (
+          <>
+            <LitSidebarRow
+              label="General"
+              count={allItems.filter((i) => i.scope === "personal" && !(i as LiteratureItem & { subProjectId?: string }).subProjectId).length}
+              active={selectedSubProjectId === "__general__"}
+              color={LIT_SCOPE_COLORS.personal}
+              onClick={() => setSelectedSubProjectId("__general__")}
+            />
+            {(subProjects ?? []).map((sp) => (
+              <LitSidebarRow
+                key={sp.id}
+                label={sp.name}
+                count={allItems.filter((i) => i.scope === "personal" && (i as LiteratureItem & { subProjectId?: string }).subProjectId === sp.id).length}
+                active={selectedSubProjectId === sp.id}
+                color={sp.color ?? LIT_SCOPE_COLORS.personal}
+                onClick={() => setSelectedSubProjectId(sp.id)}
+              />
+            ))}
+          </>
+        )}
         <LitSidebarRow label="Lab"       count={scopeCounts.lab}      active={scope === "lab"}      color={LIT_SCOPE_COLORS.lab}      onClick={() => { setScope("lab");      setSelectedSubProjectId(null); }} />
         {(subProjects ?? []).length > 0 && (
           <>
@@ -2127,7 +2187,12 @@ export default function LiteraturePage() {
 
   const scopedItems = items.filter((item) => {
     if (scope === "all") return true;
-    if (scope === "personal") return item.scope === "personal";
+    if (scope === "personal") {
+      if (!item.scope || item.scope !== "personal") return false;
+      if (selectedSubProjectId === "__general__") return !(item as LiteratureItem & { subProjectId?: string }).subProjectId;
+      if (selectedSubProjectId) return (item as LiteratureItem & { subProjectId?: string }).subProjectId === selectedSubProjectId;
+      return true;
+    }
     if (scope === "project") return item.scope === "project" && (!selectedSubProjectId || (item as LiteratureItem & { subProjectId?: string }).subProjectId === selectedSubProjectId);
     return item.scope === "lab";
   });
@@ -2336,8 +2401,8 @@ export default function LiteraturePage() {
       )}
 
       {addItemOpen && <AddItemModal onSave={addItem} onClose={() => setAddItemOpen(false)} projectId={projectId} currentUserId={currentUserId} subProjectId={subProjectId ?? null} subProjects={subProjects} />}
-      {zoteroImportOpen && <ZoteroImportModal existingItems={items} onImport={importItems} onClose={() => setZoteroImportOpen(false)} projectId={projectId} currentUserId={currentUserId} subProjectId={subProjectId ?? null} />}
-      {doiLookupOpen && <DOILookupModal onSave={addItemFromDOI} onClose={() => setDoiLookupOpen(false)} projectId={projectId} currentUserId={currentUserId} subProjectId={subProjectId ?? null} />}
+      {zoteroImportOpen && <ZoteroImportModal existingItems={items} onImport={importItems} onClose={() => setZoteroImportOpen(false)} projectId={projectId} currentUserId={currentUserId} subProjectId={subProjectId ?? null} subProjects={subProjects} />}
+      {doiLookupOpen && <DOILookupModal onSave={addItemFromDOI} onClose={() => setDoiLookupOpen(false)} projectId={projectId} currentUserId={currentUserId} subProjectId={subProjectId ?? null} subProjects={subProjects} />}
     </div>
   );
 }
