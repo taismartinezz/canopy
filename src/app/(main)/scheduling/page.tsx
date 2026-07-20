@@ -7,7 +7,6 @@ import {
 } from "lucide-react";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { useProject } from "@/context/ProjectContext";
-import ProjectFilterTabs from "@/components/ui/ProjectFilterTabs";
 import { computeInitials } from "@/lib/utils";
 import type {
   User, WeeklyAvailability, MeetingProposal, MeetingResponse,
@@ -942,7 +941,7 @@ const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
 ];
 
 export default function SchedulingPage() {
-  const { projectId, activeScope, subProjectId, subProjects, setActiveSubProject, setActiveScope } = useProject();
+  const { projectId } = useProject();
 
   const [tab, setTab] = useState<Tab>("calendar");
   const [showProposalModal, setShowProposalModal] = useState(false);
@@ -1050,26 +1049,17 @@ export default function SchedulingPage() {
     fetchStaticData();
   }, [projectId, currentUserId]);
 
-  // Events effect — re-runs on scope change for strict isolation
+  // Events effect — fetches all lab/project events + current user's personal events
   useEffect(() => {
     if (!projectId || !currentUserId || !isSupabaseConfigured) return;
 
     async function fetchEvents() {
-      // personal has no distinct calendar — fall back to lab view
-      const effectiveScope = activeScope === "project" ? "project" : "lab";
-
-      let q = supabase
+      const { data: evData } = await supabase
         .from("schedule_events")
         .select("*")
-        .eq("project_id", projectId);
-
-      if (effectiveScope === "project" && subProjectId) {
-        q = q.eq("scope", "project").eq("sub_project_id", subProjectId);
-      } else {
-        q = q.eq("scope", "lab");
-      }
-
-      const { data: evData } = await q.order("date", { ascending: true });
+        .eq("project_id", projectId)
+        .or(`scope.neq.personal,and(scope.eq.personal,created_by.eq.${currentUserId})`)
+        .order("date", { ascending: true });
 
       if (evData) {
         setEvents(
@@ -1090,7 +1080,7 @@ export default function SchedulingPage() {
     }
 
     fetchEvents();
-  }, [projectId, currentUserId, activeScope, subProjectId]);
+  }, [projectId, currentUserId]);
 
   // ── Write handlers ──────────────────────────────────────────────────────────
 
@@ -1192,8 +1182,6 @@ export default function SchedulingPage() {
 
   async function handleAddEvent(event: Omit<ScheduleEvent, "id">) {
     const tempId = crypto.randomUUID();
-    const effectiveScope: ScheduleEvent["scope"] = activeScope === "project" ? "project" : event.scope;
-    const effectiveSubProjectId = activeScope === "project" ? subProjectId : null;
     if (isSupabaseConfigured && projectId && currentUserId) {
       const { data, error } = await supabase
         .from("schedule_events")
@@ -1203,21 +1191,21 @@ export default function SchedulingPage() {
           date: event.date,
           time: event.time ?? null,
           end_time: event.endTime ?? null,
-          scope: effectiveScope,
-          sub_project_id: effectiveSubProjectId ?? null,
+          scope: event.scope,
+          sub_project_id: event.subProjectId ?? null,
           created_by: currentUserId,
           description: event.description ?? null,
         })
         .select()
         .single();
       if (!error && data) {
-        setEvents((prev) => [...prev, { ...event, scope: effectiveScope, subProjectId: effectiveSubProjectId, id: data.id as string }]);
+        setEvents((prev) => [...prev, { ...event, id: data.id as string }]);
       } else {
         if (error) console.error("[Scheduling] add event:", error);
-        setEvents((prev) => [...prev, { ...event, scope: effectiveScope, subProjectId: effectiveSubProjectId, id: tempId }]);
+        setEvents((prev) => [...prev, { ...event, id: tempId }]);
       }
     } else {
-      setEvents((prev) => [...prev, { ...event, scope: effectiveScope, subProjectId: effectiveSubProjectId, id: tempId }]);
+      setEvents((prev) => [...prev, { ...event, id: tempId }]);
     }
   }
 
@@ -1256,19 +1244,6 @@ export default function SchedulingPage() {
             Calendar, availability, and meetings with your lab.
           </p>
         </div>
-
-        {subProjects.length > 0 && (
-          <div className="mb-4 -mx-4 md:-mx-8 px-4 md:px-8" style={{ borderTop: "1px solid var(--color-border)" }}>
-            <ProjectFilterTabs
-              subProjects={subProjects}
-              selected={activeScope === "project" ? (subProjectId ?? null) : null}
-              onChange={(id) => {
-                if (id === null) { setActiveSubProject(null); setActiveScope("lab"); }
-                else { setActiveSubProject(id); setActiveScope("project"); }
-              }}
-            />
-          </div>
-        )}
 
         {/* Tab bar */}
         <div className="flex gap-0.5 mb-6 overflow-x-auto" style={{ backgroundColor: "rgba(27,46,75,0.06)", borderRadius: 9, padding: 3 }}>

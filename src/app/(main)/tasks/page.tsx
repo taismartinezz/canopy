@@ -11,7 +11,7 @@ import {
   SortableContext, useSortable, verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { LayoutGrid, List, Search, Plus, MoreHorizontal, ChevronDown, Bookmark, X as XIcon } from "lucide-react";
+import { LayoutGrid, List, Search, Plus, MoreHorizontal, ChevronDown, Bookmark, X as XIcon, User as UserIcon, Users } from "lucide-react";
 import { formatDate, TASKS as MOCK_TASKS, USERS, getStoredProject } from "@/lib/mock-data";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { useProject } from "@/context/ProjectContext";
@@ -22,7 +22,7 @@ import TaskDetailPanel, {
   STATUS_CONFIG, STATUS_ORDER, PriorityBadge, AssigneeStack,
 } from "@/components/tasks/TaskDetailPanel";
 import TaskModal from "@/components/tasks/TaskModal";
-import ProjectFilterTabs from "@/components/ui/ProjectFilterTabs";
+import ScopeSidebar, { type ScopeSection } from "@/components/ui/ScopeSidebar";
 import EmptyState from "@/components/ui/EmptyState";
 import { CalendarPicker } from "@/components/ui/DateTimePicker";
 
@@ -674,7 +674,11 @@ export default function TasksPage() {
   const [filterPriority, setFilterPriority] = useState("all");
   const [activeId, setActiveId] = useState<string | null>(null);
   const [modalState, setModalState] = useState<ModalState>(null);
-  const { activeScope, subProjectId, subProjects, setActiveSubProject, setActiveScope } = useProject();
+  const { subProjects } = useProject();
+  const [taskScope, setTaskScope] = useState<string>("all"); // "all" | "personal" | "lab" | subProjectId
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try { return localStorage.getItem("canopy_tasks_sidebar_collapsed") === "true"; } catch { return false; }
+  });
   const [teamMembers, setTeamMembers] = useState<User[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string>("");
   const [projectId, setProjectId] = useState<string>("");
@@ -785,29 +789,13 @@ export default function TasksPage() {
         }));
       }
 
-      // Build a single query that covers all visible scopes for this rail mode.
-      // In project mode: lab-wide tasks are still relevant alongside project tasks,
-      // so we OR the two conditions rather than firing two sequential setTasks calls
-      // which would race and overwrite each other.
-      let taskQ = supabase
+      const { data, error } = await supabase
         .from("tasks")
         .select("*, task_assignees(user_id)")
         .eq("project_id", pid)
         .is("parent_id", null)
         .or("archived.is.null,archived.eq.false")
         .order("created_at", { ascending: false });
-
-      if (activeScope === "personal") {
-        taskQ = taskQ.eq("scope", "personal");
-      } else if (activeScope === "project" && subProjectId) {
-        // Layer tab: only tasks explicitly filed under this layer
-        taskQ = taskQ.eq("sub_project_id", subProjectId);
-      } else {
-        // "All" tab: lab-wide tasks + any layer-specific tasks (exclude personal)
-        taskQ = taskQ.neq("scope", "personal");
-      }
-
-      const { data, error } = await taskQ;
 
       if (cancelled) return;
       if (error) console.error("[Tasks] fetch error:", error);
@@ -853,7 +841,8 @@ export default function TasksPage() {
     });
 
     return () => { cancelled = true; };
-  }, [activeScope, subProjectId]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Realtime: reflect task INSERTs/UPDATEs/DELETEs from other users
   useEffect(() => {
@@ -1065,7 +1054,33 @@ export default function TasksPage() {
       .then(({ error }) => { if (error) { console.error("[Tasks] due_date update:", error); showToast("Failed to update due date.", "error"); } });
   }, []);
 
-  const filteredTasks = tasks.filter((t) => {
+  // Scope counts for sidebar (computed from full unfiltered task list)
+  const scopeCounts = {
+    all: tasks.length,
+    personal: tasks.filter(t => t.scope === "personal").length,
+    lab: tasks.filter(t => t.scope === "lab" || !t.scope).length,
+  };
+  const projectTaskCounts: Record<string, number> = {};
+  for (const sp of subProjects) {
+    projectTaskCounts[sp.id] = tasks.filter(t => t.scope === "project" && t.subProjectId === sp.id).length;
+  }
+
+  const isSubProjectScope = taskScope !== "all" && taskScope !== "personal" && taskScope !== "lab";
+
+  const sidebarSections: ScopeSection[] = [
+    { id: "all", label: "All", color: "#1B2E4B", icon: <LayoutGrid size={17} />, count: scopeCounts.all, isActive: taskScope === "all", onClick: () => setTaskScope("all") },
+    { id: "personal", label: "Personal", color: "#6366f1", icon: <UserIcon size={17} />, count: scopeCounts.personal, isActive: taskScope === "personal", onClick: () => setTaskScope("personal") },
+    { id: "lab", label: "Lab", color: "#0ea5e9", icon: <Users size={17} />, count: scopeCounts.lab, isActive: taskScope === "lab", onClick: () => setTaskScope("lab") },
+  ];
+
+  const scopedTasks = tasks.filter(t => {
+    if (taskScope === "all") return true;
+    if (taskScope === "personal") return t.scope === "personal";
+    if (taskScope === "lab") return t.scope === "lab" || !t.scope;
+    return t.scope === "project" && t.subProjectId === taskScope;
+  });
+
+  const filteredTasks = scopedTasks.filter((t) => {
     if (search && !t.title.toLowerCase().includes(search.toLowerCase())) return false;
     if (filterMember !== "all" && !t.assigneeIds.includes(filterMember)) return false;
     if (filterPriority !== "all" && t.priority !== filterPriority) return false;
@@ -1181,18 +1196,6 @@ export default function TasksPage() {
           )}
         </div>
 
-        {/* Per-project filter tabs */}
-        {subProjects.length > 0 && (
-          <ProjectFilterTabs
-            subProjects={subProjects}
-            selected={activeScope === "project" ? (subProjectId ?? null) : null}
-            onChange={(id) => {
-              if (id === null) { setActiveSubProject(null); setActiveScope("lab"); }
-              else { setActiveSubProject(id); setActiveScope("project"); }
-            }}
-          />
-        )}
-
         {/* Search + filters row */}
         <div className="flex items-center gap-2 py-2 flex-wrap">
           <div className="relative flex-1 min-w-0" style={{ minWidth: 120 }}>
@@ -1221,8 +1224,22 @@ export default function TasksPage() {
         </div>
       </div>
 
-      {/* Content */}
-      <div className="flex-1 overflow-auto p-4 md:p-6">
+      {/* Content = ScopeSidebar + Board/List */}
+      <div className="flex flex-1 overflow-hidden">
+        <ScopeSidebar
+          sections={sidebarSections}
+          subProjects={subProjects}
+          selectedSubProjectId={isSubProjectScope ? taskScope : null}
+          projectCounts={projectTaskCounts}
+          onSelectSubProject={(id) => setTaskScope(id)}
+          collapsed={sidebarCollapsed}
+          onToggleCollapse={() => setSidebarCollapsed(c => {
+            const next = !c;
+            try { localStorage.setItem("canopy_tasks_sidebar_collapsed", String(next)); } catch {}
+            return next;
+          })}
+        />
+        <div className="flex-1 overflow-auto p-4 md:p-6">
         {loading && (
           <p style={{ fontSize: 13, color: "var(--color-secondary)", padding: 8 }}>Loading tasks…</p>
         )}
@@ -1243,7 +1260,7 @@ export default function TasksPage() {
                     onArchiveDone={archiveDoneTasks}
                     teamMembers={teamMembers}
                     subtaskCounts={subtaskCounts}
-                    showLabBadge={activeScope === "project"}
+                    showLabBadge={false}
                   />
                 ))}
               </div>
@@ -1259,7 +1276,7 @@ export default function TasksPage() {
                     onDelete={() => {}}
                     isDragging
                     teamMembers={teamMembers}
-                    showLabBadge={activeScope === "project"}
+                    showLabBadge={false}
                   />
                 </div>
               )}
@@ -1290,7 +1307,7 @@ export default function TasksPage() {
                     onUpdateDueDate={(d) => handleUpdateTaskDueDate(task.id, d)}
                     teamMembers={teamMembers}
                     subtaskProgress={subtaskCounts[task.id]}
-                    showLabBadge={activeScope === "project"}
+                    showLabBadge={false}
                   />
                 ))}
                 {filteredTasks.length === 0 && (
@@ -1308,6 +1325,7 @@ export default function TasksPage() {
             </table>
           </div>
         ) : null}
+        </div>
       </div>
 
       {selectedTask && (
@@ -1336,8 +1354,8 @@ export default function TasksPage() {
           teamMembers={teamMembers}
           currentUserId={currentUserId}
           projectId={projectId}
-          scope={activeScope === "personal" ? "personal" : activeScope === "project" ? "project" : "lab"}
-          subProjectId={activeScope === "project" ? (subProjectId ?? null) : null}
+          scope={taskScope === "personal" ? "personal" : isSubProjectScope ? "project" : "lab"}
+          subProjectId={isSubProjectScope ? taskScope : null}
         />
       )}
 
