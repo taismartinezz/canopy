@@ -155,7 +155,8 @@ function AddForm({ onAdd, onCancel }: {
     if (!url || !isValidUrl(url) || title) return;
     setFetching(true);
     const fetched = await fetchPageTitle(url);
-    setTitle(fetched ?? hostname(url));
+    // Use functional update: if the user typed a title while fetch was in-flight, keep it
+    setTitle((prev) => prev || (fetched ?? hostname(url)));
     setFetching(false);
   }
 
@@ -263,6 +264,7 @@ function BookmarkCard({ bm, canDelete, onDelete }: {
   async function handleDelete(e: React.MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
+    if (!window.confirm(`Remove "${bm.title}"?\nThis cannot be undone.`)) return;
     setDeleting(true);
     await onDelete(bm.id);
     setDeleting(false);

@@ -6,9 +6,10 @@ import {
 } from "@/lib/mock-data";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { useProject } from "@/context/ProjectContext";
-import type { LiteratureItem, ReadStatus, LiteratureType, LibraryScope, LiteratureFile, LitAnnotation, LitAssignedReading, LitRecommendation, AssignmentReadingStatus, SubProject } from "@/types";
+import type { LiteratureItem, ReadStatus, LiteratureType, LibraryScope, LiteratureFile, LitAnnotation, LitAssignedReading, LitRecommendation, AssignmentReadingStatus, SubProject, User, UserRole } from "@/types";
+import Avatar from "@/components/ui/Avatar";
 import {
-  Plus, Search, Download, FileText, File, X, Trash2,
+  Plus, Search, Download, FileText, File as FileIcon, X, Trash2,
   Tag, Star, ExternalLink, Copy, Check, ChevronLeft, ChevronRight,
   Book, BarChart2, GraduationCap,
   Library, ClipboardList, Brain, Microscope, Heart,
@@ -685,7 +686,7 @@ function ZoteroImportModal({ existingItems, onImport, onClose, projectId, curren
         {tab === "file" && (
           <>
             <p style={{ fontSize: 12, color: "var(--color-secondary)", marginBottom: 14 }}>
-              In Zotero: <strong>File → Export Library</strong>, then choose <strong>CSL JSON</strong> or <strong>Zotero RDF</strong> (RDF also imports notes as annotations).
+              In Zotero: <strong>File → Export Library</strong>, then choose <strong>CSL JSON</strong> (citation metadata only) or <strong>Zotero RDF</strong> (also imports notes as annotations and includes file attachment references). File attachments themselves must be re-uploaded separately in the Files tab once imported.
             </p>
             <label style={{ display: "block", border: "2px dashed var(--color-border)", borderRadius: 8, padding: "20px 16px", textAlign: "center", cursor: "pointer", marginBottom: 14 }}>
               <Upload size={20} color="var(--color-secondary)" style={{ margin: "0 auto 8px" }} />
@@ -1199,60 +1200,34 @@ function CollectionsSidebar({
 
 // ── Assign Reading Form ───────────────────────────────────────────────────────
 
-function AssignReadingForm({ itemId, projectId, assignedBy, onAssigned }: {
+function AssignReadingForm({ itemId, projectId, assignedBy, teamMembers, onAssigned }: {
   itemId: string; projectId: string; assignedBy: string;
+  teamMembers: User[];
   onAssigned: (a: LitAssignedReading) => void;
 }) {
-  const [assigneeId, setAssigneeId]         = useState("");
-  const [dueDate, setDueDate]               = useState("");
-  const [note, setNote]                     = useState("");
-  const [initialStatus, setInitialStatus]   = useState<AssignmentReadingStatus>("not_started");
-  const [saving, setSaving]                 = useState(false);
-  const [error, setError]                   = useState("");
+  const [assigneeId, setAssigneeId]       = useState("");
+  const [dueDate, setDueDate]             = useState("");
+  const [note, setNote]                   = useState("");
+  const [initialStatus, setInitialStatus] = useState<AssignmentReadingStatus>("not_started");
+  const [saving, setSaving]               = useState(false);
+  const [error, setError]                 = useState("");
+
+  const selectedMember = teamMembers.find((m) => m.id === assigneeId) ?? null;
 
   async function handleAssign() {
-    const raw = assigneeId.trim();
-    if (!raw) return;
+    if (!assigneeId.trim()) return;
     setSaving(true);
     setError("");
 
-    let resolvedId = raw;
-
-    if (raw.includes("@")) {
-      // Resolve email → user_id via security-definer RPC (reads auth.users server-side)
-      const { data: found, error: lookupErr } = await supabase.rpc(
-        "find_team_member_id_by_email",
-        { p_project_id: projectId, p_email: raw },
-      );
-      if (lookupErr) {
-        setError("Email lookup failed. Please try again.");
-        setSaving(false);
-        return;
-      }
-      if (!found) {
-        setError("No team member with that email found in this project.");
-        setSaving(false);
-        return;
-      }
-      resolvedId = found as string;
-    } else {
-      const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-      if (!uuidRe.test(raw)) {
-        setError("Invalid format. Enter a valid user ID (UUID) or email address.");
-        setSaving(false);
-        return;
-      }
-    }
-
     const newA: LitAssignedReading = {
       id: crypto.randomUUID(), itemId, projectId, assignedBy,
-      assigneeId: resolvedId, dueDate: dueDate || undefined,
+      assigneeId, dueDate: dueDate || undefined,
       note: note.trim() || undefined, readingStatus: initialStatus,
       createdAt: new Date().toISOString(),
     };
     const { error: insertErr } = await supabase.from("lit_assigned_readings").insert({
       id: newA.id, item_id: itemId, project_id: projectId, assigned_by: assignedBy,
-      assignee_id: resolvedId, due_date: dueDate || null, note: note.trim() || null,
+      assignee_id: assigneeId, due_date: dueDate || null, note: note.trim() || null,
       reading_status: initialStatus,
     });
     if (insertErr) {
@@ -1265,16 +1240,62 @@ function AssignReadingForm({ itemId, projectId, assignedBy, onAssigned }: {
       setSaving(false);
       return;
     }
-    onAssigned(newA); setAssigneeId(""); setDueDate(""); setNote(""); setInitialStatus("not_started"); setSaving(false);
+    onAssigned(newA);
+    setAssigneeId(""); setDueDate(""); setNote(""); setInitialStatus("not_started"); setSaving(false);
   }
+
+  const inputStyle12: React.CSSProperties = {
+    width: "100%", height: 34, border: "1px solid var(--color-border)", borderRadius: 6,
+    padding: "0 10px", fontSize: 12, fontFamily: "var(--font-roboto)", outline: "none", boxSizing: "border-box",
+  };
 
   return (
     <div className="mt-2 p-3 rounded-lg" style={{ backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)" }}>
       <p style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-secondary)", marginBottom: 8 }}>Assign to a team member</p>
       <div className="space-y-2">
-        <input value={assigneeId} onChange={(e) => { setAssigneeId(e.target.value); setError(""); }} placeholder="User ID or email"
-          style={{ width: "100%", height: 34, border: "1px solid var(--color-border)", borderRadius: 6, padding: "0 10px", fontSize: 12, fontFamily: "var(--font-roboto)", outline: "none", boxSizing: "border-box" }}
-          onFocus={(e) => { e.currentTarget.style.borderColor = "var(--color-navy)"; }} onBlur={(e) => { e.currentTarget.style.borderColor = "var(--color-border)"; }} />
+
+        {/* Team member picker */}
+        {teamMembers.length > 0 ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+            {teamMembers.map((member) => {
+              const selected = assigneeId === member.id;
+              return (
+                <button
+                  key={member.id}
+                  onClick={() => { setAssigneeId(selected ? "" : member.id); setError(""); }}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 8,
+                    padding: "6px 10px", borderRadius: 7, border: "none", textAlign: "left",
+                    cursor: "pointer", backgroundColor: selected ? "rgba(27,46,75,0.08)" : "transparent",
+                    outline: selected ? "1.5px solid var(--color-navy)" : "none",
+                    transition: "background-color 100ms ease",
+                    fontFamily: "var(--font-roboto)",
+                  }}
+                  onMouseEnter={(e) => { if (!selected) (e.currentTarget as HTMLElement).style.backgroundColor = "rgba(0,0,0,0.04)"; }}
+                  onMouseLeave={(e) => { if (!selected) (e.currentTarget as HTMLElement).style.backgroundColor = "transparent"; }}
+                >
+                  <Avatar user={member} size={24} />
+                  <span style={{ fontSize: 13, color: "var(--color-body)", fontWeight: selected ? 600 : 400, flex: 1 }}>{member.name}</span>
+                  {selected && (
+                    <span style={{ width: 16, height: 16, borderRadius: "50%", backgroundColor: "var(--color-navy)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      <Check size={9} color="#fff" strokeWidth={3} />
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <input
+            value={assigneeId}
+            onChange={(e) => { setAssigneeId(e.target.value); setError(""); }}
+            placeholder="User ID or email"
+            style={inputStyle12}
+            onFocus={(e) => { e.currentTarget.style.borderColor = "var(--color-navy)"; }}
+            onBlur={(e) => { e.currentTarget.style.borderColor = "var(--color-border)"; }}
+          />
+        )}
+
         <div className="flex gap-2">
           <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)}
             style={{ flex: 1, height: 34, border: "1px solid var(--color-border)", borderRadius: 6, padding: "0 10px", fontSize: 12, fontFamily: "var(--font-roboto)", outline: "none" }}
@@ -1286,13 +1307,20 @@ function AssignReadingForm({ itemId, projectId, assignedBy, onAssigned }: {
             <option value="done">Done</option>
           </select>
         </div>
+
         <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note (optional)"
-          style={{ width: "100%", height: 34, border: "1px solid var(--color-border)", borderRadius: 6, padding: "0 10px", fontSize: 12, fontFamily: "var(--font-roboto)", outline: "none", boxSizing: "border-box" }}
+          style={inputStyle12}
           onFocus={(e) => { e.currentTarget.style.borderColor = "var(--color-navy)"; }} onBlur={(e) => { e.currentTarget.style.borderColor = "var(--color-border)"; }} />
+
         {error && <p style={{ fontSize: 11, color: "var(--color-error)", margin: 0 }}>{error}</p>}
-        <button onClick={handleAssign} disabled={!assigneeId.trim() || saving}
-          style={{ fontSize: 12, fontWeight: 700, padding: "6px 14px", borderRadius: 7, backgroundColor: "var(--color-navy)", color: "#fff", border: "none", cursor: "pointer", minHeight: 36, opacity: (!assigneeId.trim() || saving) ? 0.5 : 1 }}>
-          {saving ? "Assigning…" : "Assign"}
+
+        <button
+          onClick={handleAssign}
+          disabled={!assigneeId.trim() || saving}
+          style={{ fontSize: 12, fontWeight: 700, padding: "6px 14px", borderRadius: 7, backgroundColor: "var(--color-navy)", color: "#fff", border: "none", cursor: "pointer", minHeight: 36, opacity: (!assigneeId.trim() || saving) ? 0.5 : 1, display: "flex", alignItems: "center", gap: 6 }}
+        >
+          {selectedMember && <Avatar user={selectedMember} size={16} />}
+          {saving ? "Assigning…" : selectedMember ? `Assign to ${selectedMember.name.split(" ")[0]}` : "Assign"}
         </button>
       </div>
     </div>
@@ -1305,7 +1333,7 @@ const DETAIL_TABS = ["Info", "Abstract", "Notes", "Tags", "Files", "Cite", "Rela
 type DetailTab = typeof DETAIL_TABS[number];
 
 function DetailPanelContent({
-  item, onClose, onUpdateItem, onDeleteItem, allItems, currentUserId, projectId, onAddItem, subProjectId,
+  item, onClose, onUpdateItem, onDeleteItem, allItems, currentUserId, projectId, onAddItem, subProjectId, teamMembers,
 }: {
   item: LiteratureItem;
   onClose: () => void;
@@ -1316,6 +1344,7 @@ function DetailPanelContent({
   projectId: string;
   onAddItem: (item: LiteratureItem) => void;
   subProjectId: string | null;
+  teamMembers: User[];
 }) {
   const [tab, setTab]                     = useState<DetailTab>("Info");
   const [citationStyle, setCitationStyle] = useState<"apa" | "mla" | "chicago">("apa");
@@ -1356,6 +1385,11 @@ function DetailPanelContent({
 
   useEffect(() => {
     if (tab === "Annotations") {
+      // Pre-seed from teamMembers so names resolve immediately without a round-trip
+      const seedMap: Record<string, string> = {};
+      for (const m of teamMembers) seedMap[m.id] = m.name;
+      setAnnotAuthors(seedMap);
+
       supabase.from("lit_annotations").select("*").eq("item_id", item.id).order("created_at")
         .then(async ({ data }) => {
           if (!data) return;
@@ -1368,8 +1402,9 @@ function DetailPanelContent({
             color: r.color as string | undefined,
           }));
           setAnnotations(mapped);
-          // Resolve author IDs to names
-          const unknownIds = [...new Set(mapped.map((a) => a.authorId))].filter((id) => id !== currentUserId);
+          // Fetch profiles for any IDs not already in teamMembers (e.g. past members)
+          const knownIds = new Set([...teamMembers.map((m) => m.id), currentUserId]);
+          const unknownIds = [...new Set(mapped.map((a) => a.authorId))].filter((id) => !knownIds.has(id));
           if (unknownIds.length > 0) {
             const { data: profiles } = await supabase.from("user_profiles").select("id, name").in("id", unknownIds);
             if (profiles) {
@@ -1524,21 +1559,71 @@ function DetailPanelContent({
     onUpdateItem(item.id, { tags: updated });
   }
 
-  function handleFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    e.target.value = "";
+
+    // Duplicate name handling
+    const duplicate = localFiles.find((f) => f.name === file.name);
+    let finalFile = file;
+    let baseList = localFiles;
+    if (duplicate) {
+      const replace = window.confirm(
+        `"${file.name}" is already attached.\n\nOK → replace the existing file\nCancel → keep both (new file will be renamed)`
+      );
+      if (replace) {
+        baseList = localFiles.filter((f) => f.name !== file.name);
+        setLocalFiles(baseList);
+        if (duplicate.storagePath && isSupabaseConfigured) {
+          await supabase.storage.from("literature-files").remove([duplicate.storagePath]);
+        }
+      } else {
+        const ext = file.name.includes(".") ? `.${file.name.split(".").pop()}` : "";
+        const base = file.name.slice(0, file.name.length - ext.length);
+        let suffix = 2;
+        while (localFiles.some((f) => f.name === `${base} (${suffix})${ext}`)) suffix++;
+        finalFile = new File([file], `${base} (${suffix})${ext}`, { type: file.type });
+      }
+    }
+
+    const fileId = crypto.randomUUID();
+    let url = "";
+    let storagePath: string | undefined;
+
+    if (isSupabaseConfigured) {
+      storagePath = `${projectId}/${item.id}/${fileId}-${finalFile.name}`;
+      const { error: uploadError } = await supabase.storage
+        .from("literature-files")
+        .upload(storagePath, finalFile);
+      if (uploadError) {
+        console.error("[LitFiles] upload:", uploadError);
+        alert(`Upload failed: ${uploadError.message}`);
+        return;
+      }
+      url = supabase.storage.from("literature-files").getPublicUrl(storagePath).data.publicUrl;
+    }
+
     const newFile: LiteratureFile = {
-      id: crypto.randomUUID(),
-      name: file.name,
-      size: file.size,
-      uploaderId: currentUserId,
-      uploadedAt: new Date().toISOString(),
-      ocrStatus: null,
+      id: fileId, name: finalFile.name, size: finalFile.size,
+      uploaderId: currentUserId, uploadedAt: new Date().toISOString(),
+      ocrStatus: null, url, storagePath,
     };
-    const updated = [...localFiles, newFile];
+    const updated = [...baseList, newFile];
     setLocalFiles(updated);
     onUpdateItem(item.id, { files: updated });
-    e.target.value = "";
+  }
+
+  async function handleDeleteFile(id: string) {
+    if (!window.confirm("Remove this file?")) return;
+    const target = localFiles.find((f) => f.id === id);
+    const updated = localFiles.filter((f) => f.id !== id);
+    setLocalFiles(updated);
+    onUpdateItem(item.id, { files: updated });
+    if (target?.storagePath && isSupabaseConfigured) {
+      const { error } = await supabase.storage.from("literature-files").remove([target.storagePath]);
+      if (error) console.error("[LitFiles] delete from storage:", error);
+    }
   }
 
   return (
@@ -1704,8 +1789,26 @@ function DetailPanelContent({
                         {file.ocrStatus === "ready" && <span style={{ marginLeft: 6, color: "var(--color-success)" }}>✓ Searchable</span>}
                       </p>
                     </div>
-                    <button className="flex items-center justify-center rounded hover:bg-[rgba(27,46,75,0.06)]" style={{ width: 44, height: 44 }}>
-                      <Download size={12} color="var(--color-navy)" />
+                    {file.url ? (
+                      <a href={file.url} target="_blank" rel="noopener noreferrer"
+                        className="flex items-center justify-center rounded hover:bg-[rgba(27,46,75,0.06)]"
+                        style={{ width: 36, height: 36 }} title="Open / download" aria-label="Open file">
+                        <Download size={12} color="var(--color-navy)" />
+                      </a>
+                    ) : (
+                      <span className="flex items-center justify-center" style={{ width: 36, height: 36, opacity: 0.3 }}>
+                        <Download size={12} color="var(--color-secondary)" />
+                      </span>
+                    )}
+                    <button
+                      onClick={() => handleDeleteFile(file.id)}
+                      className="flex items-center justify-center rounded"
+                      style={{ width: 32, height: 32, background: "none", border: "none", cursor: "pointer", color: "var(--color-secondary)" }}
+                      aria-label="Remove file"
+                      onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--color-error)"; (e.currentTarget as HTMLElement).style.backgroundColor = "rgba(192,57,43,0.08)"; }}
+                      onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--color-secondary)"; (e.currentTarget as HTMLElement).style.backgroundColor = "transparent"; }}
+                    >
+                      <Trash2 size={12} />
                     </button>
                   </div>
                 ))}
@@ -1719,7 +1822,7 @@ function DetailPanelContent({
               className="flex flex-col items-center justify-center gap-2 py-6 cursor-pointer transition-colors hover:bg-[rgba(27,46,75,0.03)]"
               style={{ border: "2px dashed var(--color-border)", borderRadius: 8 }}
             >
-              <File size={18} color="var(--color-secondary)" />
+              <FileIcon size={18} color="var(--color-secondary)" />
               <p style={{ fontSize: 12, color: "var(--color-secondary)" }}>Drop files or click to upload</p>
             </div>
           </div>
@@ -1884,7 +1987,7 @@ function DetailPanelContent({
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <span style={{ fontSize: 10, color: "var(--color-secondary)" }}>
-                          {a.authorId === currentUserId ? "You" : (annotAuthors[a.authorId] ?? a.authorId.slice(0, 8))} · {new Date(a.createdAt).toLocaleDateString()}
+                          {a.authorId === currentUserId ? "You" : (annotAuthors[a.authorId] ?? "Unknown")} · {new Date(a.createdAt).toLocaleDateString()}
                         </span>
                         {/* Inline color tag change for annotation author */}
                         {a.authorId === currentUserId && (
@@ -1982,7 +2085,7 @@ function DetailPanelContent({
                           <UserCheck size={14} color="var(--color-navy)" style={{ marginTop: 2, flexShrink: 0 }} />
                           <div className="flex-1 min-w-0">
                             <p style={{ fontSize: 12, fontWeight: 600, color: "var(--color-body)", wordBreak: "break-all" }}>
-                              {a.assigneeId === currentUserId ? "You" : a.assigneeId}
+                              {a.assigneeId === currentUserId ? "You" : (teamMembers.find((m) => m.id === a.assigneeId)?.name ?? a.assigneeId.slice(0, 8))}
                             </p>
                             {a.dueDate && <p style={{ fontSize: 11, color: "var(--color-secondary)" }}>Due {new Date(a.dueDate).toLocaleDateString()}</p>}
                             {a.note && <p style={{ fontSize: 12, color: "var(--color-secondary)", marginTop: 2 }}>{a.note}</p>}
@@ -2047,6 +2150,7 @@ function DetailPanelContent({
                   </div>
                 )}
               <AssignReadingForm itemId={item.id} projectId={projectId} assignedBy={currentUserId}
+                teamMembers={teamMembers}
                 onAssigned={(a) => setAssigned((prev) => [...prev, a])} />
             </div>
           );
@@ -2078,6 +2182,7 @@ export default function LiteraturePage() {
   const [doiLookupOpen, setDoiLookupOpen]   = useState(false);
   const [projectId, setProjectId]           = useState("");
   const [currentUserId, setCurrentUserId] = useState("");
+  const [teamMembers, setTeamMembers]     = useState<User[]>([]);
   const [typeFilter, setTypeFilter]     = useState<LiteratureType | "all">("all");
   const [yearFilter, setYearFilter]     = useState<number | "all">("all");
   const [yearSort, setYearSort]         = useState<"desc" | "asc">("desc");
@@ -2102,6 +2207,32 @@ export default function LiteraturePage() {
       const projectId = profile?.project_id as string | undefined;
       if (!projectId) { setLoadingItems(false); return; }
       setProjectId(projectId);
+
+      // Fetch team members for the assignee picker
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      supabase.from("team_members")
+        .select("*, user_profiles(name, avatar_initials, avatar_color, avatar_url, role)")
+        .eq("project_id", projectId)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .then(({ data: members }) => {
+          if (members) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            setTeamMembers((members as any[]).map((row) => {
+              const p = Array.isArray(row.user_profiles) ? row.user_profiles[0] : row.user_profiles;
+              const id = row.user_id as string;
+              let hash = 0;
+              for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) >>> 0;
+              return {
+                id, name: p?.name ?? "Team Member", email: "",
+                role: (p?.role ?? "researcher") as UserRole,
+                avatarColor: p?.avatar_color ?? `hsl(${hash % 360}, 55%, 80%)`,
+                avatarInitials: p?.avatar_initials ?? "??",
+                avatarUrl: p?.avatar_url ?? undefined,
+              } as User;
+            }));
+          }
+        });
+
       supabase
         .from("literature_items")
         .select("*")
@@ -2150,7 +2281,7 @@ export default function LiteraturePage() {
   function updateItem(id: string, updates: Partial<LiteratureItem>) {
     setItems((prev) => prev.map((item) => item.id === id ? { ...item, ...updates } : item));
     if (!isSupabaseConfigured) return;
-    const colMap: Record<string, string> = { notes: "notes", tags: "tags", status: "status", rating: "rating" };
+    const colMap: Record<string, string> = { notes: "notes", tags: "tags", status: "status", rating: "rating", files: "files" };
     const payload: Record<string, unknown> = {};
     for (const [k, col] of Object.entries(colMap)) {
       if (k in updates) payload[col] = (updates as Record<string, unknown>)[k];
@@ -2390,11 +2521,11 @@ export default function LiteraturePage() {
         <>
           {isMobile ? (
             <div className="fixed inset-0 z-40 animate-slide-in-bottom" style={{ backgroundColor: "var(--color-surface)" }}>
-              <DetailPanelContent item={selectedItem} onClose={() => setSelectedItemId(null)} onUpdateItem={updateItem} onDeleteItem={deleteItem} allItems={items} currentUserId={currentUserId} projectId={projectId} onAddItem={addItem} subProjectId={subProjectId ?? null} />
+              <DetailPanelContent item={selectedItem} onClose={() => setSelectedItemId(null)} onUpdateItem={updateItem} onDeleteItem={deleteItem} allItems={items} currentUserId={currentUserId} projectId={projectId} onAddItem={addItem} subProjectId={subProjectId ?? null} teamMembers={teamMembers} />
             </div>
           ) : (
             <div className="flex flex-col shrink-0" style={{ width: 340, borderLeft: "1px solid var(--color-border)" }}>
-              <DetailPanelContent item={selectedItem} onClose={() => setSelectedItemId(null)} onUpdateItem={updateItem} onDeleteItem={deleteItem} allItems={items} currentUserId={currentUserId} projectId={projectId} onAddItem={addItem} subProjectId={subProjectId ?? null} />
+              <DetailPanelContent item={selectedItem} onClose={() => setSelectedItemId(null)} onUpdateItem={updateItem} onDeleteItem={deleteItem} allItems={items} currentUserId={currentUserId} projectId={projectId} onAddItem={addItem} subProjectId={subProjectId ?? null} teamMembers={teamMembers} />
             </div>
           )}
         </>

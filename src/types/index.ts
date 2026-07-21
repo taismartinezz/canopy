@@ -157,6 +157,8 @@ export interface LiteratureFile {
   uploaderId: string;
   uploadedAt: string;
   ocrStatus?: "pending" | "ready" | null;
+  url?: string;
+  storagePath?: string;
 }
 
 export interface LiteratureItem {

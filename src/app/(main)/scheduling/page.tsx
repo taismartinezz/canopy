@@ -732,7 +732,11 @@ function AvailabilityTab({
         <div className="grid gap-4 lg:grid-cols-[1fr_280px]">
           <Card>
             <SectionHeader
-              title="My Weekly Availability"
+              title={
+                subProjects.length > 0
+                  ? `My Availability — ${availSubProjectId ? (subProjects.find(sp => sp.id === availSubProjectId)?.name ?? "Project") : "Lab-wide"}`
+                  : "My Weekly Availability"
+              }
               action={
                 <div className="flex items-center gap-2">
                   {saved ? (
@@ -777,7 +781,7 @@ function AvailabilityTab({
               <div className="flex items-start gap-2 mb-4 px-3 py-2 rounded-lg" style={{ backgroundColor: "rgba(27,46,75,0.05)", border: "1px solid rgba(27,46,75,0.10)" }}>
                 <Lock size={13} style={{ marginTop: 2, color: "var(--color-navy)", flexShrink: 0 }} />
                 <p style={{ fontSize: 12, color: "var(--color-body)", margin: 0, lineHeight: 1.5 }}>
-                  Team members see only the aggregate overlap — not your individual schedule details.
+                  You&apos;re editing your <strong>{availSubProjectId ? (subProjects.find(sp => sp.id === availSubProjectId)?.name ?? "project") : "lab-wide"}</strong> availability. Team members see only the aggregate overlap — not your individual schedule.
                 </p>
               </div>
               <AvailabilityGrid slots={slots} onChange={setSlots} />
