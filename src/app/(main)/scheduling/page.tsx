@@ -19,6 +19,10 @@ import Avatar from "@/components/ui/Avatar";
 import ClientOnly from "@/components/ui/ClientOnly";
 import { TimePicker, formatTimeDisplay } from "@/components/ui/DateTimePicker";
 
+// Sentinel UUID stored in user_availability.sub_project_id to mean "Lab-wide"
+// (NULL can't be used because two NULLs aren't treated as equal by the unique constraint)
+const LAB_AVAILABILITY_ID = "00000000-0000-0000-0000-000000000000";
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function formatProposedDate(date: string, time: string): string {
@@ -1053,7 +1057,7 @@ export default function SchedulingPage() {
         setAllAvailabilities(avData.map((row) => ({
           userId: row.user_id as string,
           projectId: row.project_id as string,
-          subProjectId: (row.sub_project_id as string | null) ?? null,
+          subProjectId: (row.sub_project_id as string | null) === LAB_AVAILABILITY_ID ? null : ((row.sub_project_id as string | null) ?? null),
           slots: (row.slots as string[]) ?? [],
           updatedAt: row.updated_at as string,
         })));
@@ -1150,7 +1154,7 @@ export default function SchedulingPage() {
           {
             project_id: projectId,
             user_id: currentUserId,
-            sub_project_id: subProjectId,
+            sub_project_id: subProjectId ?? LAB_AVAILABILITY_ID,
             slots,
             updated_at: updated.updatedAt,
           },
