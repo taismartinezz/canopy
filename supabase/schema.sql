@@ -982,3 +982,21 @@ alter table literature_items
 -- ── Migration 20260715001: subtask display order ──────────────────────────────
 alter table tasks
   add column if not exists display_order integer not null default 0;
+
+-- ── Migration 20260721001: literature-files storage bucket ────────────────────
+-- Run once in the Supabase dashboard or via CLI:
+--   insert into storage.buckets (id, name, public) values ('literature-files', 'literature-files', true)
+--   on conflict (id) do nothing;
+--
+-- RLS policies (copy of task-files pattern):
+-- create policy "project members can upload literature files"
+--   on storage.objects for insert
+--   with check (
+--     bucket_id = 'literature-files' and auth.uid() is not null
+--   );
+-- create policy "authenticated users can read literature files"
+--   on storage.objects for select
+--   using (bucket_id = 'literature-files' and auth.uid() is not null);
+-- create policy "uploader can delete literature files"
+--   on storage.objects for delete
+--   using (bucket_id = 'literature-files' and owner = auth.uid());
