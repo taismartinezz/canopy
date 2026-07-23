@@ -522,6 +522,10 @@ function ZoteroImportModal({ existingItems, onImport, onClose, projectId, curren
   const [zoteroUserId, setZoteroUserId] = useState("");
   const [syncing, setSyncing]   = useState(false);
   const [apiError, setApiError] = useState("");
+  const [collections, setCollections] = useState<{ key: string; name: string }[]>([]);
+  const [collectionsLoading, setCollectionsLoading] = useState(false);
+  const [collectionsError, setCollectionsError] = useState("");
+  const [selectedCollectionKey, setSelectedCollectionKey] = useState("");
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) { if (e.key === "Escape") onClose(); }
@@ -620,6 +624,26 @@ function ZoteroImportModal({ existingItems, onImport, onClose, projectId, curren
     onImport(parsed); setImporting(false);
   }
 
+  async function handleFetchCollections() {
+    if (!apiKey.trim() || !zoteroUserId.trim()) {
+      setCollectionsError("Enter your Zotero user ID and API key first."); return;
+    }
+    setCollectionsLoading(true); setCollectionsError("");
+    try {
+      const res = await fetch("/api/zotero/collections", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ apiKey: apiKey.trim(), zoteroUserId: zoteroUserId.trim() }),
+      });
+      const { collections: cols, error: err } = await res.json() as { collections?: { key: string; name: string }[]; error?: string };
+      if (err || !cols) { setCollectionsError(err ?? "Could not fetch collections"); return; }
+      setCollections(cols);
+      setSelectedCollectionKey(""); // default: entire library
+    } catch (ex) {
+      setCollectionsError(ex instanceof Error ? ex.message : "Could not fetch collections");
+    } finally { setCollectionsLoading(false); }
+  }
+
   async function handleAPISync() {
     if (!apiKey.trim() || !zoteroUserId.trim()) {
       setApiError("Enter your Zotero user ID and API key."); return;
@@ -629,7 +653,11 @@ function ZoteroImportModal({ existingItems, onImport, onClose, projectId, curren
       const res = await fetch("/api/zotero/sync", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ apiKey: apiKey.trim(), zoteroUserId: zoteroUserId.trim() }),
+        body: JSON.stringify({
+          apiKey: apiKey.trim(),
+          zoteroUserId: zoteroUserId.trim(),
+          ...(selectedCollectionKey ? { collectionKey: selectedCollectionKey } : {}),
+        }),
       });
       const { items: raw, error: err } = await res.json() as { items?: CSLJsonItem[]; error?: string };
       if (err || !raw) { setApiError(err ?? "Sync failed"); setSyncing(false); return; }
@@ -686,7 +714,8 @@ function ZoteroImportModal({ existingItems, onImport, onClose, projectId, curren
         {tab === "file" && (
           <>
             <p style={{ fontSize: 12, color: "var(--color-secondary)", marginBottom: 14 }}>
-              In Zotero: <strong>File → Export Library</strong>, then choose <strong>CSL JSON</strong> (citation metadata only) or <strong>Zotero RDF</strong> (also imports notes as annotations and includes file attachment references). File attachments themselves must be re-uploaded separately in the Files tab once imported.
+              In Zotero: <strong>File → Export Library</strong>, then choose <strong>CSL JSON</strong> (citation metadata only) or <strong>Zotero RDF</strong> (also imports notes as annotations and includes file attachment references). File attachments themselves must be re-uploaded separately in the Files tab once imported.<br /><br />
+              <strong>To import a single collection:</strong> right-click the collection in Zotero's left panel → <strong>Export Collection…</strong> — the resulting file format is identical and works the same way here.
             </p>
             <label style={{ display: "block", border: "2px dashed var(--color-border)", borderRadius: 8, padding: "20px 16px", textAlign: "center", cursor: "pointer", marginBottom: 14 }}>
               <Upload size={20} color="var(--color-secondary)" style={{ margin: "0 auto 8px" }} />
@@ -730,22 +759,50 @@ function ZoteroImportModal({ existingItems, onImport, onClose, projectId, curren
             <div className="space-y-3 mb-4">
               <div>
                 <label style={labelStyle}>Zotero User ID</label>
-                <input value={zoteroUserId} onChange={(e) => setZoteroUserId(e.target.value)} placeholder="e.g. 1234567"
-                  style={{ ...inputStyle, width: "100%" }}
+                <input value={zoteroUserId} onChange={(e) => { setZoteroUserId(e.target.value); setCollections([]); }}
+                  placeholder="e.g. 1234567" style={{ ...inputStyle, width: "100%" }}
                   onFocus={(e) => { e.currentTarget.style.borderColor = "var(--color-navy)"; }} onBlur={(e) => { e.currentTarget.style.borderColor = "var(--color-border)"; }} />
               </div>
               <div>
                 <label style={labelStyle}>API Key</label>
-                <input value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="e.g. AbCdEfGhIjKlMnOp"
-                  type="password" style={{ ...inputStyle, width: "100%" }}
+                <input value={apiKey} onChange={(e) => { setApiKey(e.target.value); setCollections([]); }}
+                  placeholder="e.g. AbCdEfGhIjKlMnOp" type="password" style={{ ...inputStyle, width: "100%" }}
                   onFocus={(e) => { e.currentTarget.style.borderColor = "var(--color-navy)"; }} onBlur={(e) => { e.currentTarget.style.borderColor = "var(--color-border)"; }} />
               </div>
             </div>
+
+            {/* Collection picker */}
+            <div className="mb-4">
+              <div className="flex items-center gap-2 mb-2">
+                <label style={labelStyle}>Collection (optional)</label>
+                <button
+                  onClick={handleFetchCollections}
+                  disabled={collectionsLoading || !apiKey.trim() || !zoteroUserId.trim()}
+                  style={{ fontSize: 11, fontWeight: 600, color: "var(--color-navy)", backgroundColor: "transparent", border: "1px solid var(--color-navy)", borderRadius: 5, padding: "2px 8px", cursor: "pointer", opacity: (collectionsLoading || !apiKey.trim() || !zoteroUserId.trim()) ? 0.4 : 1 }}
+                >
+                  {collectionsLoading ? "Loading…" : "Load collections"}
+                </button>
+              </div>
+              {collectionsError && <p style={{ fontSize: 11, color: "var(--color-error)", marginBottom: 6 }}>{collectionsError}</p>}
+              {collections.length > 0 && (
+                <select
+                  value={selectedCollectionKey}
+                  onChange={(e) => setSelectedCollectionKey(e.target.value)}
+                  style={{ ...inputStyle, width: "100%" }}
+                >
+                  <option value="">Entire library</option>
+                  {collections.map((c) => (
+                    <option key={c.key} value={c.key}>{c.name}</option>
+                  ))}
+                </select>
+              )}
+            </div>
+
             {apiError && <p style={{ fontSize: 12, color: "var(--color-error)", marginBottom: 10 }}>{apiError}</p>}
             <button onClick={handleAPISync} disabled={syncing || !apiKey.trim() || !zoteroUserId.trim()}
               className="flex items-center gap-2"
               style={{ fontSize: 13, fontWeight: 700, color: "#fff", backgroundColor: "var(--color-navy)", border: "none", borderRadius: 7, padding: "8px 20px", cursor: "pointer", minHeight: 44, opacity: (syncing || !apiKey.trim() || !zoteroUserId.trim()) ? 0.5 : 1 }}>
-              <Wifi size={14} />{syncing ? "Syncing…" : "Sync library"}
+              <Wifi size={14} />{syncing ? "Syncing…" : (selectedCollectionKey ? `Sync "${collections.find(c => c.key === selectedCollectionKey)?.name ?? "collection"}"` : "Sync library")}
             </button>
           </div>
         )}
@@ -1537,8 +1594,19 @@ function DetailPanelContent({
     setTimeout(() => setCopied(false), 2000);
   }
 
-  function handleSaveNotes() {
+  async function handleSaveNotes() {
+    // Sync local state immediately via parent
     onUpdateItem(item.id, { notes });
+    if (isSupabaseConfigured) {
+      const { error } = await supabase
+        .from("literature_items")
+        .update({ notes })
+        .eq("id", item.id);
+      if (error) {
+        console.error("[Literature] notes save failed:", error);
+        return; // Don't show "Saved ✓" if DB rejected the write
+      }
+    }
     setNotesSaved(true);
     setTimeout(() => setNotesSaved(false), 1500);
   }
@@ -2281,7 +2349,8 @@ export default function LiteraturePage() {
   function updateItem(id: string, updates: Partial<LiteratureItem>) {
     setItems((prev) => prev.map((item) => item.id === id ? { ...item, ...updates } : item));
     if (!isSupabaseConfigured) return;
-    const colMap: Record<string, string> = { notes: "notes", tags: "tags", status: "status", rating: "rating", files: "files" };
+    const colMap: Record<string, string> = { tags: "tags", status: "status", rating: "rating", files: "files" };
+    // notes is handled exclusively by handleSaveNotes (async, with proper error feedback)
     const payload: Record<string, unknown> = {};
     for (const [k, col] of Object.entries(colMap)) {
       if (k in updates) payload[col] = (updates as Record<string, unknown>)[k];
