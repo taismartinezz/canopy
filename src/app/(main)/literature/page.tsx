@@ -226,6 +226,7 @@ function AddItemModal({
       doi: (data.doi as string | null) ?? undefined,
       abstract: (data.abstract as string | null) ?? undefined,
       tags: Array.isArray(data.tags) ? (data.tags as string[]) : [],
+      removedTags: [],
       status: data.status as LiteratureItem["status"],
       rating: 0,
       notes: "",
@@ -374,6 +375,46 @@ export const ANNOT_COLORS: { hex: string; label: string }[] = [
   { hex: "#64748B", label: "Note" },
 ];
 
+// ── Dupe detection + merge helpers ───────────────────────────────────────────
+
+function litLastName(author: string): string {
+  // Handles "Last, First" and "First Last" formats
+  const c = author.indexOf(",");
+  if (c !== -1) return author.slice(0, c).trim().toLowerCase();
+  const parts = author.trim().split(/\s+/);
+  return (parts[parts.length - 1] ?? "").toLowerCase();
+}
+
+function litIsDupe(
+  existing: LiteratureItem,
+  doi: string | undefined,
+  title: string,
+  firstAuthor: string,
+  year: number
+): boolean {
+  if (doi && existing.doi && existing.doi.toLowerCase() === doi.toLowerCase()) return true;
+  if (!doi &&
+      existing.title.toLowerCase() === title.toLowerCase() &&
+      year > 0 && existing.year === year &&
+      firstAuthor && existing.authors.length > 0 &&
+      litLastName(existing.authors[0]) === litLastName(firstAuthor)) {
+    return true;
+  }
+  return false;
+}
+
+function computeMergeUpdates(existing: LiteratureItem, incoming: LiteratureItem): Partial<LiteratureItem> {
+  const u: Partial<LiteratureItem> = {};
+  if (!existing.doi && incoming.doi) u.doi = incoming.doi;
+  if (!existing.abstract && incoming.abstract) u.abstract = incoming.abstract;
+  if (!existing.url && incoming.url) u.url = incoming.url;
+  if (!existing.volume && incoming.volume) u.volume = incoming.volume;
+  if (!existing.pages && incoming.pages) u.pages = incoming.pages;
+  if (!existing.journal && incoming.journal) u.journal = incoming.journal;
+  if ((!existing.year || existing.year === 0) && incoming.year) u.year = incoming.year;
+  return u;
+}
+
 // ── Zotero RDF parser ─────────────────────────────────────────────────────────
 
 type RDFParsedNote = { itemRef: string; html: string; color?: string };
@@ -381,7 +422,8 @@ type RDFParsedNote = { itemRef: string; html: string; color?: string };
 function parseZoteroRDF(content: string, existingItems: LiteratureItem[], projectId: string, currentUserId: string, scope: LibraryScope): {
   items: LiteratureItem[];
   notes: RDFParsedNote[];
-  dupes: number;
+  merges: { existing: LiteratureItem; incoming: LiteratureItem }[];
+  tagUpdates: { id: string; mergedTags: string[] }[];
 } {
   const parser = new DOMParser();
   const doc = parser.parseFromString(content, "application/xml");
@@ -413,7 +455,8 @@ function parseZoteroRDF(content: string, existingItems: LiteratureItem[], projec
 
   const now = new Date().toISOString();
   const items: LiteratureItem[] = [];
-  let dupes = 0;
+  const merges: { existing: LiteratureItem; incoming: LiteratureItem }[] = [];
+  const tagUpdates: { id: string; mergedTags: string[] }[] = [];
 
   for (const itemEl of itemEls) {
     const title = txt(itemEl, "title", "dc") || txt(itemEl, "title", "dcterms");
@@ -422,13 +465,10 @@ function parseZoteroRDF(content: string, existingItems: LiteratureItem[], projec
     const doiRaw = txt(itemEl, "identifier", "dc");
     const doi = /^DOI\s+/i.test(doiRaw) ? doiRaw.replace(/^DOI\s+/i, "").trim() : undefined;
 
-    const isDupe = existingItems.some(
-      (ex) => (doi && ex.doi?.toLowerCase() === doi.toLowerCase()) ||
-               ex.title.toLowerCase() === title.toLowerCase()
-    );
-    if (isDupe) { dupes++; continue; }
+    // Extract all fields first (needed for both new items and merge candidates)
+    const tags = Array.from(itemEl.getElementsByTagNameNS(ns("dc")!, "subject"))
+      .map((e) => e.textContent?.trim()).filter((t): t is string => !!t);
 
-    // Authors from bib:authors → rdf:Seq → rdf:li → foaf:Person
     const authorsEl = el(itemEl, "authors", "bib");
     const authors: string[] = [];
     if (authorsEl) {
@@ -440,11 +480,9 @@ function parseZoteroRDF(content: string, existingItems: LiteratureItem[], projec
       }
     }
 
-    // Year from dc:date or dcterms:dateSubmitted
     const dateStr = txt(itemEl, "date", "dc") || txt(itemEl, "dateSubmitted", "dcterms");
     const year = parseInt(dateStr) || 0;
 
-    // Journal from dcterms:isPartOf → bib:Journal → dc:title
     const isPartOf = el(itemEl, "isPartOf", "dcterms");
     const journal  = isPartOf ? txt(isPartOf, "title", "dc") : undefined;
     const volume   = isPartOf ? txt(isPartOf, "volume", "prism") : undefined;
@@ -452,19 +490,31 @@ function parseZoteroRDF(content: string, existingItems: LiteratureItem[], projec
     const abstract = txt(itemEl, "abstract", "dcterms") || txt(itemEl, "description", "dc");
     const url      = txt(itemEl, "link", "link") || txt(itemEl, "identifier", "link") || undefined;
 
-    // Tags from dc:subject
-    const tags = Array.from(itemEl.getElementsByTagNameNS(ns("dc")!, "subject"))
-      .map((e) => e.textContent?.trim()).filter((t): t is string => !!t);
-
     const tagName = itemEl.localName;
-    items.push({
+    const incomingItem: LiteratureItem = {
       id: crypto.randomUUID(), projectId, scope,
       type: RDF_TYPE_MAP[tagName] ?? "article",
       title, authors, year, journal, doi, abstract, url, volume,
-      tags, status: "unread", rating: 0, notes: "",
+      tags, removedTags: [], status: "unread", rating: 0, notes: "",
       files: [], collections: [], relatedIds: [],
       addedById: currentUserId, addedAt: now, importSource: "zotero_json",
-    });
+    };
+
+    const dupeIdx = existingItems.findIndex(
+      (ex) => litIsDupe(ex, doi, title, authors[0] ?? "", year)
+    );
+    if (dupeIdx !== -1) {
+      const existing = existingItems[dupeIdx];
+      const merged = Array.from(new Set([...existing.tags, ...tags]))
+        .filter((t) => !(existing.removedTags ?? []).includes(t));
+      if (merged.length !== existing.tags.length || merged.some((t) => !existing.tags.includes(t))) {
+        tagUpdates.push({ id: existing.id, mergedTags: merged });
+      }
+      merges.push({ existing, incoming: incomingItem });
+      continue;
+    }
+
+    items.push(incomingItem);
   }
 
   // Extract z:Note elements (Zotero child notes)
@@ -478,7 +528,7 @@ function parseZoteroRDF(content: string, existingItems: LiteratureItem[], projec
     return { itemRef: relation, html, color: color || undefined };
   }).filter((n) => n.html);
 
-  return { items, notes, dupes };
+  return { items, notes, merges, tagUpdates };
 }
 
 // ── Zotero JSON Import Modal ──────────────────────────────────────────────────
@@ -502,15 +552,18 @@ function parseCSLAuthors(a: CSLJsonItem["author"]): string[] {
   return (a ?? []).map((x) => x.literal ?? `${x.given ?? ""} ${x.family ?? ""}`.trim()).filter(Boolean);
 }
 
-function ZoteroImportModal({ existingItems, onImport, onClose, projectId, currentUserId, subProjectId, subProjects }: {
+function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, projectId, currentUserId, subProjectId, subProjects }: {
   existingItems: LiteratureItem[]; onImport: (items: LiteratureItem[]) => void;
+  onUpdateItem: (id: string, updates: Partial<LiteratureItem>) => void;
   onClose: () => void; projectId: string; currentUserId: string; subProjectId: string | null;
   subProjects?: SubProject[];
 }) {
   const [tab, setTab]           = useState<"file" | "api">("file");
   const [parsed, setParsed]     = useState<LiteratureItem[]>([]);
   const [pendingNotes, setPendingNotes] = useState<RDFParsedNote[]>([]);
-  const [dupes, setDupes]       = useState(0);
+  const [pendingTagUpdates, setPendingTagUpdates] = useState<{ id: string; mergedTags: string[] }[]>([]);
+  const [pendingMerges, setPendingMerges] = useState<{ existing: LiteratureItem; incoming: LiteratureItem }[]>([]);
+  const [mergeDupes, setMergeDupes] = useState(true);
   const [fileName, setFileName] = useState("");
   const [error, setError]       = useState("");
   const [importing, setImporting] = useState(false);
@@ -535,42 +588,44 @@ function ZoteroImportModal({ existingItems, onImport, onClose, projectId, curren
 
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]; if (!file) return;
-    setFileName(file.name); setParsed([]); setPendingNotes([]); setError("");
+    setFileName(file.name); setParsed([]); setPendingNotes([]); setPendingTagUpdates([]); setPendingMerges([]); setMergeDupes(true); setError("");
     const reader = new FileReader();
     reader.onload = (ev) => {
       const content = ev.target?.result as string;
       try {
         if (file.name.toLowerCase().endsWith(".rdf")) {
           // Zotero RDF export (multi-item, with notes)
-          const { items, notes, dupes: d } = parseZoteroRDF(content, existingItems, projectId, currentUserId, scope);
-          setParsed(items); setPendingNotes(notes); setDupes(d);
+          const { items, notes, merges, tagUpdates } = parseZoteroRDF(content, existingItems, projectId, currentUserId, scope);
+          setParsed(items); setPendingNotes(notes); setPendingMerges(merges); setPendingTagUpdates(tagUpdates);
         } else {
           // CSL JSON export
           const raw = JSON.parse(content) as CSLJsonItem[];
           const now = new Date().toISOString();
-          let dupeCount = 0;
           const items: LiteratureItem[] = [];
+          const cslMerges: { existing: LiteratureItem; incoming: LiteratureItem }[] = [];
           for (const z of raw) {
             const title = (Array.isArray(z.title) ? z.title[0] : z.title) ?? "";
             const doi = z.DOI?.toLowerCase();
-            const isDupe = existingItems.some(
-              (ex) => (doi && ex.doi?.toLowerCase() === doi) || ex.title.toLowerCase() === title.toLowerCase()
-            );
-            if (isDupe) { dupeCount++; continue; }
-            items.push({
+            const authors = parseCSLAuthors(z.author);
+            const year = z.issued?.["date-parts"]?.[0]?.[0] ?? 0;
+            const incomingItem: LiteratureItem = {
               id: crypto.randomUUID(), projectId, scope,
               type: CSL_TYPE_MAP[z.type ?? ""] ?? "article",
-              title, authors: parseCSLAuthors(z.author),
-              year: z.issued?.["date-parts"]?.[0]?.[0] ?? 0,
+              title, authors, year,
               journal: z["container-title"] ?? z.publisher,
               doi: z.DOI, abstract: z.abstract?.replace(/<[^>]+>/g, ""),
               volume: z.volume, pages: z.page, url: z.URL,
-              tags: [], status: "unread", rating: 0, notes: "",
+              tags: [], removedTags: [], status: "unread", rating: 0, notes: "",
               files: [], collections: [], relatedIds: [],
               addedById: currentUserId, addedAt: now, importSource: "zotero_json",
-            });
+            };
+            const dupeIdx = existingItems.findIndex(
+              (ex) => litIsDupe(ex, doi, title, authors[0] ?? "", year)
+            );
+            if (dupeIdx !== -1) { cslMerges.push({ existing: existingItems[dupeIdx], incoming: incomingItem }); continue; }
+            items.push(incomingItem);
           }
-          setParsed(items); setDupes(dupeCount);
+          setParsed(items); setPendingMerges(cslMerges);
         }
       } catch {
         setError(file.name.toLowerCase().endsWith(".rdf")
@@ -621,7 +676,19 @@ function ZoteroImportModal({ existingItems, onImport, onClose, projectId, curren
       if (annotRows.length > 0)
         await supabase.from("lit_annotations").insert(annotRows);
     }
-    onImport(parsed); setImporting(false);
+    onImport(parsed);
+    // Apply merged tags to any existing dupe items from RDF import
+    if (pendingTagUpdates.length > 0) {
+      pendingTagUpdates.forEach((u) => onUpdateItem(u.id, { tags: u.mergedTags }));
+    }
+    // Merge empty fields from Zotero into existing items if user chose to merge
+    if (mergeDupes && pendingMerges.length > 0) {
+      pendingMerges.forEach(({ existing, incoming }) => {
+        const updates = computeMergeUpdates(existing, incoming);
+        if (Object.keys(updates).length > 0) onUpdateItem(existing.id, updates);
+      });
+    }
+    setImporting(false);
   }
 
   async function handleFetchCollections() {
@@ -662,30 +729,32 @@ function ZoteroImportModal({ existingItems, onImport, onClose, projectId, curren
       const { items: raw, error: err } = await res.json() as { items?: CSLJsonItem[]; error?: string };
       if (err || !raw) { setApiError(err ?? "Sync failed"); setSyncing(false); return; }
       const now = new Date().toISOString();
-      let dupeCount = 0;
       const items: LiteratureItem[] = [];
+      const apiMerges: { existing: LiteratureItem; incoming: LiteratureItem }[] = [];
       for (const z of raw) {
         const title = (Array.isArray(z.title) ? z.title[0] : z.title) ?? "";
         const doi = z.DOI?.toLowerCase();
-        const isDupe = existingItems.some(
-          (ex) => (doi && ex.doi?.toLowerCase() === doi) || ex.title.toLowerCase() === title.toLowerCase()
-        );
-        if (isDupe) { dupeCount++; continue; }
-        items.push({
+        const authors = parseCSLAuthors(z.author);
+        const year = z.issued?.["date-parts"]?.[0]?.[0] ?? 0;
+        const incomingItem: LiteratureItem = {
           id: crypto.randomUUID(), projectId, scope,
           type: CSL_TYPE_MAP[z.type ?? ""] ?? "article",
-          title, authors: parseCSLAuthors(z.author),
-          year: z.issued?.["date-parts"]?.[0]?.[0] ?? 0,
+          title, authors, year,
           journal: z["container-title"] ?? z.publisher,
           doi: z.DOI, abstract: z.abstract?.replace(/<[^>]+>/g, ""),
           volume: z.volume, pages: z.page, url: z.URL,
-          tags: [], status: "unread", rating: 0, notes: "",
+          tags: [], removedTags: [], status: "unread", rating: 0, notes: "",
           files: [], collections: [], relatedIds: [],
           addedById: currentUserId, addedAt: now, importSource: "zotero_api",
-        });
+        };
+        const dupeIdx = existingItems.findIndex(
+          (ex) => litIsDupe(ex, doi, title, authors[0] ?? "", year)
+        );
+        if (dupeIdx !== -1) { apiMerges.push({ existing: existingItems[dupeIdx], incoming: incomingItem }); continue; }
+        items.push(incomingItem);
       }
-      setFileName(`Zotero API — ${items.length + dupeCount} items`);
-      setParsed(items); setDupes(dupeCount);
+      setFileName(`Zotero API — ${items.length + apiMerges.length} items`);
+      setParsed(items); setPendingMerges(apiMerges); setMergeDupes(true);
       setTab("file"); // switch to preview/import flow
     } catch (ex) {
       setApiError(ex instanceof Error ? ex.message : "Sync failed");
@@ -726,7 +795,35 @@ function ZoteroImportModal({ existingItems, onImport, onClose, projectId, curren
             {parsed.length > 0 && (
               <div className="mb-4 px-3 py-3 rounded-lg" style={{ backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)" }}>
                 <p style={{ fontSize: 13, fontWeight: 600, color: "var(--color-body)" }}>{parsed.length} item{parsed.length > 1 ? "s" : ""} ready to import{pendingNotes.length > 0 ? ` + ${pendingNotes.length} note${pendingNotes.length > 1 ? "s" : ""} as annotations` : ""}</p>
-                {dupes > 0 && <p style={{ fontSize: 12, color: "var(--color-secondary)", marginTop: 2 }}>{dupes} duplicate{dupes > 1 ? "s" : ""} skipped (matched by DOI or title)</p>}
+                {pendingMerges.length > 0 && (
+                  <div style={{ marginTop: 8, padding: "8px 10px", borderRadius: 7, backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)" }}>
+                    <div className="flex items-center gap-2 mb-2">
+                      <input type="checkbox" id="merge-dupes" checked={mergeDupes} onChange={(e) => setMergeDupes(e.target.checked)} style={{ cursor: "pointer" }} />
+                      <label htmlFor="merge-dupes" style={{ fontSize: 12, fontWeight: 600, color: "var(--color-body)", cursor: "pointer" }}>
+                        Merge {pendingMerges.length} existing item{pendingMerges.length > 1 ? "s" : ""} (fill in missing fields)
+                      </label>
+                    </div>
+                    {mergeDupes && (
+                      <ul style={{ margin: 0, padding: "0 0 0 16px" }}>
+                        {pendingMerges.map(({ existing, incoming }) => {
+                          const updates = computeMergeUpdates(existing, incoming);
+                          const fields = Object.keys(updates);
+                          return (
+                            <li key={existing.id} style={{ fontSize: 11, color: "var(--color-secondary)", marginBottom: 2 }}>
+                              <span style={{ color: "var(--color-body)", fontWeight: 600 }}>{existing.title.length > 50 ? existing.title.slice(0, 50) + "…" : existing.title}</span>
+                              {fields.length > 0 ? ` → add: ${fields.join(", ")}` : " (no new fields to add)"}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+                    {!mergeDupes && (
+                      <p style={{ fontSize: 11, color: "var(--color-secondary)", margin: 0 }}>
+                        {pendingMerges.length} duplicate{pendingMerges.length > 1 ? "s" : ""} will be skipped
+                      </p>
+                    )}
+                  </div>
+                )}
                 <div className="mt-3">
                   <label style={labelStyle}>Add to</label>
                   <div className="flex rounded-lg p-0.5 mt-1" style={{ backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", width: "fit-content" }}>
@@ -847,10 +944,13 @@ function parseBibTeX(bib: string): Partial<LiteratureItem> {
 
 type DOIMode = "doi" | "bibtex" | "url";
 
-function DOILookupModal({ onSave, onClose, projectId, currentUserId, subProjectId, subProjects }: {
-  onSave: (item: LiteratureItem) => void; onClose: () => void;
+function DOILookupModal({ onSave, onMerge, onClose, projectId, currentUserId, subProjectId, subProjects, existingItems }: {
+  onSave: (item: LiteratureItem) => void;
+  onMerge: (id: string, updates: Partial<LiteratureItem>) => void;
+  onClose: () => void;
   projectId: string; currentUserId: string; subProjectId: string | null;
   subProjects?: SubProject[];
+  existingItems?: LiteratureItem[];
 }) {
   const [mode, setMode]       = useState<DOIMode>("doi");
   const [input, setInput]     = useState("");
@@ -961,13 +1061,49 @@ function DOILookupModal({ onSave, onClose, projectId, currentUserId, subProjectI
     if (!preview?.title?.trim()) return;
     setSaving(true);
     const now = new Date().toISOString();
+    const title = preview.title!;
+    const doi = preview.doi?.toLowerCase();
+    const authors = preview.authors ?? [];
+    const year = preview.year ?? 0;
+
+    // Check for a duplicate in the current library
+    const existing = existingItems?.find((ex) =>
+      litIsDupe(ex, doi, title, authors[0] ?? "", year)
+    );
+    if (existing) {
+      const incomingItem: LiteratureItem = {
+        id: crypto.randomUUID(), projectId, scope,
+        type: preview.type ?? "article", title,
+        authors, year, journal: preview.journal, doi: preview.doi,
+        abstract: preview.abstract, volume: preview.volume,
+        pages: preview.pages, url: preview.url,
+        tags: [], removedTags: [], status: "unread", rating: 0, notes: "",
+        files: [], collections: [], relatedIds: [],
+        addedById: currentUserId, addedAt: now,
+        importSource: mode === "doi" ? "doi" : mode === "bibtex" ? "bibtex" : "url",
+      };
+      const updates = computeMergeUpdates(existing, incomingItem);
+      const fieldList = Object.keys(updates).join(", ");
+      const choice = window.confirm(
+        `"${title.length > 60 ? title.slice(0, 60) + "…" : title}" looks like a duplicate of an existing item.\n\n` +
+        (fieldList ? `Merge → fill in missing fields: ${fieldList}\nCancel → add as a new item` : `Merge → no new fields to add\nCancel → add as a new item`)
+      );
+      if (choice) {
+        if (Object.keys(updates).length > 0) onMerge(existing.id, updates);
+        setSaving(false);
+        onClose();
+        return;
+      }
+      // User chose "Add anyway" — fall through to insert
+    }
+
     const item: LiteratureItem = {
       id: crypto.randomUUID(), projectId, scope,
-      type: preview.type ?? "article", title: preview.title!,
-      authors: preview.authors ?? [], year: preview.year ?? 0,
-      journal: preview.journal, doi: preview.doi, abstract: preview.abstract,
-      volume: preview.volume, pages: preview.pages, url: preview.url,
-      tags: [], status: "unread", rating: 0, notes: "",
+      type: preview.type ?? "article", title,
+      authors, year, journal: preview.journal, doi: preview.doi,
+      abstract: preview.abstract, volume: preview.volume,
+      pages: preview.pages, url: preview.url,
+      tags: [], removedTags: [], status: "unread", rating: 0, notes: "",
       files: [], collections: [], relatedIds: [],
       addedById: currentUserId, addedAt: now,
       importSource: mode === "doi" ? "doi" : mode === "bibtex" ? "bibtex" : "url",
@@ -1110,6 +1246,7 @@ function CollectionsSidebar({
   activeCollection, setActiveCollection, allTags, activeTag, setActiveTag,
   items, allItems,
   showClose, onClose, onAddItem, onCollapse, onImportZotero, onAddByDOI, subProjects,
+  onReadingProgress, showReadingProgress,
 }: {
   scope: LitScope; setScope: (s: LitScope) => void;
   selectedSubProjectId: string | null; setSelectedSubProjectId: (id: string | null) => void;
@@ -1123,6 +1260,8 @@ function CollectionsSidebar({
   onImportZotero?: () => void;
   onAddByDOI?: () => void;
   subProjects?: SubProject[];
+  onReadingProgress?: () => void;
+  showReadingProgress?: boolean;
 }) {
   const totalRead    = items.filter((i) => i.status === "read").length;
   const totalReading = items.filter((i) => i.status === "reading").length;
@@ -1206,6 +1345,20 @@ function CollectionsSidebar({
         )}
       </div>
 
+      {onReadingProgress && (
+        <div style={{ padding: "4px 8px 4px", borderBottom: "1px solid var(--color-border)" }}>
+          <button
+            onClick={onReadingProgress}
+            style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "6px 10px 6px 11px", borderRadius: 7, border: "none", borderLeft: `3px solid ${showReadingProgress ? "#6366F1" : "transparent"}`, cursor: "pointer", backgroundColor: showReadingProgress ? "rgba(99,102,241,0.09)" : "transparent", textAlign: "left", boxSizing: "border-box", fontFamily: "var(--font-roboto)" }}
+            onMouseEnter={(e) => { if (!showReadingProgress) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "rgba(0,0,0,0.04)"; }}
+            onMouseLeave={(e) => { if (!showReadingProgress) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "transparent"; }}
+          >
+            <BarChart2 size={14} color={showReadingProgress ? "#6366F1" : "var(--color-secondary)"} />
+            <span style={{ fontSize: 13, color: showReadingProgress ? "#6366F1" : "var(--color-body)", fontWeight: showReadingProgress ? 600 : 400 }}>Reading Progress</span>
+          </button>
+        </div>
+      )}
+
       <div className="flex-1 overflow-y-auto py-2">
         {[
           { id: "lc0", name: "All Items", iconName: "Library", itemCount: items.length },
@@ -1251,6 +1404,202 @@ function CollectionsSidebar({
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+// ── Reading Progress Dashboard ────────────────────────────────────────────────
+
+const PROGRESS_STATUS_LABELS: Record<AssignmentReadingStatus, string> = {
+  done: "Done",
+  in_progress: "In progress",
+  not_started: "Not started",
+};
+const PROGRESS_STATUS_COLORS: Record<AssignmentReadingStatus, string> = {
+  done: "#10B981",
+  in_progress: "#F59E0B",
+  not_started: "#94A3B8",
+};
+
+type ProgressRow = {
+  id: string; itemId: string; itemTitle: string;
+  itemScope: LibraryScope | null; itemSubProjectId: string | null;
+  assignedBy: string; assigneeId: string; dueDate: string | null;
+  readingStatus: AssignmentReadingStatus; statusHidden: boolean;
+};
+
+function ReadingProgressDashboard({
+  projectId, currentUserId, currentUserRole, teamMembers, scope, selectedSubProjectId,
+}: {
+  projectId: string; currentUserId: string; currentUserRole: UserRole;
+  teamMembers: User[]; scope: LitScope; selectedSubProjectId: string | null;
+}) {
+  const [rows, setRows] = useState<ProgressRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [expandedItem, setExpandedItem] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLoading(true);
+    supabase
+      .from("lit_assigned_readings")
+      .select("id, item_id, assigned_by, assignee_id, due_date, reading_status, status_hidden, literature_items(scope, title, sub_project_id)")
+      .eq("project_id", projectId)
+      .then(({ data }) => {
+        setRows((data ?? []).map((r) => {
+          const li = Array.isArray(r.literature_items) ? r.literature_items[0] : (r.literature_items as Record<string, unknown> | null);
+          return {
+            id: r.id as string,
+            itemId: r.item_id as string,
+            itemTitle: (li?.title as string) ?? "Unknown paper",
+            itemScope: (li?.scope as LibraryScope | null) ?? null,
+            itemSubProjectId: (li?.sub_project_id as string | null) ?? null,
+            assignedBy: r.assigned_by as string,
+            assigneeId: r.assignee_id as string,
+            dueDate: (r.due_date as string | null) ?? null,
+            readingStatus: (r.reading_status as AssignmentReadingStatus) ?? "not_started",
+            statusHidden: (r.status_hidden as boolean) ?? false,
+          };
+        }));
+        setLoading(false);
+      });
+  }, [projectId]);
+
+  const scoped = rows.filter((a) => {
+    if (scope === "all") return true;
+    if (scope === "personal") return a.itemScope === "personal";
+    if (scope === "lab") return a.itemScope === "lab";
+    if (scope === "project") return a.itemScope === "project" && a.itemSubProjectId === selectedSubProjectId;
+    return true;
+  });
+
+  // Researchers see only their own assignments
+  const visible = currentUserRole === "pi" ? scoped : scoped.filter((a) => a.assigneeId === currentUserId);
+
+  const memberMap = new Map<string, ProgressRow[]>();
+  const itemMap = new Map<string, ProgressRow[]>();
+  for (const a of visible) {
+    if (!memberMap.has(a.assigneeId)) memberMap.set(a.assigneeId, []);
+    memberMap.get(a.assigneeId)!.push(a);
+    if (!itemMap.has(a.itemId)) itemMap.set(a.itemId, []);
+    itemMap.get(a.itemId)!.push(a);
+  }
+
+  function getStatus(a: ProgressRow): AssignmentReadingStatus | null {
+    if (a.statusHidden && a.assigneeId !== currentUserId && currentUserRole !== "pi") return null;
+    return a.readingStatus;
+  }
+
+  function memberName(id: string) {
+    if (id === currentUserId) return "You";
+    return teamMembers.find((m) => m.id === id)?.name ?? id.slice(0, 8);
+  }
+
+  if (loading) return (
+    <div className="flex-1 flex items-center justify-center" style={{ color: "var(--color-secondary)", fontSize: 13 }}>
+      Loading reading progress…
+    </div>
+  );
+
+  if (visible.length === 0) return (
+    <div className="flex-1 flex flex-col items-center justify-center gap-3 px-8 text-center">
+      <BarChart2 size={32} color="var(--color-border)" />
+      <p style={{ fontSize: 14, color: "var(--color-secondary)", margin: 0 }}>No assigned readings in this scope.</p>
+      <p style={{ fontSize: 12, color: "var(--color-secondary)", margin: 0 }}>Open any paper and use the Assigned tab to assign it to team members.</p>
+    </div>
+  );
+
+  return (
+    <div className="flex-1 overflow-y-auto px-4 py-4" style={{ fontFamily: "var(--font-roboto)" }}>
+      <h3 style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 16, color: "var(--color-navy)", marginBottom: 16, marginTop: 0 }}>
+        Reading Progress
+      </h3>
+
+      {/* Team overview table — PI only */}
+      {currentUserRole === "pi" && memberMap.size > 0 && (
+        <section className="mb-6">
+          <p style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--color-secondary)", marginBottom: 8 }}>Team overview</p>
+          <div style={{ border: "1px solid var(--color-border)", borderRadius: 8, overflow: "hidden" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+              <thead>
+                <tr style={{ backgroundColor: "var(--color-canvas)" }}>
+                  {["Member", "Total", "Done", "In Progress", "Not Started", "Progress"].map((h) => (
+                    <th key={h} style={{ padding: "8px 12px", textAlign: h === "Member" || h === "Progress" ? "left" : "center", fontWeight: 700, color: "var(--color-secondary)", borderBottom: "1px solid var(--color-border)" }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {[...memberMap.entries()].map(([mid, mrows]) => {
+                  const done = mrows.filter((r) => getStatus(r) === "done").length;
+                  const inProg = mrows.filter((r) => getStatus(r) === "in_progress").length;
+                  const notStarted = mrows.filter((r) => getStatus(r) === "not_started").length;
+                  const total = mrows.length;
+                  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+                  return (
+                    <tr key={mid} style={{ borderBottom: "1px solid var(--color-border)" }}>
+                      <td style={{ padding: "8px 12px", color: "var(--color-body)", fontWeight: 500 }}>{memberName(mid)}</td>
+                      <td style={{ padding: "8px 12px", textAlign: "center", color: "var(--color-body)" }}>{total}</td>
+                      <td style={{ padding: "8px 12px", textAlign: "center", color: "#10B981", fontWeight: 600 }}>{done}</td>
+                      <td style={{ padding: "8px 12px", textAlign: "center", color: "#F59E0B", fontWeight: 600 }}>{inProg}</td>
+                      <td style={{ padding: "8px 12px", textAlign: "center", color: "var(--color-secondary)" }}>{notStarted}</td>
+                      <td style={{ padding: "8px 12px", minWidth: 120 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          <div style={{ flex: 1, height: 6, borderRadius: 3, backgroundColor: "var(--color-border)", overflow: "hidden" }}>
+                            <div style={{ height: "100%", width: `${pct}%`, backgroundColor: "#10B981", borderRadius: 3 }} />
+                          </div>
+                          <span style={{ fontSize: 11, color: "var(--color-secondary)", whiteSpace: "nowrap" }}>{pct}%</span>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {/* Per-paper breakdown */}
+      <section>
+        <p style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--color-secondary)", marginBottom: 8 }}>By paper</p>
+        <div className="space-y-2">
+          {[...itemMap.entries()].map(([itemId, itemRows]) => {
+            const done = itemRows.filter((r) => getStatus(r) === "done").length;
+            const total = itemRows.length;
+            const isExpanded = expandedItem === itemId;
+            return (
+              <div key={itemId} style={{ border: "1px solid var(--color-border)", borderRadius: 8, overflow: "hidden" }}>
+                <button
+                  onClick={() => setExpandedItem(isExpanded ? null : itemId)}
+                  style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", backgroundColor: "var(--color-canvas)", border: "none", cursor: "pointer", textAlign: "left" }}
+                >
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ fontSize: 13, fontWeight: 600, color: "var(--color-body)", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{itemRows[0].itemTitle}</p>
+                  </div>
+                  <span style={{ fontSize: 11, color: done === total ? "#10B981" : "var(--color-secondary)", fontWeight: 600, whiteSpace: "nowrap", flexShrink: 0 }}>{done}/{total} done</span>
+                  <ChevronRight size={14} color="var(--color-secondary)" style={{ transform: isExpanded ? "rotate(90deg)" : "none", transition: "transform 150ms", flexShrink: 0 }} />
+                </button>
+                {isExpanded && (
+                  <div style={{ padding: "6px 12px 10px", backgroundColor: "var(--color-surface)", display: "flex", flexDirection: "column", gap: 4 }}>
+                    {itemRows.map((a) => {
+                      const st = getStatus(a);
+                      return (
+                        <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
+                          <span style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: st ? PROGRESS_STATUS_COLORS[st] : "var(--color-border)", flexShrink: 0, display: "inline-block" }} />
+                          <span style={{ flex: 1, color: "var(--color-body)" }}>{memberName(a.assigneeId)}</span>
+                          <span style={{ color: st ? PROGRESS_STATUS_COLORS[st] : "var(--color-secondary)", fontWeight: st ? 600 : 400 }}>
+                            {st ? PROGRESS_STATUS_LABELS[st] : "—"}
+                          </span>
+                          {a.dueDate && <span style={{ color: "var(--color-secondary)", fontSize: 11, flexShrink: 0 }}>due {a.dueDate}</span>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </section>
     </div>
   );
 }
@@ -1547,31 +1896,24 @@ function DetailPanelContent({
     if (!item.doi) return;
     setRecsLoading(true); setRecsError(""); setRecsFetched(true);
     try {
-      const workRes = await fetch(`https://api.openalex.org/works/doi:${encodeURIComponent(item.doi)}`);
-      if (!workRes.ok) throw new Error("Not found in OpenAlex");
-      const work = await workRes.json();
-      const relatedIds: string[] = (work.related_works ?? []).slice(0, 10);
-      if (!relatedIds.length) { setRecs([]); setRecsLoading(false); return; }
-      const recsRes = await fetch(
-        `https://api.openalex.org/works?filter=ids.openalex:${encodeURIComponent(relatedIds.join("|"))}&per_page=5&select=id,display_name,authorships,publication_year,primary_location,doi`
-      );
-      const { results = [] } = await recsRes.json();
-      setRecs(results.map((w: {
-        id: string; display_name: string;
-        authorships?: Array<{ author: { display_name: string } }>;
-        publication_year?: number;
-        primary_location?: { source?: { display_name?: string } };
-        doi?: string;
-      }) => ({
+      const res = await fetch("/api/literature/recommendations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ doi: item.doi, sourceItemId: item.id, projectId }),
+      });
+      if (!res.ok) throw new Error(`Server error ${res.status}`);
+      const { recommendations = [] } = await res.json() as {
+        recommendations: Array<{
+          title: string; authors: string[];
+          year?: number; journal?: string; doi?: string; openAlexId: string;
+        }>;
+        fromCache?: boolean;
+      };
+      setRecs(recommendations.map((r) => ({
         id: crypto.randomUUID(), sourceItemId: item.id, projectId,
-        title: w.display_name,
-        authors: (w.authorships ?? []).slice(0, 3).map((a) => a.author.display_name),
-        year: w.publication_year,
-        journal: w.primary_location?.source?.display_name,
-        doi: w.doi?.replace("https://doi.org/", ""),
-        openAlexId: w.id,
-        cachedAt: new Date().toISOString(),
-        dismissed: false,
+        title: r.title, authors: r.authors, year: r.year,
+        journal: r.journal, doi: r.doi, openAlexId: r.openAlexId,
+        cachedAt: new Date().toISOString(), dismissed: false,
       })));
     } catch (err) {
       setRecsError(err instanceof Error ? err.message : "Could not load suggestions.");
@@ -1616,15 +1958,19 @@ function DetailPanelContent({
     const tag = tagInput.trim();
     if (!tag || localTags.includes(tag)) { setTagInput(""); return; }
     const updated = [...localTags, tag];
+    // Re-adding a tag clears it from removed_tags so future syncs can restore it
+    const updatedRemoved = (item.removedTags ?? []).filter((t) => t !== tag);
     setLocalTags(updated);
-    onUpdateItem(item.id, { tags: updated });
+    onUpdateItem(item.id, { tags: updated, removedTags: updatedRemoved });
     setTagInput("");
   }
 
   function handleRemoveTag(tag: string) {
-    const updated = localTags.filter((t) => t !== tag);
-    setLocalTags(updated);
-    onUpdateItem(item.id, { tags: updated });
+    const updatedTags = localTags.filter((t) => t !== tag);
+    // Mark tag as explicitly removed so Zotero sync never restores it
+    const updatedRemoved = [...new Set([...(item.removedTags ?? []), tag])];
+    setLocalTags(updatedTags);
+    onUpdateItem(item.id, { tags: updatedTags, removedTags: updatedRemoved });
   }
 
   async function handleFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
@@ -1978,7 +2324,7 @@ function DetailPanelContent({
                         id: crypto.randomUUID(), projectId, scope: item.scope,
                         type: "article", title: rec.title, authors: rec.authors,
                         year: rec.year ?? 0, journal: rec.journal, doi: rec.doi,
-                        tags: [], status: "unread", rating: 0, notes: "",
+                        tags: [], removedTags: [], status: "unread", rating: 0, notes: "",
                         files: [], collections: [], relatedIds: [],
                         addedById: currentUserId, addedAt: new Date().toISOString(),
                       };
@@ -2254,6 +2600,7 @@ export default function LiteraturePage() {
   const [typeFilter, setTypeFilter]     = useState<LiteratureType | "all">("all");
   const [yearFilter, setYearFilter]     = useState<number | "all">("all");
   const [yearSort, setYearSort]         = useState<"desc" | "asc">("desc");
+  const [showReadingProgress, setShowReadingProgress] = useState(false);
 
   useEffect(() => {
     function check() { setIsMobile(window.innerWidth < 768); }
@@ -2322,6 +2669,7 @@ export default function LiteraturePage() {
             url: (row.url as string | null) ?? undefined,
             abstract: (row.abstract as string | null) ?? undefined,
             tags: Array.isArray(row.tags) ? (row.tags as string[]) : [],
+            removedTags: Array.isArray(row.removed_tags) ? (row.removed_tags as string[]) : [],
             status: (row.status as LiteratureItem["status"]) ?? "unread",
             rating: (row.rating as number | null) ?? 0,
             notes: (row.notes as string | null) ?? "",
@@ -2349,7 +2697,7 @@ export default function LiteraturePage() {
   function updateItem(id: string, updates: Partial<LiteratureItem>) {
     setItems((prev) => prev.map((item) => item.id === id ? { ...item, ...updates } : item));
     if (!isSupabaseConfigured) return;
-    const colMap: Record<string, string> = { tags: "tags", status: "status", rating: "rating", files: "files" };
+    const colMap: Record<string, string> = { tags: "tags", removedTags: "removed_tags", status: "status", rating: "rating", files: "files" };
     // notes is handled exclusively by handleSaveNotes (async, with proper error feedback)
     const payload: Record<string, unknown> = {};
     for (const [k, col] of Object.entries(colMap)) {
@@ -2414,6 +2762,7 @@ export default function LiteraturePage() {
 
   const allTags = [...new Set(scopedItems.flatMap((i) => i.tags))].sort();
   const showingDetailMobile = isMobile && selectedItem !== null;
+  const currentUserRole = (teamMembers.find((m) => m.id === currentUserId)?.role ?? "researcher") as UserRole;
 
   // When the detail panel is open on desktop, drop Authors/Year columns so title isn't squeezed
   const narrowList = isMobile || (selectedItem !== null && !isMobile);
@@ -2449,6 +2798,8 @@ export default function LiteraturePage() {
           }}
           onImportZotero={() => setZoteroImportOpen(true)}
           onAddByDOI={() => setDoiLookupOpen(true)}
+          onReadingProgress={() => { setShowReadingProgress((v) => !v); setSelectedItemId(null); }}
+          showReadingProgress={showReadingProgress}
         />
       </div>
 
@@ -2483,12 +2834,24 @@ export default function LiteraturePage() {
           onAddItem={() => { setAddItemOpen(true); setCollectionsOpen(false); }}
           onImportZotero={() => { setZoteroImportOpen(true); setCollectionsOpen(false); }}
           onAddByDOI={() => { setDoiLookupOpen(true); setCollectionsOpen(false); }}
+          onReadingProgress={() => { setShowReadingProgress((v) => !v); setSelectedItemId(null); setCollectionsOpen(false); }}
+          showReadingProgress={showReadingProgress}
         />
       </div>
 
-      {/* Center list */}
+      {/* Center list / reading progress dashboard */}
       {!showingDetailMobile && (
-        <div className="flex flex-col flex-1 min-w-0" style={{ minWidth: 240, overflow: "hidden", borderRight: selectedItem && !isMobile ? "1px solid var(--color-border)" : undefined }}>
+        <div className="flex flex-col flex-1 min-w-0" style={{ minWidth: 240, overflow: "hidden", borderRight: selectedItem && !isMobile && !showReadingProgress ? "1px solid var(--color-border)" : undefined }}>
+        {showReadingProgress ? (
+          <ReadingProgressDashboard
+            projectId={projectId}
+            currentUserId={currentUserId}
+            currentUserRole={currentUserRole}
+            teamMembers={teamMembers}
+            scope={scope}
+            selectedSubProjectId={selectedSubProjectId}
+          />
+        ) : (<>
           <div className="flex items-center gap-2 px-3 md:px-4 py-2.5 flex-wrap" style={{ backgroundColor: "var(--color-surface)", borderBottom: "1px solid var(--color-border)", minHeight: 52 }}>
             <button onClick={() => setCollectionsOpen(true)} className="flex items-center gap-1.5 shrink-0"
               style={{ display: isMobile ? "flex" : "none", fontSize: 12, fontWeight: 600, color: "var(--color-navy)", border: "1px solid var(--color-border)", borderRadius: 7, padding: "6px 10px", backgroundColor: "transparent", cursor: "pointer", minHeight: 44 }}>
@@ -2582,6 +2945,7 @@ export default function LiteraturePage() {
                   );
                 })}
           </div>
+        </>)}
         </div>
       )}
 
@@ -2601,8 +2965,8 @@ export default function LiteraturePage() {
       )}
 
       {addItemOpen && <AddItemModal onSave={addItem} onClose={() => setAddItemOpen(false)} projectId={projectId} currentUserId={currentUserId} subProjectId={subProjectId ?? null} subProjects={subProjects} />}
-      {zoteroImportOpen && <ZoteroImportModal existingItems={items} onImport={importItems} onClose={() => setZoteroImportOpen(false)} projectId={projectId} currentUserId={currentUserId} subProjectId={subProjectId ?? null} subProjects={subProjects} />}
-      {doiLookupOpen && <DOILookupModal onSave={addItemFromDOI} onClose={() => setDoiLookupOpen(false)} projectId={projectId} currentUserId={currentUserId} subProjectId={subProjectId ?? null} subProjects={subProjects} />}
+      {zoteroImportOpen && <ZoteroImportModal existingItems={items} onImport={importItems} onUpdateItem={updateItem} onClose={() => setZoteroImportOpen(false)} projectId={projectId} currentUserId={currentUserId} subProjectId={subProjectId ?? null} subProjects={subProjects} />}
+      {doiLookupOpen && <DOILookupModal onSave={addItemFromDOI} onMerge={updateItem} onClose={() => setDoiLookupOpen(false)} projectId={projectId} currentUserId={currentUserId} subProjectId={subProjectId ?? null} subProjects={subProjects} existingItems={items} />}
     </div>
   );
 }

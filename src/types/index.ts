@@ -177,6 +177,7 @@ export interface LiteratureItem {
   url?: string;
   abstract?: string;
   tags: string[];
+  removedTags: string[];    // Tags explicitly removed by user — excluded from future syncs
   status: ReadStatus;
   rating: number;          // 1–5
   notes?: string;
