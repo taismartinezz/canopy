@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import {
-  Plus, ExternalLink, Trash2, Bookmark, X, Check,
+  Plus, ExternalLink, Trash2, Bookmark, X, Check, Pencil,
   FileText, BookOpen, FlaskConical, ClipboardList, Link2, Code2, Play, Table,
   Users, User as UserIcon,
 } from "lucide-react";
@@ -250,19 +250,23 @@ function AddForm({ onAdd, onCancel }: {
 
 // ── Bookmark card ─────────────────────────────────────────────────────────────
 
-function BookmarkCard({ bm, canDelete, onDelete }: {
+function BookmarkCard({ bm, canDelete, onDelete, onEdit }: {
   bm: BookmarkRow;
   canDelete: boolean;
   onDelete: (id: string) => void;
+  onEdit: (id: string, title: string, url: string) => Promise<void>;
 }) {
   const [deleting, setDeleting] = useState(false);
   const [hovered, setHovered] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState(bm.title);
+  const [editUrl, setEditUrl] = useState(bm.url);
+  const [editSaving, setEditSaving] = useState(false);
   const type = inferType(bm.url);
   const cfg = TYPE_CONFIG[type];
   const Icon = cfg.icon;
 
   async function handleDelete(e: React.MouseEvent) {
-    e.preventDefault();
     e.stopPropagation();
     if (!window.confirm(`Remove "${bm.title}"?\nThis cannot be undone.`)) return;
     setDeleting(true);
@@ -270,12 +274,63 @@ function BookmarkCard({ bm, canDelete, onDelete }: {
     setDeleting(false);
   }
 
+  async function handleSaveEdit(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (!editUrl.trim() || !isValidUrl(editUrl.trim())) return;
+    setEditSaving(true);
+    await onEdit(bm.id, editTitle.trim() || hostname(editUrl.trim()), editUrl.trim());
+    setEditSaving(false);
+    setEditing(false);
+  }
+
+  if (editing) {
+    return (
+      <div
+        style={{
+          display: "flex", flexDirection: "column", gap: 8,
+          backgroundColor: "var(--color-surface)",
+          border: "1px solid var(--color-navy)",
+          borderRadius: 10, padding: 14, minHeight: 148,
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div>
+          <label style={{ fontSize: 11, fontWeight: 700, color: "var(--color-secondary)", display: "block", marginBottom: 3 }}>Title</label>
+          <input
+            value={editTitle}
+            onChange={(e) => setEditTitle(e.target.value)}
+            style={{ width: "100%", boxSizing: "border-box", padding: "7px 10px", fontSize: 12, border: "1px solid var(--color-border)", borderRadius: 6, outline: "none", fontFamily: "var(--font-roboto)", color: "var(--color-body)", backgroundColor: "var(--color-canvas)" }}
+          />
+        </div>
+        <div>
+          <label style={{ fontSize: 11, fontWeight: 700, color: "var(--color-secondary)", display: "block", marginBottom: 3 }}>URL</label>
+          <input
+            value={editUrl}
+            onChange={(e) => setEditUrl(e.target.value)}
+            style={{ width: "100%", boxSizing: "border-box", padding: "7px 10px", fontSize: 12, border: "1px solid var(--color-border)", borderRadius: 6, outline: "none", fontFamily: "var(--font-roboto)", color: "var(--color-body)", backgroundColor: "var(--color-canvas)" }}
+          />
+        </div>
+        <div style={{ display: "flex", gap: 6, justifyContent: "flex-end", marginTop: 4 }}>
+          <button
+            onClick={(e) => { e.stopPropagation(); setEditing(false); setEditTitle(bm.title); setEditUrl(bm.url); }}
+            style={{ fontSize: 12, color: "var(--color-secondary)", background: "none", border: "1px solid var(--color-border)", borderRadius: 6, padding: "5px 12px", cursor: "pointer", minHeight: 32 }}
+          >Cancel</button>
+          <button
+            onClick={handleSaveEdit}
+            disabled={editSaving || !editUrl.trim()}
+            style={{ fontSize: 12, fontWeight: 700, color: "#fff", backgroundColor: "var(--color-navy)", border: "none", borderRadius: 6, padding: "5px 12px", cursor: editSaving ? "not-allowed" : "pointer", minHeight: 32, opacity: editSaving ? 0.7 : 1 }}
+          >{editSaving ? "Saving…" : "Save"}</button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
+      onClick={() => window.open(bm.url, "_blank", "noopener,noreferrer")}
       style={{
-        position: "relative",
         display: "flex",
         flexDirection: "column",
         backgroundColor: "var(--color-surface)",
@@ -285,19 +340,11 @@ function BookmarkCard({ bm, canDelete, onDelete }: {
         minHeight: 148,
         boxShadow: hovered ? "var(--shadow-card)" : "none",
         transition: "border-color 150ms ease, box-shadow 150ms ease",
+        cursor: "pointer",
       }}
     >
-      {/* Cover link — makes the whole card clickable without nesting button inside a */}
-      <a
-        href={bm.url}
-        target="_blank"
-        rel="noopener noreferrer"
-        aria-label={bm.title}
-        style={{ position: "absolute", inset: 0, borderRadius: 10 }}
-      />
-
       {/* Top row: type icon + badge */}
-      <div style={{ position: "relative", zIndex: 1, display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
         <div style={{
           width: 36, height: 36, borderRadius: 8,
           backgroundColor: cfg.bg, display: "flex",
@@ -317,7 +364,6 @@ function BookmarkCard({ bm, canDelete, onDelete }: {
 
       {/* Title */}
       <p style={{
-        position: "relative", zIndex: 1,
         fontSize: 13, fontWeight: 700, color: "var(--color-body)",
         lineHeight: 1.45,
         display: "-webkit-box", WebkitLineClamp: 2,
@@ -329,7 +375,6 @@ function BookmarkCard({ bm, canDelete, onDelete }: {
 
       {/* Domain */}
       <p style={{
-        position: "relative", zIndex: 1,
         fontSize: 11, color: "var(--color-secondary)", marginBottom: 0,
         overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
       }}>
@@ -339,23 +384,34 @@ function BookmarkCard({ bm, canDelete, onDelete }: {
       {/* Spacer */}
       <div style={{ flex: 1 }} />
 
-      {/* Bottom row: contributor · time + delete */}
-      <div style={{ position: "relative", zIndex: 1, display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 14 }}>
+      {/* Bottom row: contributor · time + edit/delete */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 14 }}>
         <span style={{ fontSize: 11, color: "var(--color-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0, paddingRight: 8 }}>
           {bm.adder_name ?? "Unknown"} · {relTime(bm.added_at)}
         </span>
-        {canDelete && (
+        <div style={{ display: "flex", gap: 2, flexShrink: 0 }}>
           <button
-            onClick={handleDelete}
-            disabled={deleting}
-            style={{ flexShrink: 0, width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 6, border: "none", background: "none", cursor: deleting ? "not-allowed" : "pointer", color: "var(--color-secondary)", transition: "background-color 120ms ease, color 120ms ease" }}
-            onMouseEnter={(e) => { const el = e.currentTarget as HTMLElement; el.style.color = "var(--color-error)"; el.style.backgroundColor = "rgba(192,57,43,0.08)"; }}
+            onClick={(e) => { e.stopPropagation(); setEditing(true); }}
+            style={{ width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 6, border: "none", background: "none", cursor: "pointer", color: "var(--color-secondary)", transition: "background-color 120ms ease, color 120ms ease" }}
+            onMouseEnter={(e) => { const el = e.currentTarget as HTMLElement; el.style.color = "var(--color-navy)"; el.style.backgroundColor = "rgba(27,46,75,0.08)"; }}
             onMouseLeave={(e) => { const el = e.currentTarget as HTMLElement; el.style.color = "var(--color-secondary)"; el.style.backgroundColor = "transparent"; }}
-            aria-label="Delete bookmark"
+            aria-label="Edit bookmark"
           >
-            <Trash2 size={12} />
+            <Pencil size={11} />
           </button>
-        )}
+          {canDelete && (
+            <button
+              onClick={handleDelete}
+              disabled={deleting}
+              style={{ width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 6, border: "none", background: "none", cursor: deleting ? "not-allowed" : "pointer", color: "var(--color-secondary)", transition: "background-color 120ms ease, color 120ms ease" }}
+              onMouseEnter={(e) => { const el = e.currentTarget as HTMLElement; el.style.color = "var(--color-error)"; el.style.backgroundColor = "rgba(192,57,43,0.08)"; }}
+              onMouseLeave={(e) => { const el = e.currentTarget as HTMLElement; el.style.color = "var(--color-secondary)"; el.style.backgroundColor = "transparent"; }}
+              aria-label="Delete bookmark"
+            >
+              <Trash2 size={12} />
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -488,6 +544,17 @@ export default function BookmarksPage() {
     if (error) {
       console.error("[Bookmarks] delete error:", error);
       fetchBookmarks();
+    }
+  }
+
+  async function handleEditBookmark(id: string, title: string, url: string) {
+    setBookmarks((prev) => prev.map((b) => b.id === id ? { ...b, title, url } : b));
+    if (isSupabaseConfigured) {
+      const { error } = await supabase.from("bookmarks").update({ title, url }).eq("id", id);
+      if (error) {
+        console.error("[Bookmarks] edit error:", error);
+        fetchBookmarks();
+      }
     }
   }
 
@@ -673,6 +740,7 @@ export default function BookmarksPage() {
                   bm={bm}
                   canDelete={bm.added_by === currentUserId}
                   onDelete={handleDelete}
+                  onEdit={handleEditBookmark}
                 />
               ))}
             </div>

@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
-import { X } from "lucide-react";
+import { useState, useRef } from "react";
+import { X, CalendarDays } from "lucide-react";
 import type { Task, TaskStatus, TaskPriority, User } from "@/types";
 import Avatar from "@/components/ui/Avatar";
 import { STATUS_CONFIG, STATUS_ORDER } from "@/components/tasks/TaskDetailPanel";
+import { CalendarPicker, formatDateLabel } from "@/components/ui/DateTimePicker";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { showToast } from "@/components/ui/Toast";
 import { CURRENT_USER_ID } from "@/lib/mock-data";
@@ -72,6 +73,9 @@ export default function TaskModal({
   );
   const [error, setError]   = useState("");
   const [saving, setSaving] = useState(false);
+  const [showCal, setShowCal] = useState(false);
+  const [calPos, setCalPos]   = useState<{ top: number; left: number } | null>(null);
+  const dueDateBtnRef = useRef<HTMLButtonElement>(null);
 
   function toggleAssignee(id: string) {
     setAssigneeIds((prev) =>
@@ -360,16 +364,41 @@ export default function TaskModal({
           </div>
 
           {/* Due date */}
-          <div>
+          <div style={{ position: "relative" }}>
             <label style={labelStyle}>Due Date</label>
-            <input
-              type="date"
-              value={dueDate}
-              onChange={(e) => setDueDate(e.target.value)}
-              style={{ ...inputStyle, cursor: "pointer" }}
-              onFocus={(e) => { e.currentTarget.style.borderColor = "var(--color-navy)"; }}
-              onBlur={(e)  => { e.currentTarget.style.borderColor = "var(--color-border)"; }}
-            />
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <button
+                ref={dueDateBtnRef}
+                type="button"
+                onClick={(e) => {
+                  const r = e.currentTarget.getBoundingClientRect();
+                  setCalPos({ top: r.bottom + 6, left: r.left });
+                  setShowCal((v) => !v);
+                }}
+                style={{ display: "flex", alignItems: "center", gap: 6, height: 38, padding: "0 12px", fontSize: 13, fontFamily: "var(--font-roboto)", border: "1px solid var(--color-border)", borderRadius: 7, backgroundColor: "var(--color-canvas)", color: dueDate ? "var(--color-body)" : "var(--color-secondary)", cursor: "pointer", flex: 1, justifyContent: "flex-start" }}
+              >
+                <CalendarDays size={13} color="var(--color-secondary)" />
+                {dueDate ? formatDateLabel(dueDate) : "No due date"}
+              </button>
+              {dueDate && (
+                <button
+                  type="button"
+                  onClick={() => { setDueDate(""); setShowCal(false); }}
+                  style={{ fontSize: 14, color: "var(--color-secondary)", background: "none", border: "none", cursor: "pointer", lineHeight: 1, padding: "0 2px" }}
+                  title="Clear due date"
+                >×</button>
+              )}
+            </div>
+            {showCal && calPos && (
+              <CalendarPicker
+                value={dueDate || undefined}
+                accentColor="#1B2E4B"
+                pos={calPos}
+                onSelect={(d) => { setDueDate(d); setShowCal(false); }}
+                onClear={() => { setDueDate(""); setShowCal(false); }}
+                onClose={() => setShowCal(false)}
+              />
+            )}
           </div>
 
           {/* Assignees */}

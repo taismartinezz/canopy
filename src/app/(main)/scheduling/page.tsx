@@ -1097,6 +1097,54 @@ export default function SchedulingPage() {
     fetchStaticData();
   }, [projectId, currentUserId]);
 
+  // Realtime: update overlap grid when any team member saves their availability
+  useEffect(() => {
+    if (!isSupabaseConfigured || !projectId || !currentUserId) return;
+    const channel = supabase
+      .channel(`availability:project:${projectId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "user_availability", filter: `project_id=eq.${projectId}` },
+        (payload) => {
+          if (payload.eventType === "INSERT" || payload.eventType === "UPDATE") {
+            const row = payload.new;
+            const updated: WeeklyAvailability = {
+              userId: row.user_id as string,
+              projectId: row.project_id as string,
+              subProjectId: (row.sub_project_id as string | null) === LAB_AVAILABILITY_ID ? null : ((row.sub_project_id as string | null) ?? null),
+              slots: (row.slots as string[]) ?? [],
+              updatedAt: row.updated_at as string,
+            };
+            setAllAvailabilities((prev) => {
+              const exists = prev.some(
+                (a) => a.userId === updated.userId &&
+                  (a.subProjectId ?? LAB_AVAILABILITY_ID) === (row.sub_project_id as string ?? LAB_AVAILABILITY_ID)
+              );
+              return exists
+                ? prev.map((a) =>
+                    a.userId === updated.userId &&
+                    (a.subProjectId ?? LAB_AVAILABILITY_ID) === (row.sub_project_id as string ?? LAB_AVAILABILITY_ID)
+                      ? updated : a
+                  )
+                : [...prev, updated];
+            });
+          } else if (payload.eventType === "DELETE") {
+            const row = payload.old;
+            setAllAvailabilities((prev) =>
+              prev.filter(
+                (a) => !(
+                  a.userId === (row.user_id as string) &&
+                  (a.subProjectId ?? LAB_AVAILABILITY_ID) === (row.sub_project_id as string ?? LAB_AVAILABILITY_ID)
+                )
+              )
+            );
+          }
+        }
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [projectId, currentUserId]);
+
   // Events effect — fetches all lab/project events + current user's personal events
   useEffect(() => {
     if (!projectId || !currentUserId || !isSupabaseConfigured) return;

@@ -4,10 +4,11 @@
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
-  const { apiKey, zoteroUserId, groupId } = (await request.json()) as {
+  const { apiKey, zoteroUserId, groupId, collectionKey } = (await request.json()) as {
     apiKey?: string;
     zoteroUserId?: string;
     groupId?: string;
+    collectionKey?: string;
   };
 
   if (!apiKey?.trim() || !zoteroUserId?.trim()) {
@@ -18,13 +19,18 @@ export async function POST(request: Request) {
     ? `https://api.zotero.org/groups/${groupId}`
     : `https://api.zotero.org/users/${zoteroUserId}`;
 
+  // When a collection key is provided, scope items to that collection
+  const itemsPath = collectionKey
+    ? `${base}/collections/${collectionKey}/items`
+    : `${base}/items`;
+
   // Fetch in batches of 100 (Zotero max) with CSL JSON format
   const items: unknown[] = [];
   let start = 0;
   const limit = 100;
 
   while (true) {
-    const url = `${base}/items?format=csljson&limit=${limit}&start=${start}&itemType=-attachment`;
+    const url = `${itemsPath}?format=csljson&limit=${limit}&start=${start}&itemType=-attachment`;
     const res = await fetch(url, {
       headers: {
         "Zotero-API-Key": apiKey,
