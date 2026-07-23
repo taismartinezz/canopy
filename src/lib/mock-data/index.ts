@@ -549,6 +549,7 @@ export const LITERATURE_ITEMS: LiteratureItem[] = [
     abstract:
       "This qualitative study examines how unit cohesion relates to moral injury outcomes in military veterans. Thematic analysis of 22 semi-structured interviews revealed that strong unit bonds can both buffer and complicate the experience of moral injury, depending on the nature of the transgressive event.",
     tags: ["moral injury", "veterans", "unit cohesion", "qualitative"],
+    removedTags: [],
     status: "read",
     rating: 5,
     notes:
@@ -583,6 +584,7 @@ export const LITERATURE_ITEMS: LiteratureItem[] = [
     abstract:
       "We examine the psychometric properties of the Moral Injury Outcomes Scale (MIOS) in a sample of 412 combat veterans. Confirmatory factor analysis supports a two-factor structure: transgression-based distress and betrayal-based distress.",
     tags: ["moral injury", "measurement", "psychometrics", "MI-Measure"],
+    removedTags: [],
     status: "read",
     rating: 5,
     notes: "Core measurement paper. Using MIOS subscales in our pilot — see pilot data analysis sheet.",
@@ -607,6 +609,7 @@ export const LITERATURE_ITEMS: LiteratureItem[] = [
     abstract:
       "A systematic review of 34 studies examining vicarious trauma (VT) in researchers who study trauma. Findings reveal that VT is prevalent but underacknowledged in academic research contexts, and that institutional support structures significantly moderate outcomes.",
     tags: ["vicarious trauma", "researchers", "resilience", "systematic review"],
+    removedTags: [],
     status: "reading",
     rating: 4,
     notes: "",
@@ -631,6 +634,7 @@ export const LITERATURE_ITEMS: LiteratureItem[] = [
     abstract:
       "This paper reviews the conceptual framework of post-traumatic growth (PTG) and the empirical evidence supporting it across populations including trauma survivors, cancer patients, and bereaved individuals.",
     tags: ["PTG", "resilience", "longitudinal", "theoretical"],
+    removedTags: [],
     status: "read",
     rating: 4,
     files: [],
@@ -652,6 +656,7 @@ export const LITERATURE_ITEMS: LiteratureItem[] = [
     abstract:
       "APA guidance document covering consent procedures, risk minimization, researcher self-care, and IRB considerations specific to trauma research with vulnerable participant groups.",
     tags: ["IRB", "ethics", "trauma research", "consent"],
+    removedTags: [],
     status: "read",
     rating: 3,
     files: [],
@@ -673,6 +678,7 @@ export const LITERATURE_ITEMS: LiteratureItem[] = [
     abstract:
       "We evaluate the acceptability and comprehension of digital consent procedures across three trauma research studies. Findings suggest digital consent is comparable to in-person procedures when accompanied by synchronous clarification opportunities.",
     tags: ["digital consent", "research methods", "IRB"],
+    removedTags: [],
     status: "unread",
     rating: 0,
     files: [],

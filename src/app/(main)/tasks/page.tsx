@@ -1057,7 +1057,11 @@ export default function TasksPage() {
   // Scope counts for sidebar (computed from full unfiltered task list)
   const scopeCounts = {
     all: tasks.length,
-    personal: tasks.filter(t => t.scope === "personal").length,
+    // Personal = own personal-scoped tasks OR any task explicitly assigned to this user
+    personal: tasks.filter(t =>
+      t.scope === "personal" ||
+      (currentUserId && t.assigneeIds.includes(currentUserId))
+    ).length,
     lab: tasks.filter(t => t.scope === "lab" || !t.scope).length,
   };
   const projectTaskCounts: Record<string, number> = {};
@@ -1075,7 +1079,9 @@ export default function TasksPage() {
 
   const scopedTasks = tasks.filter(t => {
     if (taskScope === "all") return true;
-    if (taskScope === "personal") return t.scope === "personal";
+    if (taskScope === "personal")
+      return t.scope === "personal" ||
+        (currentUserId ? t.assigneeIds.includes(currentUserId) : false);
     if (taskScope === "lab") return t.scope === "lab" || !t.scope;
     return t.scope === "project" && t.subProjectId === taskScope;
   });
