@@ -1442,16 +1442,21 @@ function ReadingProgressDashboard({
     setLoading(true);
     supabase
       .from("lit_assigned_readings")
-      .select("id, item_id, assigned_by, assignee_id, due_date, reading_status, status_hidden, literature_items(scope, title, sub_project_id)")
+      .select("id, item_id, assigned_by, assignee_id, due_date, reading_status, status_hidden, literature_items(library, title, sub_project_id)")
       .eq("project_id", projectId)
-      .then(({ data }) => {
+      .then(({ data, error }) => {
+        if (error) {
+          console.error("ReadingProgressDashboard fetch error:", error.message, error.details);
+          setLoading(false);
+          return;
+        }
         setRows((data ?? []).map((r) => {
           const li = Array.isArray(r.literature_items) ? r.literature_items[0] : (r.literature_items as Record<string, unknown> | null);
           return {
             id: r.id as string,
             itemId: r.item_id as string,
             itemTitle: (li?.title as string) ?? "Unknown paper",
-            itemScope: (li?.scope as LibraryScope | null) ?? null,
+            itemScope: (li?.library as LibraryScope | null) ?? null,
             itemSubProjectId: (li?.sub_project_id as string | null) ?? null,
             assignedBy: r.assigned_by as string,
             assigneeId: r.assignee_id as string,
