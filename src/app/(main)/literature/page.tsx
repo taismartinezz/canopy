@@ -8,6 +8,7 @@ import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { useProject } from "@/context/ProjectContext";
 import type { LiteratureItem, ReadStatus, LiteratureType, LibraryScope, LiteratureFile, LitAnnotation, LitAssignedReading, LitRecommendation, AssignmentReadingStatus, SubProject, User, UserRole } from "@/types";
 import Avatar from "@/components/ui/Avatar";
+import PDFViewer from "@/components/literature/PDFViewer";
 import {
   Plus, Search, Download, FileText, File as FileIcon, X, Trash2,
   Tag, Star, ExternalLink, Copy, Check, ChevronLeft, ChevronRight,
@@ -1782,6 +1783,8 @@ function DetailPanelContent({
   const [recsLoading, setRecsLoading]   = useState(false);
   const [recsError, setRecsError]       = useState("");
   const [recsFetched, setRecsFetched]   = useState(false);
+  const [showPDFViewer, setShowPDFViewer]       = useState(false);
+  const [pdfViewerInitialPage, setPdfViewerInitialPage] = useState(1);
 
   // Sync when item switches
   useEffect(() => {
@@ -1801,7 +1804,7 @@ function DetailPanelContent({
       for (const m of teamMembers) seedMap[m.id] = m.name;
       setAnnotAuthors(seedMap);
 
-      supabase.from("lit_annotations").select("*").eq("item_id", item.id).order("created_at")
+      supabase.from("lit_annotations").select("id, item_id, author_id, text, comment, page_ref, parent_id, created_at, color, page_number, bbox").eq("item_id", item.id).order("created_at")
         .then(async ({ data }) => {
           if (!data) return;
           const mapped = data.map((r) => ({
@@ -1811,6 +1814,8 @@ function DetailPanelContent({
             parentId: r.parent_id as string | undefined,
             createdAt: r.created_at as string,
             color: r.color as string | undefined,
+            pageNumber: r.page_number as number | undefined,
+            bbox: r.bbox as { x: number; y: number; w: number; h: number } | undefined,
           }));
           setAnnotations(mapped);
           // Fetch profiles for any IDs not already in teamMembers (e.g. past members)
@@ -2122,24 +2127,41 @@ function DetailPanelContent({
             </div>
 
             <div className="flex gap-2 pt-2">
-              {(item.url || item.doi) ? (
-                <a
-                  href={item.url ?? `https://doi.org/${item.doi}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg"
-                  style={{ backgroundColor: "var(--color-navy)", color: "#fff", fontSize: 12, fontWeight: 700, border: "none", borderRadius: 7, cursor: "pointer", minHeight: 44, textDecoration: "none" }}
-                >
-                  <FileText size={13} /> {item.url ? "Open PDF" : "Open via DOI"}
-                </a>
-              ) : (
-                <button disabled className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg"
-                  style={{ backgroundColor: "var(--color-border)", color: "var(--color-secondary)", fontSize: 12, fontWeight: 700, border: "none", borderRadius: 7, cursor: "not-allowed", minHeight: 44 }}
-                  title="No URL or DOI available for this paper">
-                  <FileText size={13} /> Open PDF
-                </button>
-              )}
-              {item.doi && item.url && (
+              {(() => {
+                const pdfFile = localFiles.find((f) => f.url && f.name.toLowerCase().endsWith(".pdf"));
+                if (pdfFile?.url) {
+                  return (
+                    <button
+                      onClick={() => { setPdfViewerInitialPage(1); setShowPDFViewer(true); }}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg"
+                      style={{ backgroundColor: "var(--color-navy)", color: "#fff", fontSize: 12, fontWeight: 700, border: "none", borderRadius: 7, cursor: "pointer", minHeight: 44 }}
+                    >
+                      <FileText size={13} /> View PDF
+                    </button>
+                  );
+                }
+                if (item.url || item.doi) {
+                  return (
+                    <a
+                      href={item.url ?? `https://doi.org/${item.doi}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg"
+                      style={{ backgroundColor: "var(--color-navy)", color: "#fff", fontSize: 12, fontWeight: 700, border: "none", borderRadius: 7, cursor: "pointer", minHeight: 44, textDecoration: "none" }}
+                    >
+                      <FileText size={13} /> {item.url ? "Open PDF" : "Open via DOI"}
+                    </a>
+                  );
+                }
+                return (
+                  <button disabled className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg"
+                    style={{ backgroundColor: "var(--color-border)", color: "var(--color-secondary)", fontSize: 12, fontWeight: 700, border: "none", borderRadius: 7, cursor: "not-allowed", minHeight: 44 }}
+                    title="No URL or DOI available for this paper">
+                    <FileText size={13} /> Open PDF
+                  </button>
+                );
+              })()}
+              {item.doi && (item.url || localFiles.some((f) => f.url && f.name.toLowerCase().endsWith(".pdf"))) && (
                 <a href={`https://doi.org/${item.doi}`} target="_blank" rel="noopener noreferrer"
                   className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg"
                   style={{ backgroundColor: "transparent", color: "var(--color-navy)", fontSize: 12, fontWeight: 700, border: "1px solid var(--color-navy)", borderRadius: 7, cursor: "pointer", minHeight: 44, textDecoration: "none" }}>
@@ -2397,6 +2419,16 @@ function DetailPanelContent({
               : annotations.filter((a) => !a.parentId).map((a) => (
                 <div key={a.id} className="mb-3">
                   <div className="px-3 py-3 rounded-lg" style={{ backgroundColor: "var(--color-canvas)", border: `1px solid ${a.color ?? "var(--color-border)"}`, borderLeft: a.color ? `3px solid ${a.color}` : "1px solid var(--color-border)" }}>
+                    {/* Page badge for PDF-anchored annotations */}
+                    {a.pageNumber != null && (
+                      <button
+                        onClick={() => { setPdfViewerInitialPage(a.pageNumber!); setShowPDFViewer(true); }}
+                        style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 4, backgroundColor: a.color ? `${a.color}22` : "rgba(27,46,75,0.07)", color: a.color ?? "var(--color-navy)", border: `1px solid ${a.color ?? "var(--color-navy)"}`, cursor: "pointer", marginBottom: 6 }}
+                        title="Open PDF at this page"
+                      >
+                        <FileText size={9} /> p.{a.pageNumber}
+                      </button>
+                    )}
                     {a.text && (
                       <blockquote style={{ borderLeft: `3px solid ${a.color ?? "var(--color-navy)"}`, paddingLeft: 10, margin: "0 0 8px", fontSize: 12, color: "var(--color-secondary)", fontStyle: "italic", lineHeight: 1.5 }}>
                         {a.text}
@@ -2575,6 +2607,23 @@ function DetailPanelContent({
           );
         })()}
       </div>
+
+      {/* PDF Viewer overlay — position: fixed, renders above everything */}
+      {showPDFViewer && (() => {
+        const pdfFile = localFiles.find((f) => f.url && f.name.toLowerCase().endsWith(".pdf"));
+        if (!pdfFile?.url) { setShowPDFViewer(false); return null; }
+        return (
+          <PDFViewer
+            url={pdfFile.url}
+            itemId={item.id}
+            currentUserId={currentUserId}
+            annotations={annotations}
+            onAnnotationAdded={(a) => setAnnotations((prev) => [...prev, a])}
+            onClose={() => setShowPDFViewer(false)}
+            initialPage={pdfViewerInitialPage}
+          />
+        );
+      })()}
     </div>
   );
 }
