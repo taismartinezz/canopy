@@ -55,5 +55,46 @@ export async function POST(request: Request) {
     if (start > 5000) break; // safety cap
   }
 
-  return Response.json({ items });
+  // Second pass: discover PDF attachments stored in Zotero cloud (imported_file only).
+  // Fetches all attachments in native JSON format and maps parentItem key → attachment info.
+  // A separate /api/zotero/fetch-pdf call later downloads and stores each file.
+  const pdfAttachments: Record<string, { attachmentKey: string; filename: string }> = {};
+  let attStart = 0;
+  while (true) {
+    const attUrl = `${itemsPath}?itemType=attachment&format=json&limit=100&start=${attStart}`;
+    const attRes = await fetch(attUrl, {
+      headers: { "Zotero-API-Key": apiKey, "Zotero-API-Version": "3" },
+    });
+    if (!attRes.ok) break; // silently skip if attachment discovery fails
+    const attBatch = (await attRes.json()) as Array<{
+      key: string;
+      data: {
+        parentItem?: string;
+        contentType?: string;
+        title?: string;
+        linkMode?: string;
+      };
+    }>;
+    if (!Array.isArray(attBatch) || attBatch.length === 0) break;
+    for (const att of attBatch) {
+      const { parentItem, contentType, title, linkMode } = att.data ?? {};
+      // Only include PDFs that are actually stored in Zotero cloud
+      if (
+        contentType === "application/pdf" &&
+        linkMode === "imported_file" &&
+        parentItem &&
+        !pdfAttachments[parentItem]  // first PDF attachment per item wins
+      ) {
+        pdfAttachments[parentItem] = {
+          attachmentKey: att.key,
+          filename: title ?? "attachment.pdf",
+        };
+      }
+    }
+    if (attBatch.length < 100) break;
+    attStart += 100;
+    if (attStart > 5000) break;
+  }
+
+  return Response.json({ items, pdfAttachments });
 }

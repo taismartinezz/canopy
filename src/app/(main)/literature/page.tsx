@@ -178,6 +178,8 @@ function AddItemModal({
   const [status, setStatus]   = useState<ReadStatus>("unread");
   const [error, setError]     = useState("");
   const [saving, setSaving]   = useState(false);
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const pdfInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) { if (e.key === "Escape") onClose(); }
@@ -246,7 +248,26 @@ function AddItemModal({
       item_type: "paper",
     }).then(({ error }) => { if (error) console.error("[Literature] activity insert error:", error); });
 
-    onSave(newItem);
+    // Optional PDF upload
+    let finalItem: LiteratureItem = { ...newItem };
+    if (pdfFile && isSupabaseConfigured) {
+      const fileId = crypto.randomUUID();
+      const storagePath = `${projectId}/${newItem.id}/${fileId}-${pdfFile.name}`;
+      const { error: upErr } = await supabase.storage.from("literature-files").upload(storagePath, pdfFile);
+      if (!upErr) {
+        const url = supabase.storage.from("literature-files").getPublicUrl(storagePath).data.publicUrl;
+        const newFile: LiteratureFile = {
+          id: fileId, name: pdfFile.name, size: pdfFile.size,
+          uploaderId: currentUserId, uploadedAt: new Date().toISOString(), ocrStatus: null, url, storagePath,
+        };
+        await supabase.from("literature_items").update({ files: [newFile] }).eq("id", newItem.id);
+        finalItem = { ...newItem, files: [newFile] };
+      } else {
+        console.warn("[AddItem] PDF upload failed:", upErr.message);
+      }
+    }
+
+    onSave(finalItem);
   }
 
   return (
@@ -353,12 +374,33 @@ function AddItemModal({
           </div>
         </div>
 
+        {/* Optional PDF attachment */}
+        <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--color-border)" }}>
+          <label style={labelStyle}>PDF (optional)</label>
+          <input ref={pdfInputRef} type="file" accept=".pdf" className="hidden" onChange={(e) => setPdfFile(e.target.files?.[0] ?? null)} />
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => pdfInputRef.current?.click()}
+              style={{ fontSize: 12, fontWeight: 600, padding: "5px 12px", borderRadius: 6, border: "1px solid var(--color-border)", backgroundColor: "var(--color-canvas)", color: "var(--color-body)", cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}
+            >
+              <Upload size={12} />{pdfFile ? pdfFile.name : "Attach PDF"}
+            </button>
+            {pdfFile && (
+              <button onClick={() => { setPdfFile(null); if (pdfInputRef.current) pdfInputRef.current.value = ""; }}
+                style={{ background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", padding: 2 }} aria-label="Remove PDF">
+                <X size={13} color="var(--color-secondary)" />
+              </button>
+            )}
+          </div>
+        </div>
+
         <div className="flex justify-end gap-2 mt-6">
           <button onClick={onClose} style={{ fontSize: 13, fontWeight: 600, color: "var(--color-body)", border: "1px solid var(--color-border)", borderRadius: 7, padding: "8px 16px", backgroundColor: "transparent", cursor: "pointer", minHeight: 44, fontFamily: "var(--font-roboto)" }}>Cancel</button>
           <button onClick={handleSave} disabled={saving} style={{ fontSize: 13, fontWeight: 700, color: "#fff", backgroundColor: "var(--color-navy)", border: "none", borderRadius: 7, padding: "8px 20px", cursor: saving ? "default" : "pointer", minHeight: 44, fontFamily: "var(--font-roboto)", opacity: saving ? 0.7 : 1 }}
             onMouseEnter={(e) => { if (!saving) (e.currentTarget as HTMLElement).style.backgroundColor = "var(--color-navy-hover)"; }}
             onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "var(--color-navy)"; }}
-          >{saving ? "Saving…" : "Add item"}</button>
+          >{saving ? (pdfFile ? "Uploading…" : "Saving…") : "Add item"}</button>
         </div>
       </div>
     </div>
@@ -425,6 +467,7 @@ function parseZoteroRDF(content: string, existingItems: LiteratureItem[], projec
   notes: RDFParsedNote[];
   merges: { existing: LiteratureItem; incoming: LiteratureItem }[];
   tagUpdates: { id: string; mergedTags: string[] }[];
+  pdfLinks: { itemId: string; filename: string }[];
 } {
   const parser = new DOMParser();
   const doc = parser.parseFromString(content, "application/xml");
@@ -454,10 +497,23 @@ function parseZoteroRDF(content: string, existingItems: LiteratureItem[], projec
     "Article, BookSection, Book, Thesis, Report, ConferencePaper, Document, Presentation"
   ));
 
+  // Build a map: rdf:about value (e.g. "#item_3") → PDF filename
+  // from z:Attachment elements that have link:type = "application/pdf"
+  const attachmentFilenameMap = new Map<string, string>();
+  for (const attEl of Array.from(doc.getElementsByTagNameNS(ns("z")!, "Attachment"))) {
+    const about = attEl.getAttributeNS(ns("rdf")!, "about");
+    const type = txt(attEl, "type", "link");
+    const title = txt(attEl, "title", "dc");
+    if (about && type === "application/pdf" && title) {
+      attachmentFilenameMap.set(about, title);
+    }
+  }
+
   const now = new Date().toISOString();
   const items: LiteratureItem[] = [];
   const merges: { existing: LiteratureItem; incoming: LiteratureItem }[] = [];
   const tagUpdates: { id: string; mergedTags: string[] }[] = [];
+  const pdfLinks: { itemId: string; filename: string }[] = [];
 
   for (const itemEl of itemEls) {
     const title = txt(itemEl, "title", "dc") || txt(itemEl, "title", "dcterms");
@@ -515,6 +571,15 @@ function parseZoteroRDF(content: string, existingItems: LiteratureItem[], projec
       continue;
     }
 
+    // Check for PDF attachment links via link:link rdf:resource → z:Attachment
+    for (const linkEl of Array.from(itemEl.getElementsByTagNameNS(ns("link")!, "link"))) {
+      const resource = linkEl.getAttributeNS(ns("rdf")!, "resource");
+      if (resource && attachmentFilenameMap.has(resource)) {
+        pdfLinks.push({ itemId: incomingItem.id, filename: attachmentFilenameMap.get(resource)! });
+        break; // first PDF attachment per item only
+      }
+    }
+
     items.push(incomingItem);
   }
 
@@ -529,7 +594,7 @@ function parseZoteroRDF(content: string, existingItems: LiteratureItem[], projec
     return { itemRef: relation, html, color: color || undefined };
   }).filter((n) => n.html);
 
-  return { items, notes, merges, tagUpdates };
+  return { items, notes, merges, tagUpdates, pdfLinks };
 }
 
 // ── Zotero JSON Import Modal ──────────────────────────────────────────────────
@@ -581,6 +646,16 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
   const [collectionsError, setCollectionsError] = useState("");
   const [selectedCollectionKey, setSelectedCollectionKey] = useState("");
 
+  // PDF attachment state — API sync
+  const [pdfAttachments, setPdfAttachments] = useState<Record<string, { attachmentKey: string; filename: string }>>({});
+  const [pdfKeyMap, setPdfKeyMap]           = useState<Record<string, string>>({}); // uuid → zotero key
+  // PDF attachment state — RDF file import
+  const [parsedPDFLinks, setParsedPDFLinks] = useState<{ itemId: string; filename: string }[]>([]);
+  const [selectedPDFFiles, setSelectedPDFFiles] = useState<File[]>([]);
+  const pdfInputRef = useRef<HTMLInputElement>(null);
+  // Upload progress feedback
+  const [uploadStatus, setUploadStatus]     = useState("");
+
   useEffect(() => {
     function onKey(e: KeyboardEvent) { if (e.key === "Escape") onClose(); }
     document.addEventListener("keydown", onKey);
@@ -590,14 +665,16 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]; if (!file) return;
     setFileName(file.name); setParsed([]); setPendingNotes([]); setPendingTagUpdates([]); setPendingMerges([]); setMergeDupes(true); setError("");
+    setParsedPDFLinks([]); setSelectedPDFFiles([]); setPdfAttachments({}); setPdfKeyMap({});
     const reader = new FileReader();
     reader.onload = (ev) => {
       const content = ev.target?.result as string;
       try {
         if (file.name.toLowerCase().endsWith(".rdf")) {
           // Zotero RDF export (multi-item, with notes)
-          const { items, notes, merges, tagUpdates } = parseZoteroRDF(content, existingItems, projectId, currentUserId, scope);
+          const { items, notes, merges, tagUpdates, pdfLinks } = parseZoteroRDF(content, existingItems, projectId, currentUserId, scope);
           setParsed(items); setPendingNotes(notes); setPendingMerges(merges); setPendingTagUpdates(tagUpdates);
+          setParsedPDFLinks(pdfLinks);
         } else {
           // CSL JSON export
           const raw = JSON.parse(content) as CSLJsonItem[];
@@ -689,7 +766,76 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
         if (Object.keys(updates).length > 0) onUpdateItem(existing.id, updates);
       });
     }
+
+    // Upload PDFs from API sync (server-side Zotero download → Supabase Storage)
+    const hasPdfAtts = Object.keys(pdfAttachments).length > 0;
+    if (hasPdfAtts && apiKey.trim()) {
+      for (const item of parsed) {
+        const zKey = pdfKeyMap[item.id];
+        if (!zKey) continue;
+        const att = pdfAttachments[zKey];
+        if (!att) continue;
+        setUploadStatus(`Fetching PDF: ${att.filename}…`);
+        try {
+          const pdfRes = await fetch("/api/zotero/fetch-pdf", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              apiKey: apiKey.trim(), zoteroUserId: zoteroUserId.trim(),
+              attachmentKey: att.attachmentKey, projectId, itemId: item.id, filename: att.filename,
+            }),
+          });
+          if (pdfRes.ok) {
+            const { url, storagePath, name, size, fileId } = await pdfRes.json() as {
+              url: string; storagePath: string; name: string; size: number; fileId: string;
+            };
+            const newFile: LiteratureFile = {
+              id: fileId, name, size, uploaderId: currentUserId,
+              uploadedAt: new Date().toISOString(), ocrStatus: null, url, storagePath,
+            };
+            await supabase.from("literature_items").update({ files: [newFile] }).eq("id", item.id);
+            onUpdateItem(item.id, { files: [newFile] });
+          } else {
+            const { error: pdfErr } = await pdfRes.json() as { error?: string };
+            console.warn("[ZoteroImport] PDF fetch skipped:", att.filename, pdfErr);
+          }
+        } catch (ex) {
+          console.warn("[ZoteroImport] PDF fetch error:", att.filename, ex);
+        }
+      }
+    }
+
+    // Upload PDFs from local file picker (RDF export with "Export Files" checked)
+    if (parsedPDFLinks.length > 0 && selectedPDFFiles.length > 0) {
+      for (const { itemId, filename } of parsedPDFLinks) {
+        const file = selectedPDFFiles.find((f) => f.name === filename);
+        const item = parsed.find((i) => i.id === itemId);
+        if (!file || !item) continue;
+        setUploadStatus(`Uploading PDF: ${file.name}…`);
+        try {
+          const fileId = crypto.randomUUID();
+          const storagePath = `${projectId}/${item.id}/${fileId}-${file.name}`;
+          const { error: upErr } = await supabase.storage.from("literature-files").upload(storagePath, file);
+          if (!upErr) {
+            const url = supabase.storage.from("literature-files").getPublicUrl(storagePath).data.publicUrl;
+            const newFile: LiteratureFile = {
+              id: fileId, name: file.name, size: file.size, uploaderId: currentUserId,
+              uploadedAt: new Date().toISOString(), ocrStatus: null, url, storagePath,
+            };
+            await supabase.from("literature_items").update({ files: [newFile] }).eq("id", item.id);
+            onUpdateItem(item.id, { files: [newFile] });
+          } else {
+            console.warn("[ZoteroImport] local PDF upload error:", file.name, upErr.message);
+          }
+        } catch (ex) {
+          console.warn("[ZoteroImport] local PDF upload error:", file.name, ex);
+        }
+      }
+    }
+
+    setUploadStatus("");
     setImporting(false);
+    onClose();
   }
 
   async function handleFetchCollections() {
@@ -716,7 +862,7 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
     if (!apiKey.trim() || !zoteroUserId.trim()) {
       setApiError("Enter your Zotero user ID and API key."); return;
     }
-    setSyncing(true); setApiError("");
+    setSyncing(true); setApiError(""); setPdfAttachments({}); setPdfKeyMap({});
     try {
       const res = await fetch("/api/zotero/sync", {
         method: "POST",
@@ -727,18 +873,28 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
           ...(selectedCollectionKey ? { collectionKey: selectedCollectionKey } : {}),
         }),
       });
-      const { items: raw, error: err } = await res.json() as { items?: CSLJsonItem[]; error?: string };
+      const { items: raw, pdfAttachments: apiPdfAtts, error: err } = await res.json() as {
+        items?: CSLJsonItem[];
+        pdfAttachments?: Record<string, { attachmentKey: string; filename: string }>;
+        error?: string;
+      };
       if (err || !raw) { setApiError(err ?? "Sync failed"); setSyncing(false); return; }
+      setPdfAttachments(apiPdfAtts ?? {});
       const now = new Date().toISOString();
       const items: LiteratureItem[] = [];
       const apiMerges: { existing: LiteratureItem; incoming: LiteratureItem }[] = [];
+      const newKeyMap: Record<string, string> = {};
       for (const z of raw) {
         const title = (Array.isArray(z.title) ? z.title[0] : z.title) ?? "";
         const doi = z.DOI?.toLowerCase();
         const authors = parseCSLAuthors(z.author);
         const year = z.issued?.["date-parts"]?.[0]?.[0] ?? 0;
+        const itemId = crypto.randomUUID();
+        // Extract Zotero key from CSL id URI (e.g. ".../items/ABCD1234" → "ABCD1234")
+        const zoteroKey = (z as {id?: string}).id?.split("/").pop();
+        if (zoteroKey) newKeyMap[itemId] = zoteroKey;
         const incomingItem: LiteratureItem = {
-          id: crypto.randomUUID(), projectId, scope,
+          id: itemId, projectId, scope,
           type: CSL_TYPE_MAP[z.type ?? ""] ?? "article",
           title, authors, year,
           journal: z["container-title"] ?? z.publisher,
@@ -756,6 +912,7 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
       }
       setFileName(`Zotero API — ${items.length + apiMerges.length} items`);
       setParsed(items); setPendingMerges(apiMerges); setMergeDupes(true);
+      setPdfKeyMap(newKeyMap);
       setTab("file"); // switch to preview/import flow
     } catch (ex) {
       setApiError(ex instanceof Error ? ex.message : "Sync failed");
@@ -784,8 +941,8 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
         {tab === "file" && (
           <>
             <p style={{ fontSize: 12, color: "var(--color-secondary)", marginBottom: 14 }}>
-              In Zotero: <strong>File → Export Library</strong>, then choose <strong>CSL JSON</strong> (citation metadata only) or <strong>Zotero RDF</strong> (also imports notes as annotations and includes file attachment references). File attachments themselves must be re-uploaded separately in the Files tab once imported.<br /><br />
-              <strong>To import a single collection:</strong> right-click the collection in Zotero's left panel → <strong>Export Collection…</strong> — the resulting file format is identical and works the same way here.
+              In Zotero: <strong>File → Export Library</strong>, then choose <strong>CSL JSON</strong> (citation metadata only) or <strong>Zotero RDF</strong> (with <em>Export Files</em> checked to include PDFs). API sync also auto-attaches PDFs stored in Zotero cloud.<br /><br />
+              <strong>To import a single collection:</strong> right-click the collection in Zotero's left panel → <strong>Export Collection…</strong>
             </p>
             <label style={{ display: "block", border: "2px dashed var(--color-border)", borderRadius: 8, padding: "20px 16px", textAlign: "center", cursor: "pointer", marginBottom: 14 }}>
               <Upload size={20} color="var(--color-secondary)" style={{ margin: "0 auto 8px" }} />
@@ -844,6 +1001,43 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
                     </div>
                   )}
                 </div>
+              </div>
+            )}
+
+            {/* Second file picker: PDF files from Zotero "Export Files" folder (RDF only) */}
+            {parsedPDFLinks.length > 0 && (
+              <div className="mt-3 px-3 py-3 rounded-lg" style={{ backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)" }}>
+                <p style={{ fontSize: 12, fontWeight: 600, color: "var(--color-body)", marginBottom: 4 }}>
+                  {parsedPDFLinks.length} PDF attachment{parsedPDFLinks.length > 1 ? "s" : ""} found in this RDF
+                </p>
+                <p style={{ fontSize: 11, color: "var(--color-secondary)", marginBottom: 8 }}>
+                  In Zotero, export with <strong>Export Files</strong> checked. Then select the PDF files from the exported <em>files/</em> folder below (optional — skip to import metadata only).
+                </p>
+                <input
+                  ref={pdfInputRef}
+                  type="file"
+                  accept=".pdf"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => {
+                    const files = Array.from(e.target.files ?? []);
+                    setSelectedPDFFiles(files);
+                  }}
+                />
+                <button
+                  onClick={() => pdfInputRef.current?.click()}
+                  style={{ fontSize: 12, fontWeight: 600, padding: "5px 12px", borderRadius: 6, border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", color: "var(--color-body)", cursor: "pointer" }}
+                >
+                  <Upload size={11} style={{ display: "inline", marginRight: 5 }} />
+                  {selectedPDFFiles.length > 0
+                    ? `${selectedPDFFiles.length} PDF${selectedPDFFiles.length > 1 ? "s" : ""} selected`
+                    : "Select PDF files"}
+                </button>
+                {selectedPDFFiles.length > 0 && (
+                  <p style={{ fontSize: 11, color: "var(--color-secondary)", marginTop: 5 }}>
+                    {parsedPDFLinks.filter(l => selectedPDFFiles.some(f => f.name === l.filename)).length} of {parsedPDFLinks.length} matched by filename
+                  </p>
+                )}
               </div>
             )}
           </>
@@ -910,7 +1104,7 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
           {tab === "file" && (
             <button onClick={handleImport} disabled={!parsed.length || importing}
               style={{ fontSize: 13, fontWeight: 700, color: "#fff", backgroundColor: "var(--color-navy)", border: "none", borderRadius: 7, padding: "8px 20px", cursor: (!parsed.length || importing) ? "default" : "pointer", minHeight: 44, opacity: (!parsed.length || importing) ? 0.5 : 1 }}>
-              {importing ? "Importing…" : `Import ${parsed.length > 0 ? parsed.length + " item" + (parsed.length > 1 ? "s" : "") : ""}`}
+              {uploadStatus || (importing ? "Importing…" : `Import ${parsed.length > 0 ? parsed.length + " item" + (parsed.length > 1 ? "s" : "") : ""}`)}
             </button>
           )}
         </div>
