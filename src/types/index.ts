@@ -196,6 +196,10 @@ export interface LiteratureCollection {
   itemCount: number;
 }
 
+export interface AnnotationBbox {
+  x: number; y: number; w: number; h: number;  // 0–1 fractions of page canvas dimensions
+}
+
 export interface LitAnnotation {
   id: string;
   itemId: string;
@@ -207,6 +211,8 @@ export interface LitAnnotation {
   createdAt: string;
   updatedAt?: string;
   color?: string;        // hex color tag e.g. "#3B82F6"; undefined = no tag
+  pageNumber?: number;   // 1-indexed PDF page; only set for PDF-anchored annotations
+  bbox?: AnnotationBbox; // normalized position within that page; only set with pageNumber
 }
 
 export interface LitReadingStatus {
