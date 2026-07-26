@@ -2,6 +2,14 @@
 
 A research lab management platform built for trauma, psychology, and sensitive-population research teams. Canopy replaces the scattered collection of Slack threads, email chains, and spreadsheets that most labs rely on — bringing tasks, scheduling, journaling, and literature into one privacy-respecting tool.
 
+Live app: [canopy-tawny-six.vercel.app](https://canopy-tawny-six.vercel.app)
+
+## Product context
+
+Research teams working with vulnerable populations (trauma survivors and other sensitive-population studies) were coordinating tasks, scheduling, and emotional check-ins across tools that were never built to protect participant or researcher privacy. Before writing any code, I ran 2 contextual inquiries and a competitive analysis to understand how these teams actually worked day to day, then designed the product privacy-first from the start rather than bolting privacy on later.
+
+I built and shipped an MVP, then iterated based on usability testing with real users. Canopy is now live and continuously deployed (154+ deployments), and I'm currently leading an IRB submission for a 20+ participant study to formally evaluate it with research teams.
+
 ## Modules
 
 **Tasks** — Kanban board for managing lab work across the full research lifecycle: protocol development, data collection, analysis, and publication. Supports drag-and-drop, priorities, assignees, due dates, file attachments, and real-time activity feeds.
@@ -18,30 +26,12 @@ A research lab management platform built for trauma, psychology, and sensitive-p
 
 ## Tech stack
 
-- **Framework:** Next.js 15 (App Router)
-- **Database & Auth:** Supabase (Postgres + Row-Level Security)
-- **Styling:** CSS custom properties — no CSS framework, consistent design tokens throughout
-- **Drag & drop:** @dnd-kit/core
-- **Icons:** Lucide React
-- **Fonts:** Lora (headings) + Roboto (UI)
-
-## Running locally
-
-```bash
-npm install
-npm run dev
-```
-
-Open [http://localhost:3000](http://localhost:3000). The app runs in demo mode (local auth, empty state defaults) if no Supabase credentials are configured.
-
-To connect a real database, create `.env.local`:
-
-```
-NEXT_PUBLIC_SUPABASE_URL=your-project-url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
-```
-
-Then run `supabase/schema.sql` in your Supabase SQL editor to create all tables and RLS policies.
+- Framework: Next.js 15 (App Router)
+- Database & Auth: Supabase (Postgres + Row-Level Security)
+- Styling: CSS custom properties — no CSS framework, consistent design tokens throughout
+- Drag & drop: @dnd-kit/core
+- Icons: Lucide React
+- Fonts: Lora (headings) + Roboto (UI)
 
 ## Design principles
 
