@@ -17,7 +17,7 @@ import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { useProject } from "@/context/ProjectContext";
 import type { Task, TaskStatus, TaskPriority, User, UserRole } from "@/types";
 import Avatar from "@/components/ui/Avatar";
-import Toast, { showToast } from "@/components/ui/Toast";
+import Toast, { showToast, showUndoToast } from "@/components/ui/Toast";
 import TaskDetailPanel, {
   STATUS_CONFIG, STATUS_ORDER, PriorityBadge, AssigneeStack,
 } from "@/components/tasks/TaskDetailPanel";
@@ -1307,7 +1307,14 @@ export default function TasksPage() {
                     key={task.id}
                     task={task}
                     onClick={() => setSelectedTask(task)}
-                    onToggleDone={() => moveTask(task.id, task.status === "done" ? "todo" : "done")}
+                    onToggleDone={() => {
+                      const prevStatus = task.status;
+                      const newStatus: TaskStatus = prevStatus === "done" ? "todo" : "done";
+                      moveTask(task.id, newStatus);
+                      if (newStatus === "done") {
+                        showUndoToast("Marked as done", () => moveTask(task.id, prevStatus));
+                      }
+                    }}
                     onMoveStatus={(s) => moveTask(task.id, s)}
                     onUpdateAssignees={(ids) => handleUpdateTaskAssignees(task.id, ids)}
                     onUpdateDueDate={(d) => handleUpdateTaskDueDate(task.id, d)}
@@ -1362,6 +1369,7 @@ export default function TasksPage() {
           projectId={projectId}
           scope={taskScope === "personal" ? "personal" : isSubProjectScope ? "project" : "lab"}
           subProjectId={isSubProjectScope ? taskScope : null}
+          subProjects={subProjects}
         />
       )}
 
