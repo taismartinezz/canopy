@@ -2,7 +2,7 @@
 
 import { useState, useRef } from "react";
 import { X, CalendarDays } from "lucide-react";
-import type { Task, TaskStatus, TaskPriority, User } from "@/types";
+import type { Task, TaskStatus, TaskPriority, User, SubProject } from "@/types";
 import Avatar from "@/components/ui/Avatar";
 import { STATUS_CONFIG, STATUS_ORDER } from "@/components/tasks/TaskDetailPanel";
 import { CalendarPicker, formatDateLabel } from "@/components/ui/DateTimePicker";
@@ -49,6 +49,7 @@ export interface TaskModalProps {
   projectId?: string;
   scope?: string;
   subProjectId?: string | null;
+  subProjects?: SubProject[];
 }
 
 export default function TaskModal({
@@ -62,6 +63,7 @@ export default function TaskModal({
   projectId = "",
   scope = "lab",
   subProjectId = null,
+  subProjects = [],
 }: TaskModalProps) {
   const [title, setTitle]             = useState(task?.title ?? "");
   const [description, setDescription] = useState(task?.description ?? "");
@@ -71,6 +73,9 @@ export default function TaskModal({
   const [assigneeIds, setAssigneeIds] = useState<string[]>(
     task?.assigneeIds ?? (currentUserId ? [currentUserId] : [])
   );
+  // Project selector: encoded as "lab" | "personal" | "<subProjectId>"
+  const defaultScopeKey = scope === "project" && subProjectId ? subProjectId : scope;
+  const [scopeKey, setScopeKey] = useState<string>(defaultScopeKey);
   const [error, setError]   = useState("");
   const [saving, setSaving] = useState(false);
   const [showCal, setShowCal] = useState(false);
@@ -118,6 +123,8 @@ export default function TaskModal({
     const userId = session?.user?.id ?? currentUserId ?? CURRENT_USER_ID;
 
     if (mode === "add") {
+      const resolvedScope = scopeKey === "lab" || scopeKey === "personal" ? scopeKey : "project";
+      const resolvedSubProjectId = resolvedScope === "project" ? scopeKey : null;
       const payload = {
         project_id: projectId,
         created_by: userId,
@@ -127,8 +134,8 @@ export default function TaskModal({
         priority,
         due_date: dueDate || null,
         archived: false,
-        scope,
-        sub_project_id: subProjectId ?? null,
+        scope: resolvedScope,
+        sub_project_id: resolvedSubProjectId,
       };
       const { data, error: insertError } = await supabase
         .from("tasks")
@@ -362,6 +369,24 @@ export default function TaskModal({
               </select>
             </div>
           </div>
+
+          {/* Project — only shown in add mode when sub-projects exist */}
+          {mode === "add" && subProjects.length > 0 && (
+            <div>
+              <label style={labelStyle}>Project</label>
+              <select
+                value={scopeKey}
+                onChange={(e) => setScopeKey(e.target.value)}
+                style={{ ...inputStyle, cursor: "pointer" }}
+              >
+                <option value="lab">Lab (all projects)</option>
+                {subProjects.map((sp) => (
+                  <option key={sp.id} value={sp.id}>{sp.name}</option>
+                ))}
+                <option value="personal">Personal</option>
+              </select>
+            </div>
+          )}
 
           {/* Due date */}
           <div style={{ position: "relative" }}>

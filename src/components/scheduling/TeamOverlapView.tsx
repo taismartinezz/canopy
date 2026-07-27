@@ -75,28 +75,25 @@ export default function TeamOverlapView({ availabilities, teamMembers, onPropose
         )}
       </div>
 
-      {/* Legend */}
-      <div className="flex items-center gap-3 mb-4 flex-wrap">
-        <span style={{ fontSize: 11, color: "var(--color-secondary)", fontWeight: 600 }}>Free:</span>
-        {[0, 1, 2, 3, 4].map((n) => (
-          <div key={n} className="flex items-center gap-1">
-            <div
-              style={{
-                width: 16,
-                height: 16,
-                borderRadius: 3,
-                backgroundColor: heatColor(n, 4),
-                border: "1px solid rgba(27,46,75,0.15)",
-              }}
-            />
-            <span style={{ fontSize: 11, color: "var(--color-secondary)" }}>{n}</span>
+      {/* Legend — steps scaled to actual member count */}
+      {(() => {
+        const intermediates: number[] = total <= 5
+          ? Array.from({ length: total }, (_, i) => i)
+          : [0, Math.round(total * 0.25), Math.round(total * 0.5), Math.round(total * 0.75)];
+        const swatch = (n: number, label: string) => (
+          <div key={label} className="flex items-center gap-1">
+            <div style={{ width: 16, height: 16, borderRadius: 3, backgroundColor: heatColor(n, total), border: "1px solid rgba(27,46,75,0.15)" }} />
+            <span style={{ fontSize: 11, color: "var(--color-secondary)" }}>{label}</span>
           </div>
-        ))}
-        <div className="flex items-center gap-1">
-          <div style={{ width: 16, height: 16, borderRadius: 3, backgroundColor: heatColor(total, total), border: "1px solid rgba(27,46,75,0.15)" }} />
-          <span style={{ fontSize: 11, color: "var(--color-secondary)" }}>All ({total})</span>
-        </div>
-      </div>
+        );
+        return (
+          <div className="flex items-center gap-3 mb-4 flex-wrap">
+            <span style={{ fontSize: 11, color: "var(--color-secondary)", fontWeight: 600 }}>Free:</span>
+            {intermediates.map((n) => swatch(n, String(n)))}
+            {swatch(total, `All (${total})`)}
+          </div>
+        );
+      })()}
 
       <div className="relative select-none overflow-x-auto">
         <div

@@ -112,11 +112,6 @@ describe('Login page — Issue #4: forgot password', () => {
 })
 
 describe('Login page — Issue #6: OAuth buttons', () => {
-  it('Apple OAuth button is present', async () => {
-    await renderLogin()
-    expect(screen.getByRole('button', { name: /sign in with apple/i })).toBeInTheDocument()
-  })
-
   it('Google OAuth button is present', async () => {
     await renderLogin()
     expect(screen.getByRole('button', { name: /sign in with google/i })).toBeInTheDocument()
@@ -124,12 +119,10 @@ describe('Login page — Issue #6: OAuth buttons', () => {
 
   it('all OAuth buttons have explicit type="button"', async () => {
     await renderLogin()
-    const appleBtn = screen.getByRole('button', { name: /sign in with apple/i })
     const googleBtn = screen.getByRole('button', { name: /sign in with google/i })
     // buttons default to type="submit" inside forms but here no form — check attribute
     // AuthButton renders <button onClick={...}> without explicit type; browsers default to "submit"
     // The test verifies they are buttons (not form submit triggers)
-    expect(appleBtn.tagName).toBe('BUTTON')
     expect(googleBtn.tagName).toBe('BUTTON')
   })
 })

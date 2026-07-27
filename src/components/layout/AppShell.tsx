@@ -772,19 +772,20 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           {/* Desktop: lab name */}
           <div className="hidden md:flex items-center min-w-0">
             {project?.name && (
-              <span style={{ fontSize: 12, color: "var(--color-secondary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 200 }}>
+              <Link href="/" style={{ fontSize: 12, color: "var(--color-secondary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 200, textDecoration: "none" }}
+                className="transition-opacity hover:opacity-70">
                 {project.name}
-              </span>
+              </Link>
             )}
           </div>
 
           <div className="flex items-center gap-2 ml-auto">
-            {/* Institution badge — sm and up */}
+            {/* Institution badge — links to team page */}
             {project?.institution && (
-              <span className="hidden sm:inline-block px-3 py-1 shrink-0"
-                style={{ backgroundColor: "var(--color-navy)", color: "#fff", borderRadius: 20, fontSize: 11, fontWeight: 600, whiteSpace: "nowrap" }}>
+              <Link href="/team" className="hidden sm:inline-block px-3 py-1 shrink-0 transition-opacity hover:opacity-80"
+                style={{ backgroundColor: "var(--color-navy)", color: "#fff", borderRadius: 20, fontSize: 11, fontWeight: 600, whiteSpace: "nowrap", textDecoration: "none" }}>
                 {project.institution}
-              </span>
+              </Link>
             )}
 
             {/* Density toggle */}

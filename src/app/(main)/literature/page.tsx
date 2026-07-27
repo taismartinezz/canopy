@@ -14,7 +14,7 @@ import {
   Tag, Star, ExternalLink, Copy, Check, ChevronLeft, ChevronRight,
   Book, BarChart2, GraduationCap,
   Library, ClipboardList, Brain, Microscope, Heart,
-  Upload, Link2, MessageSquare, Zap, UserCheck, RefreshCw, Eye, EyeOff, Wifi, Undo2,
+  Upload, Link2, MessageSquare, Zap, UserCheck, RefreshCw, Eye, EyeOff, Wifi, Undo2, Pencil,
 } from "lucide-react";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -650,10 +650,16 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
   const [zoteroUserId, setZoteroUserId] = useState("");
   const [syncing, setSyncing]   = useState(false);
   const [apiError, setApiError] = useState("");
+  const [groups, setGroups]     = useState<{ id: string; name: string }[]>([]);
+  const [selectedGroupId, setSelectedGroupId] = useState("");
   const [collections, setCollections] = useState<{ key: string; name: string }[]>([]);
   const [collectionsLoading, setCollectionsLoading] = useState(false);
   const [collectionsError, setCollectionsError] = useState("");
   const [selectedCollectionKey, setSelectedCollectionKey] = useState("");
+
+  // Dropzone drag state (file tab)
+  const [isDragOver, setIsDragOver] = useState(false);
+  const dragCounterRef = useRef(0);
 
   // PDF attachment state — API sync
   const [pdfAttachments, setPdfAttachments] = useState<Record<string, { attachmentKey: string; filename: string }>>({});
@@ -671,8 +677,7 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]; if (!file) return;
+  function processFile(file: File) {
     setFileName(file.name); setParsed([]); setPendingNotes([]); setPendingTagUpdates([]); setPendingMerges([]); setMergeDupes(true); setError("");
     setParsedPDFLinks([]); setSelectedPDFFiles([]); setPdfAttachments({}); setPdfKeyMap({});
     const reader = new FileReader();
@@ -721,6 +726,31 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
       }
     };
     reader.readAsText(file);
+  }
+
+  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]; if (file) processFile(file);
+    e.target.value = ""; // reset so re-selecting the same file triggers onChange
+  }
+
+  function handleDropzoneDragEnter(e: React.DragEvent) {
+    e.preventDefault();
+    dragCounterRef.current++;
+    setIsDragOver(true);
+  }
+
+  function handleDropzoneDragLeave(e: React.DragEvent) {
+    e.preventDefault();
+    dragCounterRef.current = Math.max(0, dragCounterRef.current - 1);
+    if (dragCounterRef.current === 0) setIsDragOver(false);
+  }
+
+  function handleDropzoneDrop(e: React.DragEvent) {
+    e.preventDefault();
+    dragCounterRef.current = 0;
+    setIsDragOver(false);
+    const file = e.dataTransfer.files[0];
+    if (file) processFile(file);
   }
 
   async function handleImport() {
@@ -856,11 +886,20 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
       const res = await fetch("/api/zotero/collections", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ apiKey: apiKey.trim(), zoteroUserId: zoteroUserId.trim() }),
+        body: JSON.stringify({
+          apiKey: apiKey.trim(),
+          zoteroUserId: zoteroUserId.trim(),
+          ...(selectedGroupId ? { groupId: selectedGroupId } : {}),
+        }),
       });
-      const { collections: cols, error: err } = await res.json() as { collections?: { key: string; name: string }[]; error?: string };
-      if (err || !cols) { setCollectionsError(err ?? "Could not fetch collections"); return; }
-      setCollections(cols);
+      const { collections: cols, groups: grps, error: err } = await res.json() as {
+        collections?: { key: string; name: string }[];
+        groups?: { id: string; name: string }[];
+        error?: string;
+      };
+      if (err) { setCollectionsError(err); return; }
+      setCollections(cols ?? []);
+      if (grps) setGroups(grps);
       setSelectedCollectionKey(""); // default: entire library
     } catch (ex) {
       setCollectionsError(ex instanceof Error ? ex.message : "Could not fetch collections");
@@ -879,6 +918,7 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
         body: JSON.stringify({
           apiKey: apiKey.trim(),
           zoteroUserId: zoteroUserId.trim(),
+          ...(selectedGroupId ? { groupId: selectedGroupId } : {}),
           ...(selectedCollectionKey ? { collectionKey: selectedCollectionKey } : {}),
         }),
       });
@@ -953,9 +993,27 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
               In Zotero: <strong>File → Export Library</strong>, then choose <strong>CSL JSON</strong> (citation metadata only) or <strong>Zotero RDF</strong> (with <em>Export Files</em> checked to include PDFs). API sync also auto-attaches PDFs stored in Zotero cloud.<br /><br />
               <strong>To import a single collection:</strong> right-click the collection in Zotero's left panel → <strong>Export Collection…</strong>
             </p>
-            <label style={{ display: "block", border: "2px dashed var(--color-border)", borderRadius: 8, padding: "20px 16px", textAlign: "center", cursor: "pointer", marginBottom: 14 }}>
-              <Upload size={20} color="var(--color-secondary)" style={{ margin: "0 auto 8px" }} />
-              <p style={{ fontSize: 12, color: fileName ? "var(--color-body)" : "var(--color-secondary)" }}>{fileName || "Click to select a .json or .rdf file"}</p>
+            <label
+              style={{
+                display: "block",
+                border: `2px dashed ${isDragOver ? "var(--color-navy)" : "var(--color-border)"}`,
+                borderRadius: 8,
+                padding: "20px 16px",
+                textAlign: "center",
+                cursor: "pointer",
+                marginBottom: 14,
+                backgroundColor: isDragOver ? "rgba(27,46,75,0.04)" : "transparent",
+                transition: "border-color 0.12s, background-color 0.12s",
+              }}
+              onDragEnter={handleDropzoneDragEnter}
+              onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; }}
+              onDragLeave={handleDropzoneDragLeave}
+              onDrop={handleDropzoneDrop}
+            >
+              <Upload size={20} color={isDragOver ? "var(--color-navy)" : "var(--color-secondary)"} style={{ margin: "0 auto 8px" }} />
+              <p style={{ fontSize: 12, color: isDragOver ? "var(--color-navy)" : fileName ? "var(--color-body)" : "var(--color-secondary)" }}>
+                {isDragOver ? "Drop your file here" : (fileName || "Click to select or drag a .json or .rdf file")}
+              </p>
               <input type="file" accept=".json,.rdf" className="hidden" onChange={handleFile} />
             </label>
             {error && <p style={{ fontSize: 12, color: "var(--color-error)", marginBottom: 10 }}>{error}</p>}
@@ -1072,19 +1130,34 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
               </div>
             </div>
 
-            {/* Collection picker */}
+            {/* Collection picker + group library selector */}
             <div className="mb-4">
               <div className="flex items-center gap-2 mb-2">
-                <label style={labelStyle}>Collection (optional)</label>
+                <label style={labelStyle}>Library &amp; Collection</label>
                 <button
                   onClick={handleFetchCollections}
                   disabled={collectionsLoading || !apiKey.trim() || !zoteroUserId.trim()}
                   style={{ fontSize: 11, fontWeight: 600, color: "var(--color-navy)", backgroundColor: "transparent", border: "1px solid var(--color-navy)", borderRadius: 5, padding: "2px 8px", cursor: "pointer", opacity: (collectionsLoading || !apiKey.trim() || !zoteroUserId.trim()) ? 0.4 : 1 }}
                 >
-                  {collectionsLoading ? "Loading…" : "Load collections"}
+                  {collectionsLoading ? "Loading…" : "Load"}
                 </button>
               </div>
               {collectionsError && <p style={{ fontSize: 11, color: "var(--color-error)", marginBottom: 6 }}>{collectionsError}</p>}
+              {/* Group selector — shown when the user has group libraries */}
+              {groups.length > 0 && (
+                <div className="mb-2">
+                  <select
+                    value={selectedGroupId}
+                    onChange={(e) => { setSelectedGroupId(e.target.value); setCollections([]); setSelectedCollectionKey(""); }}
+                    style={{ ...inputStyle, width: "100%", marginBottom: 6 }}
+                  >
+                    <option value="">Personal library</option>
+                    {groups.map((g) => (
+                      <option key={g.id} value={g.id}>{g.name} (group)</option>
+                    ))}
+                  </select>
+                </div>
+              )}
               {collections.length > 0 && (
                 <select
                   value={selectedCollectionKey}
@@ -1990,6 +2063,14 @@ function DetailPanelContent({
   const [localRating, setLocalRating]     = useState<number>(item.rating);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Editable DOI / URL
+  const [editingDoi, setEditingDoi] = useState(false);
+  const [localDoi, setLocalDoi]     = useState(item.doi ?? "");
+  const [doiError, setDoiError]     = useState("");
+  const [editingUrl, setEditingUrl] = useState(false);
+  const [localUrl, setLocalUrl]     = useState(item.url ?? "");
+  const [urlError, setUrlError]     = useState("");
+
   const [annotations, setAnnotations]   = useState<LitAnnotation[]>([]);
   const [annotAuthors, setAnnotAuthors] = useState<Record<string, string>>({});
   const [newAnnotText, setNewAnnotText] = useState("");
@@ -2014,6 +2095,10 @@ function DetailPanelContent({
     setLocalFiles(item.files);
     setLocalStatus(item.status);
     setLocalRating(item.rating);
+    setLocalDoi(item.doi ?? "");
+    setLocalUrl(item.url ?? "");
+    setEditingDoi(false); setDoiError("");
+    setEditingUrl(false); setUrlError("");
     setTab("Info");
     setAnnotations([]); setAssigned([]); setRecs([]); setRecsFetched(false);
     setShowPDFViewer(false); setPdfViewerExternalUrl(null);
@@ -2160,6 +2245,20 @@ function DetailPanelContent({
   function updateRating(r: number) {
     setLocalRating(r);
     onUpdateItem(item.id, { rating: r });
+  }
+
+  function saveDoi() {
+    const v = localDoi.trim();
+    if (v && !/^10\.\d+\/.+/.test(v)) { setDoiError("Must start with 10. and contain a /"); return; }
+    setDoiError(""); setEditingDoi(false);
+    onUpdateItem(item.id, { doi: v || undefined });
+  }
+
+  function saveUrl() {
+    const v = localUrl.trim();
+    if (v) { try { new URL(v); } catch { setUrlError("Enter a valid URL (include https://)"); return; } }
+    setUrlError(""); setEditingUrl(false);
+    onUpdateItem(item.id, { url: v || undefined });
   }
 
   function handleCopy() {
@@ -2313,12 +2412,64 @@ function DetailPanelContent({
       <div className="flex-1 overflow-y-auto">
         {tab === "Info" && (
           <div className="px-4 py-4 space-y-3">
-            {[["Authors", toAuthorsArray(item.authors).join("; ") || "-"], ["Year", String(item.year)], ["Journal", item.journal ?? item.publisher ?? "-"], ["Volume", item.volume ?? "-"], ["Pages", item.pages ?? "-"], ["DOI", item.doi ?? "-"], ["Type", item.type.charAt(0).toUpperCase() + item.type.slice(1)]].map(([label, value]) => (
+            {[["Authors", toAuthorsArray(item.authors).join("; ") || "-"], ["Year", String(item.year)], ["Journal", item.journal ?? item.publisher ?? "-"], ["Volume", item.volume ?? "-"], ["Pages", item.pages ?? "-"], ["Type", item.type.charAt(0).toUpperCase() + item.type.slice(1)]].map(([label, value]) => (
               <div key={label}>
                 <p style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-secondary)", marginBottom: 3 }}>{label}</p>
                 <p style={{ fontSize: 12, color: "var(--color-body)", lineHeight: 1.4, wordBreak: "break-word" }}>{value}</p>
               </div>
             ))}
+
+            {/* Editable DOI */}
+            <div>
+              <p style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-secondary)", marginBottom: 3 }}>DOI</p>
+              {editingDoi ? (
+                <div>
+                  <input autoFocus value={localDoi} onChange={(e) => { setLocalDoi(e.target.value); setDoiError(""); }}
+                    onKeyDown={(e) => { if (e.key === "Enter") saveDoi(); if (e.key === "Escape") { setEditingDoi(false); setLocalDoi(item.doi ?? ""); setDoiError(""); } }}
+                    placeholder="10.xxxx/yyyy" style={{ width: "100%", height: 32, padding: "0 8px", fontSize: 12, border: `1px solid ${doiError ? "var(--color-error,#C0392B)" : "var(--color-navy)"}`, borderRadius: 5, fontFamily: "var(--font-roboto)", outline: "none" }} />
+                  {doiError && <p style={{ fontSize: 11, color: "var(--color-error,#C0392B)", marginTop: 2 }}>{doiError}</p>}
+                  <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
+                    <button onClick={saveDoi} style={{ fontSize: 11, fontWeight: 700, padding: "4px 10px", borderRadius: 5, backgroundColor: "var(--color-navy)", color: "#fff", border: "none", cursor: "pointer" }}>Save</button>
+                    <button onClick={() => { setEditingDoi(false); setLocalDoi(item.doi ?? ""); setDoiError(""); }} style={{ fontSize: 11, padding: "4px 8px", borderRadius: 5, border: "1px solid var(--color-border)", backgroundColor: "transparent", cursor: "pointer" }}>Cancel</button>
+                  </div>
+                </div>
+              ) : (
+                <div className="group flex items-center gap-1">
+                  <p style={{ fontSize: 12, color: "var(--color-body)", lineHeight: 1.4, wordBreak: "break-word", flex: 1 }}>{item.doi ?? "-"}</p>
+                  <button onClick={() => setEditingDoi(true)} aria-label="Edit DOI"
+                    className="opacity-0 group-hover:opacity-100 transition-opacity"
+                    style={{ flexShrink: 0, background: "none", border: "none", cursor: "pointer", padding: 2, color: "var(--color-secondary)" }}>
+                    <Pencil size={11} />
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Editable URL */}
+            <div>
+              <p style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-secondary)", marginBottom: 3 }}>URL</p>
+              {editingUrl ? (
+                <div>
+                  <input autoFocus value={localUrl} onChange={(e) => { setLocalUrl(e.target.value); setUrlError(""); }}
+                    onKeyDown={(e) => { if (e.key === "Enter") saveUrl(); if (e.key === "Escape") { setEditingUrl(false); setLocalUrl(item.url ?? ""); setUrlError(""); } }}
+                    placeholder="https://..." style={{ width: "100%", height: 32, padding: "0 8px", fontSize: 12, border: `1px solid ${urlError ? "var(--color-error,#C0392B)" : "var(--color-navy)"}`, borderRadius: 5, fontFamily: "var(--font-roboto)", outline: "none" }} />
+                  {urlError && <p style={{ fontSize: 11, color: "var(--color-error,#C0392B)", marginTop: 2 }}>{urlError}</p>}
+                  <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
+                    <button onClick={saveUrl} style={{ fontSize: 11, fontWeight: 700, padding: "4px 10px", borderRadius: 5, backgroundColor: "var(--color-navy)", color: "#fff", border: "none", cursor: "pointer" }}>Save</button>
+                    <button onClick={() => { setEditingUrl(false); setLocalUrl(item.url ?? ""); setUrlError(""); }} style={{ fontSize: 11, padding: "4px 8px", borderRadius: 5, border: "1px solid var(--color-border)", backgroundColor: "transparent", cursor: "pointer" }}>Cancel</button>
+                  </div>
+                </div>
+              ) : (
+                <div className="group flex items-center gap-1">
+                  <p style={{ fontSize: 12, color: "var(--color-body)", lineHeight: 1.4, wordBreak: "break-all", flex: 1 }}>{item.url ?? "-"}</p>
+                  <button onClick={() => setEditingUrl(true)} aria-label="Edit URL"
+                    className="opacity-0 group-hover:opacity-100 transition-opacity"
+                    style={{ flexShrink: 0, background: "none", border: "none", cursor: "pointer", padding: 2, color: "var(--color-secondary)" }}>
+                    <Pencil size={11} />
+                  </button>
+                </div>
+              )}
+            </div>
 
             {/* Status toggle */}
             <div>
@@ -3006,11 +3157,15 @@ export default function LiteraturePage() {
   function updateItem(id: string, updates: Partial<LiteratureItem>) {
     setItems((prev) => prev.map((item) => item.id === id ? { ...item, ...updates } : item));
     if (!isSupabaseConfigured) return;
-    const colMap: Record<string, string> = { tags: "tags", removedTags: "removed_tags", status: "status", rating: "rating", files: "files" };
+    const colMap: Record<string, string> = { tags: "tags", removedTags: "removed_tags", status: "status", rating: "rating", files: "files", doi: "doi", url: "url" };
     // notes is handled exclusively by handleSaveNotes (async, with proper error feedback)
+    const nullableCols = new Set(["doi", "url"]);
     const payload: Record<string, unknown> = {};
     for (const [k, col] of Object.entries(colMap)) {
-      if (k in updates) payload[col] = (updates as Record<string, unknown>)[k];
+      if (k in updates) {
+        const v = (updates as Record<string, unknown>)[k];
+        payload[col] = nullableCols.has(k) ? (v ?? null) : v;
+      }
     }
     if (Object.keys(payload).length > 0) {
       supabase.from("literature_items").update(payload).eq("id", id)

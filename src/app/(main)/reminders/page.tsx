@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useMemo, Fragment } from "react";
-import { Plus, Check, List, Trash2, ChevronLeft, ChevronRight, GripVertical, Users, User as UserIcon } from "lucide-react";
+import { Plus, Check, List, Trash2, ChevronLeft, ChevronRight, GripVertical, Users, User as UserIcon, Pencil } from "lucide-react";
 import { DateTimeFields, isoToLocalDate } from "@/components/ui/DateTimePicker";
 import { DndContext, DragOverlay, useDraggable, useDroppable, PointerSensor, KeyboardSensor, useSensor, useSensors } from "@dnd-kit/core";
 import type { DragEndEvent } from "@dnd-kit/core";
@@ -213,8 +213,8 @@ function ReminderRow({ reminder, currentUserId, teamMembers, isDraggable, showSc
       onDrop={onDrop}
       style={{ maxHeight: completing ? 0 : 120, opacity: completing ? 0 : isDragging ? 0.4 : 1, overflow: "hidden", transform: completing ? "translateY(-2px)" : "none", transition: completing ? "opacity 0.2s, max-height 0.35s ease 0.06s, transform 0.2s" : "none", pointerEvents: completing ? "none" : undefined }}
     >
-      <div onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)} onClick={onEdit}
-        style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "7px 16px 7px 12px", borderBottom: "1px solid var(--color-border)", backgroundColor: hovered ? "rgba(0,0,0,0.02)" : "transparent", transition: "background-color 0.1s", cursor: "text" }}>
+      <div onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}
+        style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "7px 16px 7px 12px", borderBottom: "1px solid var(--color-border)", backgroundColor: hovered ? "rgba(0,0,0,0.02)" : "transparent", transition: "background-color 0.1s", cursor: "default" }}>
         {/* Drag handle — only shows when draggable and hovered */}
         <div style={{ width: 16, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", paddingTop: 2, opacity: isDraggable && hovered ? 0.4 : 0, cursor: "grab", transition: "opacity 0.12s" }}>
           <GripVertical size={14} color="var(--color-secondary)" />
@@ -242,12 +242,20 @@ function ReminderRow({ reminder, currentUserId, teamMembers, isDraggable, showSc
           {creator && <Avatar user={creator} size={18} />}
           {assignee && assignee.id !== reminder.userId && <Avatar user={assignee} size={18} />}
           {isCreator && hovered && (
-            <button onClick={e => { e.stopPropagation(); onDelete(reminder.id); }} aria-label="Delete"
-              style={{ background: "none", border: "none", cursor: "pointer", padding: 2, display: "flex", opacity: 0.45 }}
-              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.opacity = "1"; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.opacity = "0.45"; }}>
-              <Trash2 size={13} color="var(--color-secondary)" />
-            </button>
+            <>
+              <button onClick={e => { e.stopPropagation(); onEdit(); }} aria-label="Edit reminder"
+                style={{ background: "none", border: "none", cursor: "pointer", padding: 2, display: "flex", opacity: 0.45 }}
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.opacity = "1"; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.opacity = "0.45"; }}>
+                <Pencil size={13} color="var(--color-secondary)" />
+              </button>
+              <button onClick={e => { e.stopPropagation(); onDelete(reminder.id); }} aria-label="Delete"
+                style={{ background: "none", border: "none", cursor: "pointer", padding: 2, display: "flex", opacity: 0.45 }}
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.opacity = "1"; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.opacity = "0.45"; }}>
+                <Trash2 size={13} color="var(--color-secondary)" />
+              </button>
+            </>
           )}
         </div>
       </div>
