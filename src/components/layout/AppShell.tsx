@@ -600,7 +600,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 key={sp.id}
                 onClick={() => { setActiveSubProject(sp.id); setActiveScope("project"); setShowSwitcher(false); }}
                 title={sp.name}
-                aria-label={sp.name}
                 aria-current={isActive ? "true" : undefined}
                 className="w-9 h-9 rounded-[10px] flex items-center justify-center shrink-0 transition-all"
                 style={{
@@ -617,7 +616,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                   opacity: isActive ? 1 : 0.75,
                 }}
               >
-                {sp.name.slice(0, 2).toUpperCase()}
+                <span aria-hidden="true">{sp.name.slice(0, 2).toUpperCase()}</span>
+                <span className="sr-only">{sp.name}</span>
               </button>
             );
           })}

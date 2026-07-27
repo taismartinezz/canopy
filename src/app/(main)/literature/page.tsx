@@ -1977,8 +1977,9 @@ function DetailPanelContent({
   const [recsLoading, setRecsLoading]   = useState(false);
   const [recsError, setRecsError]       = useState("");
   const [recsFetched, setRecsFetched]   = useState(false);
-  const [showPDFViewer, setShowPDFViewer]       = useState(false);
+  const [showPDFViewer, setShowPDFViewer]           = useState(false);
   const [pdfViewerInitialPage, setPdfViewerInitialPage] = useState(1);
+  const [pdfViewerExternalUrl, setPdfViewerExternalUrl] = useState<string | null>(null);
 
   // Sync when item switches
   useEffect(() => {
@@ -1989,6 +1990,7 @@ function DetailPanelContent({
     setLocalRating(item.rating);
     setTab("Info");
     setAnnotations([]); setAssigned([]); setRecs([]); setRecsFetched(false);
+    setShowPDFViewer(false); setPdfViewerExternalUrl(null);
   }, [item.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -2335,6 +2337,21 @@ function DetailPanelContent({
                   );
                 }
                 if (item.url || item.doi) {
+                  // Open direct PDF links in the in-app viewer; DOI links always open externally.
+                  const isDirectPdf = item.url && (() => {
+                    try { return new URL(item.url!).pathname.toLowerCase().endsWith(".pdf"); } catch { return false; }
+                  })();
+                  if (isDirectPdf) {
+                    return (
+                      <button
+                        onClick={() => { setPdfViewerExternalUrl(item.url!); setPdfViewerInitialPage(1); setShowPDFViewer(true); }}
+                        className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg"
+                        style={{ backgroundColor: "var(--color-navy)", color: "#fff", fontSize: 12, fontWeight: 700, border: "none", borderRadius: 7, cursor: "pointer", minHeight: 44 }}
+                      >
+                        <FileText size={13} /> Open PDF
+                      </button>
+                    );
+                  }
                   return (
                     <a
                       href={item.url ?? `https://doi.org/${item.doi}`}
@@ -2805,16 +2822,19 @@ function DetailPanelContent({
       {/* PDF Viewer overlay — position: fixed, renders above everything */}
       {showPDFViewer && (() => {
         const pdfFile = localFiles.find((f) => f.url && f.name.toLowerCase().endsWith(".pdf"));
-        if (!pdfFile?.url) { setShowPDFViewer(false); return null; }
+        // Prefer an uploaded/stored file; fall back to external PDF URL for direct-.pdf links.
+        const viewerUrl = pdfFile?.url ?? pdfViewerExternalUrl;
+        if (!viewerUrl) { setShowPDFViewer(false); return null; }
         return (
           <PDFViewer
-            url={pdfFile.url}
+            url={viewerUrl}
             itemId={item.id}
             currentUserId={currentUserId}
             annotations={annotations}
             onAnnotationAdded={(a) => setAnnotations((prev) => [...prev, a])}
-            onClose={() => setShowPDFViewer(false)}
+            onClose={() => { setShowPDFViewer(false); setPdfViewerExternalUrl(null); }}
             initialPage={pdfViewerInitialPage}
+            openTabUrl={pdfFile?.url ? undefined : (pdfViewerExternalUrl ?? undefined)}
           />
         );
       })()}
