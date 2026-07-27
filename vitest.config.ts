@@ -9,7 +9,7 @@ export default defineConfig({
     globals: true,
     setupFiles: ['./tests/setup.ts'],
     include: ['tests/unit/**/*.test.{ts,tsx}'],
-    pool: 'forks',
+    pool: 'threads',
   },
   resolve: {
     alias: {

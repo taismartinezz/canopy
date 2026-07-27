@@ -650,10 +650,16 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
   const [zoteroUserId, setZoteroUserId] = useState("");
   const [syncing, setSyncing]   = useState(false);
   const [apiError, setApiError] = useState("");
+  const [groups, setGroups]     = useState<{ id: string; name: string }[]>([]);
+  const [selectedGroupId, setSelectedGroupId] = useState("");
   const [collections, setCollections] = useState<{ key: string; name: string }[]>([]);
   const [collectionsLoading, setCollectionsLoading] = useState(false);
   const [collectionsError, setCollectionsError] = useState("");
   const [selectedCollectionKey, setSelectedCollectionKey] = useState("");
+
+  // Dropzone drag state (file tab)
+  const [isDragOver, setIsDragOver] = useState(false);
+  const dragCounterRef = useRef(0);
 
   // PDF attachment state — API sync
   const [pdfAttachments, setPdfAttachments] = useState<Record<string, { attachmentKey: string; filename: string }>>({});
@@ -671,8 +677,7 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]; if (!file) return;
+  function processFile(file: File) {
     setFileName(file.name); setParsed([]); setPendingNotes([]); setPendingTagUpdates([]); setPendingMerges([]); setMergeDupes(true); setError("");
     setParsedPDFLinks([]); setSelectedPDFFiles([]); setPdfAttachments({}); setPdfKeyMap({});
     const reader = new FileReader();
@@ -721,6 +726,31 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
       }
     };
     reader.readAsText(file);
+  }
+
+  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]; if (file) processFile(file);
+    e.target.value = ""; // reset so re-selecting the same file triggers onChange
+  }
+
+  function handleDropzoneDragEnter(e: React.DragEvent) {
+    e.preventDefault();
+    dragCounterRef.current++;
+    setIsDragOver(true);
+  }
+
+  function handleDropzoneDragLeave(e: React.DragEvent) {
+    e.preventDefault();
+    dragCounterRef.current = Math.max(0, dragCounterRef.current - 1);
+    if (dragCounterRef.current === 0) setIsDragOver(false);
+  }
+
+  function handleDropzoneDrop(e: React.DragEvent) {
+    e.preventDefault();
+    dragCounterRef.current = 0;
+    setIsDragOver(false);
+    const file = e.dataTransfer.files[0];
+    if (file) processFile(file);
   }
 
   async function handleImport() {
@@ -856,11 +886,20 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
       const res = await fetch("/api/zotero/collections", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ apiKey: apiKey.trim(), zoteroUserId: zoteroUserId.trim() }),
+        body: JSON.stringify({
+          apiKey: apiKey.trim(),
+          zoteroUserId: zoteroUserId.trim(),
+          ...(selectedGroupId ? { groupId: selectedGroupId } : {}),
+        }),
       });
-      const { collections: cols, error: err } = await res.json() as { collections?: { key: string; name: string }[]; error?: string };
-      if (err || !cols) { setCollectionsError(err ?? "Could not fetch collections"); return; }
-      setCollections(cols);
+      const { collections: cols, groups: grps, error: err } = await res.json() as {
+        collections?: { key: string; name: string }[];
+        groups?: { id: string; name: string }[];
+        error?: string;
+      };
+      if (err) { setCollectionsError(err); return; }
+      setCollections(cols ?? []);
+      if (grps) setGroups(grps);
       setSelectedCollectionKey(""); // default: entire library
     } catch (ex) {
       setCollectionsError(ex instanceof Error ? ex.message : "Could not fetch collections");
@@ -879,6 +918,7 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
         body: JSON.stringify({
           apiKey: apiKey.trim(),
           zoteroUserId: zoteroUserId.trim(),
+          ...(selectedGroupId ? { groupId: selectedGroupId } : {}),
           ...(selectedCollectionKey ? { collectionKey: selectedCollectionKey } : {}),
         }),
       });
@@ -953,9 +993,27 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
               In Zotero: <strong>File → Export Library</strong>, then choose <strong>CSL JSON</strong> (citation metadata only) or <strong>Zotero RDF</strong> (with <em>Export Files</em> checked to include PDFs). API sync also auto-attaches PDFs stored in Zotero cloud.<br /><br />
               <strong>To import a single collection:</strong> right-click the collection in Zotero's left panel → <strong>Export Collection…</strong>
             </p>
-            <label style={{ display: "block", border: "2px dashed var(--color-border)", borderRadius: 8, padding: "20px 16px", textAlign: "center", cursor: "pointer", marginBottom: 14 }}>
-              <Upload size={20} color="var(--color-secondary)" style={{ margin: "0 auto 8px" }} />
-              <p style={{ fontSize: 12, color: fileName ? "var(--color-body)" : "var(--color-secondary)" }}>{fileName || "Click to select a .json or .rdf file"}</p>
+            <label
+              style={{
+                display: "block",
+                border: `2px dashed ${isDragOver ? "var(--color-navy)" : "var(--color-border)"}`,
+                borderRadius: 8,
+                padding: "20px 16px",
+                textAlign: "center",
+                cursor: "pointer",
+                marginBottom: 14,
+                backgroundColor: isDragOver ? "rgba(27,46,75,0.04)" : "transparent",
+                transition: "border-color 0.12s, background-color 0.12s",
+              }}
+              onDragEnter={handleDropzoneDragEnter}
+              onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; }}
+              onDragLeave={handleDropzoneDragLeave}
+              onDrop={handleDropzoneDrop}
+            >
+              <Upload size={20} color={isDragOver ? "var(--color-navy)" : "var(--color-secondary)"} style={{ margin: "0 auto 8px" }} />
+              <p style={{ fontSize: 12, color: isDragOver ? "var(--color-navy)" : fileName ? "var(--color-body)" : "var(--color-secondary)" }}>
+                {isDragOver ? "Drop your file here" : (fileName || "Click to select or drag a .json or .rdf file")}
+              </p>
               <input type="file" accept=".json,.rdf" className="hidden" onChange={handleFile} />
             </label>
             {error && <p style={{ fontSize: 12, color: "var(--color-error)", marginBottom: 10 }}>{error}</p>}
@@ -1072,19 +1130,34 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
               </div>
             </div>
 
-            {/* Collection picker */}
+            {/* Collection picker + group library selector */}
             <div className="mb-4">
               <div className="flex items-center gap-2 mb-2">
-                <label style={labelStyle}>Collection (optional)</label>
+                <label style={labelStyle}>Library &amp; Collection</label>
                 <button
                   onClick={handleFetchCollections}
                   disabled={collectionsLoading || !apiKey.trim() || !zoteroUserId.trim()}
                   style={{ fontSize: 11, fontWeight: 600, color: "var(--color-navy)", backgroundColor: "transparent", border: "1px solid var(--color-navy)", borderRadius: 5, padding: "2px 8px", cursor: "pointer", opacity: (collectionsLoading || !apiKey.trim() || !zoteroUserId.trim()) ? 0.4 : 1 }}
                 >
-                  {collectionsLoading ? "Loading…" : "Load collections"}
+                  {collectionsLoading ? "Loading…" : "Load"}
                 </button>
               </div>
               {collectionsError && <p style={{ fontSize: 11, color: "var(--color-error)", marginBottom: 6 }}>{collectionsError}</p>}
+              {/* Group selector — shown when the user has group libraries */}
+              {groups.length > 0 && (
+                <div className="mb-2">
+                  <select
+                    value={selectedGroupId}
+                    onChange={(e) => { setSelectedGroupId(e.target.value); setCollections([]); setSelectedCollectionKey(""); }}
+                    style={{ ...inputStyle, width: "100%", marginBottom: 6 }}
+                  >
+                    <option value="">Personal library</option>
+                    {groups.map((g) => (
+                      <option key={g.id} value={g.id}>{g.name} (group)</option>
+                    ))}
+                  </select>
+                </div>
+              )}
               {collections.length > 0 && (
                 <select
                   value={selectedCollectionKey}

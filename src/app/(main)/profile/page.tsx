@@ -750,8 +750,41 @@ export default function ProfilePage() {
     },
   ];
 
-  // ── Loading guard ─────────────────────────────────────────────────────────
-  if (loading) return null;
+  // ── Loading skeleton ──────────────────────────────────────────────────────
+  if (loading) {
+    const bar = (w: string | number, h = 13, mb = 0) => (
+      <div style={{ width: w, height: h, borderRadius: 4, backgroundColor: "var(--color-border)", opacity: 0.6, marginBottom: mb }} className="animate-pulse" />
+    );
+    return (
+      <div style={{ padding: isMobile ? "16px" : "40px 24px", backgroundColor: "var(--color-canvas)", minHeight: "100%" }}>
+        <div style={{ maxWidth: 720, margin: "0 auto" }}>
+          {/* Back link */}
+          <div style={{ marginBottom: 24 }}>{bar(56, 13)}</div>
+          {/* Header card */}
+          <div style={{ backgroundColor: "var(--color-surface)", borderRadius: 10, border: "1px solid var(--color-border)", padding: isMobile ? "20px 16px 16px" : "28px 28px 24px", marginBottom: 24, display: "flex", gap: 28 }}>
+            <div style={{ width: 96, height: 96, borderRadius: "50%", backgroundColor: "var(--color-border)", flexShrink: 0 }} className="animate-pulse" />
+            <div style={{ flex: 1, paddingTop: 8 }}>
+              {bar("60%", 20, 10)}
+              {bar("40%", 13, 8)}
+              {bar("50%", 13)}
+            </div>
+          </div>
+          {/* Section cards */}
+          {[1, 2].map((i) => (
+            <div key={i} style={{ backgroundColor: "var(--color-surface)", borderRadius: 10, border: "1px solid var(--color-border)", padding: "20px 24px", marginBottom: 20 }}>
+              {bar("30%", 11, 16)}
+              {[1, 2, 3].map((j) => (
+                <div key={j} style={{ marginBottom: 14 }}>
+                  {bar("20%", 10, 6)}
+                  {bar("100%", 36)}
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   // ── Render ────────────────────────────────────────────────────────────────
   const displayName = profile?.name ?? "";
