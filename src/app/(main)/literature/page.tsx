@@ -14,7 +14,7 @@ import {
   Tag, Star, ExternalLink, Copy, Check, ChevronLeft, ChevronRight,
   Book, BarChart2, GraduationCap,
   Library, ClipboardList, Brain, Microscope, Heart,
-  Upload, Link2, MessageSquare, Zap, UserCheck, RefreshCw, Eye, EyeOff, Wifi,
+  Upload, Link2, MessageSquare, Zap, UserCheck, RefreshCw, Eye, EyeOff, Wifi, Undo2,
 } from "lucide-react";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -82,6 +82,13 @@ function guessLitFileType(name: string): string {
   const ext = name.split(".").pop()?.toLowerCase() ?? "";
   if (ext === "pdf") return "pdf";
   return ext || "other";
+}
+
+function timeAgo(dateStr: string): string {
+  const days = Math.floor((Date.now() - new Date(dateStr).getTime()) / 86_400_000);
+  if (days === 0) return "Removed today";
+  if (days === 1) return "Removed 1 day ago";
+  return `Removed ${days} days ago`;
 }
 
 // ── Insert payload builder — single source of truth for real DB schema ────────
@@ -519,8 +526,10 @@ function parseZoteroRDF(content: string, existingItems: LiteratureItem[], projec
     const title = txt(itemEl, "title", "dc") || txt(itemEl, "title", "dcterms");
     if (!title) continue;
 
-    const doiRaw = txt(itemEl, "identifier", "dc");
-    const doi = /^DOI\s+/i.test(doiRaw) ? doiRaw.replace(/^DOI\s+/i, "").trim() : undefined;
+    const doiIdentifiers = Array.from(itemEl.getElementsByTagNameNS(ns("dc")!, "identifier"))
+      .map((e) => e.textContent?.trim() ?? "");
+    const doiRaw = doiIdentifiers.find((v) => /^DOI\s+/i.test(v));
+    const doi = doiRaw ? doiRaw.replace(/^DOI\s+/i, "").trim() : undefined;
 
     // Extract all fields first (needed for both new items and merge candidates)
     const tags = Array.from(itemEl.getElementsByTagNameNS(ns("dc")!, "subject"))
@@ -1442,6 +1451,7 @@ function CollectionsSidebar({
   items, allItems,
   showClose, onClose, onAddItem, onCollapse, onImportZotero, onAddByDOI, subProjects,
   onReadingProgress, showReadingProgress,
+  showTrash, setShowTrash,
 }: {
   scope: LitScope; setScope: (s: LitScope) => void;
   selectedSubProjectId: string | null; setSelectedSubProjectId: (id: string | null) => void;
@@ -1457,6 +1467,8 @@ function CollectionsSidebar({
   subProjects?: SubProject[];
   onReadingProgress?: () => void;
   showReadingProgress?: boolean;
+  showTrash?: boolean;
+  setShowTrash?: (v: boolean) => void;
 }) {
   const totalRead    = items.filter((i) => i.status === "read").length;
   const totalReading = items.filter((i) => i.status === "reading").length;
@@ -1536,6 +1548,20 @@ function CollectionsSidebar({
                 onClick={() => { setScope("project"); setSelectedSubProjectId(sp.id); }}
               />
             ))}
+          </>
+        )}
+        {setShowTrash && (
+          <>
+            <div style={{ height: 1, backgroundColor: "var(--color-border)", margin: "4px 2px" }} />
+            <button
+              onClick={() => setShowTrash(true)}
+              style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "6px 10px 6px 11px", borderRadius: 7, border: "none", borderLeft: `3px solid ${showTrash ? "#C0392B" : "transparent"}`, cursor: "pointer", backgroundColor: showTrash ? "rgba(192,57,43,0.08)" : "transparent", textAlign: "left", boxSizing: "border-box", fontFamily: "var(--font-roboto)", marginBottom: 1 }}
+              onMouseEnter={(e) => { if (!showTrash) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "rgba(0,0,0,0.04)"; }}
+              onMouseLeave={(e) => { if (!showTrash) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "transparent"; }}
+            >
+              <Trash2 size={13} color={showTrash ? "#C0392B" : "var(--color-secondary)"} />
+              <span style={{ fontSize: 13, color: showTrash ? "#C0392B" : "var(--color-body)", fontWeight: showTrash ? 600 : 400 }}>Recently removed</span>
+            </button>
           </>
         )}
       </div>
@@ -2842,6 +2868,37 @@ function DetailPanelContent({
   );
 }
 
+// ── Row mapper (shared between main fetch and trash fetch) ────────────────────
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapLitRow(row: Record<string, any>): LiteratureItem {
+  return {
+    id: row.id as string,
+    projectId: row.project_id as string,
+    scope: ((row.library ?? row.scope ?? "lab") as LiteratureItem["scope"]),
+    subProjectId: (row.sub_project_id as string | null | undefined) ?? undefined,
+    type: (row.type as LiteratureItem["type"]) ?? "article",
+    title: row.title as string,
+    authors: toAuthorsArray(row.authors as string | string[]),
+    year: (row.year as number | null) ?? 0,
+    journal: (row.journal as string | null) ?? undefined,
+    doi: (row.doi as string | null) ?? undefined,
+    url: (row.url as string | null) ?? undefined,
+    abstract: (row.abstract as string | null) ?? undefined,
+    tags: Array.isArray(row.tags) ? (row.tags as string[]) : [],
+    removedTags: Array.isArray(row.removed_tags) ? (row.removed_tags as string[]) : [],
+    status: (row.status as LiteratureItem["status"]) ?? "unread",
+    rating: (row.rating as number | null) ?? 0,
+    notes: (row.notes as string | null) ?? "",
+    files: [],
+    addedById: (row.user_id ?? row.added_by) as string,
+    addedAt: (row.created_at ?? row.added_at) as string,
+    deletedAt: (row.deleted_at as string | null) ?? null,
+    collections: [],
+    relatedIds: [],
+  };
+}
+
 // ── Literature page ───────────────────────────────────────────────────────────
 
 export default function LiteraturePage() {
@@ -2869,6 +2926,12 @@ export default function LiteraturePage() {
   const [yearFilter, setYearFilter]     = useState<number | "all">("all");
   const [yearSort, setYearSort]         = useState<"desc" | "asc">("desc");
   const [showReadingProgress, setShowReadingProgress] = useState(false);
+  const [selectMode, setSelectMode]     = useState(false);
+  const [selectedIds, setSelectedIds]   = useState<Set<string>>(new Set());
+  const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState(false);
+  const [showTrash, setShowTrash]       = useState(false);
+  const [trashItems, setTrashItems]     = useState<LiteratureItem[]>([]);
+  const [loadingTrash, setLoadingTrash] = useState(false);
 
   useEffect(() => {
     function check() { setIsMobile(window.innerWidth < 768); }
@@ -2920,33 +2983,11 @@ export default function LiteraturePage() {
         .from("literature_items")
         .select("*")
         .eq("project_id", projectId)
+        .is("deleted_at", null)
         .order("created_at", { ascending: false })
         .then(({ data, error: fetchError }) => {
           if (fetchError) console.error("[Literature] fetch error:", fetchError);
-          if (data) setItems(data.map((row) => ({
-            id: row.id as string,
-            projectId: row.project_id as string,
-            scope: ((row.library ?? row.scope ?? "lab") as LiteratureItem["scope"]),
-            subProjectId: (row.sub_project_id as string | null | undefined) ?? undefined,
-            type: (row.type as LiteratureItem["type"]) ?? "article",
-            title: row.title as string,
-            authors: toAuthorsArray(row.authors as string | string[]),
-            year: (row.year as number | null) ?? 0,
-            journal: (row.journal as string | null) ?? undefined,
-            doi: (row.doi as string | null) ?? undefined,
-            url: (row.url as string | null) ?? undefined,
-            abstract: (row.abstract as string | null) ?? undefined,
-            tags: Array.isArray(row.tags) ? (row.tags as string[]) : [],
-            removedTags: Array.isArray(row.removed_tags) ? (row.removed_tags as string[]) : [],
-            status: (row.status as LiteratureItem["status"]) ?? "unread",
-            rating: (row.rating as number | null) ?? 0,
-            notes: (row.notes as string | null) ?? "",
-            files: [],
-            addedById: (row.user_id ?? row.added_by) as string,
-            addedAt: (row.created_at ?? row.added_at) as string,
-            collections: [],
-            relatedIds: [],
-          })));
+          if (data) setItems(data.map(mapLitRow));
           setLoadingItems(false);
         });
     });
@@ -2981,9 +3022,73 @@ export default function LiteraturePage() {
     setItems((prev) => prev.filter((item) => item.id !== id));
     setSelectedItemId(null);
     if (isSupabaseConfigured) {
-      const { error } = await supabase.from("literature_items").delete().eq("id", id);
-      if (error) console.error("[Literature] delete:", error);
+      const { error } = await supabase.from("literature_items")
+        .update({ deleted_at: new Date().toISOString(), deleted_by: currentUserId || null })
+        .eq("id", id);
+      if (error) console.error("[Literature] soft-delete:", error);
     }
+  }
+
+  async function deleteBulk(ids: string[]) {
+    setItems((prev) => prev.filter((item) => !ids.includes(item.id)));
+    setSelectedItemId(null);
+    setSelectedIds(new Set());
+    setSelectMode(false);
+    if (isSupabaseConfigured) {
+      const { error } = await supabase.from("literature_items")
+        .update({ deleted_at: new Date().toISOString(), deleted_by: currentUserId || null })
+        .in("id", ids);
+      if (error) console.error("[Literature] bulk soft-delete:", error);
+    }
+  }
+
+  async function restoreItem(id: string) {
+    const restored = trashItems.find((i) => i.id === id);
+    setTrashItems((prev) => prev.filter((i) => i.id !== id));
+    if (isSupabaseConfigured) {
+      const { error } = await supabase.from("literature_items")
+        .update({ deleted_at: null, deleted_by: null })
+        .eq("id", id);
+      if (error) { console.error("[Literature] restore:", error); return; }
+    }
+    if (restored) setItems((prev) => [{ ...restored, deletedAt: null }, ...prev]);
+  }
+
+  async function restoreBulk(ids: string[]) {
+    const toRestore = trashItems.filter((i) => ids.includes(i.id));
+    setTrashItems((prev) => prev.filter((i) => !ids.includes(i.id)));
+    setSelectedIds(new Set());
+    if (isSupabaseConfigured) {
+      const { error } = await supabase.from("literature_items")
+        .update({ deleted_at: null, deleted_by: null })
+        .in("id", ids);
+      if (error) { console.error("[Literature] bulk restore:", error); return; }
+    }
+    setItems((prev) => [...toRestore.map((i) => ({ ...i, deletedAt: null })), ...prev]);
+  }
+
+  async function openTrash() {
+    setShowTrash(true);
+    setShowReadingProgress(false);
+    setSelectedItemId(null);
+    setSelectMode(false);
+    setSelectedIds(new Set());
+    if (!isSupabaseConfigured || !projectId) return;
+    setLoadingTrash(true);
+    const { data, error } = await supabase.from("literature_items")
+      .select("*")
+      .eq("project_id", projectId)
+      .not("deleted_at", "is", null)
+      .order("deleted_at", { ascending: false });
+    if (error) console.error("[Literature] trash fetch:", error);
+    if (data) setTrashItems(data.map(mapLitRow));
+    setLoadingTrash(false);
+  }
+
+  function closeTrash() {
+    setShowTrash(false);
+    setSelectMode(false);
+    setSelectedIds(new Set());
   }
 
   function addItem(item: LiteratureItem) {
@@ -3054,10 +3159,10 @@ export default function LiteraturePage() {
         }}
       >
         <CollectionsSidebar
-          scope={scope} setScope={setScope}
-          selectedSubProjectId={selectedSubProjectId} setSelectedSubProjectId={setSelectedSubProjectId}
-          activeCollection={activeCollection} setActiveCollection={setActiveCollection}
-          allTags={allTags} activeTag={activeTag} setActiveTag={setActiveTag}
+          scope={scope} setScope={(s) => { setScope(s); setShowTrash(false); setSelectMode(false); setSelectedIds(new Set()); }}
+          selectedSubProjectId={selectedSubProjectId} setSelectedSubProjectId={(id) => { setSelectedSubProjectId(id); setShowTrash(false); }}
+          activeCollection={activeCollection} setActiveCollection={(id) => { setActiveCollection(id); setShowTrash(false); }}
+          allTags={allTags} activeTag={activeTag} setActiveTag={(t) => { setActiveTag(t); setShowTrash(false); }}
           items={scopedItems} allItems={items} subProjects={subProjects} onAddItem={() => setAddItemOpen(true)}
           onCollapse={() => {
             setPanelTransitionActive(true);
@@ -3066,8 +3171,10 @@ export default function LiteraturePage() {
           }}
           onImportZotero={() => setZoteroImportOpen(true)}
           onAddByDOI={() => setDoiLookupOpen(true)}
-          onReadingProgress={() => { setShowReadingProgress((v) => !v); setSelectedItemId(null); }}
+          onReadingProgress={() => { setShowReadingProgress((v) => !v); setShowTrash(false); setSelectMode(false); setSelectedIds(new Set()); setSelectedItemId(null); }}
           showReadingProgress={showReadingProgress}
+          showTrash={showTrash}
+          setShowTrash={openTrash}
         />
       </div>
 
@@ -3094,22 +3201,24 @@ export default function LiteraturePage() {
         aria-hidden={!collectionsOpen}
       >
         <CollectionsSidebar
-          scope={scope} setScope={setScope}
-          selectedSubProjectId={selectedSubProjectId} setSelectedSubProjectId={setSelectedSubProjectId}
-          activeCollection={activeCollection} setActiveCollection={(id) => { setActiveCollection(id); setCollectionsOpen(false); }}
-          allTags={allTags} activeTag={activeTag} setActiveTag={(t) => { setActiveTag(t); setCollectionsOpen(false); }}
+          scope={scope} setScope={(s) => { setScope(s); setShowTrash(false); setSelectMode(false); setSelectedIds(new Set()); setCollectionsOpen(false); }}
+          selectedSubProjectId={selectedSubProjectId} setSelectedSubProjectId={(id) => { setSelectedSubProjectId(id); setShowTrash(false); setCollectionsOpen(false); }}
+          activeCollection={activeCollection} setActiveCollection={(id) => { setActiveCollection(id); setShowTrash(false); setCollectionsOpen(false); }}
+          allTags={allTags} activeTag={activeTag} setActiveTag={(t) => { setActiveTag(t); setShowTrash(false); setCollectionsOpen(false); }}
           items={scopedItems} allItems={items} showClose onClose={() => setCollectionsOpen(false)}
           onAddItem={() => { setAddItemOpen(true); setCollectionsOpen(false); }}
           onImportZotero={() => { setZoteroImportOpen(true); setCollectionsOpen(false); }}
           onAddByDOI={() => { setDoiLookupOpen(true); setCollectionsOpen(false); }}
-          onReadingProgress={() => { setShowReadingProgress((v) => !v); setSelectedItemId(null); setCollectionsOpen(false); }}
+          onReadingProgress={() => { setShowReadingProgress((v) => !v); setShowTrash(false); setSelectMode(false); setSelectedIds(new Set()); setSelectedItemId(null); setCollectionsOpen(false); }}
           showReadingProgress={showReadingProgress}
+          showTrash={showTrash}
+          setShowTrash={(v) => { if (v) { openTrash(); } else { closeTrash(); } setCollectionsOpen(false); }}
         />
       </div>
 
-      {/* Center list / reading progress dashboard */}
+      {/* Center list / reading progress dashboard / trash */}
       {!showingDetailMobile && (
-        <div className="flex flex-col flex-1 min-w-0" style={{ minWidth: 240, overflow: "hidden", borderRight: selectedItem && !isMobile && !showReadingProgress ? "1px solid var(--color-border)" : undefined }}>
+        <div className="flex flex-col flex-1 min-w-0" style={{ minWidth: 240, overflow: "hidden", borderRight: selectedItem && !isMobile && !showReadingProgress && !showTrash ? "1px solid var(--color-border)" : undefined }}>
         {showReadingProgress ? (
           <ReadingProgressDashboard
             projectId={projectId}
@@ -3119,61 +3228,164 @@ export default function LiteraturePage() {
             scope={scope}
             selectedSubProjectId={selectedSubProjectId}
           />
-        ) : (<>
-          <div className="flex items-center gap-2 px-3 md:px-4 py-2.5 flex-wrap" style={{ backgroundColor: "var(--color-surface)", borderBottom: "1px solid var(--color-border)", minHeight: 52 }}>
-            <button onClick={() => setCollectionsOpen(true)} className="flex items-center gap-1.5 shrink-0"
-              style={{ display: isMobile ? "flex" : "none", fontSize: 12, fontWeight: 600, color: "var(--color-navy)", border: "1px solid var(--color-border)", borderRadius: 7, padding: "6px 10px", backgroundColor: "transparent", cursor: "pointer", minHeight: 44 }}>
-              <ChevronLeft size={14} /> Collections
-            </button>
-            <div className="relative" style={{ minWidth: 0, flex: 1 }}>
-              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2" color="var(--color-secondary)" />
-              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search..."
-                style={{ width: "100%", paddingLeft: 30, paddingRight: 8, height: 36, border: "1px solid var(--color-border)", borderRadius: 7, fontSize: 12, fontFamily: "var(--font-roboto)", backgroundColor: "var(--color-canvas)", outline: "none" }} />
-            </div>
-            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as ReadStatus | "all")}
-              style={{ height: 36, paddingLeft: 8, paddingRight: 8, border: "1px solid var(--color-border)", borderRadius: 7, fontSize: 12, fontFamily: "var(--font-roboto)", backgroundColor: statusFilter !== "all" ? "rgba(27,46,75,0.06)" : "var(--color-canvas)", color: "var(--color-body)", outline: "none", cursor: "pointer" }}>
-              <option value="all">All Status</option>
-              <option value="read">Read</option>
-              <option value="reading">Reading</option>
-              <option value="unread">Unread</option>
-            </select>
-            <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value as LiteratureType | "all")}
-              style={{ height: 36, paddingLeft: 8, paddingRight: 8, border: "1px solid var(--color-border)", borderRadius: 7, fontSize: 12, fontFamily: "var(--font-roboto)", backgroundColor: typeFilter !== "all" ? "rgba(27,46,75,0.06)" : "var(--color-canvas)", color: "var(--color-body)", outline: "none", cursor: "pointer" }}>
-              <option value="all">All Types</option>
-              <option value="article">Article</option>
-              <option value="book">Book</option>
-              <option value="preprint">Preprint</option>
-              <option value="report">Report</option>
-              <option value="thesis">Thesis</option>
-            </select>
-            <div className="flex items-center gap-1">
-              <select value={yearFilter === "all" ? "all" : String(yearFilter)} onChange={(e) => setYearFilter(e.target.value === "all" ? "all" : parseInt(e.target.value))}
-                style={{ height: 36, paddingLeft: 8, paddingRight: 8, border: "1px solid var(--color-border)", borderRadius: 7, fontSize: 12, fontFamily: "var(--font-roboto)", backgroundColor: yearFilter !== "all" ? "rgba(27,46,75,0.06)" : "var(--color-canvas)", color: "var(--color-body)", outline: "none", cursor: "pointer" }}>
-                <option value="all">All Years</option>
-                {availableYears.map((y) => <option key={y} value={y}>{y}</option>)}
-              </select>
-              <button
-                onClick={() => setYearSort((s) => s === "desc" ? "asc" : "desc")}
-                title={yearSort === "desc" ? "Oldest first" : "Newest first"}
-                style={{ height: 36, width: 36, border: "1px solid var(--color-border)", borderRadius: 7, fontSize: 13, backgroundColor: "var(--color-canvas)", color: "var(--color-secondary)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
-              >
-                {yearSort === "desc" ? "↓" : "↑"}
+        ) : showTrash ? (
+          <>
+            {/* Trash toolbar */}
+            <div className="flex items-center gap-2 px-3 md:px-4 py-2.5 flex-wrap" style={{ backgroundColor: "var(--color-surface)", borderBottom: "1px solid var(--color-border)", minHeight: 52 }}>
+              <button onClick={closeTrash} className="flex items-center gap-1.5 shrink-0"
+                style={{ fontSize: 12, fontWeight: 600, color: "var(--color-secondary)", border: "1px solid var(--color-border)", borderRadius: 7, padding: "6px 10px", backgroundColor: "transparent", cursor: "pointer", minHeight: 36 }}>
+                <ChevronLeft size={14} /> Back
+              </button>
+              <span style={{ fontSize: 13, fontWeight: 600, color: "var(--color-body)", flex: 1 }}>Recently removed</span>
+              {selectMode && selectedIds.size > 0 && (
+                <button onClick={() => restoreBulk([...selectedIds])}
+                  style={{ fontSize: 12, fontWeight: 600, color: "#2E7D52", border: "1px solid #2E7D52", borderRadius: 7, padding: "6px 12px", backgroundColor: "transparent", cursor: "pointer", display: "flex", alignItems: "center", gap: 5, minHeight: 36 }}>
+                  <Undo2 size={13} /> Restore selected ({selectedIds.size})
+                </button>
+              )}
+              {selectMode && (
+                <button onClick={() => setSelectedIds(new Set(trashItems.map((i) => i.id)))}
+                  style={{ fontSize: 12, color: "var(--color-secondary)", border: "1px solid var(--color-border)", borderRadius: 7, padding: "6px 10px", backgroundColor: "transparent", cursor: "pointer", minHeight: 36 }}>
+                  Select all
+                </button>
+              )}
+              <button onClick={() => { setSelectMode((v) => !v); setSelectedIds(new Set()); }}
+                style={{ fontSize: 12, fontWeight: selectMode ? 600 : 400, color: selectMode ? "var(--color-navy)" : "var(--color-secondary)", border: `1px solid ${selectMode ? "var(--color-navy)" : "var(--color-border)"}`, borderRadius: 7, padding: "6px 10px", backgroundColor: selectMode ? "rgba(27,46,75,0.06)" : "transparent", cursor: "pointer", minHeight: 36 }}>
+                {selectMode ? "Cancel" : "Select"}
               </button>
             </div>
-            <button onClick={() => setAddItemOpen(true)} className="flex items-center gap-1 shrink-0"
-              style={{ fontSize: 12, fontWeight: 700, color: "#fff", backgroundColor: "var(--color-navy)", border: "none", borderRadius: 7, padding: "6px 12px", cursor: "pointer", minHeight: 36, fontFamily: "var(--font-roboto)" }}>
-              <Plus size={13} /> Add
-            </button>
-            {activeTag && (
-              <span className="flex items-center gap-1.5 px-2.5 py-1" style={{ backgroundColor: "rgba(27,46,75,0.06)", border: "1px solid var(--color-navy)", borderRadius: 5, fontSize: 11, color: "var(--color-navy)" }}>
-                <Tag size={11} />{activeTag}
-                <button onClick={() => setActiveTag(null)} style={{ display: "flex" }}><X size={11} /></button>
-              </span>
-            )}
-            <span style={{ fontSize: 11, color: "var(--color-secondary)", marginLeft: "auto", whiteSpace: "nowrap" }}>{filtered.length} item{filtered.length !== 1 ? "s" : ""}</span>
-          </div>
 
+            {/* Trash list */}
+            <div className="flex-1 overflow-y-auto">
+              {loadingTrash
+                ? <div className="flex items-center justify-center h-40"><p style={{ fontSize: 13, color: "var(--color-secondary)" }}>Loading…</p></div>
+                : trashItems.length === 0
+                ? <div className="flex flex-col items-center justify-center py-16 gap-3 text-center px-4">
+                    <Trash2 size={40} color="var(--color-border)" />
+                    <p style={{ fontSize: 14, fontWeight: 600, color: "var(--color-body)", margin: 0 }}>Nothing removed</p>
+                    <p style={{ fontSize: 12, color: "var(--color-secondary)", margin: 0 }}>Items you delete will appear here and can be restored at any time.</p>
+                  </div>
+                : trashItems.map((item) => (
+                    <div key={item.id}
+                      style={{ display: "flex", alignItems: "center", gap: 8, paddingLeft: 16, paddingRight: 12, paddingTop: 10, paddingBottom: 10, borderBottom: "1px solid var(--color-border)", minHeight: 48 }}
+                    >
+                      {selectMode && (
+                        <input type="checkbox" checked={selectedIds.has(item.id)}
+                          onChange={(e) => {
+                            const next = new Set(selectedIds);
+                            e.target.checked ? next.add(item.id) : next.delete(item.id);
+                            setSelectedIds(next);
+                          }}
+                          style={{ flexShrink: 0, width: 16, height: 16, cursor: "pointer", accentColor: "var(--color-navy)" }}
+                          aria-label={`Select ${item.title}`}
+                        />
+                      )}
+                      <span style={{ flexShrink: 0, width: 24 }}>{TYPE_ICONS[item.type]}</span>
+                      <span title={item.title} style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 500, color: "var(--color-body)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.title}</span>
+                      <span style={{ flexShrink: 0, fontSize: 11, color: "var(--color-secondary)", whiteSpace: "nowrap", marginRight: 8 }}>
+                        {item.deletedAt ? timeAgo(item.deletedAt) : ""}
+                      </span>
+                      <button onClick={() => restoreItem(item.id)}
+                        style={{ flexShrink: 0, fontSize: 12, fontWeight: 600, color: "#2E7D52", border: "1px solid #2E7D52", borderRadius: 6, padding: "4px 10px", backgroundColor: "transparent", cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}>
+                        <Undo2 size={12} /> Restore
+                      </button>
+                    </div>
+                  ))}
+            </div>
+          </>
+        ) : (<>
+          {/* Normal list toolbar */}
+          {selectMode ? (
+            <div className="flex items-center gap-2 px-3 md:px-4 py-2.5 flex-wrap" style={{ backgroundColor: "var(--color-surface)", borderBottom: "1px solid var(--color-border)", minHeight: 52 }}>
+              <button onClick={() => { setSelectMode(false); setSelectedIds(new Set()); }}
+                style={{ fontSize: 12, fontWeight: 600, color: "var(--color-secondary)", border: "1px solid var(--color-border)", borderRadius: 7, padding: "6px 10px", backgroundColor: "transparent", cursor: "pointer", minHeight: 36 }}>
+                Cancel
+              </button>
+              {selectedIds.size > 0 && (
+                <span style={{ fontSize: 12, color: "var(--color-secondary)" }}>{selectedIds.size} selected</span>
+              )}
+              <button onClick={() => setSelectedIds(new Set(filtered.map((i) => i.id)))}
+                style={{ fontSize: 12, color: "var(--color-secondary)", border: "1px solid var(--color-border)", borderRadius: 7, padding: "6px 10px", backgroundColor: "transparent", cursor: "pointer", minHeight: 36 }}>
+                Select all
+              </button>
+              {selectedIds.size > 0 && (
+                <button onClick={() => setBulkDeleteConfirmOpen(true)}
+                  style={{ fontSize: 12, fontWeight: 600, color: "#fff", backgroundColor: "#C0392B", border: "none", borderRadius: 7, padding: "6px 12px", cursor: "pointer", display: "flex", alignItems: "center", gap: 5, minHeight: 36 }}>
+                  <Trash2 size={13} /> Delete selected ({selectedIds.size})
+                </button>
+              )}
+              <span style={{ fontSize: 11, color: "var(--color-secondary)", marginLeft: "auto", whiteSpace: "nowrap" }}>{filtered.length} item{filtered.length !== 1 ? "s" : ""}</span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 px-3 md:px-4 py-2.5 flex-wrap" style={{ backgroundColor: "var(--color-surface)", borderBottom: "1px solid var(--color-border)", minHeight: 52 }}>
+              <button onClick={() => setCollectionsOpen(true)} className="flex items-center gap-1.5 shrink-0"
+                style={{ display: isMobile ? "flex" : "none", fontSize: 12, fontWeight: 600, color: "var(--color-navy)", border: "1px solid var(--color-border)", borderRadius: 7, padding: "6px 10px", backgroundColor: "transparent", cursor: "pointer", minHeight: 44 }}>
+                <ChevronLeft size={14} /> Collections
+              </button>
+              <div className="relative" style={{ minWidth: 0, flex: 1 }}>
+                <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2" color="var(--color-secondary)" />
+                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search..."
+                  style={{ width: "100%", paddingLeft: 30, paddingRight: 8, height: 36, border: "1px solid var(--color-border)", borderRadius: 7, fontSize: 12, fontFamily: "var(--font-roboto)", backgroundColor: "var(--color-canvas)", outline: "none" }} />
+              </div>
+              <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as ReadStatus | "all")}
+                style={{ height: 36, paddingLeft: 8, paddingRight: 8, border: "1px solid var(--color-border)", borderRadius: 7, fontSize: 12, fontFamily: "var(--font-roboto)", backgroundColor: statusFilter !== "all" ? "rgba(27,46,75,0.06)" : "var(--color-canvas)", color: "var(--color-body)", outline: "none", cursor: "pointer" }}>
+                <option value="all">All Status</option>
+                <option value="read">Read</option>
+                <option value="reading">Reading</option>
+                <option value="unread">Unread</option>
+              </select>
+              <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value as LiteratureType | "all")}
+                style={{ height: 36, paddingLeft: 8, paddingRight: 8, border: "1px solid var(--color-border)", borderRadius: 7, fontSize: 12, fontFamily: "var(--font-roboto)", backgroundColor: typeFilter !== "all" ? "rgba(27,46,75,0.06)" : "var(--color-canvas)", color: "var(--color-body)", outline: "none", cursor: "pointer" }}>
+                <option value="all">All Types</option>
+                <option value="article">Article</option>
+                <option value="book">Book</option>
+                <option value="preprint">Preprint</option>
+                <option value="report">Report</option>
+                <option value="thesis">Thesis</option>
+              </select>
+              <div className="flex items-center gap-1">
+                <select value={yearFilter === "all" ? "all" : String(yearFilter)} onChange={(e) => setYearFilter(e.target.value === "all" ? "all" : parseInt(e.target.value))}
+                  style={{ height: 36, paddingLeft: 8, paddingRight: 8, border: "1px solid var(--color-border)", borderRadius: 7, fontSize: 12, fontFamily: "var(--font-roboto)", backgroundColor: yearFilter !== "all" ? "rgba(27,46,75,0.06)" : "var(--color-canvas)", color: "var(--color-body)", outline: "none", cursor: "pointer" }}>
+                  <option value="all">All Years</option>
+                  {availableYears.map((y) => <option key={y} value={y}>{y}</option>)}
+                </select>
+                <button
+                  onClick={() => setYearSort((s) => s === "desc" ? "asc" : "desc")}
+                  title={yearSort === "desc" ? "Oldest first" : "Newest first"}
+                  style={{ height: 36, width: 36, border: "1px solid var(--color-border)", borderRadius: 7, fontSize: 13, backgroundColor: "var(--color-canvas)", color: "var(--color-secondary)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
+                >
+                  {yearSort === "desc" ? "↓" : "↑"}
+                </button>
+              </div>
+              <button onClick={() => setSelectMode(true)} className="flex items-center gap-1 shrink-0"
+                style={{ fontSize: 12, fontWeight: 600, color: "var(--color-secondary)", border: "1px solid var(--color-border)", borderRadius: 7, padding: "6px 10px", backgroundColor: "transparent", cursor: "pointer", minHeight: 36, fontFamily: "var(--font-roboto)" }}>
+                Select
+              </button>
+              <button onClick={() => setAddItemOpen(true)} className="flex items-center gap-1 shrink-0"
+                style={{ fontSize: 12, fontWeight: 700, color: "#fff", backgroundColor: "var(--color-navy)", border: "none", borderRadius: 7, padding: "6px 12px", cursor: "pointer", minHeight: 36, fontFamily: "var(--font-roboto)" }}>
+                <Plus size={13} /> Add
+              </button>
+              {activeTag && (
+                <span className="flex items-center gap-1.5 px-2.5 py-1" style={{ backgroundColor: "rgba(27,46,75,0.06)", border: "1px solid var(--color-navy)", borderRadius: 5, fontSize: 11, color: "var(--color-navy)" }}>
+                  <Tag size={11} />{activeTag}
+                  <button onClick={() => setActiveTag(null)} style={{ display: "flex" }}><X size={11} /></button>
+                </span>
+              )}
+              <span style={{ fontSize: 11, color: "var(--color-secondary)", marginLeft: "auto", whiteSpace: "nowrap" }}>{filtered.length} item{filtered.length !== 1 ? "s" : ""}</span>
+            </div>
+          )}
+
+          {/* Column headers */}
           <div className="flex items-center px-4 py-2" style={{ display: isMobile ? "none" : "flex", gap: 8, backgroundColor: "var(--color-surface)", borderBottom: "1px solid var(--color-border)" }}>
+            {selectMode && <span style={{ flexShrink: 0, width: 24 }}>
+              <input type="checkbox"
+                checked={filtered.length > 0 && filtered.every((i) => selectedIds.has(i.id))}
+                ref={(el) => { if (el) el.indeterminate = selectedIds.size > 0 && !filtered.every((i) => selectedIds.has(i.id)); }}
+                onChange={(e) => setSelectedIds(e.target.checked ? new Set(filtered.map((i) => i.id)) : new Set())}
+                style={{ cursor: "pointer", accentColor: "var(--color-navy)" }}
+                aria-label="Select all"
+              />
+            </span>}
             <span style={{ flexShrink: 0, width: 28 }} />
             <span style={{ flex: 1, minWidth: 0, fontSize: 11, fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.05em", color: "var(--color-secondary)" }}>Title</span>
             {!narrowList && <span style={{ flexShrink: 0, width: 100, fontSize: 11, fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.05em", color: "var(--color-secondary)" }}>Authors</span>}
@@ -3181,6 +3393,7 @@ export default function LiteraturePage() {
             <span style={{ flexShrink: 0, width: 90, fontSize: 11, fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.05em", color: "var(--color-secondary)" }}>Status</span>
           </div>
 
+          {/* Item rows */}
           <div className="flex-1 overflow-y-auto">
             {loadingItems
               ? <div className="flex items-center justify-center h-40"><p style={{ fontSize: 13, color: "var(--color-secondary)" }}>Loading…</p></div>
@@ -3198,12 +3411,26 @@ export default function LiteraturePage() {
               ? <div className="flex items-center justify-center h-40"><p style={{ fontSize: 13, color: "var(--color-secondary)" }}>No items match your filters.</p></div>
               : filtered.map((item) => {
                   const isSelected = selectedItem?.id === item.id && !isMobile;
+                  const isChecked = selectedIds.has(item.id);
                   return (
                     <button key={item.id} onClick={() => setSelectedItemId(isSelected ? null : item.id)} className="w-full text-left"
-                      style={{ display: "flex", alignItems: "center", gap: 8, paddingLeft: isMobile ? 12 : 16, paddingRight: isMobile ? 12 : 16, paddingTop: 10, paddingBottom: 10, backgroundColor: isSelected ? "rgba(27,46,75,0.06)" : "transparent", borderLeft: isSelected ? "3px solid var(--color-navy)" : "3px solid transparent", borderBottom: "1px solid var(--color-border)", minHeight: 48 }}
+                      style={{ display: "flex", alignItems: "center", gap: 8, paddingLeft: isMobile ? 12 : 16, paddingRight: isMobile ? 12 : 16, paddingTop: 10, paddingBottom: 10, backgroundColor: isSelected ? "rgba(27,46,75,0.06)" : isChecked ? "rgba(27,46,75,0.04)" : "transparent", borderLeft: isSelected ? "3px solid var(--color-navy)" : "3px solid transparent", borderBottom: "1px solid var(--color-border)", minHeight: 48 }}
                       onMouseEnter={(e) => { if (!isSelected) (e.currentTarget as HTMLElement).style.backgroundColor = "#F8FAFF"; }}
-                      onMouseLeave={(e) => { if (!isSelected) (e.currentTarget as HTMLElement).style.backgroundColor = ""; }}
+                      onMouseLeave={(e) => { if (!isSelected) (e.currentTarget as HTMLElement).style.backgroundColor = isChecked ? "rgba(27,46,75,0.04)" : ""; }}
                     >
+                      {selectMode && (
+                        <input type="checkbox" checked={isChecked}
+                          onClick={(e) => e.stopPropagation()}
+                          onChange={(e) => {
+                            e.stopPropagation();
+                            const next = new Set(selectedIds);
+                            e.target.checked ? next.add(item.id) : next.delete(item.id);
+                            setSelectedIds(next);
+                          }}
+                          style={{ flexShrink: 0, width: 16, height: 16, cursor: "pointer", accentColor: "var(--color-navy)" }}
+                          aria-label={`Select ${item.title}`}
+                        />
+                      )}
                       <span style={{ flexShrink: 0, width: 28 }}>{TYPE_ICONS[item.type]}</span>
                       <span title={item.title} style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 500, color: "var(--color-body)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.title}</span>
                       {!narrowList && <span style={{ flexShrink: 0, width: 100, fontSize: 12, color: "var(--color-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{formatAuthors(item.authors)}</span>}
@@ -3214,6 +3441,30 @@ export default function LiteraturePage() {
                 })}
           </div>
         </>)}
+        </div>
+      )}
+
+      {/* Bulk delete confirmation dialog */}
+      {bulkDeleteConfirmOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ backgroundColor: "rgba(0,0,0,0.45)" }} onClick={() => setBulkDeleteConfirmOpen(false)}>
+          <div style={{ backgroundColor: "var(--color-surface)", borderRadius: 10, padding: 24, maxWidth: 360, width: "calc(100% - 32px)", boxShadow: "0 8px 40px rgba(0,0,0,0.22)" }} onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ fontFamily: "var(--font-lora)", fontSize: 15, fontWeight: 600, color: "var(--color-navy)", marginTop: 0, marginBottom: 8 }}>
+              Delete {selectedIds.size} item{selectedIds.size !== 1 ? "s" : ""}?
+            </h3>
+            <p style={{ fontSize: 13, color: "var(--color-secondary)", marginBottom: 20, lineHeight: 1.5 }}>
+              These items will be moved to <strong>Recently removed</strong> and can be recovered at any time.
+            </p>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+              <button onClick={() => setBulkDeleteConfirmOpen(false)}
+                style={{ fontSize: 13, fontWeight: 600, color: "var(--color-body)", border: "1px solid var(--color-border)", borderRadius: 7, padding: "8px 16px", backgroundColor: "transparent", cursor: "pointer" }}>
+                Cancel
+              </button>
+              <button onClick={() => { setBulkDeleteConfirmOpen(false); deleteBulk([...selectedIds]); }}
+                style={{ fontSize: 13, fontWeight: 700, color: "#fff", backgroundColor: "#C0392B", border: "none", borderRadius: 7, padding: "8px 16px", cursor: "pointer" }}>
+                Delete {selectedIds.size} item{selectedIds.size !== 1 ? "s" : ""}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
