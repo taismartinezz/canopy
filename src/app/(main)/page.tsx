@@ -517,7 +517,7 @@ function KanbanPreview({
           </Link>
         }
       />
-      <div className="overflow-x-auto" style={{ WebkitOverflowScrolling: "touch" }}>
+      <div style={{ overflowX: "auto", overflowY: "hidden", WebkitOverflowScrolling: "touch" }}>
         <ClientOnly>
           <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
             <div className="p-4 md:p-5 grid gap-4" style={{ gridTemplateColumns: "repeat(4, minmax(240px, 1fr))", minWidth: "min(100%, 960px)" }}>
@@ -750,6 +750,7 @@ export default function DashboardPage() {
           .from("tasks")
           .select("*, task_assignees(user_id)")
           .eq("project_id", pid)
+          .is("parent_id", null)
           .or("archived.is.null,archived.eq.false")
           .order("created_at", { ascending: false });
         if (taskError) console.error("[Dashboard] tasks error:", taskError);
