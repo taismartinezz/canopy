@@ -31,6 +31,7 @@ export default function PDFViewer({
   onAnnotationAdded,
   onClose,
   initialPage = 1,
+  openTabUrl,
 }: {
   url: string;
   itemId: string;
@@ -39,6 +40,8 @@ export default function PDFViewer({
   onAnnotationAdded: (a: LitAnnotation) => void;
   onClose: () => void;
   initialPage?: number;
+  /** When set, show an "Open in new tab" button in the top bar (used for external PDFs where CORS may block loading). */
+  openTabUrl?: string;
 }) {
   const [numPages, setNumPages] = useState<number>(0);
   const [page, setPage] = useState(initialPage);
@@ -157,6 +160,17 @@ export default function PDFViewer({
           <X size={16} /> Close
         </button>
 
+        {openTabUrl && (
+          <a
+            href={openTabUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: "#ffffff99", textDecoration: "none", border: "1px solid #ffffff33", borderRadius: 6, padding: "4px 10px", whiteSpace: "nowrap" }}
+          >
+            Open in new tab
+          </a>
+        )}
+
         <div style={{ flex: 1 }} />
 
         {/* Page nav */}
@@ -216,7 +230,15 @@ export default function PDFViewer({
           }}
         >
           {loadError && (
-            <p style={{ color: "#F87171", fontSize: 13, marginTop: 40 }}>{loadError}</p>
+            <div style={{ marginTop: 40, maxWidth: 420, textAlign: "center" }}>
+              <p style={{ color: "#F87171", fontSize: 13, marginBottom: 8 }}>{loadError}</p>
+              {openTabUrl && (
+                <p style={{ color: "#ffffff99", fontSize: 12, lineHeight: 1.6 }}>
+                  This PDF is hosted on an external domain that may block cross-origin requests (CORS).
+                  Use the <strong style={{ color: "#fff" }}>Open in new tab</strong> button above to view it directly.
+                </p>
+              )}
+            </div>
           )}
 
           <Document

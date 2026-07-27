@@ -28,7 +28,9 @@ function textColor(count: number, total: number): string {
 
 export default function TeamOverlapView({ availabilities, teamMembers, onProposeMeeting }: Props) {
   const [tooltip, setTooltip] = useState<{ key: string; names: string[] } | null>(null);
-  const total = availabilities.length;
+  // Use teamMembers.length so the subtitle matches the title (which lists selected members),
+  // regardless of how many have actually submitted availability data.
+  const total = teamMembers.length;
 
   // Build a map: slotKey → array of userId who are available
   const slotMap: Record<string, string[]> = {};

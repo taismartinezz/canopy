@@ -257,30 +257,24 @@ export default function TeamPage() {
     });
   }, []);
 
-  // Query team_members only once we have a confirmed userId.
+  // Query team_members once we have both userId and projectId (from context).
+  // Using context's projectId avoids a redundant user_profiles round-trip and ensures
+  // we use the same project scope that the rest of the app resolves.
   useEffect(() => {
-    if (!currentUserId) return;
+    if (!currentUserId || !projectId) return;
 
-    supabase
-      .from("user_profiles")
-      .select("project_id")
-      .eq("id", currentUserId)
-      .maybeSingle()
-      .then(async ({ data: profileData }) => {
-        const projectId = profileData?.project_id as string | undefined;
-        if (!projectId) { setLoading(false); return; }
-
-        const [{ data: memberData }, { data: taskRows, error: taskError }] = await Promise.all([
-          supabase
-            .from("team_members")
-            .select("*, user_profiles(name, avatar_color, avatar_initials, avatar_url, institution)")
-            .eq("project_id", projectId),
-          supabase
-            .from("tasks")
-            .select("id, status, task_assignees(user_id)")
-            .eq("project_id", projectId)
-            .or("archived.is.null,archived.eq.false"),
-        ]);
+    (async () => {
+      const [{ data: memberData }, { data: taskRows, error: taskError }] = await Promise.all([
+        supabase
+          .from("team_members")
+          .select("*, user_profiles(name, avatar_color, avatar_initials, avatar_url, institution)")
+          .eq("project_id", projectId),
+        supabase
+          .from("tasks")
+          .select("id, status, task_assignees(user_id)")
+          .eq("project_id", projectId)
+          .or("archived.is.null,archived.eq.false"),
+      ]);
 
         if (taskError) console.error("[Team] task count query error:", taskError);
 
@@ -344,8 +338,8 @@ export default function TeamPage() {
 
         setTeam(members);
         setLoading(false);
-      });
-  }, [currentUserId]);
+    })();
+  }, [currentUserId, projectId]);
 
   // In project scope, fetch the full sub-project member list (includes external members
   // who may not be in team_members) directly from sub_project_members + user_profiles.

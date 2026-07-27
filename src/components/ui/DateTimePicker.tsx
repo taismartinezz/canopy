@@ -50,8 +50,13 @@ export function CalendarPicker({ value, accentColor, pos, onSelect, onClear, onC
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     function down(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as Node)) onClose(); }
+    function key(e: KeyboardEvent) { if (e.key === "Escape") onClose(); }
     document.addEventListener("mousedown", down);
-    return () => document.removeEventListener("mousedown", down);
+    document.addEventListener("keydown", key);
+    return () => {
+      document.removeEventListener("mousedown", down);
+      document.removeEventListener("keydown", key);
+    };
   }, [onClose]);
   function prevMonth() { setCursor(p => p.month === 0 ? { year: p.year-1, month: 11 } : { ...p, month: p.month-1 }); }
   function nextMonth() { setCursor(p => p.month === 11 ? { year: p.year+1, month: 0 } : { ...p, month: p.month+1 }); }

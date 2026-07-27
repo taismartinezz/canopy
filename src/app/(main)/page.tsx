@@ -245,10 +245,36 @@ function activitySuffix(row: ActivityRow): string | null {
 
 // ── Team activity widget ──────────────────────────────────────────────────────
 
-function TeamActivityWidget({ rows, teamMembers }: { rows: ActivityRow[]; teamMembers: User[] }) {
+function SkeletonLine({ width = "100%", height = 13 }: { width?: string | number; height?: number }) {
+  return (
+    <div style={{ width, height, borderRadius: 4, backgroundColor: "var(--color-border)", opacity: 0.6 }}
+      className="animate-pulse" />
+  );
+}
+
+function TeamActivityWidget({ rows, teamMembers, loading }: { rows: ActivityRow[]; teamMembers: User[]; loading?: boolean }) {
   const [showAll, setShowAll] = useState(false);
   const displayed = showAll ? rows : rows.slice(0, 5);
   const hasMore = rows.length > 5;
+
+  if (loading) {
+    return (
+      <Card>
+        <CardHeader title="Team Activity" />
+        <div className="px-5 py-3 space-y-4">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="flex items-start gap-3">
+              <div style={{ width: 26, height: 26, borderRadius: "50%", backgroundColor: "var(--color-border)", flexShrink: 0 }} className="animate-pulse" />
+              <div className="flex-1 space-y-1.5">
+                <SkeletonLine width="70%" />
+                <SkeletonLine width="35%" height={11} />
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
+    );
+  }
 
   if (rows.length === 0) {
     return (
@@ -400,13 +426,14 @@ function DroppableColumn({
 // ── Kanban preview ────────────────────────────────────────────────────────────
 
 function KanbanPreview({
-  tasks, onTaskClick, onMoveTask, onAddTask, teamMembers,
+  tasks, onTaskClick, onMoveTask, onAddTask, teamMembers, loading,
 }: {
   tasks: Task[];
   onTaskClick: (task: Task) => void;
   onMoveTask: (taskId: string, status: TaskStatus) => void;
   onAddTask: (status: TaskStatus) => void;
   teamMembers: User[];
+  loading?: boolean;
 }) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [isMobile, setIsMobile] = useState(false);
@@ -443,6 +470,42 @@ function KanbanPreview({
   );
 
   const activeTask = activeId ? tasks.find((t) => t.id === activeId) : null;
+
+  if (loading) {
+    return (
+      <Card>
+        <CardHeader title="Tasks" action={
+          <Link href="/tasks" className="flex items-center gap-1 transition-opacity hover:opacity-70" style={{ fontSize: 12, color: "var(--color-navy)", fontWeight: 600, textDecoration: "none" }}>
+            See all <ChevronRight size={13} />
+          </Link>
+        } />
+        <div className="p-4 md:p-5 grid gap-4" style={{ gridTemplateColumns: "repeat(4, minmax(240px, 1fr))", overflowX: "auto" }}>
+          {STATUS_ORDER.map((status) => {
+            const cfg = STATUS_CONFIG[status];
+            return (
+              <div key={status}>
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: cfg.dot }} />
+                  <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--color-body)" }}>{cfg.label}</span>
+                </div>
+                <div className="space-y-2">
+                  {[1, 2].map((i) => (
+                    <div key={i} className="p-3 rounded-lg animate-pulse" style={{ border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)" }}>
+                      <SkeletonLine width="80%" height={13} />
+                      <div className="flex items-center justify-between mt-2">
+                        <SkeletonLine width="40%" height={11} />
+                        <SkeletonLine width="25%" height={11} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </Card>
+    );
+  }
 
   return (
     <Card>
@@ -638,12 +701,13 @@ export default function DashboardPage() {
   const [dashEvents, setDashEvents]   = useState<CalendarEvent[]>([]);
   const [dashActivity, setDashActivity] = useState<ActivityRow[]>([]);
   const [dashPosts, setDashPosts]     = useState<DashboardPost[]>([]);
+  const [loading, setLoading]         = useState(isSupabaseConfigured);
 
   useEffect(() => {
     if (isSupabaseConfigured) {
       supabase.auth.getSession().then(async ({ data: { session } }) => {
         const user = session?.user ?? null;
-        if (!user) return;
+        if (!user) { setLoading(false); return; }
         setUserId(user.id);
 
         const { data: up } = await supabase
@@ -652,7 +716,7 @@ export default function DashboardPage() {
           .eq("id", user.id)
           .maybeSingle();
 
-        if (!up?.project_id) return;
+        if (!up?.project_id) { setLoading(false); return; }
         const pid = up.project_id as string;
         setProjectId(pid);
 
@@ -776,6 +840,7 @@ export default function DashboardPage() {
         if (!actError && actData) {
           setDashActivity(actData as ActivityRow[]);
         }
+        setLoading(false);
       });
       return;
     }
@@ -852,7 +917,7 @@ export default function DashboardPage() {
       {/* Row 1 */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5 mb-4 md:mb-5">
         <UpcomingWidget events={dashEvents} projectId={projectId} />
-        <TeamActivityWidget rows={dashActivity} teamMembers={teamMembers} />
+        <TeamActivityWidget rows={dashActivity} teamMembers={teamMembers} loading={loading} />
       </div>
 
       {/* Row 2: Kanban preview */}
@@ -863,6 +928,7 @@ export default function DashboardPage() {
           onMoveTask={moveTask}
           onAddTask={(status) => setModalStatus(status)}
           teamMembers={teamMembers}
+          loading={loading}
         />
       </div>
 

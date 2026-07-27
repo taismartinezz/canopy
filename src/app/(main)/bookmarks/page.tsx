@@ -262,6 +262,7 @@ function BookmarkCard({ bm, canDelete, onDelete, onEdit }: {
   const [editTitle, setEditTitle] = useState(bm.title);
   const [editUrl, setEditUrl] = useState(bm.url);
   const [editSaving, setEditSaving] = useState(false);
+  const [editUrlError, setEditUrlError] = useState("");
   const type = inferType(bm.url);
   const cfg = TYPE_CONFIG[type];
   const Icon = cfg.icon;
@@ -276,7 +277,11 @@ function BookmarkCard({ bm, canDelete, onDelete, onEdit }: {
 
   async function handleSaveEdit(e: React.MouseEvent) {
     e.stopPropagation();
-    if (!editUrl.trim() || !isValidUrl(editUrl.trim())) return;
+    if (!editUrl.trim() || !isValidUrl(editUrl.trim())) {
+      setEditUrlError("Enter a valid URL (https://…)");
+      return;
+    }
+    setEditUrlError("");
     setEditSaving(true);
     await onEdit(bm.id, editTitle.trim() || hostname(editUrl.trim()), editUrl.trim());
     setEditSaving(false);
@@ -306,9 +311,10 @@ function BookmarkCard({ bm, canDelete, onDelete, onEdit }: {
           <label style={{ fontSize: 11, fontWeight: 700, color: "var(--color-secondary)", display: "block", marginBottom: 3 }}>URL</label>
           <input
             value={editUrl}
-            onChange={(e) => setEditUrl(e.target.value)}
-            style={{ width: "100%", boxSizing: "border-box", padding: "7px 10px", fontSize: 12, border: "1px solid var(--color-border)", borderRadius: 6, outline: "none", fontFamily: "var(--font-roboto)", color: "var(--color-body)", backgroundColor: "var(--color-canvas)" }}
+            onChange={(e) => { setEditUrl(e.target.value); setEditUrlError(""); }}
+            style={{ width: "100%", boxSizing: "border-box", padding: "7px 10px", fontSize: 12, border: `1px solid ${editUrlError ? "#C0392B" : "var(--color-border)"}`, borderRadius: 6, outline: "none", fontFamily: "var(--font-roboto)", color: "var(--color-body)", backgroundColor: "var(--color-canvas)" }}
           />
+          {editUrlError && <p style={{ fontSize: 11, color: "#C0392B", marginTop: 3 }}>{editUrlError}</p>}
         </div>
         <div style={{ display: "flex", gap: 6, justifyContent: "flex-end", marginTop: 4 }}>
           <button
