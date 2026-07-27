@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Building2, Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff } from "lucide-react";
 import CanopyLogo from "@/components/ui/CanopyLogo";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 
@@ -42,13 +42,6 @@ function MicrosoftIcon() {
   );
 }
 
-function AppleIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
-      <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z" fill="#000000"/>
-    </svg>
-  );
-}
 
 // ── Auth button ───────────────────────────────────────────────────────────────
 
@@ -115,84 +108,6 @@ function AuthButton({
   );
 }
 
-// ── Institution modal ─────────────────────────────────────────────────────────
-
-function InstitutionModal({ onClose }: { onClose: () => void }) {
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) { if (e.key === "Escape") onClose(); }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in"
-      style={{ backgroundColor: "rgba(27,46,75,0.3)" }}
-      onClick={onClose}
-    >
-      <div
-        style={{
-          backgroundColor: "#ffffff",
-          maxWidth: 400,
-          width: "100%",
-          padding: 32,
-          borderRadius: 10,
-          border: "1px solid #DDE1E7",
-          boxShadow: "0 8px 32px rgba(27,46,75,0.14)",
-        }}
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="institution-modal-title"
-      >
-        <h2
-          id="institution-modal-title"
-          style={{
-            fontFamily: "var(--font-lora)",
-            fontWeight: 600,
-            fontSize: 16,
-            color: "#1B2E4B",
-            margin: "0 0 12px",
-          }}
-        >
-          Institution login
-        </h2>
-        <p
-          style={{
-            fontFamily: "var(--font-roboto)",
-            fontSize: 13,
-            color: "#6B6B6B",
-            lineHeight: 1.6,
-            margin: "0 0 24px",
-          }}
-        >
-          Institution SSO will be available when your lab is onboarded by a PI.
-          Contact your PI to get started.
-        </p>
-        <button
-          onClick={onClose}
-          style={{
-            width: "100%",
-            height: 44,
-            minHeight: 44,
-            backgroundColor: "#1B2E4B",
-            color: "#ffffff",
-            border: "none",
-            borderRadius: 8,
-            fontFamily: "var(--font-roboto)",
-            fontWeight: 700,
-            fontSize: 14,
-            cursor: "pointer",
-          }}
-          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "#2E4A6F"; }}
-          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "#1B2E4B"; }}
-        >
-          Got it
-        </button>
-      </div>
-    </div>
-  );
-}
 
 // ── Project invite resolution ─────────────────────────────────────────────────
 // Called after any successful sign-in. Reads the pending token from localStorage,
@@ -244,7 +159,6 @@ async function resolveProjectInvite(userId: string, userEmail: string) {
 
 export default function LoginPage() {
   const router = useRouter();
-  const [ssoOpen, setSsoOpen] = useState(false);
   const [mode, setMode] = useState<"signin" | "signup">(() => {
     if (typeof window !== "undefined") {
       return new URLSearchParams(window.location.search).get("mode") === "signup"
@@ -384,7 +298,7 @@ export default function LoginPage() {
     setForgotLoading(false);
   }, [forgotEmail]);
 
-  const handleOAuth = useCallback(async (provider: "github" | "google" | "apple" | "azure") => {
+  const handleOAuth = useCallback(async (provider: "github" | "google" | "azure") => {
     if (isSupabaseConfigured) {
       localStorage.removeItem("canopy_user");
       localStorage.removeItem("canopy_project");
@@ -497,24 +411,10 @@ export default function LoginPage() {
         {/* Auth buttons */}
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           <AuthButton
-            icon={<GitHubIcon />}
-            label="Continue with GitHub"
-            ariaLabel="Sign in with GitHub"
-            onClick={() => handleOAuth("github")}
-          />
-
-          <AuthButton
             icon={<GoogleIcon />}
             label="Continue with Google"
             ariaLabel="Sign in with Google"
             onClick={() => handleOAuth("google")}
-          />
-
-          <AuthButton
-            icon={<AppleIcon />}
-            label="Continue with Apple"
-            ariaLabel="Sign in with Apple"
-            onClick={() => handleOAuth("apple")}
           />
 
           <AuthButton
@@ -525,11 +425,10 @@ export default function LoginPage() {
           />
 
           <AuthButton
-            icon={<Building2 size={18} color="#6B6B6B" />}
-            label="Sign in with your institution"
-            ariaLabel="Sign in with your institution"
-            onClick={() => setSsoOpen(true)}
-            muted
+            icon={<GitHubIcon />}
+            label="Continue with GitHub"
+            ariaLabel="Sign in with GitHub"
+            onClick={() => handleOAuth("github")}
           />
         </div>
 
@@ -818,7 +717,6 @@ export default function LoginPage() {
         .
       </p>
 
-      {ssoOpen && <InstitutionModal onClose={() => setSsoOpen(false)} />}
     </div>
   );
 }
