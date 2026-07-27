@@ -258,40 +258,63 @@ export default function TeamPage() {
   }, []);
 
   // Query team_members once we have both userId and projectId (from context).
-  // Using context's projectId avoids a redundant user_profiles round-trip and ensures
-  // we use the same project scope that the rest of the app resolves.
   useEffect(() => {
     if (!currentUserId || !projectId) return;
 
     (async () => {
-      const [{ data: memberData }, { data: taskRows, error: taskError }] = await Promise.all([
+      // 1. Team roster for this project + the project's display name
+      const [{ data: memberData }, { data: projectData }] = await Promise.all([
         supabase
           .from("team_members")
           .select("*, user_profiles(name, avatar_color, avatar_initials, avatar_url, institution)")
           .eq("project_id", projectId),
         supabase
-          .from("tasks")
-          .select("id, status, task_assignees(user_id)")
-          .eq("project_id", projectId)
-          .or("archived.is.null,archived.eq.false"),
+          .from("projects")
+          .select("name")
+          .eq("id", projectId)
+          .maybeSingle(),
       ]);
 
-        if (taskError) console.error("[Team] task count query error:", taskError);
+      // Override the localStorage-cached name with the real value from the DB.
+      if (projectData?.name) setStoredProjectName(projectData.name as string);
 
-        // Build per-user task count map from tasks → task_assignees
-        const countMap: Record<string, Record<TaskStatus, number>> = {};
-        if (taskRows) {
-          for (const task of taskRows) {
-            const taskStatus = task.status as TaskStatus;
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const assignees = (task.task_assignees as any[]) ?? [];
-            for (const ta of assignees) {
-              const uid = ta.user_id as string;
+      // 2. Task counts — scoped to team members across ALL projects they work in.
+      //    Filtering by project_id would miss tasks created in sub-projects or other
+      //    projects where the same users are assigned work.
+      const memberIds = (memberData ?? []).map((r) => r.user_id as string);
+      const countMap: Record<string, Record<TaskStatus, number>> = {};
+
+      if (memberIds.length > 0) {
+        const { data: assigneeRows, error: assigneeError } = await supabase
+          .from("task_assignees")
+          .select("user_id, task_id")
+          .in("user_id", memberIds);
+
+        if (assigneeError) console.error("[Team] task_assignees error:", assigneeError);
+
+        const rawTaskIds = [...new Set((assigneeRows ?? []).map((r) => r.task_id as string))];
+
+        if (rawTaskIds.length > 0) {
+          const { data: taskRows, error: taskError } = await supabase
+            .from("tasks")
+            .select("id, status")
+            .in("id", rawTaskIds)
+            .or("archived.is.null,archived.eq.false");
+
+          if (taskError) console.error("[Team] task count query error:", taskError);
+
+          if (taskRows) {
+            const taskStatusMap = new Map(taskRows.map((t) => [t.id as string, t.status as string]));
+            for (const { user_id, task_id } of (assigneeRows ?? [])) {
+              const status = taskStatusMap.get(task_id as string);
+              if (!status) continue; // archived or filtered out
+              const uid = user_id as string;
               if (!countMap[uid]) countMap[uid] = { todo: 0, in_progress: 0, in_review: 0, done: 0 };
-              countMap[uid][taskStatus] = (countMap[uid][taskStatus] ?? 0) + 1;
+              countMap[uid][status as TaskStatus] = (countMap[uid][status as TaskStatus] ?? 0) + 1;
             }
           }
         }
+      }
 
         const members: TeamMember[] = (memberData ?? []).map((row) => {
           const profiles = row.user_profiles as unknown as Record<string, string>[] | Record<string, string> | null;
