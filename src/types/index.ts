@@ -165,6 +165,7 @@ export interface LiteratureItem {
   id: string;
   projectId: string;
   scope: LibraryScope;
+  subProjectId?: string;
   type: LiteratureType;
   title: string;
   authors: string[];
@@ -184,6 +185,7 @@ export interface LiteratureItem {
   files: LiteratureFile[];
   addedById: string;
   addedAt: string;
+  deletedAt?: string | null;
   collections: string[];   // Collection IDs
   relatedIds: string[];    // Related item IDs
   importSource?: "manual" | "zotero_json" | "zotero_api" | "doi" | "bibtex" | "url";

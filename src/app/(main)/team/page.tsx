@@ -278,42 +278,35 @@ export default function TeamPage() {
       // Override the localStorage-cached name with the real value from the DB.
       if (projectData?.name) setStoredProjectName(projectData.name as string);
 
-      // 2. Task counts — scoped to team members across ALL projects they work in.
-      //    Filtering by project_id would miss tasks created in sub-projects or other
-      //    projects where the same users are assigned work.
+      // 2. Task counts — single embedded-join query so PostgREST handles the
+      //    task_id → tasks.id match server-side; no client-side Map key lookup needed.
       const memberIds = (memberData ?? []).map((r) => r.user_id as string);
       const countMap: Record<string, Record<TaskStatus, number>> = {};
 
       if (memberIds.length > 0) {
-        const { data: assigneeRows, error: assigneeError } = await supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: assigneeWithTasks, error: joinError } = await (supabase
           .from("task_assignees")
-          .select("user_id, task_id")
-          .in("user_id", memberIds);
+          .select("user_id, task_id, tasks(id, status, archived)")
+          .in("user_id", memberIds) as any);
 
-        if (assigneeError) console.error("[Team] task_assignees error:", assigneeError);
+        console.error("[Team] assigneeWithTasks:", assigneeWithTasks, "joinError:", joinError);
 
-        const rawTaskIds = [...new Set((assigneeRows ?? []).map((r) => r.task_id as string))];
+        if (joinError) console.error("[Team] assignee+task join error:", joinError);
 
-        if (rawTaskIds.length > 0) {
-          const { data: taskRows, error: taskError } = await supabase
-            .from("tasks")
-            .select("id, status")
-            .in("id", rawTaskIds)
-            .or("archived.is.null,archived.eq.false");
-
-          if (taskError) console.error("[Team] task count query error:", taskError);
-
-          if (taskRows) {
-            const taskStatusMap = new Map(taskRows.map((t) => [t.id as string, t.status as string]));
-            for (const { user_id, task_id } of (assigneeRows ?? [])) {
-              const status = taskStatusMap.get(task_id as string);
-              if (!status) continue; // archived or filtered out
-              const uid = user_id as string;
-              if (!countMap[uid]) countMap[uid] = { todo: 0, in_progress: 0, in_review: 0, done: 0 };
-              countMap[uid][status as TaskStatus] = (countMap[uid][status as TaskStatus] ?? 0) + 1;
-            }
-          }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        for (const row of (assigneeWithTasks ?? []) as any[]) {
+          const taskArr = row.tasks;
+          const task = Array.isArray(taskArr) ? taskArr[0] : taskArr;
+          if (!task) continue;           // task deleted or RLS-hidden
+          if (task.archived) continue;   // skip archived tasks
+          const status = task.status as TaskStatus;
+          const uid = row.user_id as string;
+          if (!countMap[uid]) countMap[uid] = { todo: 0, in_progress: 0, in_review: 0, done: 0 };
+          if (status in countMap[uid]) countMap[uid][status]++;
         }
+
+        console.error("[Team] countMap after join:", JSON.stringify(countMap));
       }
 
         const members: TeamMember[] = (memberData ?? []).map((row) => {
