@@ -95,7 +95,7 @@ export const TASKS: Task[] = [
         id: "c2",
         authorId: "u1",
         content:
-          "Updated the withdrawal section — matches the IRB submission exactly now. @u0 can you take a final look before we send to legal?",
+          "Updated the withdrawal section. Matches the IRB submission exactly now. @u0 can you take a final look before we send to legal?",
         createdAt: "2026-05-29T11:30:00Z",
         mentions: ["u0"],
       },
@@ -123,7 +123,7 @@ export const TASKS: Task[] = [
   {
     id: "t2",
     projectId: "p1",
-    title: "Code interview transcripts — Phase 1",
+    title: "Code interview transcripts: Phase 1",
     description:
       "Apply the moral injury codebook to the first 12 interview transcripts. Flag any passages that don't fit existing codes for team discussion.",
     status: "in_progress",
@@ -154,7 +154,7 @@ export const TASKS: Task[] = [
   {
     id: "t3",
     projectId: "p1",
-    title: "Literature review — resilience frameworks",
+    title: "Literature review: resilience frameworks",
     description:
       "Synthesize literature on post-traumatic resilience frameworks published 2018–2026. Focus on longitudinal study designs.",
     status: "in_progress",
@@ -209,7 +209,7 @@ export const TASKS: Task[] = [
   {
     id: "t6",
     projectId: "p1",
-    title: "Statistical analysis — pilot data",
+    title: "Statistical analysis: pilot data",
     description:
       "Run descriptive statistics on the 24-person pilot dataset. Check for floor/ceiling effects on the MI-Measure subscales.",
     status: "todo",
@@ -298,7 +298,7 @@ export const ACTIVITY: ActivityEvent[] = [
     actorId: "u2",
     action: "moved",
     objectType: "task",
-    objectLabel: "Code interview transcripts — Phase 1",
+    objectLabel: "Code interview transcripts: Phase 1",
     destination: "In Progress",
     createdAt: new Date(Date.now() - 1000 * 60 * 45).toISOString(),
   },
@@ -331,7 +331,7 @@ export const ACTIVITY: ActivityEvent[] = [
     actorId: "u3",
     action: "created",
     objectType: "task",
-    objectLabel: "Statistical analysis — pilot data",
+    objectLabel: "Statistical analysis: pilot data",
     createdAt: new Date(Date.now() - 1000 * 60 * 60 * 48).toISOString(),
   },
 ];
@@ -341,7 +341,7 @@ export const ACTIVITY: ActivityEvent[] = [
 export const EVENTS: CalendarEvent[] = [
   {
     id: "e1",
-    title: "Team debrief — post interview",
+    title: "Team debrief: post interview",
     date: "2026-06-04",
     time: "14:00",
     projectId: "p1",
@@ -361,7 +361,7 @@ export const EVENTS: CalendarEvent[] = [
   },
   {
     id: "e4",
-    title: "Lab meeting — codebook review",
+    title: "Lab meeting: codebook review",
     date: "2026-06-12",
     time: "13:00",
     projectId: "p1",
@@ -381,7 +381,7 @@ export const DASHBOARD_POSTS: DashboardPost[] = [
     id: "dp1",
     authorId: "u2",
     content:
-      "NSF supplement funding opportunity — due Aug 1. Could support a summer RA. Sharing link in Slack.",
+      "NSF supplement funding opportunity. Due Aug 1. Could support a summer RA. Sharing link in Slack.",
     createdAt: new Date(Date.now() - 1000 * 60 * 60 * 36).toISOString(),
     type: "opportunity",
   },
@@ -396,7 +396,7 @@ export const DASHBOARD_POSTS: DashboardPost[] = [
   {
     id: "dp3",
     authorId: "u0",
-    content: "The ethics amendment was approved faster than expected — 3 weeks! Great team effort on that submission.",
+    content: "The ethics amendment was approved faster than expected: 3 weeks! Great team effort on that submission.",
     createdAt: new Date(Date.now() - 1000 * 60 * 60 * 120).toISOString(),
     type: "lab_win",
   },
@@ -464,18 +464,18 @@ export const JOURNAL_ENTRIES: JournalEntry[] = [
         promptId: "jp2",
         promptText: "Was there a moment this week when you felt particularly affected by the content of your work? What happened?",
         response:
-          "Transcript 3 from the pilot was hard to sit with. The participant described losing a colleague to suicide after they both witnessed the same incident. I noticed myself slowing way down while coding it — which I think is good, actually. Gave myself the afternoon to step away from the coding and go for a walk.",
+          "Transcript 3 from the pilot was hard to sit with. The participant described losing a colleague to suicide after they both witnessed the same incident. I noticed myself slowing way down while coding it, which I think is good, actually. Gave myself the afternoon to step away from the coding and go for a walk.",
       },
       {
         promptId: "jp7",
         promptText: "Were you able to step away from your research this week? What helped or made that difficult?",
         response:
-          "Better than last week. I set a hard stop at 6pm on Wednesday and kept it. The hardest day was Friday when I wanted to finish coding transcript 6 — I ended up stopping at a natural break instead of pushing through. It helped.",
+          "Better than last week. I set a hard stop at 6pm on Wednesday and kept it. The hardest day was Friday when I wanted to finish coding transcript 6; I ended up stopping at a natural break instead of pushing through. It helped.",
       },
       {
         promptId: "jp11",
         promptText: "What's one thing you're looking forward to next week, in or outside of your research?",
-        response: "The team meeting Thursday — I actually enjoy when we all get together to work through codebook disagreements. Also: hiking Sunday.",
+        response: "The team meeting Thursday. I actually enjoy when we all get together to work through codebook disagreements. Also: hiking Sunday.",
       },
     ],
     checkin: [
@@ -502,7 +502,7 @@ export const JOURNAL_ENTRIES: JournalEntry[] = [
       {
         promptId: "jp7",
         promptText: "Were you able to step away from your research this week? What helped or made that difficult?",
-        response: "Harder this week — kept thinking about the amendment deadlines. Worked a couple of evenings I hadn't planned to.",
+        response: "Harder this week. Kept thinking about the amendment deadlines. Worked a couple of evenings I hadn't planned to.",
       },
       {
         promptId: "jp11",
@@ -553,7 +553,7 @@ export const LITERATURE_ITEMS: LiteratureItem[] = [
     status: "read",
     rating: 5,
     notes:
-      "Key paper for our theoretical framework. The finding on 'protective guilt' is directly relevant to Phase 2 interview guide — add to codebook meeting agenda.",
+      "Key paper for our theoretical framework. The finding on 'protective guilt' is directly relevant to Phase 2 interview guide. Add to codebook meeting agenda.",
     files: [
       {
         id: "lf1",
@@ -587,7 +587,7 @@ export const LITERATURE_ITEMS: LiteratureItem[] = [
     removedTags: [],
     status: "read",
     rating: 5,
-    notes: "Core measurement paper. Using MIOS subscales in our pilot — see pilot data analysis sheet.",
+    notes: "Core measurement paper. Using MIOS subscales in our pilot. See pilot data analysis sheet.",
     files: [],
     addedById: "u1",
     addedAt: "2026-02-03T10:00:00Z",
@@ -758,7 +758,7 @@ export const NOTIFICATIONS: Notification[] = [
     id: "n4",
     type: "meeting_proposed",
     recipientId: "u1",
-    message: "Dr. Yara Osei proposed a meeting: Consent Form Review — Jul 8 at 10:00 AM",
+    message: "Dr. Yara Osei proposed a meeting: Consent Form Review on Jul 8 at 10:00 AM",
     read: false,
     createdAt: new Date(Date.now() - 1000 * 60 * 60 * 3).toISOString(),
     linkTo: "/scheduling",

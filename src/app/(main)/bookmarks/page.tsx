@@ -125,14 +125,14 @@ async function fetchPageTitle(url: string): Promise<string | null> {
 // ── Demo data ─────────────────────────────────────────────────────────────────
 
 const DEMO_BOOKMARKS: BookmarkRow[] = [
-  { id: "d1", project_id: "demo", url: "https://www.ncbi.nlm.nih.gov/pmc/articles/PMC7523697/", title: "Moral Injury in Healthcare Workers — PMC", added_by: null, added_at: new Date(Date.now() - 1000 * 60 * 60 * 3).toISOString(), adder_name: "Dr. Yara Osei" },
+  { id: "d1", project_id: "demo", url: "https://www.ncbi.nlm.nih.gov/pmc/articles/PMC7523697/", title: "Moral Injury in Healthcare Workers (PMC)", added_by: null, added_at: new Date(Date.now() - 1000 * 60 * 60 * 3).toISOString(), adder_name: "Dr. Yara Osei" },
   { id: "d2", project_id: "demo", url: "https://psycnet.apa.org/record/2009-05485-004", title: "Moral Injury and Moral Repair in War Veterans", added_by: null, added_at: new Date(Date.now() - 1000 * 60 * 60 * 28).toISOString(), adder_name: "Tais Martinez" },
-  { id: "d3", project_id: "demo", url: "https://docs.google.com/document/d/1/edit", title: "Interview Protocol — Wave 2", added_by: null, added_at: new Date(Date.now() - 1000 * 60 * 30).toISOString(), adder_name: "Dana Kim" },
+  { id: "d3", project_id: "demo", url: "https://docs.google.com/document/d/1/edit", title: "Interview Protocol: Wave 2", added_by: null, added_at: new Date(Date.now() - 1000 * 60 * 30).toISOString(), adder_name: "Dana Kim" },
   { id: "d4", project_id: "demo", url: "https://docs.google.com/document/d/2/edit", title: "Consent Form Template v3", added_by: null, added_at: new Date(Date.now() - 1000 * 60 * 60 * 6).toISOString(), adder_name: "Dr. Yara Osei" },
-  { id: "d5", project_id: "demo", url: "https://www.sigmaaldrich.com/US/en/product/sigma/m3148", title: "Morphine Sulfate Salt — Sigma-Aldrich", added_by: null, added_at: new Date(Date.now() - 1000 * 60 * 60 * 5).toISOString(), adder_name: "Dr. Yara Osei" },
+  { id: "d5", project_id: "demo", url: "https://www.sigmaaldrich.com/US/en/product/sigma/m3148", title: "Morphine Sulfate Salt (Sigma-Aldrich)", added_by: null, added_at: new Date(Date.now() - 1000 * 60 * 60 * 5).toISOString(), adder_name: "Dr. Yara Osei" },
   { id: "d6", project_id: "demo", url: "https://www.protocols.io/view/interview-guide-bwcjhau", title: "Structured Interview Guide for Moral Injury", added_by: null, added_at: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(), adder_name: "Tais Martinez" },
-  { id: "d7", project_id: "demo", url: "https://sheets.google.com/spreadsheets/d/1/edit", title: "Participant Tracking — Spring 2025", added_by: null, added_at: new Date(Date.now() - 1000 * 60 * 60 * 12).toISOString(), adder_name: "Dana Kim" },
-  { id: "d8", project_id: "demo", url: "https://github.com/osei-lab/interview-analysis", title: "interview-analysis — GitHub", added_by: null, added_at: new Date(Date.now() - 1000 * 60 * 60 * 48).toISOString(), adder_name: "Tais Martinez" },
+  { id: "d7", project_id: "demo", url: "https://sheets.google.com/spreadsheets/d/1/edit", title: "Participant Tracking: Spring 2025", added_by: null, added_at: new Date(Date.now() - 1000 * 60 * 60 * 12).toISOString(), adder_name: "Dana Kim" },
+  { id: "d8", project_id: "demo", url: "https://github.com/osei-lab/interview-analysis", title: "interview-analysis (GitHub)", added_by: null, added_at: new Date(Date.now() - 1000 * 60 * 60 * 48).toISOString(), adder_name: "Tais Martinez" },
 ];
 
 

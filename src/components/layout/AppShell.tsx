@@ -250,7 +250,7 @@ function NotifPanel({ onClose, notifications }: { onClose: () => void; notificat
             <div key={n.id} className="px-4 py-3" style={{ backgroundColor: n.read ? undefined : "rgba(27,46,75,0.03)", borderBottom: "1px solid var(--color-border)" }}>
               <p style={{ fontSize: 13, color: "var(--color-body)" }}>
                 {!n.read && <span className="inline-block w-2 h-2 rounded-full mr-2" style={{ backgroundColor: "var(--color-navy)", verticalAlign: "middle" }} />}
-                {n.title}{n.body ? ` — ${n.body}` : ""}
+                {n.title}{n.body ? `: ${n.body}` : ""}
               </p>
               <p style={{ fontSize: 11, color: "var(--color-secondary)", marginTop: 2 }}>{relTime(n.created_at)}</p>
             </div>
@@ -772,19 +772,20 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           {/* Desktop: lab name */}
           <div className="hidden md:flex items-center min-w-0">
             {project?.name && (
-              <span style={{ fontSize: 12, color: "var(--color-secondary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 200 }}>
+              <Link href="/" style={{ fontSize: 12, color: "var(--color-secondary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 200, textDecoration: "none" }}
+                className="transition-opacity hover:opacity-70">
                 {project.name}
-              </span>
+              </Link>
             )}
           </div>
 
           <div className="flex items-center gap-2 ml-auto">
-            {/* Institution badge — sm and up */}
+            {/* Institution badge — links to team page */}
             {project?.institution && (
-              <span className="hidden sm:inline-block px-3 py-1 shrink-0"
-                style={{ backgroundColor: "var(--color-navy)", color: "#fff", borderRadius: 20, fontSize: 11, fontWeight: 600, whiteSpace: "nowrap" }}>
+              <Link href="/team" className="hidden sm:inline-block px-3 py-1 shrink-0 transition-opacity hover:opacity-80"
+                style={{ backgroundColor: "var(--color-navy)", color: "#fff", borderRadius: 20, fontSize: 11, fontWeight: 600, whiteSpace: "nowrap", textDecoration: "none" }}>
                 {project.institution}
-              </span>
+              </Link>
             )}
 
             {/* Density toggle */}

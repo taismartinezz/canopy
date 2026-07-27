@@ -10,7 +10,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Canopy — Research Project Management",
+  title: "Canopy: Research Project Management",
   description:
     "A research project management and researcher well-being platform for academic research teams.",
 };

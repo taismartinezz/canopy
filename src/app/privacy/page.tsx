@@ -46,7 +46,7 @@ export default function PrivacyPage() {
             Our commitment
           </h2>
           <p style={{ fontSize: 14, color: "#2D2D2D", lineHeight: 1.75, margin: 0 }}>
-            Canopy is built specifically for researchers who work with sensitive topics — trauma, grief,
+            Canopy is built specifically for researchers who work with sensitive topics: trauma, grief,
             conflict, and human vulnerability. We take that responsibility seriously. This policy explains
             exactly what data we collect, how we use it, and what we will never do with it.
           </p>
@@ -57,10 +57,10 @@ export default function PrivacyPage() {
             What we collect
           </h2>
           <ul style={{ fontSize: 14, color: "#2D2D2D", lineHeight: 1.8, margin: 0, paddingLeft: 20 }}>
-            <li><strong>Account information</strong> — your name, email address, and role (PI or Researcher), provided at sign-up.</li>
-            <li><strong>Workspace data</strong> — tasks, literature items, calendar events, and team information you add to your lab workspace.</li>
-            <li><strong>Journal entries</strong> — text you write in the private journal feature. These are encrypted and stored under your user ID only.</li>
-            <li><strong>Usage metadata</strong> — timestamps of activity (e.g., when a task was created or completed) used to generate aggregate trends.</li>
+            <li><strong>Account information:</strong> your name, email address, and role (PI or Researcher), provided at sign-up.</li>
+            <li><strong>Workspace data:</strong> tasks, literature items, calendar events, and team information you add to your lab workspace.</li>
+            <li><strong>Journal entries:</strong> text you write in the private journal feature. These are encrypted and stored under your user ID only.</li>
+            <li><strong>Usage metadata:</strong> timestamps of activity (e.g., when a task was created or completed) used to generate aggregate trends.</li>
           </ul>
           <p style={{ fontSize: 14, color: "#2D2D2D", lineHeight: 1.75, margin: "12px 0 0" }}>
             We do not collect audio, video, biometric data, or any data from your device beyond what is
@@ -74,7 +74,7 @@ export default function PrivacyPage() {
           </h2>
           <ul style={{ fontSize: 14, color: "#2D2D2D", lineHeight: 1.8, margin: 0, paddingLeft: 20 }}>
             <li>To provide and improve the Canopy platform.</li>
-            <li>To generate <strong>anonymized, aggregate well-being trends</strong> visible to PIs — never individual-level data. A trend is only surfaced when it includes responses from 3 or more lab members.</li>
+            <li>To generate <strong>anonymized, aggregate well-being trends</strong> visible to PIs (never individual-level data). A trend is only surfaced when it includes responses from 3 or more lab members.</li>
             <li>To send platform notifications you have opted into (task assignments, lab updates).</li>
             <li>To conduct our own research on researcher well-being, where you have explicitly opted in under your Lab Settings.</li>
           </ul>
@@ -99,7 +99,7 @@ export default function PrivacyPage() {
           <p style={{ fontSize: 14, color: "#2D2D2D", lineHeight: 1.75, margin: 0 }}>
             Your data is stored on Supabase infrastructure hosted in the United States. We use industry-standard
             encryption in transit (TLS) and at rest. Journal entries are stored with row-level security policies
-            that prevent any other user — including PIs — from querying them directly. We perform regular security
+            that prevent any other user, including PIs, from querying them directly. We perform regular security
             reviews and will notify you promptly in the event of a breach affecting your data.
           </p>
         </section>
@@ -109,11 +109,11 @@ export default function PrivacyPage() {
             Your rights
           </h2>
           <ul style={{ fontSize: 14, color: "#2D2D2D", lineHeight: 1.8, margin: 0, paddingLeft: 20 }}>
-            <li><strong>Access</strong> — you can view your profile and all workspace data at any time from within Canopy.</li>
-            <li><strong>Correction</strong> — you can update your name, institution, bio, and other profile fields directly in the app.</li>
-            <li><strong>Deletion</strong> — you can request full deletion of your account and all associated data by emailing us. We will process requests within 30 days.</li>
-            <li><strong>Portability</strong> — on request, we will provide an export of your personal data in a machine-readable format.</li>
-            <li><strong>Opt-out of research</strong> — you can change your research participation preference at any time in Lab Settings.</li>
+            <li><strong>Access:</strong> you can view your profile and all workspace data at any time from within Canopy.</li>
+            <li><strong>Correction:</strong> you can update your name, institution, bio, and other profile fields directly in the app.</li>
+            <li><strong>Deletion:</strong> you can request full deletion of your account and all associated data by emailing us. We will process requests within 30 days.</li>
+            <li><strong>Portability:</strong> on request, we will provide an export of your personal data in a machine-readable format.</li>
+            <li><strong>Opt-out of research:</strong> you can change your research participation preference at any time in Lab Settings.</li>
           </ul>
         </section>
 

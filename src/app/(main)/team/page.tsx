@@ -193,7 +193,7 @@ function WeeklyUpdateBar({ current, onSave }: { current?: string; onSave: (v: st
     return (
       <div className="flex items-center gap-3 px-5 py-3 mb-6 rounded-lg" style={{ backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 8 }}>
         <p style={{ fontSize: 13, color: current ? "var(--color-body)" : "var(--color-secondary)", flex: 1 }}>
-          {current ? `This week: ${current}` : "What are you working on this week? (optional — visible to your team)"}
+          {current ? `This week: ${current}` : "What are you working on this week? (optional, visible to your team)"}
         </p>
         <button onClick={() => setEditing(true)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg hover:bg-[rgba(27,46,75,0.06)]"
           style={{ fontSize: 12, color: "var(--color-navy)", fontWeight: 600, border: "1px solid var(--color-border)", borderRadius: 7, cursor: "pointer", minHeight: 36 }}>
@@ -405,14 +405,30 @@ export default function TeamPage() {
         {/* Header */}
         <div className="flex items-center justify-between mb-5 md:mb-6">
           <div>
-            <h1 style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 26, color: "var(--color-navy)", margin: 0, lineHeight: 1.2 }}>Team</h1>
-            <p style={{ fontSize: 13, color: "var(--color-secondary)", marginTop: 4 }}>
-              {visibleTeam.length} member{visibleTeam.length !== 1 ? "s" : ""}{(() => {
-                const displayName = activeScope === "project"
-                  ? (subProjects.find((sp) => sp.id === subProjectId)?.name ?? storedProjectName)
-                  : storedProjectName;
-                return displayName ? ` · ${displayName}` : "";
+            <div className="flex items-center gap-2">
+              <h1 style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 26, color: "var(--color-navy)", margin: 0, lineHeight: 1.2 }}>Team</h1>
+              {(() => {
+                if (activeScope !== "project") return null;
+                const displayName = subProjects.find((sp) => sp.id === subProjectId)?.name ?? storedProjectName;
+                if (!displayName) return null;
+                return (
+                  <span style={{
+                    fontSize: 12, fontWeight: 700, letterSpacing: "0.03em",
+                    backgroundColor: "rgba(27,46,75,0.10)", color: "var(--color-navy)",
+                    padding: "3px 10px", borderRadius: 20, whiteSpace: "nowrap",
+                  }}>
+                    {displayName}
+                  </span>
+                );
               })()}
+            </div>
+            <p style={{ fontSize: 12, color: "var(--color-secondary)", marginTop: 4 }}>
+              {activeScope === "project" ? (() => {
+                const displayName = subProjects.find((sp) => sp.id === subProjectId)?.name ?? storedProjectName;
+                return displayName
+                  ? `Showing members of ${displayName}. Switch projects in the sidebar to see other rosters.`
+                  : `${visibleTeam.length} member${visibleTeam.length !== 1 ? "s" : ""}`;
+              })() : `${visibleTeam.length} member${visibleTeam.length !== 1 ? "s" : ""} · ${storedProjectName}`}
             </p>
           </div>
           <div className="flex items-center gap-2">

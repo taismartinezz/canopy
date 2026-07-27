@@ -547,7 +547,7 @@ export default function ProfilePage() {
       .upload(path, file, { upsert: true, contentType: file.type });
 
     if (uploadError) {
-      showToast("Photo preview shown — storage upload failed: " + uploadError.message, "error");
+      showToast("Photo preview shown. Storage upload failed: " + uploadError.message, "error");
       return;
     }
 

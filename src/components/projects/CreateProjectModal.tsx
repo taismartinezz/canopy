@@ -4,7 +4,17 @@ import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useProject } from "@/context/ProjectContext";
+import { computeInitials } from "@/lib/utils";
+import Avatar from "@/components/ui/Avatar";
 import type { SubProject } from "@/types";
+
+interface LabMember {
+  userId: string;
+  name: string;
+  avatarColor: string;
+  avatarInitials: string;
+  avatarUrl?: string;
+}
 
 const inputStyle: React.CSSProperties = {
   width: "100%",
@@ -41,12 +51,44 @@ export default function CreateProjectModal({ onClose }: { onClose: () => void })
   const [description, setDescription] = useState("");
   const [saving, setSaving]         = useState(false);
   const [error, setError]           = useState("");
+  const [labRoster, setLabRoster]   = useState<LabMember[]>([]);
+  const [selectedMembers, setSelectedMembers] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) { if (e.key === "Escape") onClose(); }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
+
+  useEffect(() => {
+    if (!projectId) return;
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      const userId = session?.user?.id;
+      supabase
+        .from("team_members")
+        .select("user_id, user_profiles(name, avatar_color, avatar_initials, avatar_url)")
+        .eq("project_id", projectId)
+        .then(({ data }) => {
+          if (!data) return;
+          setLabRoster(
+            data
+              .filter((r) => r.user_id !== userId)
+              .map((r) => {
+                const p = Array.isArray(r.user_profiles) ? r.user_profiles[0] : r.user_profiles;
+                const profile = p as Record<string, string> | null;
+                const name = profile?.name ?? "Unknown";
+                return {
+                  userId: r.user_id as string,
+                  name,
+                  avatarColor: profile?.avatar_color ?? "#B4D4E3",
+                  avatarInitials: computeInitials(name) || (profile?.avatar_initials ?? "??"),
+                  avatarUrl: profile?.avatar_url ?? undefined,
+                };
+              })
+          );
+        });
+    });
+  }, [projectId]);
 
   async function handleSubmit() {
     if (!name.trim()) { setError("Project name is required."); return; }
@@ -92,6 +134,18 @@ export default function CreateProjectModal({ onClose }: { onClose: () => void })
         if (memberError) {
           console.error("[CreateProjectModal] sub_project_members insert error:", memberError);
         }
+      }
+
+      // Add selected lab members (fire-and-forget — never blocks project creation)
+      if (selectedMembers.size > 0 && userId) {
+        const rows = [...selectedMembers].map((uid) => ({
+          sub_project_id: data.id,
+          user_id: uid,
+          invited_by: userId,
+        }));
+        supabase.from("sub_project_members").insert(rows).then(({ error: batchErr }) => {
+          if (batchErr) console.error("[CreateProjectModal] batch member insert error:", batchErr);
+        });
       }
 
       // Optimistically update context — no re-fetch needed
@@ -192,6 +246,43 @@ export default function CreateProjectModal({ onClose }: { onClose: () => void })
               onBlur={(e)  => { e.currentTarget.style.borderColor = "var(--color-border)"; }}
             />
           </div>
+
+          {/* People */}
+          {labRoster.length > 0 && (
+            <div>
+              <label style={labelStyle}>Add people <span style={{ fontWeight: 400, textTransform: "none" }}>(optional)</span></label>
+              <div style={{ maxHeight: 180, overflowY: "auto", display: "flex", flexDirection: "column", gap: 4 }}>
+                {labRoster.map((member) => {
+                  const checked = selectedMembers.has(member.userId);
+                  return (
+                    <label
+                      key={member.userId}
+                      className="flex items-center gap-2.5 cursor-pointer rounded-lg hover:bg-[rgba(27,46,75,0.04)]"
+                      style={{ padding: "6px 8px" }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() =>
+                          setSelectedMembers((prev) => {
+                            const next = new Set(prev);
+                            if (checked) next.delete(member.userId); else next.add(member.userId);
+                            return next;
+                          })
+                        }
+                        style={{ width: 14, height: 14, accentColor: "var(--color-navy)", flexShrink: 0 }}
+                      />
+                      <Avatar
+                        user={{ name: member.name, avatarColor: member.avatarColor, avatarInitials: member.avatarInitials, avatarUrl: member.avatarUrl }}
+                        size={22}
+                      />
+                      <span style={{ fontSize: 13, color: "var(--color-body)" }}>{member.name}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Actions */}

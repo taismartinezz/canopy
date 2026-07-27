@@ -381,7 +381,7 @@ export default function LoginPage() {
             margin: "16px auto 0",
           }}
         >
-          For researchers doing meaningful, difficult work.
+          Only for researchers.
         </p>
 
         {/* Divider */}
@@ -414,21 +414,21 @@ export default function LoginPage() {
             icon={<GoogleIcon />}
             label="Continue with Google"
             ariaLabel="Sign in with Google"
-            onClick={() => handleOAuth("google")}
+            onClick={() => router.push("/coming-soon")}
           />
 
           <AuthButton
             icon={<MicrosoftIcon />}
             label="Continue with Microsoft"
             ariaLabel="Sign in with Microsoft"
-            onClick={() => handleOAuth("azure")}
+            onClick={() => router.push("/coming-soon")}
           />
 
           <AuthButton
             icon={<GitHubIcon />}
             label="Continue with GitHub"
             ariaLabel="Sign in with GitHub"
-            onClick={() => handleOAuth("github")}
+            onClick={() => router.push("/coming-soon")}
           />
         </div>
 
@@ -569,7 +569,7 @@ export default function LoginPage() {
         )}
         {!passwordError && mode === "signup" && (
           <p style={{ fontFamily: "var(--font-roboto)", fontSize: 12, color: "#6B6B6B", margin: "4px 0 0", lineHeight: 1.5 }}>
-            Use a unique password — your account protects sensitive research data.
+            Use a unique password. Your account protects sensitive research data.
           </p>
         )}
 

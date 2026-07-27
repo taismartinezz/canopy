@@ -8,21 +8,41 @@ interface ToastItem {
   id: string;
   message: string;
   type: ToastType;
+  action?: { label: string; onClick: () => void };
 }
 
 type SetFn = React.Dispatch<React.SetStateAction<ToastItem[]>>;
 let _set: SetFn | null = null;
 
+function dismiss(id: string) {
+  _set?.((prev) => prev.filter((t) => t.id !== id));
+}
+
 export function showToast(message: string, type: ToastType = "info") {
   if (!_set) return;
   const id = crypto.randomUUID();
   _set((prev) => [...prev, { id, message, type }]);
-  setTimeout(() => {
-    _set?.((prev) => prev.filter((t) => t.id !== id));
-  }, 3000);
+  setTimeout(() => dismiss(id), 3000);
   if (typeof window !== "undefined") {
     window.dispatchEvent(new CustomEvent("canopy:toast", { detail: { id, message, type } }));
   }
+}
+
+export function showUndoToast(message: string, onUndo: () => void) {
+  if (!_set) return;
+  const id = crypto.randomUUID();
+  let dismissed = false;
+  const action = {
+    label: "Undo",
+    onClick: () => {
+      if (dismissed) return;
+      dismissed = true;
+      dismiss(id);
+      onUndo();
+    },
+  };
+  _set((prev) => [...prev, { id, message, type: "success", action }]);
+  setTimeout(() => { dismissed = true; dismiss(id); }, 4000);
 }
 
 const BG: Record<ToastType, string> = {
@@ -70,9 +90,32 @@ export default function Toast() {
             padding: "10px 18px",
             boxShadow: "0 4px 20px rgba(0,0,0,0.22)",
             whiteSpace: "nowrap",
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            pointerEvents: t.action ? "auto" : "none",
           }}
         >
-          {t.message}
+          <span>{t.message}</span>
+          {t.action && (
+            <button
+              onClick={t.action.onClick}
+              style={{
+                fontSize: 12,
+                fontWeight: 700,
+                color: "#fff",
+                background: "rgba(255,255,255,0.2)",
+                border: "1px solid rgba(255,255,255,0.35)",
+                borderRadius: 6,
+                padding: "3px 10px",
+                cursor: "pointer",
+                fontFamily: "var(--font-roboto)",
+                letterSpacing: "0.03em",
+              }}
+            >
+              {t.action.label}
+            </button>
+          )}
         </div>
       ))}
     </div>

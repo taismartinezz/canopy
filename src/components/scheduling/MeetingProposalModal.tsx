@@ -198,7 +198,7 @@ export default function MeetingProposalModal({ currentUserId, teamMembers, onSub
             </label>
             {invitableMembers.length === 0 ? (
               <p style={{ fontSize: 13, color: "var(--color-secondary)", padding: "8px 0" }}>
-                No teammates yet — invite someone to your lab first.
+                No teammates yet. Invite someone to your lab first.
               </p>
             ) : null}
           <div className="space-y-1">

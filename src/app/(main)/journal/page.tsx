@@ -220,8 +220,8 @@ function PromptCard({
         {!readOnly && hasSpeechSupport === false && (
           <button
             disabled
-            title="Voice input isn't supported in this browser — try Chrome"
-            aria-label="Voice input isn't supported in this browser — try Chrome"
+            title="Voice input isn't supported in this browser. Try Chrome."
+            aria-label="Voice input isn't supported in this browser. Try Chrome."
             className="shrink-0 flex items-center justify-center rounded-full ml-3"
             style={{ width: 44, height: 44, backgroundColor: "var(--color-border)", color: "var(--color-secondary)", border: "none", cursor: "not-allowed", opacity: 0.6 }}
           >
@@ -326,7 +326,7 @@ function CheckinCard({ question, response, onScore }: {
             <button key={score} onClick={() => onScore(score)}
               className="flex flex-col items-center gap-1.5 flex-1 py-2 rounded-lg transition-all"
               style={{ border: `1px solid ${isSelected ? color : "var(--color-border)"}`, backgroundColor: isSelected ? `${color}14` : "transparent", cursor: "pointer", minHeight: 52 }}
-              aria-label={`${score} — ${SCORE_LABELS[score]}`} aria-pressed={isSelected}
+              aria-label={`${score}: ${SCORE_LABELS[score]}`} aria-pressed={isSelected}
             >
               <span className="w-4 h-4 rounded-full border-2 flex items-center justify-center" style={{ borderColor: isSelected ? color : "var(--color-border)", backgroundColor: isSelected ? color : "transparent" }} />
               <span style={{ fontSize: 11, fontWeight: 600, color: isSelected ? color : "var(--color-secondary)", textAlign: "center", lineHeight: 1.2 }}>{score}</span>
@@ -383,7 +383,7 @@ function SupportModal({ onClose, userId, projectId }: { onClose: () => void; use
               {checkinState === 'loading' ? <Loader2 size={18} color="var(--color-navy)" style={{ marginTop: 2, flexShrink: 0 }} className="animate-spin" /> : <Users size={18} color={checkinState === 'sent' ? "#22c55e" : "var(--color-navy)"} style={{ marginTop: 2, flexShrink: 0 }} />}
               <div>
                 <p style={{ fontSize: 13, fontWeight: 600, color: checkinState === 'sent' ? "#22c55e" : checkinState === 'error' ? "var(--color-error)" : "var(--color-body)" }}>
-                  {checkinState === 'sent' ? 'Check-in request sent' : checkinState === 'error' ? 'Failed to send — tap to retry' : 'Request a check-in with your supervisor'}
+                  {checkinState === 'sent' ? 'Check-in request sent' : checkinState === 'error' ? 'Failed to send. Tap to retry.' : 'Request a check-in with your supervisor'}
                 </p>
                 <p style={{ fontSize: 12, color: "var(--color-secondary)", marginTop: 3, lineHeight: 1.4 }}>
                   {checkinState === 'sent' ? 'Your supervisor will be notified anonymously.' : 'Sends an anonymous notification to your PI. Your identity is never shared.'}
