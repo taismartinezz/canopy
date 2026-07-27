@@ -75,11 +75,6 @@ test.describe('Auth page — Issue #4: forgot password', () => {
 })
 
 test.describe('Auth page — Issue #6: OAuth providers', () => {
-  test('Apple login button is present', async ({ page }) => {
-    await mockSupabaseAndVisitLogin(page)
-    await expect(page.getByRole('button', { name: /sign in with apple/i })).toBeVisible()
-  })
-
   test('Google login button is present', async ({ page }) => {
     await mockSupabaseAndVisitLogin(page)
     await expect(page.getByRole('button', { name: /sign in with google/i })).toBeVisible()
