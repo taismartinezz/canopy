@@ -290,8 +290,6 @@ export default function TeamPage() {
           .select("user_id, task_id, tasks(id, status, archived)")
           .in("user_id", memberIds) as any);
 
-        console.error("[Team] assigneeWithTasks:", assigneeWithTasks, "joinError:", joinError);
-
         if (joinError) console.error("[Team] assignee+task join error:", joinError);
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -306,7 +304,6 @@ export default function TeamPage() {
           if (status in countMap[uid]) countMap[uid][status]++;
         }
 
-        console.error("[Team] countMap after join:", JSON.stringify(countMap));
       }
 
         const members: TeamMember[] = (memberData ?? []).map((row) => {
@@ -392,8 +389,14 @@ export default function TeamPage() {
   }, [activeScope, subProjectId]);
 
   // In project scope use the directly-fetched list (includes external members).
-  // In lab/personal scope fall back to the lab team roster.
-  const visibleTeam = activeScope === "project" ? projectTeam : team;
+  // Merge task counts from `team` (which has the countMap applied) so project-scope
+  // members don't always show zeros — projectTeam is built with hardcoded zeros.
+  const visibleTeam = activeScope === "project"
+    ? projectTeam.map((m) => ({
+        ...m,
+        taskCounts: team.find((t) => t.id === m.id)?.taskCounts ?? m.taskCounts,
+      }))
+    : team;
 
   return (
     <div className="flex flex-col h-full overflow-auto" style={{ fontFamily: "var(--font-roboto)" }}>
