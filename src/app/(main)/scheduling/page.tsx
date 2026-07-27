@@ -669,8 +669,8 @@ function AvailabilityTab({
   const overlapTitle = filteredMembers.length === 0
     ? "Select people to compare"
     : filteredMembers.length <= 3
-      ? `Overlap — ${filteredMembers.map(m => m.name.split(" ")[0]).join(", ")}`
-      : `Overlap — ${filteredMembers.length} people`;
+      ? `Overlap: ${filteredMembers.map(m => m.name.split(" ")[0]).join(", ")}`
+      : `Overlap: ${filteredMembers.length} people`;
 
   return (
     <div className="space-y-4">
@@ -734,7 +734,7 @@ function AvailabilityTab({
             <SectionHeader
               title={
                 subProjects.length > 0
-                  ? `My Availability — ${availSubProjectId ? (subProjects.find(sp => sp.id === availSubProjectId)?.name ?? "Project") : "Lab-wide"}`
+                  ? `My Availability: ${availSubProjectId ? (subProjects.find(sp => sp.id === availSubProjectId)?.name ?? "Project") : "Lab-wide"}`
                   : "My Weekly Availability"
               }
               action={
@@ -781,7 +781,7 @@ function AvailabilityTab({
               <div className="flex items-start gap-2 mb-4 px-3 py-2 rounded-lg" style={{ backgroundColor: "rgba(27,46,75,0.05)", border: "1px solid rgba(27,46,75,0.10)" }}>
                 <Lock size={13} style={{ marginTop: 2, color: "var(--color-navy)", flexShrink: 0 }} />
                 <p style={{ fontSize: 12, color: "var(--color-body)", margin: 0, lineHeight: 1.5 }}>
-                  You&apos;re editing your <strong>{availSubProjectId ? (subProjects.find(sp => sp.id === availSubProjectId)?.name ?? "project") : "lab-wide"}</strong> availability. Team members see only the aggregate overlap — not your individual schedule.
+                  You&apos;re editing your <strong>{availSubProjectId ? (subProjects.find(sp => sp.id === availSubProjectId)?.name ?? "project") : "lab-wide"}</strong> availability. Team members see only the aggregate overlap, not your individual schedule.
                 </p>
               </div>
               <AvailabilityGrid slots={slots} onChange={setSlots} />
@@ -807,7 +807,7 @@ function AvailabilityTab({
                 )}
                 <p style={{ fontSize: 12, color: "var(--color-body)", margin: 0, lineHeight: 1.5 }}>
                   {googleConnected
-                    ? "Connected — free/busy syncs automatically. No event details are visible to anyone."
+                    ? "Connected: free/busy syncs automatically. No event details are visible to anyone."
                     : "Not connected. Connect to sync your free/busy status automatically."}
                 </p>
               </div>
@@ -963,7 +963,7 @@ function MeetingsTab({
         />
         {upcoming.length === 0 ? (
           <EmptyState icon={Send} heading="No upcoming meetings"
-            body="Propose a time with your lab members — everyone can accept or decline."
+            body="Propose a time with your lab members. Everyone can accept or decline."
             action={<button onClick={onPropose} style={{ fontSize: 13, fontWeight: 600, color: "var(--color-navy)", background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>Propose a meeting</button>}
           />
         ) : (

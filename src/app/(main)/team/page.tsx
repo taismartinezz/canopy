@@ -193,7 +193,7 @@ function WeeklyUpdateBar({ current, onSave }: { current?: string; onSave: (v: st
     return (
       <div className="flex items-center gap-3 px-5 py-3 mb-6 rounded-lg" style={{ backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 8 }}>
         <p style={{ fontSize: 13, color: current ? "var(--color-body)" : "var(--color-secondary)", flex: 1 }}>
-          {current ? `This week: ${current}` : "What are you working on this week? (optional — visible to your team)"}
+          {current ? `This week: ${current}` : "What are you working on this week? (optional, visible to your team)"}
         </p>
         <button onClick={() => setEditing(true)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg hover:bg-[rgba(27,46,75,0.06)]"
           style={{ fontSize: 12, color: "var(--color-navy)", fontWeight: 600, border: "1px solid var(--color-border)", borderRadius: 7, cursor: "pointer", minHeight: 36 }}>

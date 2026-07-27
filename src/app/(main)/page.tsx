@@ -328,7 +328,7 @@ function MiniTaskCardContent({ task, teamMembers }: { task: Task; teamMembers: U
     <div className="p-3">
       <p style={{ fontSize: 13, fontWeight: 500, color: "var(--color-body)", lineHeight: 1.35 }}>{task.title}</p>
       <div className="flex items-center justify-between mt-2">
-        <span style={{ fontSize: 12, color: "var(--color-secondary)" }}>{task.dueDate ? formatDate(task.dueDate) : "—"}</span>
+        <span style={{ fontSize: 12, color: "var(--color-secondary)" }}>{task.dueDate ? formatDate(task.dueDate) : "-"}</span>
         <span className="px-2 py-0.5" style={{ backgroundColor: priorityBg, color: priority, fontSize: 11, fontWeight: 600, borderRadius: 4 }}>
           {symbol} {task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}
         </span>

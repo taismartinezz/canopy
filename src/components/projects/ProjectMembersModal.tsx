@@ -213,7 +213,7 @@ export default function ProjectMembersModal({
         const inviterName = members.find((m) => m.userId === currentUserId)?.name ?? "A collaborator";
         sendInviteEmail({ to: email, token, inviterName, projectName: subProjectName });
 
-        showToast("Invite created — copy the link below to share.", "success");
+        showToast("Invite created. Copy the link below to share.", "success");
         setEmailInput("");
         await load();
       }

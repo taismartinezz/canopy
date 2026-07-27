@@ -1220,7 +1220,7 @@ export default function TaskDetailPanel({
                       if (e.key === "Escape") { e.preventDefault(); setAddingSubtask(false); setSubtaskInput(""); }
                     }}
                     onBlur={() => { if (!subtaskInput.trim()) setAddingSubtask(false); }}
-                    placeholder="Subtask title — Enter to save, Esc to cancel"
+                    placeholder="Subtask title - Enter to save, Esc to cancel"
                     style={{ flex: 1, fontSize: 13, border: "none", outline: "none", backgroundColor: "transparent", fontFamily: "var(--font-roboto)", color: "var(--color-body)" }}
                   />
                 </div>

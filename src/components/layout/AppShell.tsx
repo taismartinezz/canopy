@@ -250,7 +250,7 @@ function NotifPanel({ onClose, notifications }: { onClose: () => void; notificat
             <div key={n.id} className="px-4 py-3" style={{ backgroundColor: n.read ? undefined : "rgba(27,46,75,0.03)", borderBottom: "1px solid var(--color-border)" }}>
               <p style={{ fontSize: 13, color: "var(--color-body)" }}>
                 {!n.read && <span className="inline-block w-2 h-2 rounded-full mr-2" style={{ backgroundColor: "var(--color-navy)", verticalAlign: "middle" }} />}
-                {n.title}{n.body ? ` — ${n.body}` : ""}
+                {n.title}{n.body ? `: ${n.body}` : ""}
               </p>
               <p style={{ fontSize: 11, color: "var(--color-secondary)", marginTop: 2 }}>{relTime(n.created_at)}</p>
             </div>

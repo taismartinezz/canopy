@@ -64,7 +64,7 @@ function toAuthorsArray(authors: string | string[]): string[] {
 
 function formatAuthors(authors: string | string[]) {
   const arr = toAuthorsArray(authors);
-  if (!arr.length) return "—";
+  if (!arr.length) return "-";
   if (arr.length <= 2) return arr.join(", ");
   return `${arr[0]} et al.`;
 }
@@ -919,7 +919,7 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
         if (dupeIdx !== -1) { apiMerges.push({ existing: existingItems[dupeIdx], incoming: incomingItem }); continue; }
         items.push(incomingItem);
       }
-      setFileName(`Zotero API — ${items.length + apiMerges.length} items`);
+      setFileName(`Zotero API: ${items.length + apiMerges.length} items`);
       setParsed(items); setPendingMerges(apiMerges); setMergeDupes(true);
       setPdfKeyMap(newKeyMap);
       setTab("file"); // switch to preview/import flow
@@ -1020,7 +1020,7 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
                   {parsedPDFLinks.length} PDF attachment{parsedPDFLinks.length > 1 ? "s" : ""} found in this RDF
                 </p>
                 <p style={{ fontSize: 11, color: "var(--color-secondary)", marginBottom: 8 }}>
-                  In Zotero, export with <strong>Export Files</strong> checked. Then select the PDF files from the exported <em>files/</em> folder below (optional — skip to import metadata only).
+                  In Zotero, export with <strong>Export Files</strong> checked. Then select the PDF files from the exported <em>files/</em> folder below (optional, skip to import metadata only).
                 </p>
                 <input
                   ref={pdfInputRef}
@@ -1813,7 +1813,7 @@ function ReadingProgressDashboard({
                           <span style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: st ? PROGRESS_STATUS_COLORS[st] : "var(--color-border)", flexShrink: 0, display: "inline-block" }} />
                           <span style={{ flex: 1, color: "var(--color-body)" }}>{memberName(a.assigneeId)}</span>
                           <span style={{ color: st ? PROGRESS_STATUS_COLORS[st] : "var(--color-secondary)", fontWeight: st ? 600 : 400 }}>
-                            {st ? PROGRESS_STATUS_LABELS[st] : "—"}
+                            {st ? PROGRESS_STATUS_LABELS[st] : "-"}
                           </span>
                           {a.dueDate && <span style={{ color: "var(--color-secondary)", fontSize: 11, flexShrink: 0 }}>due {a.dueDate}</span>}
                         </div>
@@ -2313,7 +2313,7 @@ function DetailPanelContent({
       <div className="flex-1 overflow-y-auto">
         {tab === "Info" && (
           <div className="px-4 py-4 space-y-3">
-            {[["Authors", toAuthorsArray(item.authors).join("; ") || "—"], ["Year", String(item.year)], ["Journal", item.journal ?? item.publisher ?? "—"], ["Volume", item.volume ?? "—"], ["Pages", item.pages ?? "—"], ["DOI", item.doi ?? "—"], ["Type", item.type.charAt(0).toUpperCase() + item.type.slice(1)]].map(([label, value]) => (
+            {[["Authors", toAuthorsArray(item.authors).join("; ") || "-"], ["Year", String(item.year)], ["Journal", item.journal ?? item.publisher ?? "-"], ["Volume", item.volume ?? "-"], ["Pages", item.pages ?? "-"], ["DOI", item.doi ?? "-"], ["Type", item.type.charAt(0).toUpperCase() + item.type.slice(1)]].map(([label, value]) => (
               <div key={label}>
                 <p style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-secondary)", marginBottom: 3 }}>{label}</p>
                 <p style={{ fontSize: 12, color: "var(--color-body)", lineHeight: 1.4, wordBreak: "break-word" }}>{value}</p>
@@ -2799,7 +2799,7 @@ function DetailPanelContent({
                                 </select>
                                 {/* Visibility toggle — only the assignee sees this */}
                                 <button
-                                  title={a.statusHidden ? "Status hidden from peers — click to show" : "Status visible to peers — click to hide"}
+                                  title={a.statusHidden ? "Status hidden from peers. Click to show." : "Status visible to peers. Click to hide."}
                                   onClick={async () => {
                                     const hidden = !a.statusHidden;
                                     await supabase.from("lit_assigned_readings").update({ status_hidden: hidden }).eq("id", a.id);
@@ -2815,7 +2815,7 @@ function DetailPanelContent({
                               </div>
                             ) : (
                               <span style={{ display: "inline-block", marginTop: 4, fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 5, backgroundColor: canSeeStatus ? sc.bg : "#F1F5F9", color: canSeeStatus ? sc.color : "#64748B" }}>
-                                {canSeeStatus ? STATUS_LABELS[a.readingStatus!] : "—"}
+                                {canSeeStatus ? STATUS_LABELS[a.readingStatus!] : "-"}
                               </span>
                             )}
                           </div>

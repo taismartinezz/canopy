@@ -119,7 +119,7 @@ function TaskCard({
         </p>
         <div className="flex items-center justify-between gap-2">
           <span style={{ fontSize: 12, color: "var(--color-secondary)" }}>
-            {task.dueDate ? formatDate(task.dueDate) : "—"}
+            {task.dueDate ? formatDate(task.dueDate) : "-"}
           </span>
           <div className="flex items-center gap-1.5">
             {showLabBadge && task.scope === "lab" && (
@@ -504,7 +504,7 @@ function TaskRow({
           aria-label="Edit assignees"
         >
           {task.assigneeIds.length === 0
-            ? <span style={{ fontSize: 12, color: "var(--color-secondary)" }}>—</span>
+            ? <span style={{ fontSize: 12, color: "var(--color-secondary)" }}>-</span>
             : <AssigneeStack ids={task.assigneeIds} size={22} users={teamMembers} />}
         </button>
         {assigneeOpen && createPortal(
@@ -572,7 +572,7 @@ function TaskRow({
           }}
           aria-label="Edit due date"
         >
-          {task.dueDate ? formatDate(task.dueDate) : "—"}
+          {task.dueDate ? formatDate(task.dueDate) : "-"}
         </button>
         {calOpen && createPortal(
           <div onClick={(e) => e.stopPropagation()}>
