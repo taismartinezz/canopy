@@ -14,7 +14,7 @@ import {
   Tag, Star, ExternalLink, Copy, Check, ChevronLeft, ChevronRight,
   Book, BarChart2, GraduationCap,
   Library, ClipboardList, Brain, Microscope, Heart,
-  Upload, Link2, MessageSquare, Zap, UserCheck, RefreshCw, Eye, EyeOff, Wifi, Undo2,
+  Upload, Link2, MessageSquare, Zap, UserCheck, RefreshCw, Eye, EyeOff, Wifi, Undo2, Pencil,
 } from "lucide-react";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -1990,6 +1990,14 @@ function DetailPanelContent({
   const [localRating, setLocalRating]     = useState<number>(item.rating);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Editable DOI / URL
+  const [editingDoi, setEditingDoi] = useState(false);
+  const [localDoi, setLocalDoi]     = useState(item.doi ?? "");
+  const [doiError, setDoiError]     = useState("");
+  const [editingUrl, setEditingUrl] = useState(false);
+  const [localUrl, setLocalUrl]     = useState(item.url ?? "");
+  const [urlError, setUrlError]     = useState("");
+
   const [annotations, setAnnotations]   = useState<LitAnnotation[]>([]);
   const [annotAuthors, setAnnotAuthors] = useState<Record<string, string>>({});
   const [newAnnotText, setNewAnnotText] = useState("");
@@ -2014,6 +2022,10 @@ function DetailPanelContent({
     setLocalFiles(item.files);
     setLocalStatus(item.status);
     setLocalRating(item.rating);
+    setLocalDoi(item.doi ?? "");
+    setLocalUrl(item.url ?? "");
+    setEditingDoi(false); setDoiError("");
+    setEditingUrl(false); setUrlError("");
     setTab("Info");
     setAnnotations([]); setAssigned([]); setRecs([]); setRecsFetched(false);
     setShowPDFViewer(false); setPdfViewerExternalUrl(null);
@@ -2160,6 +2172,20 @@ function DetailPanelContent({
   function updateRating(r: number) {
     setLocalRating(r);
     onUpdateItem(item.id, { rating: r });
+  }
+
+  function saveDoi() {
+    const v = localDoi.trim();
+    if (v && !/^10\.\d+\/.+/.test(v)) { setDoiError("Must start with 10. and contain a /"); return; }
+    setDoiError(""); setEditingDoi(false);
+    onUpdateItem(item.id, { doi: v || undefined });
+  }
+
+  function saveUrl() {
+    const v = localUrl.trim();
+    if (v) { try { new URL(v); } catch { setUrlError("Enter a valid URL (include https://)"); return; } }
+    setUrlError(""); setEditingUrl(false);
+    onUpdateItem(item.id, { url: v || undefined });
   }
 
   function handleCopy() {
@@ -2313,12 +2339,64 @@ function DetailPanelContent({
       <div className="flex-1 overflow-y-auto">
         {tab === "Info" && (
           <div className="px-4 py-4 space-y-3">
-            {[["Authors", toAuthorsArray(item.authors).join("; ") || "-"], ["Year", String(item.year)], ["Journal", item.journal ?? item.publisher ?? "-"], ["Volume", item.volume ?? "-"], ["Pages", item.pages ?? "-"], ["DOI", item.doi ?? "-"], ["Type", item.type.charAt(0).toUpperCase() + item.type.slice(1)]].map(([label, value]) => (
+            {[["Authors", toAuthorsArray(item.authors).join("; ") || "-"], ["Year", String(item.year)], ["Journal", item.journal ?? item.publisher ?? "-"], ["Volume", item.volume ?? "-"], ["Pages", item.pages ?? "-"], ["Type", item.type.charAt(0).toUpperCase() + item.type.slice(1)]].map(([label, value]) => (
               <div key={label}>
                 <p style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-secondary)", marginBottom: 3 }}>{label}</p>
                 <p style={{ fontSize: 12, color: "var(--color-body)", lineHeight: 1.4, wordBreak: "break-word" }}>{value}</p>
               </div>
             ))}
+
+            {/* Editable DOI */}
+            <div>
+              <p style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-secondary)", marginBottom: 3 }}>DOI</p>
+              {editingDoi ? (
+                <div>
+                  <input autoFocus value={localDoi} onChange={(e) => { setLocalDoi(e.target.value); setDoiError(""); }}
+                    onKeyDown={(e) => { if (e.key === "Enter") saveDoi(); if (e.key === "Escape") { setEditingDoi(false); setLocalDoi(item.doi ?? ""); setDoiError(""); } }}
+                    placeholder="10.xxxx/yyyy" style={{ width: "100%", height: 32, padding: "0 8px", fontSize: 12, border: `1px solid ${doiError ? "var(--color-error,#C0392B)" : "var(--color-navy)"}`, borderRadius: 5, fontFamily: "var(--font-roboto)", outline: "none" }} />
+                  {doiError && <p style={{ fontSize: 11, color: "var(--color-error,#C0392B)", marginTop: 2 }}>{doiError}</p>}
+                  <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
+                    <button onClick={saveDoi} style={{ fontSize: 11, fontWeight: 700, padding: "4px 10px", borderRadius: 5, backgroundColor: "var(--color-navy)", color: "#fff", border: "none", cursor: "pointer" }}>Save</button>
+                    <button onClick={() => { setEditingDoi(false); setLocalDoi(item.doi ?? ""); setDoiError(""); }} style={{ fontSize: 11, padding: "4px 8px", borderRadius: 5, border: "1px solid var(--color-border)", backgroundColor: "transparent", cursor: "pointer" }}>Cancel</button>
+                  </div>
+                </div>
+              ) : (
+                <div className="group flex items-center gap-1">
+                  <p style={{ fontSize: 12, color: "var(--color-body)", lineHeight: 1.4, wordBreak: "break-word", flex: 1 }}>{item.doi ?? "-"}</p>
+                  <button onClick={() => setEditingDoi(true)} aria-label="Edit DOI"
+                    className="opacity-0 group-hover:opacity-100 transition-opacity"
+                    style={{ flexShrink: 0, background: "none", border: "none", cursor: "pointer", padding: 2, color: "var(--color-secondary)" }}>
+                    <Pencil size={11} />
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Editable URL */}
+            <div>
+              <p style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-secondary)", marginBottom: 3 }}>URL</p>
+              {editingUrl ? (
+                <div>
+                  <input autoFocus value={localUrl} onChange={(e) => { setLocalUrl(e.target.value); setUrlError(""); }}
+                    onKeyDown={(e) => { if (e.key === "Enter") saveUrl(); if (e.key === "Escape") { setEditingUrl(false); setLocalUrl(item.url ?? ""); setUrlError(""); } }}
+                    placeholder="https://..." style={{ width: "100%", height: 32, padding: "0 8px", fontSize: 12, border: `1px solid ${urlError ? "var(--color-error,#C0392B)" : "var(--color-navy)"}`, borderRadius: 5, fontFamily: "var(--font-roboto)", outline: "none" }} />
+                  {urlError && <p style={{ fontSize: 11, color: "var(--color-error,#C0392B)", marginTop: 2 }}>{urlError}</p>}
+                  <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
+                    <button onClick={saveUrl} style={{ fontSize: 11, fontWeight: 700, padding: "4px 10px", borderRadius: 5, backgroundColor: "var(--color-navy)", color: "#fff", border: "none", cursor: "pointer" }}>Save</button>
+                    <button onClick={() => { setEditingUrl(false); setLocalUrl(item.url ?? ""); setUrlError(""); }} style={{ fontSize: 11, padding: "4px 8px", borderRadius: 5, border: "1px solid var(--color-border)", backgroundColor: "transparent", cursor: "pointer" }}>Cancel</button>
+                  </div>
+                </div>
+              ) : (
+                <div className="group flex items-center gap-1">
+                  <p style={{ fontSize: 12, color: "var(--color-body)", lineHeight: 1.4, wordBreak: "break-all", flex: 1 }}>{item.url ?? "-"}</p>
+                  <button onClick={() => setEditingUrl(true)} aria-label="Edit URL"
+                    className="opacity-0 group-hover:opacity-100 transition-opacity"
+                    style={{ flexShrink: 0, background: "none", border: "none", cursor: "pointer", padding: 2, color: "var(--color-secondary)" }}>
+                    <Pencil size={11} />
+                  </button>
+                </div>
+              )}
+            </div>
 
             {/* Status toggle */}
             <div>
@@ -3006,11 +3084,15 @@ export default function LiteraturePage() {
   function updateItem(id: string, updates: Partial<LiteratureItem>) {
     setItems((prev) => prev.map((item) => item.id === id ? { ...item, ...updates } : item));
     if (!isSupabaseConfigured) return;
-    const colMap: Record<string, string> = { tags: "tags", removedTags: "removed_tags", status: "status", rating: "rating", files: "files" };
+    const colMap: Record<string, string> = { tags: "tags", removedTags: "removed_tags", status: "status", rating: "rating", files: "files", doi: "doi", url: "url" };
     // notes is handled exclusively by handleSaveNotes (async, with proper error feedback)
+    const nullableCols = new Set(["doi", "url"]);
     const payload: Record<string, unknown> = {};
     for (const [k, col] of Object.entries(colMap)) {
-      if (k in updates) payload[col] = (updates as Record<string, unknown>)[k];
+      if (k in updates) {
+        const v = (updates as Record<string, unknown>)[k];
+        payload[col] = nullableCols.has(k) ? (v ?? null) : v;
+      }
     }
     if (Object.keys(payload).length > 0) {
       supabase.from("literature_items").update(payload).eq("id", id)
