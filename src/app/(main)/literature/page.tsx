@@ -660,6 +660,7 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
   // Dropzone drag state (file tab)
   const [isDragOver, setIsDragOver] = useState(false);
   const dragCounterRef = useRef(0);
+  const dropzoneInputRef = useRef<HTMLInputElement>(null);
 
   // PDF attachment state — API sync
   const [pdfAttachments, setPdfAttachments] = useState<Record<string, { attachmentKey: string; filename: string }>>({});
@@ -676,6 +677,25 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
+
+  // The dropzone label showed a stale filename after the picker was reopened
+  // and cancelled: `fileName` is React state set once in processFile(), so it
+  // never noticed the underlying <input> going back to zero files. The
+  // "cancel" event (fired only when the dialog is dismissed without a
+  // selection, never on a real pick) is the reliable signal for that, so
+  // clear the file-tab state directly from input.files right when it fires,
+  // rather than trusting the stale state to have kept up on its own.
+  useEffect(() => {
+    const input = dropzoneInputRef.current;
+    if (!input) return;
+    function onCancel() {
+      if (dropzoneInputRef.current?.files?.length) return; // picked, not cancelled
+      setFileName(""); setParsed([]); setPendingNotes([]); setPendingTagUpdates([]);
+      setPendingMerges([]); setError("");
+    }
+    input.addEventListener("cancel", onCancel);
+    return () => input.removeEventListener("cancel", onCancel);
+  }, []);
 
   function processFile(file: File) {
     setFileName(file.name); setParsed([]); setPendingNotes([]); setPendingTagUpdates([]); setPendingMerges([]); setMergeDupes(true); setError("");
@@ -877,10 +897,15 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
     onClose();
   }
 
-  async function handleFetchCollections() {
+  // Accepts an explicit groupId so it can be called right from the group
+  // <select>'s onChange with the just-picked value — reading `selectedGroupId`
+  // there would still see the pre-change value, since the setState from the
+  // same handler hasn't applied yet.
+  async function handleFetchCollections(groupIdOverride?: string) {
     if (!apiKey.trim() || !zoteroUserId.trim()) {
       setCollectionsError("Enter your Zotero user ID and API key first."); return;
     }
+    const groupId = groupIdOverride ?? selectedGroupId;
     setCollectionsLoading(true); setCollectionsError("");
     try {
       const res = await fetch("/api/zotero/collections", {
@@ -889,7 +914,7 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
         body: JSON.stringify({
           apiKey: apiKey.trim(),
           zoteroUserId: zoteroUserId.trim(),
-          ...(selectedGroupId ? { groupId: selectedGroupId } : {}),
+          ...(groupId ? { groupId } : {}),
         }),
       });
       const { collections: cols, groups: grps, error: err } = await res.json() as {
@@ -1014,7 +1039,7 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
               <p style={{ fontSize: 12, color: isDragOver ? "var(--color-navy)" : fileName ? "var(--color-body)" : "var(--color-secondary)" }}>
                 {isDragOver ? "Drop your file here" : (fileName || "Click to select or drag a .json or .rdf file")}
               </p>
-              <input type="file" accept=".json,.rdf" className="hidden" onChange={handleFile} />
+              <input ref={dropzoneInputRef} type="file" accept=".json,.rdf" className="hidden" onChange={handleFile} />
             </label>
             {error && <p style={{ fontSize: 12, color: "var(--color-error)", marginBottom: 10 }}>{error}</p>}
             {parsed.length > 0 && (
@@ -1135,7 +1160,7 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
               <div className="flex items-center gap-2 mb-2">
                 <label style={labelStyle}>Library &amp; Collection</label>
                 <button
-                  onClick={handleFetchCollections}
+                  onClick={() => handleFetchCollections()}
                   disabled={collectionsLoading || !apiKey.trim() || !zoteroUserId.trim()}
                   style={{ fontSize: 11, fontWeight: 600, color: "var(--color-navy)", backgroundColor: "transparent", border: "1px solid var(--color-navy)", borderRadius: 5, padding: "2px 8px", cursor: "pointer", opacity: (collectionsLoading || !apiKey.trim() || !zoteroUserId.trim()) ? 0.4 : 1 }}
                 >
@@ -1148,7 +1173,16 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
                 <div className="mb-2">
                   <select
                     value={selectedGroupId}
-                    onChange={(e) => { setSelectedGroupId(e.target.value); setCollections([]); setSelectedCollectionKey(""); }}
+                    onChange={(e) => {
+                      const newGroupId = e.target.value;
+                      setSelectedGroupId(newGroupId);
+                      setCollections([]); setSelectedCollectionKey("");
+                      // Auto-refresh so the Collection dropdown for the newly
+                      // chosen library reappears immediately, instead of
+                      // clearing it and requiring a second manual "Load"
+                      // click the user has no reason to expect.
+                      handleFetchCollections(newGroupId);
+                    }}
                     style={{ ...inputStyle, width: "100%", marginBottom: 6 }}
                   >
                     <option value="">Personal library</option>
