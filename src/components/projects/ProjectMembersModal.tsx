@@ -79,11 +79,13 @@ export default function ProjectMembersModal({
   onClose: () => void;
 }) {
   const [members, setMembers] = useState<ProjectMember[]>([]);
+  const [labMembersToAdd, setLabMembersToAdd] = useState<ProjectMember[]>([]);
   const [pendingInvites, setPendingInvites] = useState<PendingInvite[]>([]);
   const [loading, setLoading] = useState(true);
   const [emailInput, setEmailInput] = useState("");
   const [emailTouched, setEmailTouched] = useState(false);
   const [adding, setAdding] = useState(false);
+  const [addingUserId, setAddingUserId] = useState<string | null>(null);
   const [addError, setAddError] = useState("");
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
 
@@ -99,11 +101,12 @@ export default function ProjectMembersModal({
         .eq("sub_project_id", subProjectId),
       supabase
         .from("team_members")
-        .select("user_id")
+        .select("user_id, user_profiles(name, avatar_color, avatar_initials, avatar_url)")
         .eq("project_id", labProjectId),
     ]);
 
     const labMemberIds = new Set((labRows ?? []).map((r) => r.user_id as string));
+    const currentMemberIds = new Set((memberRows ?? []).map((r) => r.user_id as string));
 
     if (memberRows) {
       setMembers(
@@ -121,6 +124,28 @@ export default function ProjectMembersModal({
             joinedAt: row.joined_at as string,
           };
         })
+      );
+    }
+
+    // Build list of lab members not yet in this project (for quick-add picker)
+    if (labRows) {
+      setLabMembersToAdd(
+        labRows
+          .filter((r) => !currentMemberIds.has(r.user_id as string))
+          .map((r) => {
+            const p = Array.isArray(r.user_profiles) ? r.user_profiles[0] : r.user_profiles;
+            const profile = p as Record<string, string> | null;
+            const name = profile?.name ?? "Unknown";
+            return {
+              userId: r.user_id as string,
+              name,
+              avatarColor: profile?.avatar_color ?? "#B4D4E3",
+              avatarInitials: computeInitials(name) || (profile?.avatar_initials ?? "??"),
+              avatarUrl: profile?.avatar_url ?? undefined,
+              isLabMember: true,
+              joinedAt: "",
+            };
+          })
       );
     }
 
@@ -222,6 +247,23 @@ export default function ProjectMembersModal({
     setAdding(false);
   }
 
+  async function addLabMember(userId: string) {
+    setAddingUserId(userId);
+    const { error } = await supabase.from("sub_project_members").insert({
+      sub_project_id: subProjectId,
+      user_id: userId,
+      joined_at: new Date().toISOString(),
+      invited_by: currentUserId,
+    });
+    if (error) {
+      showToast("Failed to add member.", "error");
+    } else {
+      showToast("Member added.", "success");
+      await load();
+    }
+    setAddingUserId(null);
+  }
+
   async function handleRemove(userId: string) {
     const { error } = await supabase
       .from("sub_project_members")
@@ -290,10 +332,45 @@ export default function ProjectMembersModal({
         ) : (
           <div className="space-y-5">
 
-            {/* Add-by-email — PI/creator only */}
+            {/* Lab members not yet in this project — PI/creator only */}
+            {canManage && labMembersToAdd.length > 0 && (
+              <div>
+                <label style={labelStyle}>Lab members ({labMembersToAdd.length} available to add)</label>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {labMembersToAdd.map((m) => (
+                    <div
+                      key={m.userId}
+                      className="flex items-center justify-between"
+                      style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid var(--color-border)", backgroundColor: "var(--color-canvas)" }}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <Avatar user={{ name: m.name, avatarColor: m.avatarColor, avatarInitials: m.avatarInitials, avatarUrl: m.avatarUrl }} size={26} />
+                        <span style={{ fontSize: 13, fontWeight: 500, color: "var(--color-body)" }}>{m.name}</span>
+                      </div>
+                      <button
+                        onClick={() => addLabMember(m.userId)}
+                        disabled={addingUserId === m.userId}
+                        style={{
+                          height: 30, padding: "0 12px",
+                          backgroundColor: "var(--color-navy)", color: "#fff",
+                          border: "none", borderRadius: 6,
+                          fontSize: 12, fontWeight: 600, cursor: "pointer",
+                          opacity: addingUserId === m.userId ? 0.6 : 1,
+                          fontFamily: "var(--font-roboto)",
+                        }}
+                      >
+                        {addingUserId === m.userId ? "Adding…" : "Add"}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Add-by-email — PI/creator only (for external / non-lab collaborators) */}
             {canManage && (
               <div>
-                <label style={labelStyle}>Add member by email</label>
+                <label style={labelStyle}>Add external collaborator by email</label>
                 <div className="flex gap-2">
                   <input
                     value={emailInput}
