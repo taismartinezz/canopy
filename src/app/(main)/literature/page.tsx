@@ -814,6 +814,24 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
       if (annotRows.length > 0)
         await supabase.from("lit_annotations").insert(annotRows);
     }
+    // Persist url + notes for API-imported items (not included in buildLitInsert)
+    if (isSupabaseConfigured) {
+      const postInsertUpdates = parsed
+        .map((item) => ({ id: item.id, url: item.url, notes: item.notes }))
+        .filter((x) => x.url || x.notes);
+      if (postInsertUpdates.length > 0) {
+        setUploadStatus("Saving metadata…");
+        await Promise.all(
+          postInsertUpdates.map(({ id, url, notes }) => {
+            const payload: Record<string, unknown> = {};
+            if (url) payload.url = url;
+            if (notes) payload.notes = notes;
+            return supabase.from("literature_items").update(payload).eq("id", id);
+          })
+        );
+      }
+    }
+
     onImport(parsed);
     // Apply merged tags to any existing dupe items from RDF import
     if (pendingTagUpdates.length > 0) {
@@ -842,6 +860,7 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               apiKey: apiKey.trim(), zoteroUserId: zoteroUserId.trim(),
+              ...(selectedGroupId ? { groupId: selectedGroupId } : {}),
               attachmentKey: att.attachmentKey, projectId, itemId: item.id, filename: att.filename,
             }),
           });
@@ -948,9 +967,10 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
           ...(selectedCollectionKey ? { collectionKey: selectedCollectionKey } : {}),
         }),
       });
-      const { items: raw, pdfAttachments: apiPdfAtts, error: err } = await res.json() as {
+      const { items: raw, pdfAttachments: apiPdfAtts, notesMap: rawNotesMap, error: err } = await res.json() as {
         items?: CSLJsonItem[];
         pdfAttachments?: Record<string, { attachmentKey: string; filename: string }>;
+        notesMap?: Record<string, string[]>;
         error?: string;
       };
       if (err || !raw) { setApiError(err ?? "Sync failed"); setSyncing(false); return; }
@@ -968,6 +988,12 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
         // Extract Zotero key from CSL id URI (e.g. ".../items/ABCD1234" → "ABCD1234")
         const zoteroKey = (z as {id?: string}).id?.split("/").pop();
         if (zoteroKey) newKeyMap[itemId] = zoteroKey;
+        // Concatenate child text notes (HTML → plain text) separated by rule
+        const zNotes: string[] = (zoteroKey ? rawNotesMap?.[zoteroKey] : undefined) ?? [];
+        const notesText = zNotes
+          .map((h: string) => h.replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").trim())
+          .filter(Boolean)
+          .join("\n\n---\n\n");
         const incomingItem: LiteratureItem = {
           id: itemId, projectId, scope,
           type: CSL_TYPE_MAP[z.type ?? ""] ?? "article",
@@ -975,7 +1001,7 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
           journal: z["container-title"] ?? z.publisher,
           doi: z.DOI, abstract: z.abstract?.replace(/<[^>]+>/g, ""),
           volume: z.volume, pages: z.page, url: z.URL,
-          tags: [], removedTags: [], status: "unread", rating: 0, notes: "",
+          tags: [], removedTags: [], status: "unread", rating: 0, notes: notesText,
           files: [], collections: [], relatedIds: [],
           addedById: currentUserId, addedAt: now, importSource: "zotero_api",
         };
@@ -2098,6 +2124,7 @@ function DetailPanelContent({
   const [localRating, setLocalRating]     = useState<number>(item.rating);
   const [fileUploading, setFileUploading] = useState(false);
   const [filesDragOver, setFilesDragOver] = useState(false);
+  const [filesError, setFilesError] = useState("");
   const filesDragCounterRef = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -2345,9 +2372,10 @@ function DetailPanelContent({
   async function handleFileFromSource(file: File) {
     const MAX_MB = 50;
     if (file.size > MAX_MB * 1024 * 1024) {
-      alert(`This file is ${Math.round(file.size / 1024 / 1024)} MB, which exceeds the ${MAX_MB} MB upload limit. Try compressing it, or ask your lab admin to increase the bucket limit in Supabase Storage settings.`);
+      setFilesError(`File is ${Math.round(file.size / 1024 / 1024)} MB — exceeds the ${MAX_MB} MB limit. Try compressing it first.`);
       return;
     }
+    setFilesError("");
     setFileUploading(true);
     try {
       await handleFileUpload(file);
@@ -2398,7 +2426,7 @@ function DetailPanelContent({
         .upload(storagePath, finalFile);
       if (uploadError) {
         console.error("[LitFiles] upload:", uploadError);
-        alert(`Upload failed: ${uploadError.message}`);
+        setFilesError(`Upload failed: ${uploadError.message}`);
         return;
       }
       url = supabase.storage.from("literature-files").getPublicUrl(storagePath).data.publicUrl;
@@ -2714,6 +2742,11 @@ function DetailPanelContent({
             )}
             {localFiles.length === 0 && !fileUploading && (
               <p style={{ fontSize: 13, color: "var(--color-secondary)", marginBottom: 12 }}>No files attached.</p>
+            )}
+            {filesError && (
+              <p style={{ fontSize: 12, color: "var(--color-error)", marginBottom: 8, padding: "6px 8px", backgroundColor: "rgba(192,57,43,0.06)", borderRadius: 6 }}>
+                {filesError}
+              </p>
             )}
             <div
               onClick={() => { if (!fileUploading) fileInputRef.current?.click(); }}
