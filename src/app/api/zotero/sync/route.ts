@@ -96,5 +96,32 @@ export async function POST(request: Request) {
     if (attStart > 5000) break;
   }
 
-  return Response.json({ items, pdfAttachments });
+  // Third pass: fetch all child text notes and map parentItem key → note HTML strings.
+  const notesMap: Record<string, string[]> = {};
+  let noteStart = 0;
+  while (true) {
+    const noteUrl = `${itemsPath}?itemType=note&format=json&limit=100&start=${noteStart}`;
+    const noteRes = await fetch(noteUrl, {
+      headers: { "Zotero-API-Key": apiKey, "Zotero-API-Version": "3" },
+    });
+    if (!noteRes.ok) break;
+    const noteBatch = (await noteRes.json()) as Array<{
+      key: string;
+      data: { parentItem?: string; note?: string };
+    }>;
+    if (!Array.isArray(noteBatch) || noteBatch.length === 0) break;
+    for (const n of noteBatch) {
+      const parent = n.data?.parentItem;
+      const html = n.data?.note;
+      if (parent && html) {
+        if (!notesMap[parent]) notesMap[parent] = [];
+        notesMap[parent].push(html);
+      }
+    }
+    if (noteBatch.length < 100) break;
+    noteStart += 100;
+    if (noteStart > 5000) break;
+  }
+
+  return Response.json({ items, pdfAttachments, notesMap });
 }

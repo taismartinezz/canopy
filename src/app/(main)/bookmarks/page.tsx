@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import {
   Plus, ExternalLink, Trash2, Bookmark, X, Check, Pencil,
   FileText, BookOpen, FlaskConical, ClipboardList, Link2, Code2, Play, Table,
-  Users, User as UserIcon,
+  Users, User as UserIcon, Home,
 } from "lucide-react";
 import ScopeSidebar, { type ScopeSection } from "@/components/ui/ScopeSidebar";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
@@ -103,6 +103,11 @@ function relTime(iso: string) {
   const h = Math.floor(m / 60);
   if (h < 24) return `${h}h ago`;
   return `${Math.floor(h / 24)}d ago`;
+}
+
+function isCanopyInternalUrl(url: string): boolean {
+  if (typeof window === "undefined") return false;
+  try { return new URL(url).origin === window.location.origin; } catch { return false; }
 }
 
 function isValidUrl(value: string): boolean {
@@ -266,6 +271,7 @@ function BookmarkCard({ bm, canDelete, onDelete, onEdit }: {
   const type = inferType(bm.url);
   const cfg = TYPE_CONFIG[type];
   const Icon = cfg.icon;
+  const isInternal = isCanopyInternalUrl(bm.url);
 
   async function handleDelete(e: React.MouseEvent) {
     e.stopPropagation();
@@ -335,7 +341,7 @@ function BookmarkCard({ bm, canDelete, onDelete, onEdit }: {
     <div
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      onClick={() => window.open(bm.url, "_blank", "noopener,noreferrer")}
+      onClick={() => isInternal ? (window.location.href = bm.url) : window.open(bm.url, "_blank", "noopener,noreferrer")}
       style={{
         display: "flex",
         flexDirection: "column",
@@ -349,7 +355,7 @@ function BookmarkCard({ bm, canDelete, onDelete, onEdit }: {
         cursor: "pointer",
       }}
     >
-      {/* Top row: type icon + badge */}
+      {/* Top row: type icon + badges */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
         <div style={{
           width: 36, height: 36, borderRadius: 8,
@@ -358,14 +364,27 @@ function BookmarkCard({ bm, canDelete, onDelete, onEdit }: {
         }}>
           <Icon size={16} color={cfg.color} />
         </div>
-        <span style={{
-          fontSize: 10, fontWeight: 700, color: cfg.color,
-          backgroundColor: cfg.bg, borderRadius: 5,
-          padding: "3px 8px", letterSpacing: "0.05em",
-          textTransform: "uppercase", flexShrink: 0,
-        }}>
-          {cfg.badge}
-        </span>
+        <div style={{ display: "flex", gap: 4, alignItems: "center", flexShrink: 0 }}>
+          {isInternal && (
+            <span style={{
+              display: "flex", alignItems: "center", gap: 3,
+              fontSize: 10, fontWeight: 700, color: "#0F2544",
+              backgroundColor: "rgba(15,37,68,0.10)", borderRadius: 5,
+              padding: "3px 7px",
+            }}>
+              <Home size={9} />
+              Canopy
+            </span>
+          )}
+          <span style={{
+            fontSize: 10, fontWeight: 700, color: cfg.color,
+            backgroundColor: cfg.bg, borderRadius: 5,
+            padding: "3px 8px", letterSpacing: "0.05em",
+            textTransform: "uppercase", flexShrink: 0,
+          }}>
+            {cfg.badge}
+          </span>
+        </div>
       </div>
 
       {/* Title */}
@@ -379,12 +398,12 @@ function BookmarkCard({ bm, canDelete, onDelete, onEdit }: {
         {bm.title}
       </p>
 
-      {/* Domain */}
+      {/* Domain / path */}
       <p style={{
         fontSize: 11, color: "var(--color-secondary)", marginBottom: 0,
         overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
       }}>
-        {hostname(bm.url)}
+        {isInternal ? (() => { try { return new URL(bm.url).pathname; } catch { return bm.url; } })() : hostname(bm.url)}
       </p>
 
       {/* Spacer */}
@@ -744,7 +763,7 @@ export default function BookmarksPage() {
                 <BookmarkCard
                   key={bm.id}
                   bm={bm}
-                  canDelete={bm.added_by === currentUserId}
+                  canDelete={currentUserId !== null && (bm.scope !== "personal" || bm.added_by === currentUserId)}
                   onDelete={handleDelete}
                   onEdit={handleEditBookmark}
                 />
