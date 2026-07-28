@@ -98,10 +98,10 @@ function timeAgo(dateStr: string): string {
 // caught at dev time instead of surfacing as a 400 three rounds later.
 
 const REAL_LIT_COLS = new Set([
-  "id", "project_id", "user_id", "library",
+  "id", "project_id", "user_id", "added_by", "library",
   "title", "authors", "year", "journal",
   "doi", "abstract", "status", "tags", "type",
-  "sub_project_id",  // added Phase 1 — used for project-scope external member access
+  "sub_project_id",
 ]);
 
 function buildLitInsert(
@@ -132,6 +132,7 @@ function buildLitInsert(
   const payload: Record<string, unknown> = {
     project_id: projectId,
     user_id: userId,
+    added_by: userId,
     library: fields.library,
     type: fields.type ?? "article",
     title: fields.title,
@@ -2095,6 +2096,9 @@ function DetailPanelContent({
   const [localFiles, setLocalFiles]       = useState<LiteratureFile[]>(item.files);
   const [localStatus, setLocalStatus]     = useState<ReadStatus>(item.status);
   const [localRating, setLocalRating]     = useState<number>(item.rating);
+  const [fileUploading, setFileUploading] = useState(false);
+  const [filesDragOver, setFilesDragOver] = useState(false);
+  const filesDragCounterRef = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Editable DOI / URL
@@ -2338,11 +2342,28 @@ function DetailPanelContent({
     onUpdateItem(item.id, { tags: updatedTags, removedTags: updatedRemoved });
   }
 
+  async function handleFileFromSource(file: File) {
+    const MAX_MB = 50;
+    if (file.size > MAX_MB * 1024 * 1024) {
+      alert(`This file is ${Math.round(file.size / 1024 / 1024)} MB, which exceeds the ${MAX_MB} MB upload limit. Try compressing it, or ask your lab admin to increase the bucket limit in Supabase Storage settings.`);
+      return;
+    }
+    setFileUploading(true);
+    try {
+      await handleFileUpload(file);
+    } finally {
+      setFileUploading(false);
+    }
+  }
+
   async function handleFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
     e.target.value = "";
+    await handleFileFromSource(file);
+  }
 
+  async function handleFileUpload(file: File) {
     // Duplicate name handling
     const duplicate = localFiles.find((f) => f.name === file.name);
     let finalFile = file;
@@ -2403,6 +2424,24 @@ function DetailPanelContent({
       const { error } = await supabase.storage.from("literature-files").remove([target.storagePath]);
       if (error) console.error("[LitFiles] delete from storage:", error);
     }
+  }
+
+  function handleFilesDragEnter(e: React.DragEvent) {
+    e.preventDefault();
+    filesDragCounterRef.current++;
+    setFilesDragOver(true);
+  }
+  function handleFilesDragLeave(e: React.DragEvent) {
+    e.preventDefault();
+    filesDragCounterRef.current = Math.max(0, filesDragCounterRef.current - 1);
+    if (filesDragCounterRef.current === 0) setFilesDragOver(false);
+  }
+  async function handleFilesDrop(e: React.DragEvent) {
+    e.preventDefault();
+    filesDragCounterRef.current = 0;
+    setFilesDragOver(false);
+    const file = e.dataTransfer.files[0];
+    if (file) await handleFileFromSource(file);
   }
 
   return (
@@ -2535,8 +2574,11 @@ function DetailPanelContent({
 
             <div className="flex gap-2 pt-2">
               {(() => {
-                const pdfFile = localFiles.find((f) => f.url && f.name.toLowerCase().endsWith(".pdf"));
-                if (pdfFile?.url) {
+                const uploadedPdf = localFiles.find((f) => f.url && f.name.toLowerCase().endsWith(".pdf"));
+                const isDirectPdfUrl = item.url && (() => {
+                  try { return new URL(item.url!).pathname.toLowerCase().endsWith(".pdf"); } catch { return false; }
+                })();
+                if (uploadedPdf?.url) {
                   return (
                     <button
                       onClick={() => { setPdfViewerInitialPage(1); setShowPDFViewer(true); }}
@@ -2547,47 +2589,40 @@ function DetailPanelContent({
                     </button>
                   );
                 }
-                if (item.url || item.doi) {
-                  // Open direct PDF links in the in-app viewer; DOI links always open externally.
-                  const isDirectPdf = item.url && (() => {
-                    try { return new URL(item.url!).pathname.toLowerCase().endsWith(".pdf"); } catch { return false; }
-                  })();
-                  if (isDirectPdf) {
-                    return (
-                      <button
-                        onClick={() => { setPdfViewerExternalUrl(item.url!); setPdfViewerInitialPage(1); setShowPDFViewer(true); }}
-                        className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg"
-                        style={{ backgroundColor: "var(--color-navy)", color: "#fff", fontSize: 12, fontWeight: 700, border: "none", borderRadius: 7, cursor: "pointer", minHeight: 44 }}
-                      >
-                        <FileText size={13} /> Open PDF
-                      </button>
-                    );
-                  }
+                if (isDirectPdfUrl) {
                   return (
-                    <a
-                      href={item.url ?? `https://doi.org/${item.doi}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                    <button
+                      onClick={() => { setPdfViewerExternalUrl(item.url!); setPdfViewerInitialPage(1); setShowPDFViewer(true); }}
                       className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg"
-                      style={{ backgroundColor: "var(--color-navy)", color: "#fff", fontSize: 12, fontWeight: 700, border: "none", borderRadius: 7, cursor: "pointer", minHeight: 44, textDecoration: "none" }}
+                      style={{ backgroundColor: "var(--color-navy)", color: "#fff", fontSize: 12, fontWeight: 700, border: "none", borderRadius: 7, cursor: "pointer", minHeight: 44 }}
                     >
-                      <FileText size={13} /> {item.url ? "Open PDF" : "Open via DOI"}
-                    </a>
+                      <FileText size={13} /> Open PDF
+                    </button>
                   );
                 }
                 return (
-                  <button disabled className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg"
-                    style={{ backgroundColor: "var(--color-border)", color: "var(--color-secondary)", fontSize: 12, fontWeight: 700, border: "none", borderRadius: 7, cursor: "not-allowed", minHeight: 44 }}
-                    title="No URL or DOI available for this paper">
-                    <FileText size={13} /> Open PDF
+                  <button
+                    onClick={() => setTab("Files")}
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg"
+                    style={{ backgroundColor: "var(--color-canvas)", color: "var(--color-secondary)", fontSize: 12, fontWeight: 600, border: "1px dashed var(--color-border)", borderRadius: 7, cursor: "pointer", minHeight: 44 }}
+                    title="No PDF attached — click to open the Files tab and upload one"
+                  >
+                    <FileText size={13} /> Attach PDF
                   </button>
                 );
               })()}
-              {item.doi && (item.url || localFiles.some((f) => f.url && f.name.toLowerCase().endsWith(".pdf"))) && (
+              {item.doi && (
                 <a href={`https://doi.org/${item.doi}`} target="_blank" rel="noopener noreferrer"
                   className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg"
                   style={{ backgroundColor: "transparent", color: "var(--color-navy)", fontSize: 12, fontWeight: 700, border: "1px solid var(--color-navy)", borderRadius: 7, cursor: "pointer", minHeight: 44, textDecoration: "none" }}>
-                  <ExternalLink size={13} /> DOI
+                  <ExternalLink size={13} /> Open via DOI
+                </a>
+              )}
+              {!item.doi && item.url && (
+                <a href={item.url} target="_blank" rel="noopener noreferrer"
+                  className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg"
+                  style={{ backgroundColor: "transparent", color: "var(--color-navy)", fontSize: 12, fontWeight: 700, border: "1px solid var(--color-navy)", borderRadius: 7, cursor: "pointer", minHeight: 44, textDecoration: "none" }}>
+                  <ExternalLink size={13} /> Open URL
                 </a>
               )}
             </div>
@@ -2677,16 +2712,37 @@ function DetailPanelContent({
                 ))}
               </div>
             )}
-            {localFiles.length === 0 && (
+            {localFiles.length === 0 && !fileUploading && (
               <p style={{ fontSize: 13, color: "var(--color-secondary)", marginBottom: 12 }}>No files attached.</p>
             )}
             <div
-              onClick={() => fileInputRef.current?.click()}
-              className="flex flex-col items-center justify-center gap-2 py-6 cursor-pointer transition-colors hover:bg-[rgba(27,46,75,0.03)]"
-              style={{ border: "2px dashed var(--color-border)", borderRadius: 8 }}
+              onClick={() => { if (!fileUploading) fileInputRef.current?.click(); }}
+              onDragEnter={handleFilesDragEnter}
+              onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; }}
+              onDragLeave={handleFilesDragLeave}
+              onDrop={handleFilesDrop}
+              className="flex flex-col items-center justify-center gap-2 py-6 cursor-pointer transition-colors"
+              style={{
+                border: `2px dashed ${filesDragOver ? "var(--color-navy)" : "var(--color-border)"}`,
+                borderRadius: 8,
+                backgroundColor: filesDragOver ? "rgba(27,46,75,0.04)" : "transparent",
+                cursor: fileUploading ? "default" : "pointer",
+                transition: "border-color 0.12s, background-color 0.12s",
+              }}
             >
-              <FileIcon size={18} color="var(--color-secondary)" />
-              <p style={{ fontSize: 12, color: "var(--color-secondary)" }}>Drop files or click to upload</p>
+              {fileUploading ? (
+                <>
+                  <RefreshCw size={18} color="var(--color-navy)" style={{ animation: "spin 1s linear infinite" }} />
+                  <p style={{ fontSize: 12, color: "var(--color-navy)", fontWeight: 600 }}>Uploading…</p>
+                </>
+              ) : (
+                <>
+                  <FileIcon size={18} color={filesDragOver ? "var(--color-navy)" : "var(--color-secondary)"} />
+                  <p style={{ fontSize: 12, color: filesDragOver ? "var(--color-navy)" : "var(--color-secondary)" }}>
+                    {filesDragOver ? "Drop to attach" : "Drop a file or click to upload"}
+                  </p>
+                </>
+              )}
             </div>
           </div>
         )}
@@ -3075,7 +3131,7 @@ function mapLitRow(row: Record<string, any>): LiteratureItem {
     status: (row.status as LiteratureItem["status"]) ?? "unread",
     rating: (row.rating as number | null) ?? 0,
     notes: (row.notes as string | null) ?? "",
-    files: [],
+    files: Array.isArray(row.files) ? (row.files as LiteratureFile[]) : [],
     addedById: (row.user_id ?? row.added_by) as string,
     addedAt: (row.created_at ?? row.added_at) as string,
     deletedAt: (row.deleted_at as string | null) ?? null,
