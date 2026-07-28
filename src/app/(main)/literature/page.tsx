@@ -99,7 +99,7 @@ function timeAgo(dateStr: string): string {
 
 const REAL_LIT_COLS = new Set([
   "id", "project_id", "user_id", "added_by", "library",
-  "title", "authors", "year", "journal",
+  "title", "authors", "year", "journal", "volume", "pages",
   "doi", "abstract", "status", "tags", "type",
   "sub_project_id",
 ]);
@@ -114,6 +114,8 @@ function buildLitInsert(
     authors: string | string[];
     year?: number | null;
     journal?: string | null;
+    volume?: string | null;
+    pages?: string | null;
     doi?: string | null;
     abstract?: string | null;
     tags?: string[];
@@ -141,6 +143,8 @@ function buildLitInsert(
       : (fields.authors ?? ""),
     year: fields.year ?? null,
     journal: fields.journal ?? null,
+    volume: fields.volume ?? null,
+    pages: fields.pages ?? null,
     doi: fields.doi ?? null,
     abstract: fields.abstract ?? null,
     tags: fields.tags ?? [],
@@ -781,8 +785,9 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
       buildLitInsert(projectId, currentUserId, {
         id: item.id, library: scope, type: item.type, title: item.title, authors: item.authors,
         year: item.year || null, journal: item.journal ?? null,
+        volume: item.volume ?? null, pages: item.pages ?? null,
         doi: item.doi ?? null, abstract: item.abstract ?? null,
-        tags: [], status: "unread",
+        tags: item.tags ?? [], status: "unread",
         sub_project_id: scope === "project" ? subProjectId : scope === "personal" ? personalSubProjectId : null,
       })
     );
@@ -1450,6 +1455,7 @@ function DOILookupModal({ onSave, onMerge, onClose, projectId, currentUserId, su
       buildLitInsert(projectId, currentUserId, {
         id: item.id, library: scope, type: item.type, title: item.title, authors: item.authors,
         year: item.year || null, journal: item.journal ?? null,
+        volume: item.volume ?? null, pages: item.pages ?? null,
         doi: item.doi ?? null, abstract: item.abstract ?? null,
         tags: [], status: "unread",
         sub_project_id: scope === "project" ? subProjectId : scope === "personal" ? personalSubProjectId : null,
@@ -3156,6 +3162,8 @@ function mapLitRow(row: Record<string, any>): LiteratureItem {
     authors: toAuthorsArray(row.authors as string | string[]),
     year: (row.year as number | null) ?? 0,
     journal: (row.journal as string | null) ?? undefined,
+    volume: (row.volume as string | null) ?? undefined,
+    pages: (row.pages as string | null) ?? undefined,
     doi: (row.doi as string | null) ?? undefined,
     url: (row.url as string | null) ?? undefined,
     abstract: (row.abstract as string | null) ?? undefined,
@@ -3280,7 +3288,7 @@ export default function LiteraturePage() {
   function updateItem(id: string, updates: Partial<LiteratureItem>) {
     setItems((prev) => prev.map((item) => item.id === id ? { ...item, ...updates } : item));
     if (!isSupabaseConfigured) return;
-    const colMap: Record<string, string> = { tags: "tags", removedTags: "removed_tags", status: "status", rating: "rating", files: "files", doi: "doi", url: "url" };
+    const colMap: Record<string, string> = { tags: "tags", removedTags: "removed_tags", status: "status", rating: "rating", files: "files", doi: "doi", url: "url", volume: "volume", pages: "pages" };
     // notes is handled exclusively by handleSaveNotes (async, with proper error feedback)
     const nullableCols = new Set(["doi", "url"]);
     const payload: Record<string, unknown> = {};
