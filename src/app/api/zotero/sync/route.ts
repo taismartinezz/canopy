@@ -55,7 +55,9 @@ export async function POST(request: Request) {
     if (start > 5000) break;
   }
 
-  // Second pass: discover PDF attachments stored in Zotero cloud (imported_file only).
+  // Second pass: discover PDF attachments stored in Zotero cloud.
+  // Both "imported_file" (added from local) and "imported_url" (added from URL) mean the
+  // PDF is stored in Zotero cloud — group libraries predominantly use "imported_url".
   // Also builds attachmentParentMap (attachmentKey → parentItemKey) for the annotation pass.
   const pdfAttachments: Record<string, { attachmentKey: string; filename: string }> = {};
   const attachmentParentMap: Record<string, string> = {};
@@ -80,10 +82,10 @@ export async function POST(request: Request) {
       const { parentItem, contentType, title, linkMode } = att.data ?? {};
       // Track every attachment for annotation resolution
       if (parentItem) attachmentParentMap[att.key] = parentItem;
-      // Only include PDFs that are actually stored in Zotero cloud
+      // Accept both linkModes — both mean the file lives in Zotero cloud storage
       if (
         contentType === "application/pdf" &&
-        linkMode === "imported_file" &&
+        (linkMode === "imported_file" || linkMode === "imported_url") &&
         parentItem &&
         !pdfAttachments[parentItem]
       ) {
@@ -177,5 +179,31 @@ export async function POST(request: Request) {
     notesMap[key].push(`--- PDF Annotations ---\n${lines.join("\n")}`);
   }
 
-  return Response.json({ items, pdfAttachments, notesMap });
+  // Fifth pass: native JSON items to collect Zotero tags.
+  // CSL JSON format does not include Zotero-specific tags — a separate native-format
+  // pass is required. Each item's key matches the key embedded in the CSL id URI.
+  const tagsMap: Record<string, string[]> = {};
+  let tagStart = 0;
+  while (true) {
+    const tagUrl = `${itemsPath}?format=json&limit=100&start=${tagStart}&itemType=-attachment`;
+    const tagRes = await fetch(tagUrl, {
+      headers: { "Zotero-API-Key": apiKey, "Zotero-API-Version": "3" },
+    });
+    if (!tagRes.ok) break;
+    const tagBatch = (await tagRes.json()) as Array<{
+      key: string;
+      data: { tags?: Array<{ tag: string }> };
+    }>;
+    if (!Array.isArray(tagBatch) || tagBatch.length === 0) break;
+    for (const t of tagBatch) {
+      if (t.data?.tags?.length) {
+        tagsMap[t.key] = t.data.tags.map((tag) => tag.tag).filter(Boolean);
+      }
+    }
+    if (tagBatch.length < 100) break;
+    tagStart += 100;
+    if (tagStart > 5000) break;
+  }
+
+  return Response.json({ items, pdfAttachments, notesMap, tagsMap });
 }
