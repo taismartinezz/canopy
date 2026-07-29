@@ -461,12 +461,15 @@ function litIsDupe(
 function computeMergeUpdates(existing: LiteratureItem, incoming: LiteratureItem): Partial<LiteratureItem> {
   const u: Partial<LiteratureItem> = {};
   if (!existing.doi && incoming.doi) u.doi = incoming.doi;
-  if (!existing.abstract && incoming.abstract) u.abstract = incoming.abstract;
   if (!existing.url && incoming.url) u.url = incoming.url;
   if (!existing.volume && incoming.volume) u.volume = incoming.volume;
   if (!existing.pages && incoming.pages) u.pages = incoming.pages;
   if (!existing.journal && incoming.journal) u.journal = incoming.journal;
   if ((!existing.year || existing.year === 0) && incoming.year) u.year = incoming.year;
+  // Prefer the more complete abstract (longer wins, not just fill-empty)
+  const ea = existing.abstract ?? "";
+  const ia = incoming.abstract ?? "";
+  if (ia && ia.length > ea.length) u.abstract = ia;
   return u;
 }
 
@@ -644,6 +647,7 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
   const [pendingTagUpdates, setPendingTagUpdates] = useState<{ id: string; mergedTags: string[] }[]>([]);
   const [pendingMerges, setPendingMerges] = useState<{ existing: LiteratureItem; incoming: LiteratureItem }[]>([]);
   const [mergeDupes, setMergeDupes] = useState(true);
+  const [forceNewIds, setForceNewIds] = useState<Set<string>>(new Set());
   const [fileName, setFileName] = useState("");
   const [error, setError]       = useState("");
   const [importing, setImporting] = useState(false);
@@ -676,6 +680,8 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
   const pdfInputRef = useRef<HTMLInputElement>(null);
   // Upload progress feedback
   const [uploadStatus, setUploadStatus]     = useState("");
+  const [importErrors, setImportErrors]     = useState<string[]>([]);
+  const [pdfErrors, setPdfErrors]           = useState<string[]>([]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) { if (e.key === "Escape") onClose(); }
@@ -696,7 +702,7 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
     function onCancel() {
       if (dropzoneInputRef.current?.files?.length) return; // picked, not cancelled
       setFileName(""); setParsed([]); setPendingNotes([]); setPendingTagUpdates([]);
-      setPendingMerges([]); setError("");
+      setPendingMerges([]); setError(""); setForceNewIds(new Set()); setImportErrors([]); setPdfErrors([]);
     }
     input.addEventListener("cancel", onCancel);
     return () => input.removeEventListener("cancel", onCancel);
@@ -705,6 +711,7 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
   function processFile(file: File) {
     setFileName(file.name); setParsed([]); setPendingNotes([]); setPendingTagUpdates([]); setPendingMerges([]); setMergeDupes(true); setError("");
     setParsedPDFLinks([]); setSelectedPDFFiles([]); setPdfAttachments({}); setPdfKeyMap({});
+    setForceNewIds(new Set()); setImportErrors([]); setPdfErrors([]);
     const reader = new FileReader();
     reader.onload = (ev) => {
       const content = ev.target?.result as string;
@@ -779,33 +786,70 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
   }
 
   async function handleImport() {
-    if (!parsed.length) return;
+    if (!parsed.length && !forceNewIds.size) return;
     setImporting(true);
-    const rows = parsed.map((item) =>
+    setImportErrors([]); setPdfErrors([]);
+    let hadImportErrors = false;
+
+    // Items forced-new from the duplicates list get inserted alongside regular items
+    const forceNewItems = pendingMerges
+      .filter(({ existing }) => forceNewIds.has(existing.id))
+      .map(({ incoming }) => ({ ...incoming, id: crypto.randomUUID() }));
+    const allNew = [...parsed, ...forceNewItems];
+
+    const subId = scope === "project" ? subProjectId : scope === "personal" ? personalSubProjectId : null;
+    const rows = allNew.map((item) =>
       buildLitInsert(projectId, currentUserId, {
         id: item.id, library: scope, type: item.type, title: item.title, authors: item.authors,
         year: item.year || null, journal: item.journal ?? null,
         volume: item.volume ?? null, pages: item.pages ?? null,
         doi: item.doi ?? null, abstract: item.abstract ?? null,
         tags: item.tags ?? [], status: "unread",
-        sub_project_id: scope === "project" ? subProjectId : scope === "personal" ? personalSubProjectId : null,
+        sub_project_id: subId,
       })
     );
-    const { error: insertErr } = await supabase.from("literature_items").insert(rows);
-    if (insertErr) {
-      console.error("[Zotero import]", insertErr.code, insertErr.message, insertErr.details);
-      setError(`Import failed: ${insertErr.message}`);
-      setImporting(false);
-      return;
+
+    // Attempt batch insert; on failure fall back to per-item inserts so one bad row
+    // doesn't silently discard all the others.
+    let successfulItems = allNew;
+    const { error: batchErr } = await supabase.from("literature_items").insert(rows);
+    if (batchErr) {
+      console.warn("[Zotero import] batch insert failed, falling back to per-item:", batchErr.message);
+      const results = await Promise.allSettled(
+        rows.map((row, i) =>
+          supabase.from("literature_items").insert([row]).then((res) => ({ res, item: allNew[i] }))
+        )
+      );
+      const failed: string[] = [];
+      const succeeded: LiteratureItem[] = [];
+      for (const r of results) {
+        if (r.status === "fulfilled" && !r.value.res.error) {
+          succeeded.push(r.value.item);
+        } else {
+          const item = r.status === "fulfilled" ? r.value.item : allNew[results.indexOf(r)];
+          failed.push(item?.title ?? "Unknown item");
+          if (r.status === "fulfilled" && r.value.res.error) {
+            console.error("[Zotero import] item insert error:", r.value.res.error.message, "–", item?.title);
+          }
+        }
+      }
+      if (succeeded.length === 0) {
+        setError(`Import failed: ${batchErr.message}`);
+        setImporting(false);
+        return;
+      }
+      successfulItems = succeeded;
+      if (failed.length > 0) { setImportErrors(failed); hadImportErrors = true; }
     }
     // Import RDF notes as annotations on the corresponding items
+    const successIds = new Set(successfulItems.map((i) => i.id));
     if (pendingNotes.length > 0) {
       const annotRows = pendingNotes.flatMap((note) => {
         // Match by itemRef fragment (#item_N) or positional index if available
         const refFragment = note.itemRef.replace(/^.*#/, "");
         const target = parsed.find((_, i) => `item_${i + 1}` === refFragment || `item${i + 1}` === refFragment)
           ?? parsed[0]; // fallback to first item if ref can't be matched
-        if (!target) return [];
+        if (!target || !successIds.has(target.id)) return [];
         // Pick nearest Canopy color; if Zotero color hex doesn't match palette, keep raw hex
         const color = note.color ?? undefined;
         const plainText = note.html.replace(/<[^>]+>/g, "").trim();
@@ -821,7 +865,7 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
     }
     // Persist url + notes for API-imported items (not included in buildLitInsert)
     if (isSupabaseConfigured) {
-      const postInsertUpdates = parsed
+      const postInsertUpdates = successfulItems
         .map((item) => ({ id: item.id, url: item.url, notes: item.notes }))
         .filter((x) => x.url || x.notes);
       if (postInsertUpdates.length > 0) {
@@ -837,7 +881,7 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
       }
     }
 
-    onImport(parsed);
+    onImport(successfulItems);
     // Apply merged tags to any existing dupe items from RDF import
     if (pendingTagUpdates.length > 0) {
       pendingTagUpdates.forEach((u) => onUpdateItem(u.id, { tags: u.mergedTags }));
@@ -853,7 +897,8 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
     // Upload PDFs from API sync (server-side Zotero download → Supabase Storage)
     const hasPdfAtts = Object.keys(pdfAttachments).length > 0;
     if (hasPdfAtts && apiKey.trim()) {
-      for (const item of parsed) {
+      const collectedPdfErrors: string[] = [];
+      for (const item of successfulItems) {
         const zKey = pdfKeyMap[item.id];
         if (!zKey) continue;
         const att = pdfAttachments[zKey];
@@ -880,13 +925,16 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
             await supabase.from("literature_items").update({ files: [newFile] }).eq("id", item.id);
             onUpdateItem(item.id, { files: [newFile] });
           } else {
-            const { error: pdfErr } = await pdfRes.json() as { error?: string };
-            console.warn("[ZoteroImport] PDF fetch skipped:", att.filename, pdfErr);
+            const body = await pdfRes.json() as { error?: string };
+            console.warn("[ZoteroImport] PDF fetch skipped:", att.filename, body.error);
+            collectedPdfErrors.push(`${att.filename}: ${body.error ?? "unknown error"}`);
           }
         } catch (ex) {
           console.warn("[ZoteroImport] PDF fetch error:", att.filename, ex);
+          collectedPdfErrors.push(`${att.filename}: network error`);
         }
       }
+      if (collectedPdfErrors.length > 0) setPdfErrors(collectedPdfErrors);
     }
 
     // Upload PDFs from local file picker (RDF export with "Export Files" checked)
@@ -919,7 +967,8 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
 
     setUploadStatus("");
     setImporting(false);
-    onClose();
+    // Keep modal open if there are errors to report so the user can read them
+    if (!hadImportErrors) onClose();
   }
 
   // Accepts an explicit groupId so it can be called right from the group
@@ -972,10 +1021,11 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
           ...(selectedCollectionKey ? { collectionKey: selectedCollectionKey } : {}),
         }),
       });
-      const { items: raw, pdfAttachments: apiPdfAtts, notesMap: rawNotesMap, error: err } = await res.json() as {
+      const { items: raw, pdfAttachments: apiPdfAtts, notesMap: rawNotesMap, tagsMap: rawTagsMap, error: err } = await res.json() as {
         items?: CSLJsonItem[];
         pdfAttachments?: Record<string, { attachmentKey: string; filename: string }>;
         notesMap?: Record<string, string[]>;
+        tagsMap?: Record<string, string[]>;
         error?: string;
       };
       if (err || !raw) { setApiError(err ?? "Sync failed"); setSyncing(false); return; }
@@ -1006,7 +1056,7 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
           journal: z["container-title"] ?? z.publisher,
           doi: z.DOI, abstract: z.abstract?.replace(/<[^>]+>/g, ""),
           volume: z.volume, pages: z.page, url: z.URL,
-          tags: [], removedTags: [], status: "unread", rating: 0, notes: notesText,
+          tags: (zoteroKey ? rawTagsMap?.[zoteroKey] : undefined) ?? [], removedTags: [], status: "unread", rating: 0, notes: notesText,
           files: [], collections: [], relatedIds: [],
           addedById: currentUserId, addedAt: now, importSource: "zotero_api",
         };
@@ -1082,26 +1132,41 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
                     <div className="flex items-center gap-2 mb-2">
                       <input type="checkbox" id="merge-dupes" checked={mergeDupes} onChange={(e) => setMergeDupes(e.target.checked)} style={{ cursor: "pointer" }} />
                       <label htmlFor="merge-dupes" style={{ fontSize: 12, fontWeight: 600, color: "var(--color-body)", cursor: "pointer" }}>
-                        Merge {pendingMerges.length} existing item{pendingMerges.length > 1 ? "s" : ""} (fill in missing fields)
+                        Merge {pendingMerges.length} duplicate{pendingMerges.length > 1 ? "s" : ""} (update with most complete fields)
                       </label>
                     </div>
-                    {mergeDupes && (
-                      <ul style={{ margin: 0, padding: "0 0 0 16px" }}>
-                        {pendingMerges.map(({ existing, incoming }) => {
-                          const updates = computeMergeUpdates(existing, incoming);
-                          const fields = Object.keys(updates);
-                          return (
-                            <li key={existing.id} style={{ fontSize: 11, color: "var(--color-secondary)", marginBottom: 2 }}>
-                              <span style={{ color: "var(--color-body)", fontWeight: 600 }}>{existing.title.length > 50 ? existing.title.slice(0, 50) + "…" : existing.title}</span>
-                              {fields.length > 0 ? ` → add: ${fields.join(", ")}` : " (no new fields to add)"}
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    )}
-                    {!mergeDupes && (
-                      <p style={{ fontSize: 11, color: "var(--color-secondary)", margin: 0 }}>
-                        {pendingMerges.length} duplicate{pendingMerges.length > 1 ? "s" : ""} will be skipped
+                    <ul style={{ margin: 0, padding: "0 0 0 16px" }}>
+                      {pendingMerges.map(({ existing, incoming }) => {
+                        const updates = computeMergeUpdates(existing, incoming);
+                        const fields = Object.keys(updates);
+                        const isForceNew = forceNewIds.has(existing.id);
+                        return (
+                          <li key={existing.id} style={{ fontSize: 11, color: "var(--color-secondary)", marginBottom: 3, display: "flex", alignItems: "baseline", gap: 4, flexWrap: "wrap" }}>
+                            <span style={{ color: "var(--color-body)", fontWeight: 600 }}>{existing.title.length > 44 ? existing.title.slice(0, 44) + "…" : existing.title}</span>
+                            {isForceNew ? (
+                              <span style={{ color: "var(--color-navy)", fontWeight: 600 }}>→ will add as new</span>
+                            ) : mergeDupes ? (
+                              fields.length > 0 ? ` → update: ${fields.join(", ")}` : " (no new fields)"
+                            ) : (
+                              " (skip)"
+                            )}
+                            <button
+                              onClick={() => setForceNewIds((prev) => {
+                                const next = new Set(prev);
+                                if (isForceNew) next.delete(existing.id); else next.add(existing.id);
+                                return next;
+                              })}
+                              style={{ fontSize: 10, fontWeight: 600, color: isForceNew ? "var(--color-error)" : "var(--color-navy)", background: "none", border: "none", cursor: "pointer", padding: "0 2px", textDecoration: "underline" }}
+                            >
+                              {isForceNew ? "undo" : "add as new"}
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                    {!mergeDupes && forceNewIds.size === 0 && (
+                      <p style={{ fontSize: 11, color: "var(--color-secondary)", margin: "4px 0 0" }}>
+                        Duplicates not marked "add as new" will be skipped.
                       </p>
                     )}
                   </div>
@@ -1247,12 +1312,31 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
           </div>
         )}
 
+        {importErrors.length > 0 && (
+          <div style={{ marginTop: 10, padding: "8px 10px", borderRadius: 7, backgroundColor: "rgba(192,57,43,0.06)", border: "1px solid rgba(192,57,43,0.2)" }}>
+            <p style={{ fontSize: 12, fontWeight: 600, color: "var(--color-error)", marginBottom: 4 }}>{importErrors.length} item{importErrors.length > 1 ? "s" : ""} could not be inserted:</p>
+            <ul style={{ margin: 0, padding: "0 0 0 16px" }}>
+              {importErrors.slice(0, 10).map((t, i) => <li key={i} style={{ fontSize: 11, color: "var(--color-secondary)" }}>{t}</li>)}
+              {importErrors.length > 10 && <li style={{ fontSize: 11, color: "var(--color-secondary)" }}>…and {importErrors.length - 10} more</li>}
+            </ul>
+          </div>
+        )}
+        {pdfErrors.length > 0 && (
+          <div style={{ marginTop: 6, padding: "8px 10px", borderRadius: 7, backgroundColor: "rgba(192,57,43,0.04)", border: "1px solid rgba(192,57,43,0.15)" }}>
+            <p style={{ fontSize: 12, fontWeight: 600, color: "var(--color-error)", marginBottom: 4 }}>PDF attach failed for {pdfErrors.length} item{pdfErrors.length > 1 ? "s" : ""} (metadata still imported):</p>
+            <ul style={{ margin: 0, padding: "0 0 0 16px" }}>
+              {pdfErrors.slice(0, 5).map((t, i) => <li key={i} style={{ fontSize: 11, color: "var(--color-secondary)" }}>{t}</li>)}
+            </ul>
+          </div>
+        )}
         <div className="flex justify-end gap-2 mt-4">
-          <button onClick={onClose} style={{ fontSize: 13, fontWeight: 600, color: "var(--color-body)", border: "1px solid var(--color-border)", borderRadius: 7, padding: "8px 16px", backgroundColor: "transparent", cursor: "pointer", minHeight: 44 }}>Cancel</button>
+          <button onClick={onClose} style={{ fontSize: 13, fontWeight: 600, color: "var(--color-body)", border: "1px solid var(--color-border)", borderRadius: 7, padding: "8px 16px", backgroundColor: "transparent", cursor: "pointer", minHeight: 44 }}>
+            {importErrors.length > 0 ? "Close" : "Cancel"}
+          </button>
           {tab === "file" && (
-            <button onClick={handleImport} disabled={!parsed.length || importing}
-              style={{ fontSize: 13, fontWeight: 700, color: "#fff", backgroundColor: "var(--color-navy)", border: "none", borderRadius: 7, padding: "8px 20px", cursor: (!parsed.length || importing) ? "default" : "pointer", minHeight: 44, opacity: (!parsed.length || importing) ? 0.5 : 1 }}>
-              {uploadStatus || (importing ? "Importing…" : `Import ${parsed.length > 0 ? parsed.length + " item" + (parsed.length > 1 ? "s" : "") : ""}`)}
+            <button onClick={handleImport} disabled={(!parsed.length && !forceNewIds.size) || importing}
+              style={{ fontSize: 13, fontWeight: 700, color: "#fff", backgroundColor: "var(--color-navy)", border: "none", borderRadius: 7, padding: "8px 20px", cursor: ((!parsed.length && !forceNewIds.size) || importing) ? "default" : "pointer", minHeight: 44, opacity: ((!parsed.length && !forceNewIds.size) || importing) ? 0.5 : 1 }}>
+              {uploadStatus || (importing ? "Importing…" : `Import ${parsed.length + forceNewIds.size > 0 ? (parsed.length + forceNewIds.size) + " item" + (parsed.length + forceNewIds.size > 1 ? "s" : "") : ""}`)}
             </button>
           )}
         </div>
@@ -2134,13 +2218,17 @@ function DetailPanelContent({
   const filesDragCounterRef = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Editable DOI / URL
-  const [editingDoi, setEditingDoi] = useState(false);
-  const [localDoi, setLocalDoi]     = useState(item.doi ?? "");
-  const [doiError, setDoiError]     = useState("");
-  const [editingUrl, setEditingUrl] = useState(false);
-  const [localUrl, setLocalUrl]     = useState(item.url ?? "");
-  const [urlError, setUrlError]     = useState("");
+  // Editable DOI / URL / Volume / Pages
+  const [editingDoi, setEditingDoi]       = useState(false);
+  const [localDoi, setLocalDoi]           = useState(item.doi ?? "");
+  const [doiError, setDoiError]           = useState("");
+  const [editingUrl, setEditingUrl]       = useState(false);
+  const [localUrl, setLocalUrl]           = useState(item.url ?? "");
+  const [urlError, setUrlError]           = useState("");
+  const [editingVolume, setEditingVolume] = useState(false);
+  const [localVolume, setLocalVolume]     = useState(item.volume ?? "");
+  const [editingPages, setEditingPages]   = useState(false);
+  const [localPages, setLocalPages]       = useState(item.pages ?? "");
 
   const [annotations, setAnnotations]   = useState<LitAnnotation[]>([]);
   const [annotAuthors, setAnnotAuthors] = useState<Record<string, string>>({});
@@ -2168,8 +2256,12 @@ function DetailPanelContent({
     setLocalRating(item.rating);
     setLocalDoi(item.doi ?? "");
     setLocalUrl(item.url ?? "");
+    setLocalVolume(item.volume ?? "");
+    setLocalPages(item.pages ?? "");
     setEditingDoi(false); setDoiError("");
     setEditingUrl(false); setUrlError("");
+    setEditingVolume(false);
+    setEditingPages(false);
     setTab("Info");
     setAnnotations([]); setAssigned([]); setRecs([]); setRecsFetched(false);
     setShowPDFViewer(false); setPdfViewerExternalUrl(null);
@@ -2330,6 +2422,18 @@ function DetailPanelContent({
     if (v) { try { new URL(v); } catch { setUrlError("Enter a valid URL (include https://)"); return; } }
     setUrlError(""); setEditingUrl(false);
     onUpdateItem(item.id, { url: v || undefined });
+  }
+
+  function saveVolume() {
+    const v = localVolume.trim();
+    setEditingVolume(false);
+    onUpdateItem(item.id, { volume: v || undefined });
+  }
+
+  function savePages() {
+    const v = localPages.trim();
+    setEditingPages(false);
+    onUpdateItem(item.id, { pages: v || undefined });
   }
 
   function handleCopy() {
@@ -2519,12 +2623,62 @@ function DetailPanelContent({
       <div className="flex-1 overflow-y-auto">
         {tab === "Info" && (
           <div className="px-4 py-4 space-y-3">
-            {[["Authors", toAuthorsArray(item.authors).join("; ") || "-"], ["Year", String(item.year)], ["Journal", item.journal ?? item.publisher ?? "-"], ["Volume", item.volume ?? "-"], ["Pages", item.pages ?? "-"], ["Type", item.type.charAt(0).toUpperCase() + item.type.slice(1)]].map(([label, value]) => (
+            {[["Authors", toAuthorsArray(item.authors).join("; ") || "-"], ["Year", String(item.year)], ["Journal", item.journal ?? item.publisher ?? "-"], ["Type", item.type.charAt(0).toUpperCase() + item.type.slice(1)]].map(([label, value]) => (
               <div key={label}>
                 <p style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-secondary)", marginBottom: 3 }}>{label}</p>
                 <p style={{ fontSize: 12, color: "var(--color-body)", lineHeight: 1.4, wordBreak: "break-word" }}>{value}</p>
               </div>
             ))}
+
+            {/* Editable Volume */}
+            <div>
+              <p style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-secondary)", marginBottom: 3 }}>Volume</p>
+              {editingVolume ? (
+                <div>
+                  <input autoFocus value={localVolume} onChange={(e) => setLocalVolume(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") saveVolume(); if (e.key === "Escape") { setEditingVolume(false); setLocalVolume(item.volume ?? ""); } }}
+                    placeholder="e.g. 42" style={{ width: "100%", height: 32, padding: "0 8px", fontSize: 12, border: "1px solid var(--color-navy)", borderRadius: 5, fontFamily: "var(--font-roboto)", outline: "none" }} />
+                  <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
+                    <button onClick={saveVolume} style={{ fontSize: 11, fontWeight: 700, padding: "4px 10px", borderRadius: 5, backgroundColor: "var(--color-navy)", color: "#fff", border: "none", cursor: "pointer" }}>Save</button>
+                    <button onClick={() => { setEditingVolume(false); setLocalVolume(item.volume ?? ""); }} style={{ fontSize: 11, padding: "4px 8px", borderRadius: 5, border: "1px solid var(--color-border)", backgroundColor: "transparent", cursor: "pointer" }}>Cancel</button>
+                  </div>
+                </div>
+              ) : (
+                <div className="group flex items-center gap-1">
+                  <p style={{ fontSize: 12, color: "var(--color-body)", lineHeight: 1.4, flex: 1 }}>{item.volume ?? "-"}</p>
+                  <button onClick={() => setEditingVolume(true)} aria-label="Edit Volume"
+                    className="opacity-0 group-hover:opacity-100 transition-opacity"
+                    style={{ flexShrink: 0, background: "none", border: "none", cursor: "pointer", padding: 2, color: "var(--color-secondary)" }}>
+                    <Pencil size={11} />
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Editable Pages */}
+            <div>
+              <p style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-secondary)", marginBottom: 3 }}>Pages</p>
+              {editingPages ? (
+                <div>
+                  <input autoFocus value={localPages} onChange={(e) => setLocalPages(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") savePages(); if (e.key === "Escape") { setEditingPages(false); setLocalPages(item.pages ?? ""); } }}
+                    placeholder="e.g. 123-145" style={{ width: "100%", height: 32, padding: "0 8px", fontSize: 12, border: "1px solid var(--color-navy)", borderRadius: 5, fontFamily: "var(--font-roboto)", outline: "none" }} />
+                  <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
+                    <button onClick={savePages} style={{ fontSize: 11, fontWeight: 700, padding: "4px 10px", borderRadius: 5, backgroundColor: "var(--color-navy)", color: "#fff", border: "none", cursor: "pointer" }}>Save</button>
+                    <button onClick={() => { setEditingPages(false); setLocalPages(item.pages ?? ""); }} style={{ fontSize: 11, padding: "4px 8px", borderRadius: 5, border: "1px solid var(--color-border)", backgroundColor: "transparent", cursor: "pointer" }}>Cancel</button>
+                  </div>
+                </div>
+              ) : (
+                <div className="group flex items-center gap-1">
+                  <p style={{ fontSize: 12, color: "var(--color-body)", lineHeight: 1.4, flex: 1 }}>{item.pages ?? "-"}</p>
+                  <button onClick={() => setEditingPages(true)} aria-label="Edit Pages"
+                    className="opacity-0 group-hover:opacity-100 transition-opacity"
+                    style={{ flexShrink: 0, background: "none", border: "none", cursor: "pointer", padding: 2, color: "var(--color-secondary)" }}>
+                    <Pencil size={11} />
+                  </button>
+                </div>
+              )}
+            </div>
 
             {/* Editable DOI */}
             <div>
