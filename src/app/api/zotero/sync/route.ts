@@ -179,10 +179,14 @@ export async function POST(request: Request) {
     notesMap[key].push(`--- PDF Annotations ---\n${lines.join("\n")}`);
   }
 
-  // Fifth pass: native JSON items to collect Zotero tags.
+  // Fifth pass: native JSON items to collect Zotero tags AND detect CSL-drop gaps.
   // CSL JSON format does not include Zotero-specific tags — a separate native-format
   // pass is required. Each item's key matches the key embedded in the CSL id URI.
+  // We also use this pass to cross-reference against the CSL JSON output: if an item
+  // is present in native JSON but absent from CSL JSON, it was silently dropped by
+  // Zotero's CSL serializer. We surface those as droppedItems in the response.
   const tagsMap: Record<string, string[]> = {};
+  const nativeItems: { key: string; title: string }[] = [];
   let tagStart = 0;
   while (true) {
     const tagUrl = `${itemsPath}?format=json&limit=100&start=${tagStart}&itemType=-attachment`;
@@ -192,10 +196,11 @@ export async function POST(request: Request) {
     if (!tagRes.ok) break;
     const tagBatch = (await tagRes.json()) as Array<{
       key: string;
-      data: { tags?: Array<{ tag: string }> };
+      data: { tags?: Array<{ tag: string }>; title?: string };
     }>;
     if (!Array.isArray(tagBatch) || tagBatch.length === 0) break;
     for (const t of tagBatch) {
+      nativeItems.push({ key: t.key, title: t.data?.title ?? "" });
       if (t.data?.tags?.length) {
         tagsMap[t.key] = t.data.tags.map((tag) => tag.tag).filter(Boolean);
       }
@@ -205,5 +210,22 @@ export async function POST(request: Request) {
     if (tagStart > 5000) break;
   }
 
-  return Response.json({ items, pdfAttachments, notesMap, tagsMap });
+  // Keys present in the CSL JSON first pass (extracted from the id URI field)
+  const cslKeys = new Set(
+    (items as Array<{ id?: string }>)
+      .map((z) => z.id?.split("/").pop())
+      .filter(Boolean) as string[]
+  );
+  const droppedItems = nativeItems
+    .filter(({ key }) => !cslKeys.has(key))
+    .map(({ key, title }) => ({ key, title }));
+
+  if (droppedItems.length > 0) {
+    console.warn(
+      `[ZoteroSync] ${droppedItems.length} item(s) present in native JSON but missing from CSL JSON:`,
+      droppedItems.map((d) => `${d.key}: "${d.title}"`).join(", ")
+    );
+  }
+
+  return Response.json({ items, pdfAttachments, notesMap, tagsMap, droppedItems });
 }
