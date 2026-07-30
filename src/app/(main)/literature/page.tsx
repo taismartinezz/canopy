@@ -470,6 +470,16 @@ function computeMergeUpdates(existing: LiteratureItem, incoming: LiteratureItem)
   const ea = existing.abstract ?? "";
   const ia = incoming.abstract ?? "";
   if (ia && ia.length > ea.length) u.abstract = ia;
+  // Union incoming tags into existing ones — never overwrites manually-added Canopy tags,
+  // but surfaces new Zotero tags on re-sync. Respects removedTags to avoid re-adding
+  // tags the user explicitly deleted.
+  const incomingTags = incoming.tags ?? [];
+  if (incomingTags.length > 0) {
+    const removed = new Set(existing.removedTags ?? []);
+    const existingSet = new Set(existing.tags ?? []);
+    const newTags = incomingTags.filter((t) => !existingSet.has(t) && !removed.has(t));
+    if (newTags.length > 0) u.tags = [...(existing.tags ?? []), ...newTags];
+  }
   return u;
 }
 
@@ -682,6 +692,7 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
   const [uploadStatus, setUploadStatus]     = useState("");
   const [importErrors, setImportErrors]     = useState<string[]>([]);
   const [pdfErrors, setPdfErrors]           = useState<string[]>([]);
+  const [syncWarnings, setSyncWarnings]     = useState<string[]>([]); // CSL-drop warnings shown pre-import
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) { if (e.key === "Escape") onClose(); }
@@ -702,7 +713,7 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
     function onCancel() {
       if (dropzoneInputRef.current?.files?.length) return; // picked, not cancelled
       setFileName(""); setParsed([]); setPendingNotes([]); setPendingTagUpdates([]);
-      setPendingMerges([]); setError(""); setForceNewIds(new Set()); setImportErrors([]); setPdfErrors([]);
+      setPendingMerges([]); setError(""); setForceNewIds(new Set()); setImportErrors([]); setPdfErrors([]); setSyncWarnings([]);
     }
     input.addEventListener("cancel", onCancel);
     return () => input.removeEventListener("cancel", onCancel);
@@ -711,7 +722,7 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
   function processFile(file: File) {
     setFileName(file.name); setParsed([]); setPendingNotes([]); setPendingTagUpdates([]); setPendingMerges([]); setMergeDupes(true); setError("");
     setParsedPDFLinks([]); setSelectedPDFFiles([]); setPdfAttachments({}); setPdfKeyMap({});
-    setForceNewIds(new Set()); setImportErrors([]); setPdfErrors([]);
+    setForceNewIds(new Set()); setImportErrors([]); setPdfErrors([]); setSyncWarnings([]);
     const reader = new FileReader();
     reader.onload = (ev) => {
       const content = ev.target?.result as string;
@@ -1021,15 +1032,28 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
           ...(selectedCollectionKey ? { collectionKey: selectedCollectionKey } : {}),
         }),
       });
-      const { items: raw, pdfAttachments: apiPdfAtts, notesMap: rawNotesMap, tagsMap: rawTagsMap, error: err } = await res.json() as {
+      const { items: raw, pdfAttachments: apiPdfAtts, notesMap: rawNotesMap, tagsMap: rawTagsMap, droppedItems: rawDropped, error: err } = await res.json() as {
         items?: CSLJsonItem[];
         pdfAttachments?: Record<string, { attachmentKey: string; filename: string }>;
         notesMap?: Record<string, string[]>;
         tagsMap?: Record<string, string[]>;
+        droppedItems?: { key: string; title: string }[];
         error?: string;
       };
       if (err || !raw) { setApiError(err ?? "Sync failed"); setSyncing(false); return; }
       setPdfAttachments(apiPdfAtts ?? {});
+
+      // Surface items that Zotero's CSL serializer silently dropped (present in native JSON
+      // but absent from CSL JSON). User sees these before deciding to import.
+      if (rawDropped?.length) {
+        setSyncWarnings(
+          rawDropped.map((d) => `"${d.title || d.key}" was in your Zotero library but dropped by Zotero's CSL export — import via File export (Zotero RDF) to capture it`)
+        );
+        console.warn("[ZoteroSync] CSL-dropped items:", rawDropped);
+      } else {
+        setSyncWarnings([]);
+      }
+
       const now = new Date().toISOString();
       const items: LiteratureItem[] = [];
       const apiMerges: { existing: LiteratureItem; incoming: LiteratureItem }[] = [];
@@ -1060,10 +1084,21 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
           files: [], collections: [], relatedIds: [],
           addedById: currentUserId, addedAt: now, importSource: "zotero_api",
         };
+        // Check against already-known Canopy items
         const dupeIdx = existingItems.findIndex(
           (ex) => litIsDupe(ex, doi, title, authors[0] ?? "", year)
         );
         if (dupeIdx !== -1) { apiMerges.push({ existing: existingItems[dupeIdx], incoming: incomingItem }); continue; }
+        // Also check within the current batch — Zotero can return the same item
+        // multiple times (e.g. via a different collection path), which would create
+        // phantom duplicates if we only compared against pre-existing Canopy items.
+        const inBatchDupe = items.findIndex(
+          (ex) => litIsDupe(ex, doi, title, authors[0] ?? "", year)
+        );
+        if (inBatchDupe !== -1) {
+          console.warn("[ZoteroSync] intra-batch duplicate, skipping:", title, doi ?? "(no DOI)");
+          continue;
+        }
         items.push(incomingItem);
       }
       setFileName(`Zotero API: ${items.length + apiMerges.length} items`);
@@ -1124,6 +1159,14 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
               <input ref={dropzoneInputRef} type="file" accept=".json,.rdf" className="hidden" onChange={handleFile} />
             </label>
             {error && <p style={{ fontSize: 12, color: "var(--color-error)", marginBottom: 10 }}>{error}</p>}
+            {syncWarnings.length > 0 && (
+              <div className="mb-3 px-3 py-2 rounded-lg" style={{ backgroundColor: "rgba(160,98,42,0.06)", border: "1px solid rgba(160,98,42,0.25)" }}>
+                <p style={{ fontSize: 12, fontWeight: 600, color: "#A0622A", marginBottom: 4 }}>{syncWarnings.length} item{syncWarnings.length > 1 ? "s" : ""} missing from Zotero's CSL export:</p>
+                <ul style={{ margin: 0, padding: "0 0 0 16px" }}>
+                  {syncWarnings.map((w, i) => <li key={i} style={{ fontSize: 11, color: "var(--color-secondary)", marginBottom: 2 }}>{w}</li>)}
+                </ul>
+              </div>
+            )}
             {parsed.length > 0 && (
               <div className="mb-4 px-3 py-3 rounded-lg" style={{ backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)" }}>
                 <p style={{ fontSize: 13, fontWeight: 600, color: "var(--color-body)" }}>{parsed.length} item{parsed.length > 1 ? "s" : ""} ready to import{pendingNotes.length > 0 ? ` + ${pendingNotes.length} note${pendingNotes.length > 1 ? "s" : ""} as annotations` : ""}</p>
