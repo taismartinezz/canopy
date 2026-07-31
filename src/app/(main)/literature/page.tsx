@@ -440,6 +440,24 @@ function litLastName(author: string): string {
   return (parts[parts.length - 1] ?? "").toLowerCase();
 }
 
+// Strip URL prefix variants (https://doi.org/, http://dx.doi.org/) then trim+lowercase.
+// Zotero, CrossRef, and manual entry all produce slightly different DOI forms.
+function normalizeDoi(raw: string): string {
+  return raw.replace(/^https?:\/\/(dx\.)?doi\.org\//i, "").trim().toLowerCase();
+}
+
+// Collapse whitespace, normalize typographic quotes and dashes, lowercase.
+// Protects against Zotero curly-quote titles not matching CrossRef straight-quote titles.
+function normalizeTitle(raw: string): string {
+  return raw
+    .trim()
+    .replace(/\s+/g, " ")
+    .replace(/[‘’]/g, "'")
+    .replace(/[“”]/g, '"')
+    .replace(/[–—]/g, "-")
+    .toLowerCase();
+}
+
 function litIsDupe(
   existing: LiteratureItem,
   doi: string | undefined,
@@ -447,13 +465,22 @@ function litIsDupe(
   firstAuthor: string,
   year: number
 ): boolean {
-  if (doi && existing.doi && existing.doi.toLowerCase() === doi.toLowerCase()) return true;
-  if (!doi &&
-      existing.title.toLowerCase() === title.toLowerCase() &&
-      year > 0 && existing.year === year &&
-      firstAuthor && existing.authors.length > 0 &&
-      litLastName(existing.authors[0]) === litLastName(firstAuthor)) {
-    return true;
+  // DOI match (normalized both sides to catch URL-prefix and case variants)
+  if (doi && existing.doi) {
+    if (normalizeDoi(existing.doi) === normalizeDoi(doi)) return true;
+  }
+  // Title + first-author-last-name match.
+  // Year is used as a tie-breaker only when BOTH sides have a valid year — items
+  // with year=0 (Zotero sometimes omits date-parts) would otherwise never match
+  // and accumulate duplicate rows on every re-sync.
+  const titleMatch = normalizeTitle(existing.title) === normalizeTitle(title);
+  const authorMatch =
+    firstAuthor !== "" &&
+    existing.authors.length > 0 &&
+    litLastName(existing.authors[0]) === litLastName(firstAuthor);
+  if (titleMatch && authorMatch) {
+    if (year > 0 && existing.year > 0) return existing.year === year;
+    return true; // one or both sides missing year — title+author match is sufficient
   }
   return false;
 }
@@ -1020,6 +1047,7 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
     if (!apiKey.trim() || !zoteroUserId.trim()) {
       setApiError("Enter your Zotero user ID and API key."); return;
     }
+    if (importing) { setApiError("Wait for the current import to finish before syncing again."); return; }
     setSyncing(true); setApiError(""); setPdfAttachments({}); setPdfKeyMap({});
     try {
       const res = await fetch("/api/zotero/sync", {
@@ -1043,8 +1071,7 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
       if (err || !raw) { setApiError(err ?? "Sync failed"); setSyncing(false); return; }
       setPdfAttachments(apiPdfAtts ?? {});
 
-      // Surface items that Zotero's CSL serializer silently dropped (present in native JSON
-      // but absent from CSL JSON). User sees these before deciding to import.
+      // Surface items that Zotero's CSL serializer silently dropped.
       if (rawDropped?.length) {
         setSyncWarnings(
           rawDropped.map((d) => `"${d.title || d.key}" was in your Zotero library but dropped by Zotero's CSL export — import via File export (Zotero RDF) to capture it`)
@@ -1054,20 +1081,48 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
         setSyncWarnings([]);
       }
 
+      // Re-fetch existing items from the DB right before matching so we compare
+      // against current DB state, not the potentially-stale in-memory snapshot.
+      // This prevents duplicates when other team members imported items since
+      // this tab was loaded, or when the modal is reused across multiple syncs.
+      const { data: freshRows } = await supabase
+        .from("literature_items")
+        .select("id, title, doi, year, authors, abstract, url, volume, pages, journal, tags, removed_tags")
+        .eq("project_id", projectId)
+        .is("deleted_at", null);
+      // Build a lightweight lookup list that satisfies litIsDupe + computeMergeUpdates
+      type FreshItem = Pick<LiteratureItem, "id" | "title" | "doi" | "year" | "authors" | "abstract" | "url" | "volume" | "pages" | "journal" | "tags" | "removedTags">;
+      const freshExisting: FreshItem[] = (freshRows ?? []).map((r) => ({
+        id: r.id as string,
+        title: r.title as string ?? "",
+        doi: (r.doi as string | null) ?? undefined,
+        year: r.year as number ?? 0,
+        authors: r.authors as string[] ?? [],
+        abstract: (r.abstract as string | null) ?? undefined,
+        url: (r.url as string | null) ?? undefined,
+        volume: (r.volume as string | null) ?? undefined,
+        pages: (r.pages as string | null) ?? undefined,
+        journal: (r.journal as string | null) ?? undefined,
+        tags: r.tags as string[] ?? [],
+        removedTags: r.removed_tags as string[] ?? [],
+      }));
+      console.log(`[ZoteroSync] existingItems (prop snapshot): ${existingItems.length}, freshExisting (DB): ${freshExisting.length}, incoming Zotero items: ${raw.length}`);
+
       const now = new Date().toISOString();
       const items: LiteratureItem[] = [];
       const apiMerges: { existing: LiteratureItem; incoming: LiteratureItem }[] = [];
       const newKeyMap: Record<string, string> = {};
+      let dupeCount = 0;
       for (const z of raw) {
         const title = (Array.isArray(z.title) ? z.title[0] : z.title) ?? "";
-        const doi = z.DOI?.toLowerCase();
+        // Normalize DOI on ingest so stored values are consistent regardless of source format
+        const rawDoi = z.DOI?.trim();
+        const doi = rawDoi ? normalizeDoi(rawDoi) : undefined;
         const authors = parseCSLAuthors(z.author);
         const year = z.issued?.["date-parts"]?.[0]?.[0] ?? 0;
         const itemId = crypto.randomUUID();
-        // Extract Zotero key from CSL id URI (e.g. ".../items/ABCD1234" → "ABCD1234")
         const zoteroKey = (z as {id?: string}).id?.split("/").pop();
         if (zoteroKey) newKeyMap[itemId] = zoteroKey;
-        // Concatenate child text notes (HTML → plain text) separated by rule
         const zNotes: string[] = (zoteroKey ? rawNotesMap?.[zoteroKey] : undefined) ?? [];
         const notesText = zNotes
           .map((h: string) => h.replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").trim())
@@ -1078,20 +1133,30 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
           type: CSL_TYPE_MAP[z.type ?? ""] ?? "article",
           title, authors, year,
           journal: z["container-title"] ?? z.publisher,
-          doi: z.DOI, abstract: z.abstract?.replace(/<[^>]+>/g, ""),
+          doi: rawDoi ? normalizeDoi(rawDoi) : undefined,
+          abstract: z.abstract?.replace(/<[^>]+>/g, ""),
           volume: z.volume, pages: z.page, url: z.URL,
           tags: (zoteroKey ? rawTagsMap?.[zoteroKey] : undefined) ?? [], removedTags: [], status: "unread", rating: 0, notes: notesText,
           files: [], collections: [], relatedIds: [],
           addedById: currentUserId, addedAt: now, importSource: "zotero_api",
         };
-        // Check against already-known Canopy items
-        const dupeIdx = existingItems.findIndex(
-          (ex) => litIsDupe(ex, doi, title, authors[0] ?? "", year)
+        // Check against fresh DB state (primary) — catches items added by other team
+        // members or from a previous import in this session
+        const freshDupeIdx = freshExisting.findIndex(
+          (ex) => litIsDupe(ex as LiteratureItem, doi, title, authors[0] ?? "", year)
         );
-        if (dupeIdx !== -1) { apiMerges.push({ existing: existingItems[dupeIdx], incoming: incomingItem }); continue; }
+        if (freshDupeIdx !== -1) {
+          dupeCount++;
+          // For the merge preview, prefer the full LiteratureItem from existingItems if
+          // available; fall back to the fresh data (which has enough for computeMergeUpdates)
+          const existingFull = existingItems.find((ex) => ex.id === freshExisting[freshDupeIdx].id);
+          const mergeBase = existingFull ?? (freshExisting[freshDupeIdx] as unknown as LiteratureItem);
+          apiMerges.push({ existing: mergeBase, incoming: incomingItem });
+          console.log(`[ZoteroSync] dupe (DB match): "${title}" doi=${doi ?? "none"} year=${year}`);
+          continue;
+        }
         // Also check within the current batch — Zotero can return the same item
-        // multiple times (e.g. via a different collection path), which would create
-        // phantom duplicates if we only compared against pre-existing Canopy items.
+        // multiple times (e.g. in multiple collections), creating phantom duplicates.
         const inBatchDupe = items.findIndex(
           (ex) => litIsDupe(ex, doi, title, authors[0] ?? "", year)
         );
@@ -1101,10 +1166,11 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
         }
         items.push(incomingItem);
       }
+      console.log(`[ZoteroSync] result: ${items.length} new, ${dupeCount} dupes, ${apiMerges.length} merge candidates`);
       setFileName(`Zotero API: ${items.length + apiMerges.length} items`);
       setParsed(items); setPendingMerges(apiMerges); setMergeDupes(true);
       setPdfKeyMap(newKeyMap);
-      setTab("file"); // switch to preview/import flow
+      setTab("file");
     } catch (ex) {
       setApiError(ex instanceof Error ? ex.message : "Sync failed");
     } finally { setSyncing(false); }
@@ -1347,10 +1413,10 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
             </div>
 
             {apiError && <p style={{ fontSize: 12, color: "var(--color-error)", marginBottom: 10 }}>{apiError}</p>}
-            <button onClick={handleAPISync} disabled={syncing || !apiKey.trim() || !zoteroUserId.trim()}
+            <button onClick={handleAPISync} disabled={syncing || importing || !apiKey.trim() || !zoteroUserId.trim()}
               className="flex items-center gap-2"
-              style={{ fontSize: 13, fontWeight: 700, color: "#fff", backgroundColor: "var(--color-navy)", border: "none", borderRadius: 7, padding: "8px 20px", cursor: "pointer", minHeight: 44, opacity: (syncing || !apiKey.trim() || !zoteroUserId.trim()) ? 0.5 : 1 }}>
-              <Wifi size={14} />{syncing ? "Syncing…" : (selectedCollectionKey ? `Sync "${collections.find(c => c.key === selectedCollectionKey)?.name ?? "collection"}"` : "Sync library")}
+              style={{ fontSize: 13, fontWeight: 700, color: "#fff", backgroundColor: "var(--color-navy)", border: "none", borderRadius: 7, padding: "8px 20px", cursor: "pointer", minHeight: 44, opacity: (syncing || importing || !apiKey.trim() || !zoteroUserId.trim()) ? 0.5 : 1 }}>
+              <Wifi size={14} />{syncing ? "Syncing…" : importing ? "Import in progress…" : (selectedCollectionKey ? `Sync "${collections.find(c => c.key === selectedCollectionKey)?.name ?? "collection"}"` : "Sync library")}
             </button>
           </div>
         )}
@@ -1377,9 +1443,9 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
             {importErrors.length > 0 ? "Close" : "Cancel"}
           </button>
           {tab === "file" && (
-            <button onClick={handleImport} disabled={(!parsed.length && !forceNewIds.size) || importing}
-              style={{ fontSize: 13, fontWeight: 700, color: "#fff", backgroundColor: "var(--color-navy)", border: "none", borderRadius: 7, padding: "8px 20px", cursor: ((!parsed.length && !forceNewIds.size) || importing) ? "default" : "pointer", minHeight: 44, opacity: ((!parsed.length && !forceNewIds.size) || importing) ? 0.5 : 1 }}>
-              {uploadStatus || (importing ? "Importing…" : `Import ${parsed.length + forceNewIds.size > 0 ? (parsed.length + forceNewIds.size) + " item" + (parsed.length + forceNewIds.size > 1 ? "s" : "") : ""}`)}
+            <button onClick={handleImport} disabled={(!parsed.length && !forceNewIds.size) || importing || syncing}
+              style={{ fontSize: 13, fontWeight: 700, color: "#fff", backgroundColor: "var(--color-navy)", border: "none", borderRadius: 7, padding: "8px 20px", cursor: ((!parsed.length && !forceNewIds.size) || importing || syncing) ? "default" : "pointer", minHeight: 44, opacity: ((!parsed.length && !forceNewIds.size) || importing || syncing) ? 0.5 : 1 }}>
+              {uploadStatus || (importing ? "Importing…" : syncing ? "Sync in progress…" : `Import ${parsed.length + forceNewIds.size > 0 ? (parsed.length + forceNewIds.size) + " item" + (parsed.length + forceNewIds.size > 1 ? "s" : "") : ""}`)}
             </button>
           )}
         </div>
