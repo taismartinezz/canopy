@@ -258,6 +258,7 @@ function AddItemModal({
       action_type: "added",
       item_name: newItem.title,
       item_type: "paper",
+      sub_project_id: newItem.subProjectId ?? null,
     }).then(({ error }) => { if (error) console.error("[Literature] activity insert error:", error); });
 
     // Optional PDF upload

@@ -941,6 +941,7 @@ export default function TasksPage() {
           item_type: "task",
           from_status: task.status,
           to_status: status,
+          sub_project_id: task.subProjectId ?? null,
         }).then(({ error }) => { if (error) console.error("[Tasks] activity insert error:", error); });
       }
       return prev.map((t) => t.id === taskId ? { ...t, status } : t);

@@ -225,6 +225,7 @@ type ActivityRow = {
   from_status?: string;
   to_status?: string;
   created_at: string;
+  sub_project_id?: string | null;
 };
 
 function activityVerb(row: ActivityRow): string {
@@ -891,6 +892,11 @@ export default function DashboardPage() {
   const visibleTasks = isLabHome
     ? tasks
     : tasks.filter((t) => t.scope === "project" && t.subProjectId === subProjectId);
+  // Filter activity to the selected sub-project. Rows without sub_project_id (historical
+  // or lab-wide) are excluded from project views — they only appear in Lab Home.
+  const visibleActivity = isLabHome
+    ? dashActivity
+    : dashActivity.filter((a) => a.sub_project_id === subProjectId);
 
   const moveTask = useCallback((taskId: string, status: TaskStatus) => {
     setTasks((prev) => {
@@ -904,6 +910,7 @@ export default function DashboardPage() {
           item_type: "task",
           from_status: task.status,
           to_status: status,
+          sub_project_id: task.subProjectId ?? null,
         }).then(({ error }) => { if (error) console.error("[Dashboard] activity insert error:", error); });
       }
       return prev.map((t) => (t.id === taskId ? { ...t, status } : t));
@@ -931,7 +938,7 @@ export default function DashboardPage() {
       {/* Row 1 */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5 mb-4 md:mb-5">
         <UpcomingWidget events={dashEvents} projectId={projectId} />
-        <TeamActivityWidget rows={dashActivity} teamMembers={teamMembers} loading={loading} />
+        <TeamActivityWidget rows={visibleActivity} teamMembers={teamMembers} loading={loading} />
       </div>
 
       {/* Row 2: Kanban preview */}
@@ -946,7 +953,11 @@ export default function DashboardPage() {
         />
       </div>
 
-      {/* Row 3: Opportunities + Lab Wins */}
+      {/* Row 3: Opportunities + Lab Wins
+          Intentionally lab-wide: these are team-level announcements (grant news, wins,
+          collaboration leads) that are relevant to everyone regardless of which sub-project
+          is selected in the top rail. The opportunities/lab_wins tables have no
+          sub_project_id column — this is by design, not a gap. */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
         <PostsCard
           title="Opportunities"
@@ -976,7 +987,7 @@ export default function DashboardPage() {
         />
       )}
 
-      {/* Task add modal (from column + buttons) */}
+      {/* Task add modal (from column + buttons) — scoped to the active project when one is selected */}
       {modalStatus && (
         <TaskModal
           mode="add"
@@ -986,6 +997,9 @@ export default function DashboardPage() {
           teamMembers={teamMembers}
           currentUserId={userId}
           projectId={projectId}
+          scope={activeSubProject ? "project" : "lab"}
+          subProjectId={activeSubProject?.id ?? null}
+          subProjects={subProjects}
         />
       )}
 
