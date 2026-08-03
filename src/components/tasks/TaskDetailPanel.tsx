@@ -79,30 +79,34 @@ export function PriorityBadge({ priority }: { priority: TaskPriority }) {
 export function AssigneeStack({ ids, size = 22, users = [] }: { ids: string[]; size?: number; users?: User[] }) {
   const resolved = ids.map((id) => users.find((u: User) => u.id === id)).filter(Boolean) as User[];
   if (resolved.length === 0) return null;
+  const MAX_VISIBLE = 2;
+  const overflow = resolved.length - MAX_VISIBLE;
   return (
     <div className="flex items-center">
-      {resolved.slice(0, 4).map((user, i) => (
-        <div key={user.id} style={{ marginLeft: i > 0 ? -6 : 0, zIndex: 4 - i, position: "relative" }}>
+      {resolved.slice(0, MAX_VISIBLE).map((user, i) => (
+        <div key={user.id} style={{ marginLeft: i > 0 ? -4 : 0, zIndex: MAX_VISIBLE - i, position: "relative", borderRadius: "50%", boxShadow: "0 0 0 2px var(--color-surface)" }}>
           <Avatar user={user} size={size} />
         </div>
       ))}
-      {resolved.length > 4 && (
+      {overflow > 0 && (
         <span
           style={{
-            marginLeft: -6,
+            marginLeft: -4,
             width: size,
             height: size,
             borderRadius: "50%",
             backgroundColor: "var(--color-border)",
-            fontSize: 10,
-            fontWeight: 600,
+            fontSize: size <= 20 ? 9 : 10,
+            fontWeight: 700,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
             color: "var(--color-secondary)",
+            flexShrink: 0,
+            boxShadow: "0 0 0 2px var(--color-surface)",
           }}
         >
-          +{resolved.length - 4}
+          +{overflow}
         </span>
       )}
     </div>
