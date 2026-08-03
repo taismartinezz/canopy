@@ -1787,6 +1787,7 @@ function CollectionsSidebar({
   onReadingProgress, showReadingProgress,
   showTrash, setShowTrash,
   showScopeFilter = true,
+  projectBadge,
 }: {
   scope: LitScope; setScope: (s: LitScope) => void;
   selectedSubProjectId: string | null; setSelectedSubProjectId: (id: string | null) => void;
@@ -1805,6 +1806,7 @@ function CollectionsSidebar({
   showTrash?: boolean;
   setShowTrash?: (v: boolean) => void;
   showScopeFilter?: boolean;
+  projectBadge?: string;
 }) {
   const totalRead    = items.filter((i) => i.status === "read").length;
   const totalReading = items.filter((i) => i.status === "reading").length;
@@ -1823,7 +1825,12 @@ function CollectionsSidebar({
   return (
     <div className="flex flex-col h-full" style={{ backgroundColor: "var(--color-surface)" }}>
       <div className="flex items-center justify-between px-4 pt-4 pb-3" style={{ borderBottom: "1px solid var(--color-border)" }}>
-        <h2 style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 16, color: "var(--color-navy)", margin: 0 }}>Literature</h2>
+        <div>
+          <h2 style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 16, color: "var(--color-navy)", margin: 0 }}>Literature</h2>
+          {projectBadge && (
+            <p style={{ fontSize: 11, color: "var(--color-secondary)", margin: "2px 0 0", fontFamily: "var(--font-roboto)" }}>{projectBadge}</p>
+          )}
+        </div>
         <div className="flex items-center gap-1">
           {onCollapse && (
             <button
@@ -1872,22 +1879,6 @@ function CollectionsSidebar({
               </>
             )}
             <LitSidebarRow label="Lab"       count={scopeCounts.lab}      active={scope === "lab"}      color={LIT_SCOPE_COLORS.lab}      onClick={() => { setScope("lab");      setSelectedSubProjectId(null); }} />
-            {(subProjects ?? []).length > 0 && (
-              <>
-                <div style={{ height: 1, backgroundColor: "var(--color-border)", margin: "4px 2px" }} />
-                <p style={{ fontSize: 10, fontWeight: 700, color: "var(--color-secondary)", textTransform: "uppercase", letterSpacing: "0.08em", padding: "3px 11px 2px", margin: 0 }}>Projects</p>
-                {(subProjects ?? []).map((sp) => (
-                  <LitSidebarRow
-                    key={sp.id}
-                    label={sp.name}
-                    count={projectCounts[sp.id] ?? 0}
-                    active={scope === "project" && selectedSubProjectId === sp.id}
-                    color={sp.color ?? LIT_SCOPE_COLORS.project}
-                    onClick={() => { setScope("project"); setSelectedSubProjectId(sp.id); }}
-                  />
-                ))}
-              </>
-            )}
           </>
         )}
         {setShowTrash && (
@@ -3737,6 +3728,7 @@ export default function LiteraturePage() {
           showTrash={showTrash}
           setShowTrash={openTrash}
           showScopeFilter={isLabHome}
+          projectBadge={!isLabHome && activeScope === "project" ? subProjects.find((sp) => sp.id === subProjectId)?.name : undefined}
         />
       </div>
 
@@ -3776,6 +3768,7 @@ export default function LiteraturePage() {
           showTrash={showTrash}
           setShowTrash={(v) => { if (v) { openTrash(); } else { closeTrash(); } setCollectionsOpen(false); }}
           showScopeFilter={isLabHome}
+          projectBadge={!isLabHome && activeScope === "project" ? subProjects.find((sp) => sp.id === subProjectId)?.name : undefined}
         />
       </div>
 

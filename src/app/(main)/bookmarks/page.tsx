@@ -690,19 +690,25 @@ export default function BookmarksPage() {
                 </button>
               );
             })}
-            {subProjects.map((sp) => {
-              const isAct = bmScope === "project" && selectedSubProjectId === sp.id;
-              const color = sp.color ?? "#34A853";
-              return (
-                <button key={sp.id} onClick={() => handleScopeSelect("project", sp.id)} style={{ flexShrink: 0, fontSize: 12, fontWeight: isAct ? 700 : 500, padding: "5px 12px", borderRadius: 20, border: `1px solid ${isAct ? color : "var(--color-border)"}`, backgroundColor: isAct ? `${color}18` : "transparent", color: isAct ? color : "var(--color-secondary)", cursor: "pointer", whiteSpace: "nowrap", fontFamily: "var(--font-roboto)" }}>
-                  {sp.name} {projectCounts[sp.id] ?? 0}
-                </button>
-              );
-            })}
-          </div>
+            </div>
         )}
 
         <div style={{ padding: "28px 28px 40px" }}>
+
+          {/* Project context header — shown only in project view (no sidebar) */}
+          {!isLabHome && activeScope === "project" && (() => {
+            const activeSp = subProjects.find((s) => s.id === subProjectId);
+            return (
+              <div className="flex items-center gap-2 mb-5">
+                <h1 style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 24, color: "var(--color-navy)", margin: 0 }}>Bookmarks</h1>
+                {activeSp && (
+                  <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.03em", backgroundColor: "rgba(27,46,75,0.10)", color: "var(--color-navy)", padding: "3px 10px", borderRadius: 20, whiteSpace: "nowrap" }}>
+                    {activeSp.name}
+                  </span>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Content header */}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", marginBottom: 20 }}>

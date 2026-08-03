@@ -114,16 +114,6 @@ export default function ScopeSidebar({
             {sections.map(s => (
               <IconRailBtn key={s.id} isActive={s.isActive} color={s.color} icon={s.icon} label={s.label} onClick={s.onClick} />
             ))}
-            {subProjects.map(sp => (
-              <IconRailBtn
-                key={sp.id}
-                isActive={selectedSubProjectId === sp.id}
-                color={sp.color ?? "#34A853"}
-                icon={<span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", backgroundColor: "currentColor" }} />}
-                label={sp.name}
-                onClick={() => onSelectSubProject?.(sp.id)}
-              />
-            ))}
           </div>
         </>
       ) : (
@@ -146,22 +136,6 @@ export default function ScopeSidebar({
                 {i === 0 && <div style={{ height: 1, backgroundColor: "var(--color-border)", margin: "5px 2px" }} />}
               </Fragment>
             ))}
-            {subProjects.length > 0 && (
-              <>
-                <div style={{ height: 1, backgroundColor: "var(--color-border)", margin: "5px 2px" }} />
-                <p style={{ fontSize: 10, fontWeight: 700, color: "var(--color-secondary)", textTransform: "uppercase", letterSpacing: "0.08em", padding: "3px 11px 4px", margin: 0 }}>Projects</p>
-                {subProjects.map(sp => (
-                  <NavRow
-                    key={sp.id}
-                    color={sp.color ?? "#34A853"}
-                    label={sp.name}
-                    count={projectCounts[sp.id] ?? 0}
-                    selected={selectedSubProjectId === sp.id}
-                    onClick={() => onSelectSubProject?.(sp.id)}
-                  />
-                ))}
-              </>
-            )}
             {extraContent}
           </div>
         </>
