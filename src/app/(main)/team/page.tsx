@@ -238,6 +238,7 @@ export default function TeamPage() {
   );
   const [subProjectMemberIds, setSubProjectMemberIds] = useState<Set<string> | null>(null);
   const [projectTeam, setProjectTeam] = useState<TeamMember[]>([]);
+  const [projectScopedCounts, setProjectScopedCounts] = useState<Record<string, Record<TaskStatus, number>>>({});
   const [showMembersModal, setShowMembersModal] = useState(false);
   const closeMemberPanel = useCallback(() => setSelectedMember(null), []);
   const closeMeetingModal = useCallback(() => setMeetingModalOpen(false), []);
@@ -356,45 +357,64 @@ export default function TeamPage() {
 
   // In project scope, fetch the full sub-project member list (includes external members
   // who may not be in team_members) directly from sub_project_members + user_profiles.
+  // Also fetch task counts scoped to this sub-project so member cards show accurate counts.
   useEffect(() => {
     if (activeScope !== "project" || !subProjectId || !isSupabaseConfigured) {
       setSubProjectMemberIds(null);
       setProjectTeam([]);
+      setProjectScopedCounts({});
       return;
     }
-    supabase
-      .from("sub_project_members")
-      .select("user_id, user_profiles(name, avatar_color, avatar_initials, avatar_url, role, institution)")
-      .eq("sub_project_id", subProjectId)
-      .then(({ data }) => {
-        if (!data) return;
-        setSubProjectMemberIds(new Set(data.map((r) => r.user_id as string)));
-        setProjectTeam(data.map((row) => {
-          const p = Array.isArray(row.user_profiles) ? row.user_profiles[0] : row.user_profiles;
-          const prof = p as Record<string, string> | null;
-          const name = prof?.name ?? "Unknown";
-          return {
-            id:              row.user_id as string,
-            name,
-            email:           "",
-            role:            (prof?.role as "pi" | "researcher") ?? "researcher",
-            avatarColor:     prof?.avatar_color ?? "#B4D4E3",
-            avatarInitials:  prof?.avatar_initials ?? name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase(),
-            avatarUrl:       prof?.avatar_url ?? undefined,
-            institution:     prof?.institution ?? undefined,
-            taskCounts:      { todo: 0, in_progress: 0, in_review: 0, done: 0 },
-          } satisfies TeamMember;
-        }));
-      });
+    (async () => {
+      const { data } = await supabase
+        .from("sub_project_members")
+        .select("user_id, user_profiles(name, avatar_color, avatar_initials, avatar_url, role, institution)")
+        .eq("sub_project_id", subProjectId);
+
+      if (!data) return;
+      setSubProjectMemberIds(new Set(data.map((r) => r.user_id as string)));
+      setProjectTeam(data.map((row) => {
+        const p = Array.isArray(row.user_profiles) ? row.user_profiles[0] : row.user_profiles;
+        const prof = p as Record<string, string> | null;
+        const name = prof?.name ?? "Unknown";
+        return {
+          id:              row.user_id as string,
+          name,
+          email:           "",
+          role:            (prof?.role as "pi" | "researcher") ?? "researcher",
+          avatarColor:     prof?.avatar_color ?? "#B4D4E3",
+          avatarInitials:  prof?.avatar_initials ?? name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase(),
+          avatarUrl:       prof?.avatar_url ?? undefined,
+          institution:     prof?.institution ?? undefined,
+          taskCounts:      { todo: 0, in_progress: 0, in_review: 0, done: 0 },
+        } satisfies TeamMember;
+      }));
+
+      // Fetch task counts scoped to this sub-project only
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: scopedTasks } = await (supabase
+        .from("tasks")
+        .select("id, status, archived, task_assignees(user_id)")
+        .eq("sub_project_id", subProjectId)
+        .eq("archived", false) as any);
+
+      const newCounts: Record<string, Record<TaskStatus, number>> = {};
+      for (const task of (scopedTasks ?? []) as { status: string; task_assignees: { user_id: string }[] }[]) {
+        const status = task.status as TaskStatus;
+        for (const row of (task.task_assignees ?? [])) {
+          if (!newCounts[row.user_id]) newCounts[row.user_id] = { todo: 0, in_progress: 0, in_review: 0, done: 0 };
+          if (status in newCounts[row.user_id]) newCounts[row.user_id][status]++;
+        }
+      }
+      setProjectScopedCounts(newCounts);
+    })();
   }, [activeScope, subProjectId]);
 
-  // In project scope use the directly-fetched list (includes external members).
-  // Merge task counts from `team` (which has the countMap applied) so project-scope
-  // members don't always show zeros — projectTeam is built with hardcoded zeros.
+  // In project scope use the directly-fetched list with project-scoped task counts.
   const visibleTeam = activeScope === "project"
     ? projectTeam.map((m) => ({
         ...m,
-        taskCounts: team.find((t) => t.id === m.id)?.taskCounts ?? m.taskCounts,
+        taskCounts: projectScopedCounts[m.id] ?? { todo: 0, in_progress: 0, in_review: 0, done: 0 },
       }))
     : team;
 
@@ -426,7 +446,7 @@ export default function TeamPage() {
               {activeScope === "project" ? (() => {
                 const displayName = subProjects.find((sp) => sp.id === subProjectId)?.name ?? storedProjectName;
                 return displayName
-                  ? `Showing members of ${displayName}. Switch projects in the sidebar to see other rosters.`
+                  ? `Showing members of ${displayName}. Switch projects using the icons on the left to see other rosters.`
                   : `${visibleTeam.length} member${visibleTeam.length !== 1 ? "s" : ""}`;
               })() : `${visibleTeam.length} member${visibleTeam.length !== 1 ? "s" : ""} · ${storedProjectName}`}
             </p>

@@ -1122,7 +1122,18 @@ export default function TasksPage() {
       {/* Toolbar */}
       <div className="px-4 md:px-6 pt-3 pb-0" style={{ backgroundColor: "var(--color-surface)", borderBottom: "1px solid var(--color-border)" }}>
         <div className="flex items-center gap-3 mb-2">
-          <h1 style={{ fontWeight: 700, fontSize: 20, color: "var(--color-navy)", margin: 0, flex: 1 }}>Tasks</h1>
+          <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 8 }}>
+            <h1 style={{ fontWeight: 700, fontSize: 20, color: "var(--color-navy)", margin: 0 }}>Tasks</h1>
+            {!isLabHome && activeScope === "project" && (() => {
+              const activeSp = subProjects.find((s) => s.id === ctxSubProjectId);
+              if (!activeSp) return null;
+              return (
+                <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.03em", backgroundColor: "rgba(27,46,75,0.10)", color: "var(--color-navy)", padding: "3px 10px", borderRadius: 20, whiteSpace: "nowrap" }}>
+                  {activeSp.name}
+                </span>
+              );
+            })()}
+          </div>
           <div className="flex items-center rounded-lg p-0.5 shrink-0" style={{ backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)" }}>
             {(["board", "list"] as const).map((v) => (
               <button

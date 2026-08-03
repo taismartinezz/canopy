@@ -953,29 +953,29 @@ export default function DashboardPage() {
         />
       </div>
 
-      {/* Row 3: Opportunities + Lab Wins
-          Intentionally lab-wide: these are team-level announcements (grant news, wins,
-          collaboration leads) that are relevant to everyone regardless of which sub-project
-          is selected in the top rail. The opportunities/lab_wins tables have no
-          sub_project_id column — this is by design, not a gap. */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
-        <PostsCard
-          title="Opportunities"
-          posts={dashPosts}
-          type="opportunity"
-          projectId={projectId}
-          userId={userId}
-          teamMembers={teamMembers}
-        />
-        <PostsCard
-          title="Lab Wins"
-          posts={dashPosts}
-          type="lab_win"
-          projectId={projectId}
-          userId={userId}
-          teamMembers={teamMembers}
-        />
-      </div>
+      {/* Row 3: Opportunities + Lab Wins — Lab Home only.
+          These are lab-wide announcements with no sub-project granularity.
+          Hidden in project views so the project Dashboard stays focused. */}
+      {isLabHome && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
+          <PostsCard
+            title="Opportunities"
+            posts={dashPosts}
+            type="opportunity"
+            projectId={projectId}
+            userId={userId}
+            teamMembers={teamMembers}
+          />
+          <PostsCard
+            title="Lab Wins"
+            posts={dashPosts}
+            type="lab_win"
+            projectId={projectId}
+            userId={userId}
+            teamMembers={teamMembers}
+          />
+        </div>
+      )}
 
       {/* Task detail panel */}
       {selectedTask && (
