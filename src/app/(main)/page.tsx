@@ -12,6 +12,7 @@ import {
 } from "@/lib/mock-data";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import type { Task, CalendarEvent, DashboardPost, TaskStatus, User } from "@/types";
+import { useProject } from "@/context/ProjectContext";
 import Avatar from "@/components/ui/Avatar";
 import { Plus, ChevronRight, X } from "lucide-react";
 import Link from "next/link";
@@ -691,6 +692,7 @@ function PostsCard({
 // ── Dashboard page ────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
+  const { activeScope, subProjectId, subProjects } = useProject();
   const [tasks, setTasks]             = useState<Task[]>([]);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [modalStatus, setModalStatus] = useState<TaskStatus | null>(null);
@@ -770,6 +772,8 @@ export default function DashboardPage() {
             comments: (row.comments as Task["comments"]) ?? [],
             files: (row.files as Task["files"]) ?? [],
             links: (row.links as Task["links"]) ?? [],
+            scope: (row.scope as Task["scope"]) ?? undefined,
+            subProjectId: (row.sub_project_id as string | null) ?? undefined,
           })));
         }
 
@@ -879,6 +883,15 @@ export default function DashboardPage() {
 
   const today = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
 
+  const isLabHome = activeScope === "lab";
+  const activeSubProject = !isLabHome && activeScope === "project"
+    ? (subProjects.find((sp) => sp.id === subProjectId) ?? null)
+    : null;
+  const displayTitle = activeSubProject?.name ?? projectName;
+  const visibleTasks = isLabHome
+    ? tasks
+    : tasks.filter((t) => t.scope === "project" && t.subProjectId === subProjectId);
+
   const moveTask = useCallback((taskId: string, status: TaskStatus) => {
     setTasks((prev) => {
       const task = prev.find((t) => t.id === taskId);
@@ -910,7 +923,7 @@ export default function DashboardPage() {
       {/* Header */}
       <div className="mb-5 md:mb-6">
         <h1 style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 26, color: "var(--color-navy)", margin: 0, lineHeight: 1.2 }}>
-          {projectName}
+          {displayTitle}
         </h1>
         <p style={{ fontSize: 13, color: "var(--color-secondary)", marginTop: 4 }}>{today}</p>
       </div>
@@ -924,7 +937,7 @@ export default function DashboardPage() {
       {/* Row 2: Kanban preview */}
       <div className="mb-4 md:mb-5">
         <KanbanPreview
-          tasks={tasks}
+          tasks={visibleTasks}
           onTaskClick={setSelectedTask}
           onMoveTask={moveTask}
           onAddTask={(status) => setModalStatus(status)}
