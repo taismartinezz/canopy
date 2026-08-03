@@ -173,6 +173,8 @@ export default function TaskModal({
         comments: [],
         files: [],
         links: [],
+        scope: resolvedScope as Task["scope"],
+        subProjectId: resolvedSubProjectId ?? undefined,
       };
 
       // Notify assignees — use session userId so the filter is never undefined
@@ -197,6 +199,7 @@ export default function TaskModal({
         action_type: "created",
         item_name: saved.title,
         item_type: "task",
+        sub_project_id: resolvedSubProjectId,
       }).then(({ error }) => { if (error) console.error("[TaskModal] activity insert error:", error); });
 
       onSave(saved);
