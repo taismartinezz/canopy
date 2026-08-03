@@ -1785,6 +1785,7 @@ function CollectionsSidebar({
   showClose, onClose, onAddItem, onCollapse, onImportZotero, onAddByDOI, subProjects,
   onReadingProgress, showReadingProgress,
   showTrash, setShowTrash,
+  showScopeFilter = true,
 }: {
   scope: LitScope; setScope: (s: LitScope) => void;
   selectedSubProjectId: string | null; setSelectedSubProjectId: (id: string | null) => void;
@@ -1802,6 +1803,7 @@ function CollectionsSidebar({
   showReadingProgress?: boolean;
   showTrash?: boolean;
   setShowTrash?: (v: boolean) => void;
+  showScopeFilter?: boolean;
 }) {
   const totalRead    = items.filter((i) => i.status === "read").length;
   const totalReading = items.filter((i) => i.status === "reading").length;
@@ -1843,44 +1845,48 @@ function CollectionsSidebar({
       </div>
 
       <div style={{ padding: "4px 8px 6px", borderBottom: "1px solid var(--color-border)" }}>
-        <LitSidebarRow label="All Items" count={scopeCounts.all} active={scope === "all"} color={LIT_SCOPE_COLORS.all} onClick={() => { setScope("all"); setSelectedSubProjectId(null); }} />
-        <LitSidebarRow label="Personal"  count={scopeCounts.personal} active={scope === "personal" && selectedSubProjectId === null} color={LIT_SCOPE_COLORS.personal} onClick={() => { setScope("personal"); setSelectedSubProjectId(null); }} />
-        {scope === "personal" && (subProjects ?? []).length > 0 && (
+        {showScopeFilter && <LitSidebarRow label="All Items" count={scopeCounts.all} active={scope === "all"} color={LIT_SCOPE_COLORS.all} onClick={() => { setScope("all"); setSelectedSubProjectId(null); }} />}
+        {showScopeFilter && (
           <>
-            <LitSidebarRow
-              label="General"
-              count={allItems.filter((i) => i.scope === "personal" && !(i as LiteratureItem & { subProjectId?: string }).subProjectId).length}
-              active={selectedSubProjectId === "__general__"}
-              color={LIT_SCOPE_COLORS.personal}
-              onClick={() => setSelectedSubProjectId("__general__")}
-            />
-            {(subProjects ?? []).map((sp) => (
-              <LitSidebarRow
-                key={sp.id}
-                label={sp.name}
-                count={allItems.filter((i) => i.scope === "personal" && (i as LiteratureItem & { subProjectId?: string }).subProjectId === sp.id).length}
-                active={selectedSubProjectId === sp.id}
-                color={sp.color ?? LIT_SCOPE_COLORS.personal}
-                onClick={() => setSelectedSubProjectId(sp.id)}
-              />
-            ))}
-          </>
-        )}
-        <LitSidebarRow label="Lab"       count={scopeCounts.lab}      active={scope === "lab"}      color={LIT_SCOPE_COLORS.lab}      onClick={() => { setScope("lab");      setSelectedSubProjectId(null); }} />
-        {(subProjects ?? []).length > 0 && (
-          <>
-            <div style={{ height: 1, backgroundColor: "var(--color-border)", margin: "4px 2px" }} />
-            <p style={{ fontSize: 10, fontWeight: 700, color: "var(--color-secondary)", textTransform: "uppercase", letterSpacing: "0.08em", padding: "3px 11px 2px", margin: 0 }}>Projects</p>
-            {(subProjects ?? []).map((sp) => (
-              <LitSidebarRow
-                key={sp.id}
-                label={sp.name}
-                count={projectCounts[sp.id] ?? 0}
-                active={scope === "project" && selectedSubProjectId === sp.id}
-                color={sp.color ?? LIT_SCOPE_COLORS.project}
-                onClick={() => { setScope("project"); setSelectedSubProjectId(sp.id); }}
-              />
-            ))}
+            <LitSidebarRow label="Personal"  count={scopeCounts.personal} active={scope === "personal" && selectedSubProjectId === null} color={LIT_SCOPE_COLORS.personal} onClick={() => { setScope("personal"); setSelectedSubProjectId(null); }} />
+            {scope === "personal" && (subProjects ?? []).length > 0 && (
+              <>
+                <LitSidebarRow
+                  label="General"
+                  count={allItems.filter((i) => i.scope === "personal" && !(i as LiteratureItem & { subProjectId?: string }).subProjectId).length}
+                  active={selectedSubProjectId === "__general__"}
+                  color={LIT_SCOPE_COLORS.personal}
+                  onClick={() => setSelectedSubProjectId("__general__")}
+                />
+                {(subProjects ?? []).map((sp) => (
+                  <LitSidebarRow
+                    key={sp.id}
+                    label={sp.name}
+                    count={allItems.filter((i) => i.scope === "personal" && (i as LiteratureItem & { subProjectId?: string }).subProjectId === sp.id).length}
+                    active={selectedSubProjectId === sp.id}
+                    color={sp.color ?? LIT_SCOPE_COLORS.personal}
+                    onClick={() => setSelectedSubProjectId(sp.id)}
+                  />
+                ))}
+              </>
+            )}
+            <LitSidebarRow label="Lab"       count={scopeCounts.lab}      active={scope === "lab"}      color={LIT_SCOPE_COLORS.lab}      onClick={() => { setScope("lab");      setSelectedSubProjectId(null); }} />
+            {(subProjects ?? []).length > 0 && (
+              <>
+                <div style={{ height: 1, backgroundColor: "var(--color-border)", margin: "4px 2px" }} />
+                <p style={{ fontSize: 10, fontWeight: 700, color: "var(--color-secondary)", textTransform: "uppercase", letterSpacing: "0.08em", padding: "3px 11px 2px", margin: 0 }}>Projects</p>
+                {(subProjects ?? []).map((sp) => (
+                  <LitSidebarRow
+                    key={sp.id}
+                    label={sp.name}
+                    count={projectCounts[sp.id] ?? 0}
+                    active={scope === "project" && selectedSubProjectId === sp.id}
+                    color={sp.color ?? LIT_SCOPE_COLORS.project}
+                    onClick={() => { setScope("project"); setSelectedSubProjectId(sp.id); }}
+                  />
+                ))}
+              </>
+            )}
           </>
         )}
         {setShowTrash && (
@@ -3447,11 +3453,16 @@ function mapLitRow(row: Record<string, any>): LiteratureItem {
 // ── Literature page ───────────────────────────────────────────────────────────
 
 export default function LiteraturePage() {
-  const { subProjectId, subProjects } = useProject();
+  const { subProjectId, subProjects, activeScope } = useProject();
   const [items, setItems]               = useState<LiteratureItem[]>([]);
   const [loadingItems, setLoadingItems] = useState(true);
   const [scope, setScope]               = useState<LitScope>("all");
   const [selectedSubProjectId, setSelectedSubProjectId] = useState<string | null>(null);
+  const isLabHome = activeScope === "lab";
+  const effectiveLitScope: LitScope = isLabHome ? scope : (activeScope === "project" ? "project" : "personal");
+  const effectiveLitSubProjectId: string | null = isLabHome
+    ? (scope === "project" ? selectedSubProjectId : null)
+    : (activeScope === "project" ? (subProjectId ?? null) : null);
   const [activeCollection, setActiveCollection] = useState("lc0");
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [search, setSearch]             = useState("");
@@ -3656,14 +3667,14 @@ export default function LiteraturePage() {
   }
 
   const scopedItems = items.filter((item) => {
-    if (scope === "all") return true;
-    if (scope === "personal") {
+    if (effectiveLitScope === "all") return true;
+    if (effectiveLitScope === "personal") {
       if (!item.scope || item.scope !== "personal") return false;
-      if (selectedSubProjectId === "__general__") return !(item as LiteratureItem & { subProjectId?: string }).subProjectId;
-      if (selectedSubProjectId) return (item as LiteratureItem & { subProjectId?: string }).subProjectId === selectedSubProjectId;
+      if (effectiveLitSubProjectId === "__general__") return !(item as LiteratureItem & { subProjectId?: string }).subProjectId;
+      if (effectiveLitSubProjectId) return (item as LiteratureItem & { subProjectId?: string }).subProjectId === effectiveLitSubProjectId;
       return true;
     }
-    if (scope === "project") return item.scope === "project" && (!selectedSubProjectId || (item as LiteratureItem & { subProjectId?: string }).subProjectId === selectedSubProjectId);
+    if (effectiveLitScope === "project") return item.scope === "project" && (!effectiveLitSubProjectId || (item as LiteratureItem & { subProjectId?: string }).subProjectId === effectiveLitSubProjectId);
     return item.scope === "lab";
   });
 
@@ -3724,6 +3735,7 @@ export default function LiteraturePage() {
           showReadingProgress={showReadingProgress}
           showTrash={showTrash}
           setShowTrash={openTrash}
+          showScopeFilter={isLabHome}
         />
       </div>
 
@@ -3762,6 +3774,7 @@ export default function LiteraturePage() {
           showReadingProgress={showReadingProgress}
           showTrash={showTrash}
           setShowTrash={(v) => { if (v) { openTrash(); } else { closeTrash(); } setCollectionsOpen(false); }}
+          showScopeFilter={isLabHome}
         />
       </div>
 

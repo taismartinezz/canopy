@@ -1113,20 +1113,24 @@ export default function RemindersPage() {
   const allActive = useMemo(() => reminders.filter(r => !r.completed), [reminders]);
   const allCompleted = useMemo(() => reminders.filter(r => r.completed), [reminders]);
 
+  const isLabHome = activeScope === "lab";
+  const effectiveList: ListType = isLabHome ? selectedList : (activeScope === "project" ? "project" : "personal");
+  const effectiveSubProjectId: string | null = isLabHome ? selectedSubProjectId : (activeScope === "project" ? (subProjectId ?? null) : null);
+
   const visible = useMemo(() => {
-    const filtered = filterReminders(selectedList, allActive, selectedSubProjectId);
-    if (DRAGGABLE_LISTS.includes(selectedList)) return sortByPosition(filtered);
+    const filtered = filterReminders(effectiveList, allActive, effectiveSubProjectId);
+    if (DRAGGABLE_LISTS.includes(effectiveList)) return sortByPosition(filtered);
     return sortByDate(filtered);
-  }, [selectedList, allActive, selectedSubProjectId]);
+  }, [effectiveList, effectiveSubProjectId, allActive]);
 
-  const completedVisible = useMemo(() => filterReminders(selectedList, allCompleted, selectedSubProjectId), [selectedList, allCompleted, selectedSubProjectId]);
+  const completedVisible = useMemo(() => filterReminders(effectiveList, allCompleted, effectiveSubProjectId), [effectiveList, effectiveSubProjectId, allCompleted]);
 
-  const activeSubProject = selectedList === "project" && selectedSubProjectId
-    ? subProjects.find(sp => sp.id === selectedSubProjectId) ?? null
+  const activeSubProject = effectiveList === "project" && effectiveSubProjectId
+    ? subProjects.find(sp => sp.id === effectiveSubProjectId) ?? null
     : null;
-  const panelColor = activeSubProject?.color ?? LIST_COLORS[selectedList];
-  const panelLabel = activeSubProject?.name ?? LIST_LABELS[selectedList];
-  const isDraggable = DRAGGABLE_LISTS.includes(selectedList);
+  const panelColor = activeSubProject?.color ?? LIST_COLORS[effectiveList];
+  const panelLabel = activeSubProject?.name ?? LIST_LABELS[effectiveList];
+  const isDraggable = DRAGGABLE_LISTS.includes(effectiveList);
 
   if (loading || (isSupabaseConfigured && projectLoading)) {
     return (
@@ -1142,7 +1146,7 @@ export default function RemindersPage() {
     isDraggable, accentColor: panelColor,
     currentUserId, teamMembers, editingId, isAdding, selectedList,
     projectId: projectId ?? undefined,
-    showScopeHint: selectedList === "all",
+    showScopeHint: effectiveList === "all",
     onComplete: handleComplete, onDelete: handleDelete, onEdit: setEditingId,
     onSave: handleUpdate, onCancelEdit: () => setEditingId(null),
     onAdd: handleAdd, onToggleAdd: () => setIsAdding(v => !v),
@@ -1155,22 +1159,26 @@ export default function RemindersPage() {
     <ClientOnly>
       <div style={{ display: "flex", height: "100%", overflow: "hidden", backgroundColor: "var(--color-canvas)" }}>
 
-        <div className="hidden md:block" style={{ height: "100%", flexShrink: 0 }}>
-          <LeftPanel selected={selectedList} activeReminders={allActive} onSelect={handleListSelect} collapsed={sidebarCollapsed} onToggleCollapse={handleToggleCollapse} subProjects={subProjects} selectedSubProjectId={selectedSubProjectId} onSelectSubProject={handleSubProjectSelect} />
-        </div>
+        {isLabHome && (
+          <div className="hidden md:block" style={{ height: "100%", flexShrink: 0 }}>
+            <LeftPanel selected={selectedList} activeReminders={allActive} onSelect={handleListSelect} collapsed={sidebarCollapsed} onToggleCollapse={handleToggleCollapse} subProjects={subProjects} selectedSubProjectId={selectedSubProjectId} onSelectSubProject={handleSubProjectSelect} />
+          </div>
+        )}
 
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
 
-          <div className="flex md:hidden" style={{ overflowX: "auto", padding: "12px 16px", gap: 8, borderBottom: "1px solid var(--color-border)", flexShrink: 0 }}>
-            {(["all","personal","lab"] as ListType[]).map(id => {
-              const isAct = selectedList === id && !selectedSubProjectId;
-              return <button key={id} onClick={() => handleListSelect(id)} style={{ height: 32, paddingInline: 14, borderRadius: 20, flexShrink: 0, border: "none", backgroundColor: isAct ? LIST_COLORS[id] : "rgba(0,0,0,0.06)", color: isAct ? "#fff" : "var(--color-secondary)", fontSize: 13, fontWeight: isAct ? 700 : 400, cursor: "pointer", fontFamily: "var(--font-roboto)" }}>{LIST_LABELS[id]}</button>;
-            })}
-            {subProjects.map(sp => {
-              const isAct = selectedList === "project" && selectedSubProjectId === sp.id;
-              return <button key={sp.id} onClick={() => handleSubProjectSelect(sp.id)} style={{ height: 32, paddingInline: 14, borderRadius: 20, flexShrink: 0, border: "none", backgroundColor: isAct ? (sp.color ?? LIST_COLORS.project) : "rgba(0,0,0,0.06)", color: isAct ? "#fff" : "var(--color-secondary)", fontSize: 13, fontWeight: isAct ? 700 : 400, cursor: "pointer", fontFamily: "var(--font-roboto)" }}>{sp.name}</button>;
-            })}
-          </div>
+          {isLabHome && (
+            <div className="flex md:hidden" style={{ overflowX: "auto", padding: "12px 16px", gap: 8, borderBottom: "1px solid var(--color-border)", flexShrink: 0 }}>
+              {(["all","personal","lab"] as ListType[]).map(id => {
+                const isAct = selectedList === id && !selectedSubProjectId;
+                return <button key={id} onClick={() => handleListSelect(id)} style={{ height: 32, paddingInline: 14, borderRadius: 20, flexShrink: 0, border: "none", backgroundColor: isAct ? LIST_COLORS[id] : "rgba(0,0,0,0.06)", color: isAct ? "#fff" : "var(--color-secondary)", fontSize: 13, fontWeight: isAct ? 700 : 400, cursor: "pointer", fontFamily: "var(--font-roboto)" }}>{LIST_LABELS[id]}</button>;
+              })}
+              {subProjects.map(sp => {
+                const isAct = selectedList === "project" && selectedSubProjectId === sp.id;
+                return <button key={sp.id} onClick={() => handleSubProjectSelect(sp.id)} style={{ height: 32, paddingInline: 14, borderRadius: 20, flexShrink: 0, border: "none", backgroundColor: isAct ? (sp.color ?? LIST_COLORS.project) : "rgba(0,0,0,0.06)", color: isAct ? "#fff" : "var(--color-secondary)", fontSize: 13, fontWeight: isAct ? 700 : 400, cursor: "pointer", fontFamily: "var(--font-roboto)" }}>{sp.name}</button>;
+              })}
+            </div>
+          )}
 
           <div style={{ padding: "22px 24px 14px", flexShrink: 0 }}>
             <h1 style={{ fontSize: 30, fontWeight: 700, color: panelColor, margin: 0, fontFamily: "var(--font-roboto)", lineHeight: 1 }}>{panelLabel}</h1>

@@ -445,9 +445,14 @@ function BookmarkCard({ bm, canDelete, onDelete, onEdit }: {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function BookmarksPage() {
-  const { projectId, subProjectId, subProjects } = useProject();
+  const { projectId, subProjectId, subProjects, activeScope } = useProject();
   const [bmScope, setBmScope] = useState<BmScope>("all");
   const [selectedSubProjectId, setSelectedSubProjectId] = useState<string | null>(null);
+  const isLabHome = activeScope === "lab";
+  const effectiveBmScope: BmScope = isLabHome ? bmScope : (activeScope === "project" ? "project" : "personal");
+  const effectiveSubProjectId: string | null = isLabHome
+    ? (bmScope === "project" ? selectedSubProjectId : null)
+    : (activeScope === "project" ? (subProjectId ?? null) : null);
   const [bookmarks, setBookmarks] = useState<BookmarkRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -512,8 +517,7 @@ export default function BookmarksPage() {
   async function handleAdd(url: string, title: string) {
     if (!projectId) return;
 
-    const effectiveScope = bmScope === "all" ? "lab" : bmScope;
-    const effectiveSubProjectId = bmScope === "project" ? (selectedSubProjectId ?? subProjectId ?? null) : null;
+    const addScope = effectiveBmScope === "all" ? "lab" : effectiveBmScope;
 
     const optimistic: BookmarkRow = {
       id:             `optimistic-${Date.now()}`,
@@ -523,7 +527,7 @@ export default function BookmarksPage() {
       added_by:       currentUserId,
       added_at:       new Date().toISOString(),
       adder_name:     "You",
-      scope:          effectiveScope,
+      scope:          addScope,
       sub_project_id: effectiveSubProjectId,
     };
     setBookmarks((prev) => [optimistic, ...prev]);
@@ -536,7 +540,7 @@ export default function BookmarksPage() {
         url,
         title,
         added_by:       currentUserId,
-        scope:          effectiveScope,
+        scope:          addScope,
         sub_project_id: effectiveSubProjectId,
       })
       .select("*, user_profiles!added_by(name)")
@@ -557,7 +561,7 @@ export default function BookmarksPage() {
       added_by:       data.added_by as string | null,
       added_at:       data.added_at as string,
       adder_name:     prof?.name ?? undefined,
-      scope:          effectiveScope,
+      scope:          addScope,
       sub_project_id: effectiveSubProjectId,
     };
     setBookmarks((prev) => prev.map((b) => b.id === optimistic.id ? confirmed : b));
@@ -583,11 +587,11 @@ export default function BookmarksPage() {
     }
   }
 
-  // Local scope filter (runs in-memory — no extra network calls)
+  // Local scope filter — uses effectiveBmScope so clicking the icon rail drives data immediately
   const scopedBookmarks = bookmarks.filter((bm) => {
-    if (bmScope === "all") return true;
-    if (bmScope === "project") return bm.scope === "project" && (!selectedSubProjectId || bm.sub_project_id === selectedSubProjectId);
-    return bm.scope === bmScope;
+    if (effectiveBmScope === "all") return true;
+    if (effectiveBmScope === "project") return bm.scope === "project" && (!effectiveSubProjectId || bm.sub_project_id === effectiveSubProjectId);
+    return bm.scope === effectiveBmScope;
   });
 
   // Scope counts for sidebar
@@ -655,44 +659,48 @@ export default function BookmarksPage() {
   return (
     <div style={{ display: "flex", height: "100%", overflow: "hidden", fontFamily: "var(--font-roboto)" }}>
 
-      {/* ── Left sidebar — desktop only ───────────────────────────────────── */}
-      <div className="hidden md:flex">
-        <ScopeSidebar
-          sections={sidebarSections}
-          subProjects={subProjects}
-          selectedSubProjectId={bmScope === "project" ? selectedSubProjectId : null}
-          projectCounts={projectCounts}
-          onSelectSubProject={(id) => handleScopeSelect("project", id)}
-          collapsed={sidebarCollapsed}
-          onToggleCollapse={() => setSidebarCollapsed((c) => !c)}
-          extraContent={typesExtra}
-        />
-      </div>
+      {/* ── Left sidebar — desktop only, lab-home context only ───────────── */}
+      {isLabHome && (
+        <div className="hidden md:flex">
+          <ScopeSidebar
+            sections={sidebarSections}
+            subProjects={subProjects}
+            selectedSubProjectId={bmScope === "project" ? selectedSubProjectId : null}
+            projectCounts={projectCounts}
+            onSelectSubProject={(id) => handleScopeSelect("project", id)}
+            collapsed={sidebarCollapsed}
+            onToggleCollapse={() => setSidebarCollapsed((c) => !c)}
+            extraContent={typesExtra}
+          />
+        </div>
+      )}
 
       {/* ── Right content area ───────────────────────────────────────────────── */}
       <div style={{ flex: 1, overflowY: "auto", backgroundColor: "var(--color-canvas)" }}>
 
-        {/* Mobile scope + type chips */}
-        <div className="md:hidden flex items-center gap-2 px-4 pt-4 pb-2 overflow-x-auto" style={{ borderBottom: "1px solid var(--color-border)", scrollbarWidth: "none" }}>
-          {(["all", "personal", "lab"] as const).map((s) => {
-            const cfg = SCOPE_CONFIG[s];
-            const isAct = bmScope === s && !selectedSubProjectId;
-            return (
-              <button key={s} onClick={() => handleScopeSelect(s)} style={{ flexShrink: 0, fontSize: 12, fontWeight: isAct ? 700 : 500, padding: "5px 12px", borderRadius: 20, border: `1px solid ${isAct ? cfg.color : "var(--color-border)"}`, backgroundColor: isAct ? `${cfg.color}18` : "transparent", color: isAct ? cfg.color : "var(--color-secondary)", cursor: "pointer", whiteSpace: "nowrap", fontFamily: "var(--font-roboto)" }}>
-                {cfg.label} {scopeCounts[s]}
-              </button>
-            );
-          })}
-          {subProjects.map((sp) => {
-            const isAct = bmScope === "project" && selectedSubProjectId === sp.id;
-            const color = sp.color ?? "#34A853";
-            return (
-              <button key={sp.id} onClick={() => handleScopeSelect("project", sp.id)} style={{ flexShrink: 0, fontSize: 12, fontWeight: isAct ? 700 : 500, padding: "5px 12px", borderRadius: 20, border: `1px solid ${isAct ? color : "var(--color-border)"}`, backgroundColor: isAct ? `${color}18` : "transparent", color: isAct ? color : "var(--color-secondary)", cursor: "pointer", whiteSpace: "nowrap", fontFamily: "var(--font-roboto)" }}>
-                {sp.name} {projectCounts[sp.id] ?? 0}
-              </button>
-            );
-          })}
-        </div>
+        {/* Mobile scope + type chips — lab-home context only */}
+        {isLabHome && (
+          <div className="md:hidden flex items-center gap-2 px-4 pt-4 pb-2 overflow-x-auto" style={{ borderBottom: "1px solid var(--color-border)", scrollbarWidth: "none" }}>
+            {(["all", "personal", "lab"] as const).map((s) => {
+              const cfg = SCOPE_CONFIG[s];
+              const isAct = bmScope === s && !selectedSubProjectId;
+              return (
+                <button key={s} onClick={() => handleScopeSelect(s)} style={{ flexShrink: 0, fontSize: 12, fontWeight: isAct ? 700 : 500, padding: "5px 12px", borderRadius: 20, border: `1px solid ${isAct ? cfg.color : "var(--color-border)"}`, backgroundColor: isAct ? `${cfg.color}18` : "transparent", color: isAct ? cfg.color : "var(--color-secondary)", cursor: "pointer", whiteSpace: "nowrap", fontFamily: "var(--font-roboto)" }}>
+                  {cfg.label} {scopeCounts[s]}
+                </button>
+              );
+            })}
+            {subProjects.map((sp) => {
+              const isAct = bmScope === "project" && selectedSubProjectId === sp.id;
+              const color = sp.color ?? "#34A853";
+              return (
+                <button key={sp.id} onClick={() => handleScopeSelect("project", sp.id)} style={{ flexShrink: 0, fontSize: 12, fontWeight: isAct ? 700 : 500, padding: "5px 12px", borderRadius: 20, border: `1px solid ${isAct ? color : "var(--color-border)"}`, backgroundColor: isAct ? `${color}18` : "transparent", color: isAct ? color : "var(--color-secondary)", cursor: "pointer", whiteSpace: "nowrap", fontFamily: "var(--font-roboto)" }}>
+                  {sp.name} {projectCounts[sp.id] ?? 0}
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         <div style={{ padding: "28px 28px 40px" }}>
 

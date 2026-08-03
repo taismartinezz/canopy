@@ -674,7 +674,7 @@ export default function TasksPage() {
   const [filterPriority, setFilterPriority] = useState("all");
   const [activeId, setActiveId] = useState<string | null>(null);
   const [modalState, setModalState] = useState<ModalState>(null);
-  const { subProjects } = useProject();
+  const { subProjects, activeScope, subProjectId: ctxSubProjectId } = useProject();
   const [taskScope, setTaskScope] = useState<string>("all"); // "all" | "personal" | "lab" | subProjectId
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     try { return localStorage.getItem("canopy_tasks_sidebar_collapsed") === "true"; } catch { return false; }
@@ -1069,6 +1069,15 @@ export default function TasksPage() {
     projectTaskCounts[sp.id] = tasks.filter(t => t.scope === "project" && t.subProjectId === sp.id).length;
   }
 
+  const isLabHome = activeScope === "lab";
+  const effectiveTaskScope: string = isLabHome
+    ? taskScope
+    : activeScope === "project" && ctxSubProjectId
+      ? ctxSubProjectId
+      : activeScope === "personal"
+        ? "personal"
+        : "all";
+
   const isSubProjectScope = taskScope !== "all" && taskScope !== "personal" && taskScope !== "lab";
 
   const sidebarSections: ScopeSection[] = [
@@ -1078,12 +1087,12 @@ export default function TasksPage() {
   ];
 
   const scopedTasks = tasks.filter(t => {
-    if (taskScope === "all") return true;
-    if (taskScope === "personal")
+    if (effectiveTaskScope === "all") return true;
+    if (effectiveTaskScope === "personal")
       return t.scope === "personal" ||
         (currentUserId ? t.assigneeIds.includes(currentUserId) : false);
-    if (taskScope === "lab") return t.scope === "lab" || !t.scope;
-    return t.scope === "project" && t.subProjectId === taskScope;
+    if (effectiveTaskScope === "lab") return t.scope === "lab" || !t.scope;
+    return t.scope === "project" && t.subProjectId === effectiveTaskScope;
   });
 
   const filteredTasks = scopedTasks.filter((t) => {
@@ -1232,19 +1241,21 @@ export default function TasksPage() {
 
       {/* Content = ScopeSidebar + Board/List */}
       <div className="flex flex-1 overflow-hidden">
-        <ScopeSidebar
-          sections={sidebarSections}
-          subProjects={subProjects}
-          selectedSubProjectId={isSubProjectScope ? taskScope : null}
-          projectCounts={projectTaskCounts}
-          onSelectSubProject={(id) => setTaskScope(id)}
-          collapsed={sidebarCollapsed}
-          onToggleCollapse={() => setSidebarCollapsed(c => {
-            const next = !c;
-            try { localStorage.setItem("canopy_tasks_sidebar_collapsed", String(next)); } catch {}
-            return next;
-          })}
-        />
+        {isLabHome && (
+          <ScopeSidebar
+            sections={sidebarSections}
+            subProjects={subProjects}
+            selectedSubProjectId={isSubProjectScope ? taskScope : null}
+            projectCounts={projectTaskCounts}
+            onSelectSubProject={(id) => setTaskScope(id)}
+            collapsed={sidebarCollapsed}
+            onToggleCollapse={() => setSidebarCollapsed(c => {
+              const next = !c;
+              try { localStorage.setItem("canopy_tasks_sidebar_collapsed", String(next)); } catch {}
+              return next;
+            })}
+          />
+        )}
         <div className="flex-1 overflow-auto p-4 md:p-6">
         {loading && (
           <p style={{ fontSize: 13, color: "var(--color-secondary)", padding: 8 }}>Loading tasks…</p>
@@ -1367,8 +1378,8 @@ export default function TasksPage() {
           teamMembers={teamMembers}
           currentUserId={currentUserId}
           projectId={projectId}
-          scope={taskScope === "personal" ? "personal" : isSubProjectScope ? "project" : "lab"}
-          subProjectId={isSubProjectScope ? taskScope : null}
+          scope={effectiveTaskScope === "personal" ? "personal" : (effectiveTaskScope !== "all" && effectiveTaskScope !== "lab" ? "project" : "lab")}
+          subProjectId={effectiveTaskScope !== "all" && effectiveTaskScope !== "personal" && effectiveTaskScope !== "lab" ? effectiveTaskScope : null}
           subProjects={subProjects}
         />
       )}
