@@ -769,22 +769,35 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             </span>
           </div>
 
-          {/* Desktop: lab name */}
-          <div className="hidden md:flex items-center min-w-0">
+          {/* Desktop: breadcrumb — "Lab" or "Lab / Project" */}
+          <div className="hidden md:flex items-center gap-1.5 min-w-0">
             {project?.name && (
-              <Link href="/" style={{ fontSize: 12, color: "var(--color-secondary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 200, textDecoration: "none" }}
+              <Link href="/" style={{ fontSize: 12, color: "var(--color-secondary)", whiteSpace: "nowrap", textDecoration: "none" }}
                 className="transition-opacity hover:opacity-70">
                 {project.name}
               </Link>
             )}
+            {activeScope === "project" && (() => {
+              const activeSp = subProjects.find((sp) => sp.id === subProjectId);
+              if (!activeSp) return null;
+              return (
+                <>
+                  <span style={{ fontSize: 12, color: "var(--color-border)", userSelect: "none" }}>/</span>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: "var(--color-navy)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 160 }}>
+                    {activeSp.name}
+                  </span>
+                </>
+              );
+            })()}
           </div>
 
           <div className="flex items-center gap-2 ml-auto">
             {/* Institution badge — links to team page */}
             {project?.institution && (
-              <Link href="/team" className="hidden sm:inline-block px-3 py-1 shrink-0 transition-opacity hover:opacity-80"
-                style={{ backgroundColor: "var(--color-navy)", color: "#fff", borderRadius: 20, fontSize: 11, fontWeight: 600, whiteSpace: "nowrap", textDecoration: "none" }}>
+              <Link href="/team" title="View team" className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 shrink-0 transition-opacity hover:opacity-90"
+                style={{ backgroundColor: "var(--color-navy)", color: "#fff", borderRadius: 20, fontSize: 11, fontWeight: 600, whiteSpace: "nowrap", textDecoration: "none", cursor: "pointer" }}>
                 {project.institution}
+                <Users size={11} style={{ opacity: 0.7, flexShrink: 0 }} />
               </Link>
             )}
 

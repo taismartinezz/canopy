@@ -1181,7 +1181,12 @@ export default function RemindersPage() {
           )}
 
           <div style={{ padding: "22px 24px 14px", flexShrink: 0 }}>
-            <h1 style={{ fontSize: 30, fontWeight: 700, color: panelColor, margin: 0, fontFamily: "var(--font-roboto)", lineHeight: 1 }}>{panelLabel}</h1>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <h1 style={{ fontSize: 26, fontWeight: 700, color: "var(--color-navy)", margin: 0, fontFamily: "var(--font-lora)", lineHeight: 1 }}>Reminders</h1>
+              <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.03em", backgroundColor: `${panelColor}1a`, color: panelColor, padding: "3px 10px", borderRadius: 20, whiteSpace: "nowrap", fontFamily: "var(--font-roboto)" }}>
+                {panelLabel}
+              </span>
+            </div>
           </div>
 
           <div style={{ flex: 1, overflowY: "auto" }}>
