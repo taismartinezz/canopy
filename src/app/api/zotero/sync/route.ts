@@ -199,12 +199,18 @@ export async function POST(request: Request) {
   // Annotations are resolved to their top-level item key via:
   //   annotation.parentItem → PDF attachment key → top-level item key
   // Returns annotationsMap: Record<topItemKey, ZoteroAnnotation[]>
-  // (Annotations are no longer merged into notesMap to avoid duplication with
-  //  the structured Highlights panel in Canopy.)
+  //
+  // IMPORTANT: annotations are GRANDCHILDREN of top-level items (child of PDF
+  // attachment, which is child of the main item). Zotero's collection-scoped
+  // endpoint only returns direct children — querying itemsPath?itemType=annotation
+  // returns 0 results when a collection is selected. Always use the library root
+  // so we get all annotations; attachmentParentMap then filters to only those
+  // belonging to items we actually processed.
+  const annotationsBase = `${base}/items`;
   const annotationsMap: Record<string, ZoteroAnnotation[]> = {};
   let annStart = 0;
   while (true) {
-    const annUrl = `${itemsPath}?itemType=annotation&format=json&limit=100&start=${annStart}`;
+    const annUrl = `${annotationsBase}?itemType=annotation&format=json&limit=100&start=${annStart}`;
     const annRes = await fetch(annUrl, {
       headers: { "Zotero-API-Key": apiKey, "Zotero-API-Version": "3" },
     });
@@ -263,6 +269,9 @@ export async function POST(request: Request) {
     annStart += 100;
     if (annStart > 5000) break;
   }
+  const annotItemCount = Object.keys(annotationsMap).length;
+  const annotTotal = Object.values(annotationsMap).reduce((s, a) => s + a.length, 0);
+  console.log(`[ZoteroSync] annotations found: ${annotTotal} across ${annotItemCount} item(s)`);
 
   // Fifth pass: native JSON items to collect Zotero tags AND detect CSL-drop gaps.
   // CSL JSON format does not include Zotero-specific tags — a separate native-format
