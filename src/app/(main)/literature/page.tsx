@@ -101,7 +101,7 @@ const REAL_LIT_COLS = new Set([
   "id", "project_id", "user_id", "added_by", "library",
   "title", "authors", "year", "journal", "volume", "pages",
   "doi", "abstract", "status", "tags", "type",
-  "sub_project_id",
+  "sub_project_id", "zotero_key",
 ]);
 
 function buildLitInsert(
@@ -122,6 +122,7 @@ function buildLitInsert(
     status?: "unread" | "reading" | "read";
     type?: LiteratureType | null;
     sub_project_id?: string | null;
+    zotero_key?: string | null;
     [extra: string]: unknown;
   }
 ) {
@@ -152,6 +153,7 @@ function buildLitInsert(
   };
   if (fields.id) payload.id = fields.id;
   if (fields.sub_project_id != null) payload.sub_project_id = fields.sub_project_id;
+  if (fields.zotero_key) payload.zotero_key = fields.zotero_key;
   return payload;
 }
 
@@ -464,8 +466,11 @@ function litIsDupe(
   doi: string | undefined,
   title: string,
   firstAuthor: string,
-  year: number
+  year: number,
+  zoteroKey?: string
 ): boolean {
+  // Zotero item key — stable per library item, works even when DOI is absent
+  if (zoteroKey && existing.zoteroKey && existing.zoteroKey === zoteroKey) return true;
   // DOI match (normalized both sides to catch URL-prefix and case variants)
   if (doi && existing.doi) {
     if (normalizeDoi(existing.doi) === normalizeDoi(doi)) return true;
@@ -845,6 +850,7 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
         doi: item.doi ?? null, abstract: item.abstract ?? null,
         tags: item.tags ?? [], status: "unread",
         sub_project_id: subId,
+        ...(item.zoteroKey ? { zotero_key: item.zoteroKey } : {}),
       })
     );
 
@@ -1088,11 +1094,11 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
       // this tab was loaded, or when the modal is reused across multiple syncs.
       const { data: freshRows } = await supabase
         .from("literature_items")
-        .select("id, title, doi, year, authors, abstract, url, volume, pages, journal, tags, removed_tags")
+        .select("id, title, doi, year, authors, abstract, url, volume, pages, journal, tags, removed_tags, zotero_key")
         .eq("project_id", projectId)
         .is("deleted_at", null);
       // Build a lightweight lookup list that satisfies litIsDupe + computeMergeUpdates
-      type FreshItem = Pick<LiteratureItem, "id" | "title" | "doi" | "year" | "authors" | "abstract" | "url" | "volume" | "pages" | "journal" | "tags" | "removedTags">;
+      type FreshItem = Pick<LiteratureItem, "id" | "title" | "doi" | "year" | "authors" | "abstract" | "url" | "volume" | "pages" | "journal" | "tags" | "removedTags" | "zoteroKey">;
       const freshExisting: FreshItem[] = (freshRows ?? []).map((r) => ({
         id: r.id as string,
         title: r.title as string ?? "",
@@ -1106,6 +1112,7 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
         journal: (r.journal as string | null) ?? undefined,
         tags: r.tags as string[] ?? [],
         removedTags: r.removed_tags as string[] ?? [],
+        zoteroKey: (r.zotero_key as string | null) ?? undefined,
       }));
       console.log(`[ZoteroSync] existingItems (prop snapshot): ${existingItems.length}, freshExisting (DB): ${freshExisting.length}, incoming Zotero items: ${raw.length}`);
 
@@ -1140,11 +1147,12 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
           tags: (zoteroKey ? rawTagsMap?.[zoteroKey] : undefined) ?? [], removedTags: [], status: "unread", rating: 0, notes: notesText,
           files: [], collections: [], relatedIds: [],
           addedById: currentUserId, addedAt: now, importSource: "zotero_api",
+          ...(zoteroKey ? { zoteroKey } : {}),
         };
         // Check against fresh DB state (primary) — catches items added by other team
         // members or from a previous import in this session
         const freshDupeIdx = freshExisting.findIndex(
-          (ex) => litIsDupe(ex as LiteratureItem, doi, title, authors[0] ?? "", year)
+          (ex) => litIsDupe(ex as LiteratureItem, doi, title, authors[0] ?? "", year, zoteroKey)
         );
         if (freshDupeIdx !== -1) {
           dupeCount++;
@@ -1153,13 +1161,13 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
           const existingFull = existingItems.find((ex) => ex.id === freshExisting[freshDupeIdx].id);
           const mergeBase = existingFull ?? (freshExisting[freshDupeIdx] as unknown as LiteratureItem);
           apiMerges.push({ existing: mergeBase, incoming: incomingItem });
-          console.log(`[ZoteroSync] dupe (DB match): "${title}" doi=${doi ?? "none"} year=${year}`);
+          console.log(`[ZoteroSync] dupe (DB match): "${title}" doi=${doi ?? "none"} zoteroKey=${zoteroKey ?? "none"} year=${year}`);
           continue;
         }
         // Also check within the current batch — Zotero can return the same item
         // multiple times (e.g. in multiple collections), creating phantom duplicates.
         const inBatchDupe = items.findIndex(
-          (ex) => litIsDupe(ex, doi, title, authors[0] ?? "", year)
+          (ex) => litIsDupe(ex, doi, title, authors[0] ?? "", year, zoteroKey)
         );
         if (inBatchDupe !== -1) {
           console.warn("[ZoteroSync] intra-batch duplicate, skipping:", title, doi ?? "(no DOI)");
@@ -2374,6 +2382,13 @@ function DetailPanelContent({
     setShowPDFViewer(false); setPdfViewerExternalUrl(null);
   }, [item.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Keep localFiles in sync when the item's files array is mutated externally while
+  // the same item is open — e.g. Zotero PDF fetched right after import. The effect
+  // above only fires on item.id change, leaving localFiles stale in that window.
+  useEffect(() => {
+    setLocalFiles(item.files);
+  }, [item.files]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     if (tab === "Annotations") {
       // Pre-seed from teamMembers so names resolve immediately without a round-trip
@@ -2730,7 +2745,7 @@ function DetailPanelContent({
       <div className="flex-1 overflow-y-auto">
         {tab === "Info" && (
           <div className="px-4 py-4 space-y-3">
-            {[["Authors", toAuthorsArray(item.authors).join("; ") || "-"], ["Year", String(item.year)], ["Journal", item.journal ?? item.publisher ?? "-"], ["Type", item.type.charAt(0).toUpperCase() + item.type.slice(1)]].map(([label, value]) => (
+            {[["Authors", toAuthorsArray(item.authors).join("; ") || "-"], ["Year", item.year > 0 ? String(item.year) : "—"], ["Journal", item.journal ?? item.publisher ?? "-"], ["Type", item.type.charAt(0).toUpperCase() + item.type.slice(1)]].map(([label, value]) => (
               <div key={label}>
                 <p style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-secondary)", marginBottom: 3 }}>{label}</p>
                 <p style={{ fontSize: 12, color: "var(--color-body)", lineHeight: 1.4, wordBreak: "break-word" }}>{value}</p>
@@ -3457,6 +3472,7 @@ function mapLitRow(row: Record<string, any>): LiteratureItem {
     deletedAt: (row.deleted_at as string | null) ?? null,
     collections: [],
     relatedIds: [],
+    zoteroKey: (row.zotero_key as string | null) ?? undefined,
   };
 }
 
@@ -4014,7 +4030,7 @@ export default function LiteraturePage() {
                       <span style={{ flexShrink: 0, width: 28 }}>{TYPE_ICONS[item.type]}</span>
                       <span title={item.title} style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 500, color: "var(--color-body)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.title}</span>
                       {!narrowList && <span style={{ flexShrink: 0, width: 100, fontSize: 12, color: "var(--color-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{formatAuthors(item.authors)}</span>}
-                      {!narrowList && <span style={{ flexShrink: 0, width: 70, fontSize: 12, color: "var(--color-secondary)" }}>{item.year}</span>}
+                      {!narrowList && <span style={{ flexShrink: 0, width: 70, fontSize: 12, color: "var(--color-secondary)" }}>{item.year > 0 ? item.year : ""}</span>}
                       <span style={{ flexShrink: 0, width: 90 }}><StatusBadge status={item.status} /></span>
                     </button>
                   );

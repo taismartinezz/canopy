@@ -189,6 +189,7 @@ export interface LiteratureItem {
   collections: string[];   // Collection IDs
   relatedIds: string[];    // Related item IDs
   importSource?: "manual" | "zotero_json" | "zotero_api" | "doi" | "bibtex" | "url";
+  zoteroKey?: string;   // Stable Zotero item key (e.g. "AIXIUGN3") — used as dedup key when DOI absent
 }
 
 export interface LiteratureCollection {
