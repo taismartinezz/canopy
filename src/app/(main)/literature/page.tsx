@@ -717,6 +717,10 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
   // PDF attachment state — API sync
   const [pdfAttachments, setPdfAttachments] = useState<Record<string, { attachmentKey: string; filename: string }>>({});
   const [pdfKeyMap, setPdfKeyMap]           = useState<Record<string, string>>({}); // uuid → zotero key
+  // Structured annotations from Zotero API — keyed by client-side item uuid
+  const [annotationsForImport, setAnnotationsForImport] = useState<Record<string, import("@/app/api/zotero/sync/route").ZoteroAnnotation[]>>({});
+  // Items that have only a linked URL in Zotero (no stored PDF) — keyed by Zotero item key
+  const [linkedUrlZoteroKeys, setLinkedUrlZoteroKeys]   = useState<Record<string, true>>({});
   // PDF attachment state — RDF file import
   const [parsedPDFLinks, setParsedPDFLinks] = useState<{ itemId: string; filename: string }[]>([]);
   const [selectedPDFFiles, setSelectedPDFFiles] = useState<File[]>([]);
@@ -1010,6 +1014,44 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
       }
     }
 
+    // Upsert Zotero annotations for newly imported items
+    // Uses zotero_key as the conflict target so re-syncing the same collection
+    // updates existing annotations instead of creating duplicates.
+    const upsertAnnotations = async (itemId: string, clientId: string) => {
+      const annots = annotationsForImport[clientId];
+      if (!annots?.length) return;
+      const rows = annots.map((a) => ({
+        id: crypto.randomUUID(),
+        item_id: itemId,
+        author_id: currentUserId,
+        text: a.text,
+        comment: a.comment,
+        color: a.color,
+        page_number: a.pageNumber,
+        bbox: a.bbox ?? undefined,
+        zotero_key: a.zoteroKey,
+      }));
+      const { error } = await supabase.from("lit_annotations").upsert(rows, {
+        onConflict: "item_id,zotero_key",
+        ignoreDuplicates: false,
+      });
+      if (error) console.warn("[ZoteroImport] annotation upsert error:", error.message);
+    };
+
+    if (isSupabaseConfigured) {
+      setUploadStatus("Saving annotations…");
+      // New items
+      await Promise.all(successfulItems.map((item) => upsertAnnotations(item.id, item.id)));
+      // Merged items (existing DB id, incoming client id with the annotation data)
+      if (mergeDupes) {
+        await Promise.all(
+          pendingMerges
+            .filter(({ existing }) => !forceNewIds.has(existing.id))
+            .map(({ existing, incoming }) => upsertAnnotations(existing.id, incoming.id))
+        );
+      }
+    }
+
     setUploadStatus("");
     setImporting(false);
     // Keep modal open if there are errors to report so the user can read them
@@ -1067,16 +1109,24 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
           ...(selectedCollectionKey ? { collectionKey: selectedCollectionKey } : {}),
         }),
       });
-      const { items: raw, pdfAttachments: apiPdfAtts, notesMap: rawNotesMap, tagsMap: rawTagsMap, droppedItems: rawDropped, error: err } = await res.json() as {
+      const {
+        items: raw, pdfAttachments: apiPdfAtts, notesMap: rawNotesMap,
+        tagsMap: rawTagsMap, droppedItems: rawDropped,
+        annotationsMap: rawAnnotationsMap, linkedUrlItems: rawLinkedUrlItems,
+        error: err,
+      } = await res.json() as {
         items?: CSLJsonItem[];
         pdfAttachments?: Record<string, { attachmentKey: string; filename: string }>;
         notesMap?: Record<string, string[]>;
         tagsMap?: Record<string, string[]>;
         droppedItems?: { key: string; title: string }[];
+        annotationsMap?: Record<string, import("@/app/api/zotero/sync/route").ZoteroAnnotation[]>;
+        linkedUrlItems?: Record<string, true>;
         error?: string;
       };
       if (err || !raw) { setApiError(err ?? "Sync failed"); setSyncing(false); return; }
       setPdfAttachments(apiPdfAtts ?? {});
+      setLinkedUrlZoteroKeys(rawLinkedUrlItems ?? {});
 
       // Surface items that Zotero's CSL serializer silently dropped.
       if (rawDropped?.length) {
@@ -1120,6 +1170,7 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
       const items: LiteratureItem[] = [];
       const apiMerges: { existing: LiteratureItem; incoming: LiteratureItem }[] = [];
       const newKeyMap: Record<string, string> = {};
+      const newAnnotationsMap: Record<string, import("@/app/api/zotero/sync/route").ZoteroAnnotation[]> = {};
       let dupeCount = 0;
       for (const z of raw) {
         const title = (Array.isArray(z.title) ? z.title[0] : z.title) ?? "";
@@ -1131,6 +1182,10 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
         const itemId = crypto.randomUUID();
         const zoteroKey = (z as {id?: string}).id?.split("/").pop();
         if (zoteroKey) newKeyMap[itemId] = zoteroKey;
+        // Collect structured annotations for this item (populated into lit_annotations on import)
+        if (zoteroKey && rawAnnotationsMap?.[zoteroKey]?.length) {
+          newAnnotationsMap[itemId] = rawAnnotationsMap[zoteroKey];
+        }
         const zNotes: string[] = (zoteroKey ? rawNotesMap?.[zoteroKey] : undefined) ?? [];
         const notesText = zNotes
           .map((h: string) => h.replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").trim())
@@ -1178,6 +1233,7 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
       console.log(`[ZoteroSync] result: ${items.length} new, ${dupeCount} dupes, ${apiMerges.length} merge candidates`);
       setFileName(`Zotero API: ${items.length + apiMerges.length} items`);
       setParsed(items); setPendingMerges(apiMerges); setMergeDupes(true);
+      setAnnotationsForImport(newAnnotationsMap);
       setPdfKeyMap(newKeyMap);
       setTab("file");
     } catch (ex) {
@@ -2912,6 +2968,14 @@ function DetailPanelContent({
                           <FileText size={13} /> Open PDF
                         </button>
                       )
+                    ) : item.zoteroKey ? (
+                      <div
+                        className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg"
+                        style={{ backgroundColor: "var(--color-canvas)", color: "var(--color-secondary)", fontSize: 12, fontWeight: 500, border: "1px solid var(--color-border)", borderRadius: 7, minHeight: 44 }}
+                        title="No PDF stored in Zotero for this item — link-only or no attachment"
+                      >
+                        <FileText size={13} /> No PDF in Zotero
+                      </div>
                     ) : (
                       <button
                         onClick={() => setTab("Files")}
@@ -3041,7 +3105,13 @@ function DetailPanelContent({
               </div>
             )}
             {localFiles.length === 0 && !fileUploading && (
-              <p style={{ fontSize: 13, color: "var(--color-secondary)", marginBottom: 12 }}>No files attached.</p>
+              item.zoteroKey ? (
+                <p style={{ fontSize: 13, color: "var(--color-secondary)", marginBottom: 12 }}>
+                  No PDF stored in Zotero — link only or no attachment.
+                </p>
+              ) : (
+                <p style={{ fontSize: 13, color: "var(--color-secondary)", marginBottom: 12 }}>No files attached.</p>
+              )
             )}
             {filesError && (
               <p style={{ fontSize: 12, color: "var(--color-error)", marginBottom: 8, padding: "6px 8px", backgroundColor: "rgba(192,57,43,0.06)", borderRadius: 6 }}>

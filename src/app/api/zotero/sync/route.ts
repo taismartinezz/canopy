@@ -3,6 +3,62 @@
 
 export const runtime = "nodejs";
 
+// Canopy uses five highlight colors. Zotero uses a broader palette — map to nearest.
+const ZOTERO_COLOR_MAP: Record<string, string> = {
+  "#ffd400": "#FBBF24", // yellow → yellow
+  "#ff6666": "#F87171", // red    → red
+  "#5fb236": "#34D399", // green  → green
+  "#2ea8e5": "#60A5FA", // blue   → blue
+  "#a28ae5": "#A78BFA", // purple → purple
+  "#e56eee": "#A78BFA", // magenta → purple (closest)
+  "#f19837": "#FBBF24", // orange  → yellow (closest)
+  "#aaaaaa": "#FBBF24", // grey    → yellow (default)
+};
+
+function mapZoteroColor(hex?: string): string {
+  if (!hex) return "#FBBF24";
+  const lower = hex.toLowerCase();
+  return ZOTERO_COLOR_MAP[lower] ?? "#FBBF24";
+}
+
+// Convert a Zotero PDF annotation position (PDF coordinate space, origin at
+// bottom-left) to Canopy's normalized bbox (0–1 fractions, origin at top-left).
+// Uses US Letter (612 × 792 pt) as the default page size, which produces < 3%
+// error on A4 pages — acceptable for highlight placement.
+function zoteroPosToBbox(
+  pos: unknown
+): { x: number; y: number; w: number; h: number } | null {
+  if (!pos) return null;
+  let parsed: { pageIndex?: number; rects?: number[][]; width?: number } | null = null;
+  if (typeof pos === "string") {
+    try { parsed = JSON.parse(pos); } catch { return null; }
+  } else if (typeof pos === "object") {
+    parsed = pos as unknown as typeof parsed;
+  }
+  if (!parsed?.rects?.length) return null;
+  const rect = parsed.rects[0];
+  if (!rect || rect.length < 4) return null;
+  const [x1, y1, x2, y2] = rect;
+  const pageW = parsed.width ?? 612;
+  const pageH = 792; // height is not provided by Zotero — assume Letter
+  const x = Math.max(0, Math.min(1, x1 / pageW));
+  const y = Math.max(0, Math.min(1, (pageH - y2) / pageH)); // flip Y axis
+  const w = Math.max(0, Math.min(1, (x2 - x1) / pageW));
+  const h = Math.max(0, Math.min(1, (y2 - y1) / pageH));
+  if (w < 0.001 || h < 0.001) return null; // degenerate rect
+  return { x, y, w, h };
+}
+
+export interface ZoteroAnnotation {
+  zoteroKey: string;
+  type: "highlight" | "note" | "underline" | "image" | "ink" | "other";
+  text: string;
+  comment: string;
+  color: string;
+  pageNumber: number;
+  bbox: { x: number; y: number; w: number; h: number } | null;
+}
+
 export async function POST(request: Request) {
   const { apiKey, zoteroUserId, groupId, collectionKey } = (await request.json()) as {
     apiKey?: string;
@@ -59,8 +115,11 @@ export async function POST(request: Request) {
   // Both "imported_file" (added from local) and "imported_url" (added from URL) mean the
   // PDF is stored in Zotero cloud — group libraries predominantly use "imported_url".
   // Also builds attachmentParentMap (attachmentKey → parentItemKey) for the annotation pass.
+  // Also tracks linkedUrlItems (parentKey → url) — items with only a linked/web URL and no
+  // stored PDF, so the UI can show a distinct "no PDF available" message instead of "Attach PDF".
   const pdfAttachments: Record<string, { attachmentKey: string; filename: string }> = {};
   const attachmentParentMap: Record<string, string> = {};
+  const linkedUrlItems: Record<string, true> = {};
   let attStart = 0;
   while (true) {
     const attUrl = `${itemsPath}?itemType=attachment&format=json&limit=100&start=${attStart}`;
@@ -75,6 +134,7 @@ export async function POST(request: Request) {
         contentType?: string;
         title?: string;
         linkMode?: string;
+        url?: string;
       };
     }>;
     if (!Array.isArray(attBatch) || attBatch.length === 0) break;
@@ -94,10 +154,18 @@ export async function POST(request: Request) {
           filename: title ?? "attachment.pdf",
         };
       }
+      // Track linked-URL-only items (linked_url / linked_file = not stored in Zotero cloud)
+      if (parentItem && linkMode === "linked_url" && !pdfAttachments[parentItem]) {
+        linkedUrlItems[parentItem] = true;
+      }
     }
     if (attBatch.length < 100) break;
     attStart += 100;
     if (attStart > 5000) break;
+  }
+  // Clear linkedUrlItems for any parent that DOES have a stored PDF
+  for (const key of Object.keys(pdfAttachments)) {
+    delete linkedUrlItems[key];
   }
 
   // Third pass: fetch all child text notes and map parentItem key → HTML strings.
@@ -127,10 +195,13 @@ export async function POST(request: Request) {
     if (noteStart > 5000) break;
   }
 
-  // Fourth pass: fetch PDF annotation items and resolve them to top-level item keys.
-  // Zotero annotation parentItem points to the PDF attachment, not the top-level item,
-  // so we resolve annotation → attachment → top-level item via attachmentParentMap.
-  const annotationsForItem: Record<string, string[]> = {};
+  // Fourth pass: fetch PDF annotation items as STRUCTURED objects.
+  // Annotations are resolved to their top-level item key via:
+  //   annotation.parentItem → PDF attachment key → top-level item key
+  // Returns annotationsMap: Record<topItemKey, ZoteroAnnotation[]>
+  // (Annotations are no longer merged into notesMap to avoid duplication with
+  //  the structured Highlights panel in Canopy.)
+  const annotationsMap: Record<string, ZoteroAnnotation[]> = {};
   let annStart = 0;
   while (true) {
     const annUrl = `${itemsPath}?itemType=annotation&format=json&limit=100&start=${annStart}`;
@@ -147,6 +218,7 @@ export async function POST(request: Request) {
         annotationComment?: string;
         annotationColor?: string;
         annotationPageLabel?: string;
+        annotationPosition?: unknown;
       };
     }>;
     if (!Array.isArray(annBatch) || annBatch.length === 0) break;
@@ -155,28 +227,41 @@ export async function POST(request: Request) {
       if (!attachKey) continue;
       const topKey = attachmentParentMap[attachKey];
       if (!topKey) continue;
-      const { annotationType, annotationText, annotationComment, annotationPageLabel } = ann.data;
-      const typeLabel =
-        annotationType === "highlight" ? "Highlight"
-        : annotationType === "note" ? "Note"
-        : annotationType === "underline" ? "Underline"
-        : (annotationType ?? "Annotation");
-      const page = annotationPageLabel ? `, p. ${annotationPageLabel}` : "";
-      const parts: string[] = [`[${typeLabel}${page}]`];
-      if (annotationText) parts.push(`"${annotationText}"`);
-      if (annotationComment) parts.push(`→ ${annotationComment}`);
-      if (!annotationsForItem[topKey]) annotationsForItem[topKey] = [];
-      annotationsForItem[topKey].push(parts.join(" "));
+
+      const {
+        annotationType, annotationText, annotationComment,
+        annotationColor, annotationPageLabel, annotationPosition,
+      } = ann.data;
+
+      // Parse page number from label (may be "1", "A3", etc. — take integer portion)
+      const rawPage = annotationPageLabel ? parseInt(annotationPageLabel, 10) : NaN;
+      const pageNumber = isNaN(rawPage) ? 1 : Math.max(1, rawPage);
+
+      const bbox = zoteroPosToBbox(annotationPosition);
+      const type =
+        annotationType === "highlight" ? "highlight"
+        : annotationType === "note"      ? "note"
+        : annotationType === "underline" ? "underline"
+        : annotationType === "image"     ? "image"
+        : annotationType === "ink"       ? "ink"
+        : "other";
+
+      const annot: ZoteroAnnotation = {
+        zoteroKey: ann.key,
+        type,
+        text: annotationText ?? "",
+        comment: annotationComment ?? "",
+        color: mapZoteroColor(annotationColor),
+        pageNumber,
+        bbox,
+      };
+
+      if (!annotationsMap[topKey]) annotationsMap[topKey] = [];
+      annotationsMap[topKey].push(annot);
     }
     if (annBatch.length < 100) break;
     annStart += 100;
     if (annStart > 5000) break;
-  }
-
-  // Merge PDF annotations into notesMap under a clear separator
-  for (const [key, lines] of Object.entries(annotationsForItem)) {
-    if (!notesMap[key]) notesMap[key] = [];
-    notesMap[key].push(`--- PDF Annotations ---\n${lines.join("\n")}`);
   }
 
   // Fifth pass: native JSON items to collect Zotero tags AND detect CSL-drop gaps.
@@ -227,5 +312,8 @@ export async function POST(request: Request) {
     );
   }
 
-  return Response.json({ items, pdfAttachments, notesMap, tagsMap, droppedItems });
+  return Response.json({
+    items, pdfAttachments, notesMap, tagsMap, droppedItems,
+    annotationsMap, linkedUrlItems,
+  });
 }
