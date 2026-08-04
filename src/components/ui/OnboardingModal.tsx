@@ -5,39 +5,148 @@ import { X, ChevronRight, ChevronLeft } from "lucide-react";
 
 const LS_KEY = "canopy_onboarding_seen";
 
-const STEPS = [
+// ── Step illustrations — thin-stroke SVG in Canopy logo style ─────────────────
+
+function IllustrationCanopy() {
+  return (
+    <svg viewBox="0 0 80 80" width={64} height={64} fill="none" aria-hidden="true">
+      <path d="M8 58 Q8 12 40 12 Q72 12 72 58" stroke="var(--color-navy)" strokeWidth="1.5" strokeLinecap="round" opacity="0.25" />
+      <path d="M16 58 Q16 20 40 20 Q64 20 64 58" stroke="var(--color-navy)" strokeWidth="2" strokeLinecap="round" opacity="0.55" />
+      <path d="M24 58 Q24 28 40 28 Q56 28 56 58" stroke="var(--color-navy)" strokeWidth="2.5" strokeLinecap="round" />
+      <line x1="8" y1="58" x2="72" y2="58" stroke="var(--color-navy)" strokeWidth="1.5" strokeLinecap="round" opacity="0.3" />
+      <circle cx="40" cy="12" r="2" fill="var(--color-navy)" opacity="0.25" />
+      <circle cx="40" cy="20" r="2" fill="var(--color-navy)" opacity="0.55" />
+      <circle cx="40" cy="28" r="2.5" fill="var(--color-navy)" />
+    </svg>
+  );
+}
+
+function IllustrationScope() {
+  return (
+    <svg viewBox="0 0 80 80" width={64} height={64} fill="none" aria-hidden="true">
+      {/* House */}
+      <polyline points="20,44 20,62 44,62 44,44" stroke="var(--color-navy)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <polyline points="14,46 32,26 50,46" stroke="var(--color-navy)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      {/* Door */}
+      <rect x="28" y="50" width="8" height="12" rx="1" stroke="var(--color-navy)" strokeWidth="1.5" />
+      {/* Project chip */}
+      <rect x="50" y="28" width="20" height="12" rx="4" stroke="var(--color-navy)" strokeWidth="1.5" opacity="0.55" />
+      <line x1="54" y1="34" x2="66" y2="34" stroke="var(--color-navy)" strokeWidth="1.5" strokeLinecap="round" opacity="0.55" />
+      <rect x="50" y="44" width="20" height="12" rx="4" stroke="var(--color-navy)" strokeWidth="1.5" opacity="0.3" />
+      <line x1="54" y1="50" x2="66" y2="50" stroke="var(--color-navy)" strokeWidth="1.5" strokeLinecap="round" opacity="0.3" />
+    </svg>
+  );
+}
+
+function IllustrationTasks() {
+  return (
+    <svg viewBox="0 0 80 80" width={64} height={64} fill="none" aria-hidden="true">
+      {/* Three kanban columns */}
+      <rect x="8"  y="16" width="18" height="10" rx="3" stroke="var(--color-navy)" strokeWidth="1.5" opacity="0.3" />
+      <rect x="8"  y="30" width="18" height="10" rx="3" stroke="var(--color-navy)" strokeWidth="1.5" opacity="0.3" />
+      <rect x="8"  y="44" width="18" height="10" rx="3" stroke="var(--color-navy)" strokeWidth="1.5" opacity="0.3" />
+
+      <rect x="31" y="16" width="18" height="10" rx="3" stroke="var(--color-navy)" strokeWidth="2" opacity="0.6" />
+      <rect x="31" y="30" width="18" height="10" rx="3" stroke="var(--color-navy)" strokeWidth="2" opacity="0.6" />
+
+      <rect x="54" y="16" width="18" height="10" rx="3" stroke="var(--color-navy)" strokeWidth="2.5" />
+      {/* Checkmark in last card */}
+      <polyline points="58,21 62,25 70,17" stroke="var(--color-navy)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+
+      {/* Column headers */}
+      <line x1="8"  y1="10" x2="26" y2="10" stroke="var(--color-navy)" strokeWidth="1.5" strokeLinecap="round" opacity="0.3" />
+      <line x1="31" y1="10" x2="49" y2="10" stroke="var(--color-navy)" strokeWidth="1.5" strokeLinecap="round" opacity="0.6" />
+      <line x1="54" y1="10" x2="72" y2="10" stroke="var(--color-navy)" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function IllustrationLiterature() {
+  return (
+    <svg viewBox="0 0 80 80" width={64} height={64} fill="none" aria-hidden="true">
+      {/* Open book */}
+      <path d="M40 20 Q26 18 14 22 L14 62 Q26 58 40 60" stroke="var(--color-navy)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M40 20 Q54 18 66 22 L66 62 Q54 58 40 60" stroke="var(--color-navy)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <line x1="40" y1="20" x2="40" y2="60" stroke="var(--color-navy)" strokeWidth="1.5" strokeLinecap="round" opacity="0.4" />
+      {/* Text lines left page */}
+      <line x1="19" y1="30" x2="36" y2="29" stroke="var(--color-navy)" strokeWidth="1.2" strokeLinecap="round" opacity="0.45" />
+      <line x1="19" y1="36" x2="36" y2="35" stroke="var(--color-navy)" strokeWidth="1.2" strokeLinecap="round" opacity="0.45" />
+      <line x1="19" y1="42" x2="33" y2="41" stroke="var(--color-navy)" strokeWidth="1.2" strokeLinecap="round" opacity="0.45" />
+      {/* Highlight on right page */}
+      <line x1="44" y1="30" x2="61" y2="29" stroke="var(--color-navy)" strokeWidth="3" strokeLinecap="round" opacity="0.18" />
+      <line x1="44" y1="30" x2="61" y2="29" stroke="var(--color-navy)" strokeWidth="1.2" strokeLinecap="round" opacity="0.55" />
+      <line x1="44" y1="36" x2="61" y2="35" stroke="var(--color-navy)" strokeWidth="1.2" strokeLinecap="round" opacity="0.45" />
+      <line x1="44" y1="42" x2="58" y2="41" stroke="var(--color-navy)" strokeWidth="1.2" strokeLinecap="round" opacity="0.45" />
+    </svg>
+  );
+}
+
+function IllustrationBookmarks() {
+  return (
+    <svg viewBox="0 0 80 80" width={64} height={64} fill="none" aria-hidden="true">
+      {/* Bookmark ribbon */}
+      <path d="M28 14 L52 14 L52 58 L40 48 L28 58 Z" stroke="var(--color-navy)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      {/* Tag line */}
+      <line x1="34" y1="26" x2="46" y2="26" stroke="var(--color-navy)" strokeWidth="1.5" strokeLinecap="round" opacity="0.5" />
+      <line x1="34" y1="33" x2="46" y2="33" stroke="var(--color-navy)" strokeWidth="1.5" strokeLinecap="round" opacity="0.35" />
+      {/* Small document */}
+      <rect x="54" y="18" width="16" height="20" rx="2" stroke="var(--color-navy)" strokeWidth="1.5" opacity="0.45" />
+      <line x1="57" y1="24" x2="67" y2="24" stroke="var(--color-navy)" strokeWidth="1.2" strokeLinecap="round" opacity="0.4" />
+      <line x1="57" y1="29" x2="67" y2="29" stroke="var(--color-navy)" strokeWidth="1.2" strokeLinecap="round" opacity="0.4" />
+      <line x1="57" y1="34" x2="63" y2="34" stroke="var(--color-navy)" strokeWidth="1.2" strokeLinecap="round" opacity="0.4" />
+    </svg>
+  );
+}
+
+function IllustrationTeam() {
+  return (
+    <svg viewBox="0 0 80 80" width={64} height={64} fill="none" aria-hidden="true">
+      {/* Center person */}
+      <circle cx="40" cy="24" r="8" stroke="var(--color-navy)" strokeWidth="2" />
+      <path d="M22 62 Q22 44 40 44 Q58 44 58 62" stroke="var(--color-navy)" strokeWidth="2" strokeLinecap="round" />
+      {/* Left person (faded) */}
+      <circle cx="18" cy="28" r="6" stroke="var(--color-navy)" strokeWidth="1.5" opacity="0.45" />
+      <path d="M6 62 Q6 48 18 48 Q24 48 28 52" stroke="var(--color-navy)" strokeWidth="1.5" strokeLinecap="round" opacity="0.45" />
+      {/* Right person (faded) */}
+      <circle cx="62" cy="28" r="6" stroke="var(--color-navy)" strokeWidth="1.5" opacity="0.45" />
+      <path d="M74 62 Q74 48 62 48 Q56 48 52 52" stroke="var(--color-navy)" strokeWidth="1.5" strokeLinecap="round" opacity="0.45" />
+    </svg>
+  );
+}
+
+const STEPS: { title: string; body: string; hint: string; Icon: () => React.ReactNode }[] = [
   {
-    emoji: "🌿",
+    Icon: IllustrationCanopy,
     title: "Welcome to Canopy",
-    body: "Your research lab's home base — tasks, literature, bookmarks, scheduling, and team coordination all in one workspace.",
+    body: "Your research lab's home base: tasks, literature, bookmarks, scheduling, and team coordination in one workspace.",
     hint: "",
   },
   {
-    emoji: "🏠",
+    Icon: IllustrationScope,
     title: "Lab Home vs. Projects",
-    body: 'The left icon rail is your context switcher. The house icon shows Lab Home (all lab-wide data). Clicking a project icon (like “GE”) narrows every page to that project’s view — title, tasks, activity, and team.',
-    hint: "The breadcrumb at the top of each page always shows which context you're in.",
+    body: "The left icon rail is your context switcher. The house icon shows Lab Home with all lab-wide data. Clicking a project icon narrows every page to that project's tasks, activity, and team.",
+    hint: "The breadcrumb at the top of each page shows which context you are in.",
   },
   {
-    emoji: "✅",
+    Icon: IllustrationTasks,
     title: "Tasks",
-    body: "Plan and track research work on a Kanban board or list. Assign teammates, set due dates, and move cards from To Do → In Progress → Done. Tasks scope automatically to your active project.",
-    hint: "Use the Board view to see workload at a glance; List view for quick bulk editing.",
+    body: "Plan and track research work on a Kanban board or list. Assign teammates, set due dates, and move cards from To Do through In Progress to Done. Tasks scope automatically to your active project.",
+    hint: "Use the Board view to see workload at a glance and List view for quick bulk editing.",
   },
   {
-    emoji: "📚",
+    Icon: IllustrationLiterature,
     title: "Literature",
-    body: "A full citation manager built for your lab. Import from Zotero, attach PDFs, add notes and annotations, and track reading status per item. All teammates see the same library.",
-    hint: 'Tip: in Zotero, export with "Export Files" + "Include Annotations" checked to carry over PDF highlights.',
+    body: "A citation manager built for your lab. Import from Zotero, attach PDFs, add notes and annotations, and track reading status. All teammates see the same library.",
+    hint: 'In Zotero, export with "Export Files" and "Include Annotations" checked to carry over PDF highlights.',
   },
   {
-    emoji: "🔖",
-    title: "Bookmarks & Files",
-    body: "Bookmarks are for links your team shares — papers, protocols, supplier pages, Zoom recordings, or any URL. PDFs and datasets live on each Literature item's Files tab, viewable in the in-app reader.",
-    hint: "Bookmarks are automatically categorized by URL type (paper, doc, sheet, code, etc.).",
+    Icon: IllustrationBookmarks,
+    title: "Bookmarks and Files",
+    body: "Bookmarks are for links your team shares: papers, protocols, supplier pages, Zoom recordings, or any URL. PDFs and datasets live on each Literature item's Files tab, viewable in the in-app reader.",
+    hint: "Bookmarks are automatically categorized by URL type (paper, doc, sheet, code, and more).",
   },
   {
-    emoji: "👥",
+    Icon: IllustrationTeam,
     title: "Team",
     body: "See what everyone is working on, share your weekly update, and start a Zoom call. PIs and project creators can manage project membership from the Manage Members button.",
     hint: "Scheduling shows everyone's availability calendar so you can find meeting times without back-and-forth.",
@@ -83,7 +192,7 @@ export default function OnboardingModal({ onClose }: { onClose: () => void }) {
           fontFamily: "var(--font-roboto)",
         }}
       >
-        {/* Header */}
+        {/* Close */}
         <div style={{ padding: "20px 24px 0", display: "flex", justifyContent: "flex-end" }}>
           <button
             onClick={dismiss}
@@ -96,10 +205,10 @@ export default function OnboardingModal({ onClose }: { onClose: () => void }) {
         </div>
 
         {/* Content */}
-        <div style={{ padding: "0 32px 28px" }}>
-          {/* Emoji illustration */}
-          <div style={{ fontSize: 52, lineHeight: 1, marginBottom: 20, textAlign: "center" }}>
-            {current.emoji}
+        <div style={{ padding: "4px 32px 28px" }}>
+          {/* SVG illustration */}
+          <div style={{ display: "flex", justifyContent: "center", marginBottom: 20 }}>
+            <current.Icon />
           </div>
 
           {/* Step counter */}
@@ -125,7 +234,7 @@ export default function OnboardingModal({ onClose }: { onClose: () => void }) {
           )}
         </div>
 
-        {/* Footer: dots + nav */}
+        {/* Footer */}
         <div style={{ borderTop: "1px solid var(--color-border)", padding: "16px 24px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           {/* Back */}
           <button
@@ -147,7 +256,8 @@ export default function OnboardingModal({ onClose }: { onClose: () => void }) {
                   width: i === step ? 18 : 6, height: 6,
                   borderRadius: 3,
                   backgroundColor: i === step ? "var(--color-navy)" : "var(--color-border)",
-                  border: "none", cursor: "pointer", transition: "width 200ms ease, background-color 200ms ease",
+                  border: "none", cursor: "pointer",
+                  transition: "width 200ms ease, background-color 200ms ease",
                   padding: 0,
                 }}
                 aria-label={`Go to step ${i + 1}`}

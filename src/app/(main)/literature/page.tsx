@@ -1104,7 +1104,7 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
         title: r.title as string ?? "",
         doi: (r.doi as string | null) ?? undefined,
         year: r.year as number ?? 0,
-        authors: r.authors as string[] ?? [],
+        authors: toAuthorsArray(r.authors as string | string[]),
         abstract: (r.abstract as string | null) ?? undefined,
         url: (r.url as string | null) ?? undefined,
         volume: (r.volume as string | null) ?? undefined,
@@ -2745,7 +2745,7 @@ function DetailPanelContent({
       <div className="flex-1 overflow-y-auto">
         {tab === "Info" && (
           <div className="px-4 py-4 space-y-3">
-            {[["Authors", toAuthorsArray(item.authors).join("; ") || "-"], ["Year", item.year > 0 ? String(item.year) : "—"], ["Journal", item.journal ?? item.publisher ?? "-"], ["Type", item.type.charAt(0).toUpperCase() + item.type.slice(1)]].map(([label, value]) => (
+            {[["Authors", toAuthorsArray(item.authors).join("; ") || "-"], ["Year", item.year > 0 ? String(item.year) : ""], ["Journal", item.journal ?? item.publisher ?? "-"], ["Type", item.type.charAt(0).toUpperCase() + item.type.slice(1)]].map(([label, value]) => (
               <div key={label}>
                 <p style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-secondary)", marginBottom: 3 }}>{label}</p>
                 <p style={{ fontSize: 12, color: "var(--color-body)", lineHeight: 1.4, wordBreak: "break-word" }}>{value}</p>
