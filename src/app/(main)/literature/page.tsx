@@ -1046,12 +1046,19 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
         ignoreDuplicates: false,
       });
       if (error) {
-        // Migration 018 may not be applied yet — fall back to plain insert without zotero_key.
-        // This means re-syncs will create duplicates until the migration is run, but it won't break.
-        console.warn("[ZoteroImport] annotation upsert failed (migration 018 pending?):", error.message);
-        const rowsWithoutZoteroKey = rows.map(({ zotero_key: _zk, ...rest }) => rest);
-        const { error: insertErr } = await supabase.from("lit_annotations").insert(rowsWithoutZoteroKey);
-        if (insertErr) console.warn("[ZoteroImport] annotation insert fallback also failed:", insertErr.message);
+        // Layer 2: strip color (migration 019 not applied yet) and retry upsert
+        console.warn("[ZoteroImport] annotation upsert failed:", error.message);
+        const rowsNoColor = rows.map(({ color: _c, ...rest }) => rest);
+        const { error: e2 } = await supabase.from("lit_annotations").upsert(rowsNoColor, {
+          onConflict: "item_id,zotero_key", ignoreDuplicates: false,
+        });
+        if (e2) {
+          // Layer 3: strip zotero_key too (migration 018 not applied) — plain insert, accepts duplicates on re-sync
+          console.warn("[ZoteroImport] annotation upsert (no color) failed:", e2.message);
+          const rowsMinimal = rowsNoColor.map(({ zotero_key: _zk, ...rest }) => rest);
+          const { error: e3 } = await supabase.from("lit_annotations").insert(rowsMinimal);
+          if (e3) console.warn("[ZoteroImport] annotation insert fallback also failed:", e3.message);
+        }
       }
     };
 
