@@ -1029,7 +1029,7 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
     // updates existing annotations instead of creating duplicates.
     const upsertAnnotations = async (itemId: string, clientId: string) => {
       const annots = annotationsForImport[clientId];
-      if (!annots?.length) return;
+      if (!annots?.length) return; // no annotations for this item — silently skip
       const rows = annots.map((a) => ({
         id: crypto.randomUUID(),
         item_id: itemId,
@@ -1056,15 +1056,26 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
     };
 
     if (isSupabaseConfigured) {
-      setUploadStatus("Saving annotations…");
+      const annotItemCount = Object.keys(annotationsForImport).length;
+      const annotTotal = Object.values(annotationsForImport).reduce((s, a) => s + a.length, 0);
+      console.log(`[ZoteroImport] annotation map: ${annotItemCount} item(s), ${annotTotal} annotation(s) total`);
+      if (annotTotal > 0) setUploadStatus("Saving annotations…");
       // New items
-      await Promise.all(successfulItems.map((item) => upsertAnnotations(item.id, item.id)));
+      await Promise.all(successfulItems.map((item) => {
+        const count = annotationsForImport[item.id]?.length ?? 0;
+        if (count > 0) console.log(`[ZoteroImport] saving ${count} annotation(s) for new item "${item.title}"`);
+        return upsertAnnotations(item.id, item.id);
+      }));
       // Merged items (existing DB id, incoming client id with the annotation data)
       if (mergeDupes) {
         await Promise.all(
           pendingMerges
             .filter(({ existing }) => !forceNewIds.has(existing.id))
-            .map(({ existing, incoming }) => upsertAnnotations(existing.id, incoming.id))
+            .map(({ existing, incoming }) => {
+              const count = annotationsForImport[incoming.id]?.length ?? 0;
+              if (count > 0) console.log(`[ZoteroImport] saving ${count} annotation(s) for merged item "${existing.title}"`);
+              return upsertAnnotations(existing.id, incoming.id);
+            })
         );
       }
     }
