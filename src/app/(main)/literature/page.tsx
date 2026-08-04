@@ -443,6 +443,16 @@ function litLastName(author: string): string {
   return (parts[parts.length - 1] ?? "").toLowerCase();
 }
 
+// Extract the last-name portion from a citation author string like "Smith et al." or "Smith & Jones".
+function citationLastName(authorPart: string): string {
+  return authorPart
+    .replace(/\s+et\s+al\.?.*$/i, "")
+    .replace(/\s*[&,].*$/, "")
+    .replace(/\s*\band\b.*$/i, "")
+    .trim()
+    .toLowerCase();
+}
+
 // Strip URL prefix variants (https://doi.org/, http://dx.doi.org/) then trim+lowercase.
 // Zotero, CrossRef, and manual entry all produce slightly different DOI forms.
 function normalizeDoi(raw: string): string {
@@ -1035,7 +1045,14 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
         onConflict: "item_id,zotero_key",
         ignoreDuplicates: false,
       });
-      if (error) console.warn("[ZoteroImport] annotation upsert error:", error.message);
+      if (error) {
+        // Migration 018 may not be applied yet — fall back to plain insert without zotero_key.
+        // This means re-syncs will create duplicates until the migration is run, but it won't break.
+        console.warn("[ZoteroImport] annotation upsert failed (migration 018 pending?):", error.message);
+        const rowsWithoutZoteroKey = rows.map(({ zotero_key: _zk, ...rest }) => rest);
+        const { error: insertErr } = await supabase.from("lit_annotations").insert(rowsWithoutZoteroKey);
+        if (insertErr) console.warn("[ZoteroImport] annotation insert fallback also failed:", insertErr.message);
+      }
     };
 
     if (isSupabaseConfigured) {
@@ -2354,13 +2371,86 @@ function AssignReadingForm({ itemId, projectId, assignedBy, teamMembers, onAssig
   );
 }
 
+// ── Citation linking ──────────────────────────────────────────────────────────
+
+interface ParsedCitation {
+  start: number; end: number; raw: string; authorPart: string; year: number;
+}
+
+function parseCitations(text: string): ParsedCitation[] {
+  const patterns: RegExp[] = [
+    // (Author, YEAR) — with optional page ref suffix
+    /\(([A-Z][a-zA-ZÀ-ɏ'\-]+(?:\s+(?:et\s+al\.?|&\s+[A-Z][a-zA-Z'\-]+|and\s+[A-Z][a-zA-Z'\-]+))?),\s*((?:19|20)\d{2})(?:[,;][^)]{0,30})?\)/g,
+    // [Author, YEAR] bracket style
+    /\[([A-Z][a-zA-ZÀ-ɏ'\-]+(?:\s+et\s+al\.?)?),\s*((?:19|20)\d{2})\]/g,
+    // Narrative: Author (YEAR) or Author et al. (YEAR)
+    /\b([A-Z][a-zA-ZÀ-ɏ'\-]+(?:\s+et\s+al\.)?)\s+\(((?:19|20)\d{2})\)/g,
+  ];
+  const all: ParsedCitation[] = [];
+  for (const re of patterns) {
+    re.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(text)) !== null) {
+      all.push({ start: m.index, end: m.index + m[0].length, raw: m[0], authorPart: m[1], year: parseInt(m[2], 10) });
+    }
+  }
+  all.sort((a, b) => a.start - b.start);
+  // Remove overlaps — keep first match at each position
+  const out: ParsedCitation[] = [];
+  let lastEnd = -1;
+  for (const c of all) {
+    if (c.start >= lastEnd) { out.push(c); lastEnd = c.end; }
+  }
+  return out;
+}
+
+function CitationLinker({ text, items, onSelectItem }: {
+  text: string;
+  items: LiteratureItem[];
+  onSelectItem: (id: string) => void;
+}) {
+  const citations = parseCitations(text);
+  if (citations.length === 0) return <>{text}</>;
+
+  const parts: React.ReactNode[] = [];
+  let cursor = 0;
+
+  for (const c of citations) {
+    if (cursor < c.start) parts.push(text.slice(cursor, c.start));
+
+    const cLast = citationLastName(c.authorPart);
+    const match = items.find(
+      (it) => it.year === c.year && it.authors.length > 0 && litLastName(it.authors[0]) === cLast
+    );
+
+    if (match) {
+      parts.push(
+        <button
+          key={c.start}
+          onClick={(e) => { e.stopPropagation(); onSelectItem(match.id); }}
+          title={match.title}
+          style={{ background: "none", border: "none", padding: 0, cursor: "pointer", color: "var(--color-navy)", textDecoration: "underline", textDecorationStyle: "dotted", fontFamily: "inherit", fontSize: "inherit", fontWeight: 600 }}
+        >
+          {c.raw}
+        </button>
+      );
+    } else {
+      parts.push(c.raw);
+    }
+    cursor = c.end;
+  }
+
+  if (cursor < text.length) parts.push(text.slice(cursor));
+  return <>{parts}</>;
+}
+
 // ── Detail panel ──────────────────────────────────────────────────────────────
 
 const DETAIL_TABS = ["Info", "Abstract", "Notes", "Tags", "Files", "Cite", "Related", "Annotations", "Assigned"] as const;
 type DetailTab = typeof DETAIL_TABS[number];
 
 function DetailPanelContent({
-  item, onClose, onUpdateItem, onDeleteItem, allItems, currentUserId, projectId, onAddItem, subProjectId, teamMembers,
+  item, onClose, onUpdateItem, onDeleteItem, allItems, currentUserId, projectId, onAddItem, subProjectId, teamMembers, onNavigateToItem,
 }: {
   item: LiteratureItem;
   onClose: () => void;
@@ -2372,6 +2462,7 @@ function DetailPanelContent({
   onAddItem: (item: LiteratureItem) => void;
   subProjectId: string | null;
   teamMembers: User[];
+  onNavigateToItem?: (id: string) => void;
 }) {
   const [tab, setTab]                     = useState<DetailTab>("Info");
   const [citationStyle, setCitationStyle] = useState<"apa" | "mla" | "chicago">("apa");
@@ -2445,42 +2536,44 @@ function DetailPanelContent({
     setLocalFiles(item.files);
   }, [item.files]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Eagerly fetch annotations whenever item changes — not just when the Annotations tab is open.
+  // This ensures the PDF viewer's `annotations` prop is populated before the viewer mounts.
   useEffect(() => {
-    if (tab === "Annotations") {
-      // Pre-seed from teamMembers so names resolve immediately without a round-trip
-      const seedMap: Record<string, string> = {};
-      for (const m of teamMembers) seedMap[m.id] = m.name;
-      setAnnotAuthors(seedMap);
+    const seedMap: Record<string, string> = {};
+    for (const m of teamMembers) seedMap[m.id] = m.name;
+    setAnnotAuthors(seedMap);
 
-      supabase.from("lit_annotations").select("id, item_id, author_id, text, comment, page_ref, parent_id, created_at, color, page_number, bbox").eq("item_id", item.id).order("created_at")
-        .then(async ({ data }) => {
-          if (!data) return;
-          const mapped = data.map((r) => ({
-            id: r.id as string, itemId: r.item_id as string, authorId: r.author_id as string,
-            text: r.text as string, comment: r.comment as string,
-            pageRef: r.page_ref as string | undefined,
-            parentId: r.parent_id as string | undefined,
-            createdAt: r.created_at as string,
-            color: r.color as string | undefined,
-            pageNumber: r.page_number as number | undefined,
-            bbox: r.bbox as { x: number; y: number; w: number; h: number } | undefined,
-          }));
-          setAnnotations(mapped);
-          // Fetch profiles for any IDs not already in teamMembers (e.g. past members)
-          const knownIds = new Set([...teamMembers.map((m) => m.id), currentUserId]);
-          const unknownIds = [...new Set(mapped.map((a) => a.authorId))].filter((id) => !knownIds.has(id));
-          if (unknownIds.length > 0) {
-            const { data: profiles } = await supabase.from("user_profiles").select("id, name").in("id", unknownIds);
-            if (profiles) {
-              setAnnotAuthors((prev) => {
-                const next = { ...prev };
-                for (const p of profiles) next[p.id as string] = (p.name as string) ?? p.id;
-                return next;
-              });
-            }
+    supabase.from("lit_annotations").select("id, item_id, author_id, text, comment, page_ref, parent_id, created_at, color, page_number, bbox").eq("item_id", item.id).order("created_at")
+      .then(async ({ data }) => {
+        if (!data) return;
+        const mapped = data.map((r) => ({
+          id: r.id as string, itemId: r.item_id as string, authorId: r.author_id as string,
+          text: r.text as string, comment: r.comment as string,
+          pageRef: r.page_ref as string | undefined,
+          parentId: r.parent_id as string | undefined,
+          createdAt: r.created_at as string,
+          color: r.color as string | undefined,
+          pageNumber: r.page_number as number | undefined,
+          bbox: r.bbox as { x: number; y: number; w: number; h: number } | undefined,
+        }));
+        setAnnotations(mapped);
+        // Fetch profiles for any IDs not already in teamMembers (e.g. past members)
+        const knownIds = new Set([...teamMembers.map((m) => m.id), currentUserId]);
+        const unknownIds = [...new Set(mapped.map((a) => a.authorId))].filter((id) => !knownIds.has(id));
+        if (unknownIds.length > 0) {
+          const { data: profiles } = await supabase.from("user_profiles").select("id, name").in("id", unknownIds);
+          if (profiles) {
+            setAnnotAuthors((prev) => {
+              const next = { ...prev };
+              for (const p of profiles) next[p.id as string] = (p.name as string) ?? p.id;
+              return next;
+            });
           }
-        });
-    }
+        }
+      });
+  }, [item.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
     if (tab === "Assigned") {
       (async () => {
         // Prefer the RPC which enforces server-side status masking and returns aggregates.
@@ -3014,7 +3107,13 @@ function DetailPanelContent({
         {tab === "Abstract" && (
           <div className="px-4 py-4">
             {item.abstract
-              ? <p style={{ fontSize: 13, color: "var(--color-body)", lineHeight: 1.75 }}>{item.abstract}</p>
+              ? <p style={{ fontSize: 13, color: "var(--color-body)", lineHeight: 1.75 }}>
+                  <CitationLinker
+                    text={item.abstract}
+                    items={allItems}
+                    onSelectItem={(id) => onNavigateToItem?.(id)}
+                  />
+                </p>
               : <p style={{ fontSize: 13, color: "var(--color-secondary)" }}>No abstract available.</p>}
           </div>
         )}
@@ -4139,11 +4238,11 @@ export default function LiteraturePage() {
         <>
           {isMobile ? (
             <div className="fixed inset-0 z-40 animate-slide-in-bottom" style={{ backgroundColor: "var(--color-surface)" }}>
-              <DetailPanelContent item={selectedItem} onClose={() => setSelectedItemId(null)} onUpdateItem={updateItem} onDeleteItem={deleteItem} allItems={items} currentUserId={currentUserId} projectId={projectId} onAddItem={addItem} subProjectId={subProjectId ?? null} teamMembers={teamMembers} />
+              <DetailPanelContent item={selectedItem} onClose={() => setSelectedItemId(null)} onUpdateItem={updateItem} onDeleteItem={deleteItem} allItems={items} currentUserId={currentUserId} projectId={projectId} onAddItem={addItem} subProjectId={subProjectId ?? null} teamMembers={teamMembers} onNavigateToItem={(id) => setSelectedItemId(id)} />
             </div>
           ) : (
             <div className="flex flex-col shrink-0" style={{ width: 340, borderLeft: "1px solid var(--color-border)" }}>
-              <DetailPanelContent item={selectedItem} onClose={() => setSelectedItemId(null)} onUpdateItem={updateItem} onDeleteItem={deleteItem} allItems={items} currentUserId={currentUserId} projectId={projectId} onAddItem={addItem} subProjectId={subProjectId ?? null} teamMembers={teamMembers} />
+              <DetailPanelContent item={selectedItem} onClose={() => setSelectedItemId(null)} onUpdateItem={updateItem} onDeleteItem={deleteItem} allItems={items} currentUserId={currentUserId} projectId={projectId} onAddItem={addItem} subProjectId={subProjectId ?? null} teamMembers={teamMembers} onNavigateToItem={(id) => setSelectedItemId(id)} />
             </div>
           )}
         </>
