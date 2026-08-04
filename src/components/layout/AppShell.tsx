@@ -18,6 +18,7 @@ import Toast from "@/components/ui/Toast";
 import Avatar from "@/components/ui/Avatar";
 import CanopyLogo from "@/components/ui/CanopyLogo";
 import CreateProjectModal from "@/components/projects/CreateProjectModal";
+import OnboardingModal, { useOnboarding } from "@/components/ui/OnboardingModal";;
 const NAV_ITEMS = [
   { href: "/",            label: "Dashboard",  icon: LayoutDashboard },
   { href: "/tasks",       label: "Tasks",      icon: CheckSquare     },
@@ -320,6 +321,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const { density, toggle: toggleDensity } = useDensity();
   const [navCollapsed, setNavCollapsed]   = useState(false);
   const [showCreate, setShowCreate]       = useState(false);
+  const { show: showOnboarding, close: closeOnboarding } = useOnboarding();
   const [showSwitcher, setShowSwitcher]   = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -572,6 +574,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
         {/* Lab home — separate from the logo */}
         <div className="pb-1 flex flex-col items-center">
+          <p style={{ fontSize: 7.5, fontWeight: 700, letterSpacing: "0.1em", color: "var(--color-secondary)", margin: "0 0 3px", textAlign: "center", textTransform: "uppercase", opacity: 0.7 }}>Lab</p>
           <button
             onClick={() => { setActiveSubProject(null); setActiveScope("lab"); }}
             title="Lab home"
@@ -591,6 +594,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
         {/* Sub-project icons + switcher */}
         <div className="flex-1 flex flex-col items-center py-1 gap-1.5 overflow-y-auto" style={{ scrollbarWidth: "none" }}>
+          <p style={{ fontSize: 7.5, fontWeight: 700, letterSpacing: "0.1em", color: "var(--color-secondary)", margin: "2px 0 1px", textAlign: "center", textTransform: "uppercase", opacity: 0.7 }}>Projects</p>
           {/* Show first 5 as icons; if more, show a switcher trigger */}
           {subProjects.slice(0, 5).map((sp) => {
             const isActive = activeScope === "project" && subProjectId === sp.id;
@@ -885,6 +889,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     </div>
     <Toast />
     {showCreate && <CreateProjectModal onClose={() => setShowCreate(false)} />}
-    </>
+    {showOnboarding && authed && <OnboardingModal onClose={closeOnboarding} />}
+</>
   );
 }

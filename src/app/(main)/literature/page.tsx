@@ -1199,8 +1199,8 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
         {tab === "file" && (
           <>
             <p style={{ fontSize: 12, color: "var(--color-secondary)", marginBottom: 14 }}>
-              In Zotero: <strong>File → Export Library</strong>, then choose <strong>CSL JSON</strong> (citation metadata only) or <strong>Zotero RDF</strong> (with <em>Export Files</em> checked to include PDFs). API sync also auto-attaches PDFs stored in Zotero cloud.<br /><br />
-              <strong>To import a single collection:</strong> right-click the collection in Zotero's left panel → <strong>Export Collection…</strong>
+              In Zotero: <strong>File → Export Library</strong>, then choose <strong>CSL JSON</strong> (metadata only) or <strong>Zotero RDF</strong>. For RDF, check both <strong>Export Files</strong> (includes PDFs) and <strong>Include Annotations</strong> — skipping either silently strips that data. API sync auto-attaches PDFs stored in Zotero cloud.<br /><br />
+              <strong>To import a single collection:</strong> right-click the collection in Zotero → <strong>Export Collection…</strong>, with the same checkboxes.
             </p>
             <label
               style={{
@@ -1310,7 +1310,7 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
                   {parsedPDFLinks.length} PDF attachment{parsedPDFLinks.length > 1 ? "s" : ""} found in this RDF
                 </p>
                 <p style={{ fontSize: 11, color: "var(--color-secondary)", marginBottom: 8 }}>
-                  In Zotero, export with <strong>Export Files</strong> checked. Then select the PDF files from the exported <em>files/</em> folder below (optional, skip to import metadata only).
+                  In Zotero, export with both <strong>Export Files</strong> and <strong>Include Annotations</strong> checked. Then select the PDFs from the exported <em>files/</em> folder below (optional — skip to import metadata only).
                 </p>
                 <input
                   ref={pdfInputRef}
@@ -2867,60 +2867,68 @@ function DetailPanelContent({
               </div>
             </div>
 
-            <div className="flex gap-2 pt-2">
-              {(() => {
-                const uploadedPdf = localFiles.find((f) => f.url && f.name.toLowerCase().endsWith(".pdf"));
-                const isDirectPdfUrl = item.url && (() => {
-                  try { return new URL(item.url!).pathname.toLowerCase().endsWith(".pdf"); } catch { return false; }
-                })();
-                if (uploadedPdf?.url) {
-                  return (
-                    <button
-                      onClick={() => { setPdfViewerInitialPage(1); setShowPDFViewer(true); }}
-                      className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg"
-                      style={{ backgroundColor: "var(--color-navy)", color: "#fff", fontSize: 12, fontWeight: 700, border: "none", borderRadius: 7, cursor: "pointer", minHeight: 44 }}
-                    >
-                      <FileText size={13} /> View PDF
-                    </button>
-                  );
-                }
-                if (isDirectPdfUrl) {
-                  return (
-                    <button
-                      onClick={() => { setPdfViewerExternalUrl(item.url!); setPdfViewerInitialPage(1); setShowPDFViewer(true); }}
-                      className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg"
-                      style={{ backgroundColor: "var(--color-navy)", color: "#fff", fontSize: 12, fontWeight: 700, border: "none", borderRadius: 7, cursor: "pointer", minHeight: 44 }}
-                    >
-                      <FileText size={13} /> Open PDF
-                    </button>
-                  );
-                }
-                return (
-                  <button
-                    onClick={() => setTab("Files")}
-                    className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg"
-                    style={{ backgroundColor: "var(--color-canvas)", color: "var(--color-secondary)", fontSize: 12, fontWeight: 600, border: "1px dashed var(--color-border)", borderRadius: 7, cursor: "pointer", minHeight: 44 }}
-                    title="No PDF attached — click to open the Files tab and upload one"
-                  >
-                    <FileText size={13} /> Attach PDF
-                  </button>
-                );
-              })()}
-              {item.doi && (
-                <a href={`https://doi.org/${item.doi}`} target="_blank" rel="noopener noreferrer"
-                  className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg"
-                  style={{ backgroundColor: "transparent", color: "var(--color-navy)", fontSize: 12, fontWeight: 700, border: "1px solid var(--color-navy)", borderRadius: 7, cursor: "pointer", minHeight: 44, textDecoration: "none" }}>
-                  <ExternalLink size={13} /> Open via DOI
-                </a>
-              )}
-              {!item.doi && item.url && (
-                <a href={item.url} target="_blank" rel="noopener noreferrer"
-                  className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg"
-                  style={{ backgroundColor: "transparent", color: "var(--color-navy)", fontSize: 12, fontWeight: 700, border: "1px solid var(--color-navy)", borderRadius: 7, cursor: "pointer", minHeight: 44, textDecoration: "none" }}>
-                  <ExternalLink size={13} /> Open URL
-                </a>
-              )}
-            </div>
+            {(() => {
+              // Any attached file with a URL counts — extension check silently fails for
+              // some Zotero-synced filenames that lack a .pdf suffix in the stored name.
+              const uploadedPdf = localFiles.find((f) => f.url);
+              const isDirectPdfUrl = item.url && (() => {
+                try { return new URL(item.url!).pathname.toLowerCase().endsWith(".pdf"); } catch { return false; }
+              })();
+              const hasPdf = !!uploadedPdf || !!isDirectPdfUrl;
+              return (
+                <>
+                  <div className="flex gap-2 pt-2">
+                    {/* PDF button — always present regardless of DOI/URL */}
+                    {hasPdf ? (
+                      uploadedPdf ? (
+                        <button
+                          onClick={() => { setPdfViewerInitialPage(1); setShowPDFViewer(true); }}
+                          className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg"
+                          style={{ backgroundColor: "var(--color-navy)", color: "#fff", fontSize: 12, fontWeight: 700, border: "none", borderRadius: 7, cursor: "pointer", minHeight: 44 }}
+                        >
+                          <FileText size={13} /> View PDF
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => { setPdfViewerExternalUrl(item.url!); setPdfViewerInitialPage(1); setShowPDFViewer(true); }}
+                          className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg"
+                          style={{ backgroundColor: "var(--color-navy)", color: "#fff", fontSize: 12, fontWeight: 700, border: "none", borderRadius: 7, cursor: "pointer", minHeight: 44 }}
+                        >
+                          <FileText size={13} /> Open PDF
+                        </button>
+                      )
+                    ) : (
+                      <button
+                        onClick={() => setTab("Files")}
+                        className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg"
+                        style={{ backgroundColor: "var(--color-canvas)", color: "var(--color-secondary)", fontSize: 12, fontWeight: 600, border: "1px dashed var(--color-border)", borderRadius: 7, cursor: "pointer", minHeight: 44 }}
+                        title="No PDF attached — click to open the Files tab and upload one"
+                      >
+                        <FileText size={13} /> Attach PDF
+                      </button>
+                    )}
+                    {/* DOI/URL button — independent of PDF state; both can show simultaneously */}
+                    {item.doi && (
+                      <a href={`https://doi.org/${item.doi}`} target="_blank" rel="noopener noreferrer"
+                        className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg"
+                        style={{ backgroundColor: "transparent", color: "var(--color-navy)", fontSize: 12, fontWeight: 700, border: "1px solid var(--color-navy)", borderRadius: 7, cursor: "pointer", minHeight: 44, textDecoration: "none" }}>
+                        <ExternalLink size={13} /> Open via DOI
+                      </a>
+                    )}
+                    {item.url && !isDirectPdfUrl && (
+                      <a href={item.url} target="_blank" rel="noopener noreferrer"
+                        className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg"
+                        style={{ backgroundColor: "transparent", color: "var(--color-navy)", fontSize: 12, fontWeight: 700, border: "1px solid var(--color-navy)", borderRadius: 7, cursor: "pointer", minHeight: 44, textDecoration: "none" }}>
+                        <ExternalLink size={13} /> Open URL
+                      </a>
+                    )}
+                  </div>
+                  {!hasPdf && !item.doi && !item.url && (
+                    <p style={{ fontSize: 12, color: "var(--color-secondary)", marginTop: 6 }}>No DOI, URL, or file attached yet.</p>
+                  )}
+                </>
+              );
+            })()}
           </div>
         )}
 
@@ -2976,7 +2984,17 @@ function DetailPanelContent({
                   <div key={file.id} className="flex items-center gap-2 px-3 py-2 rounded-lg" style={{ backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)" }}>
                     <FileText size={14} color="#C0392B" />
                     <div className="flex-1 min-w-0">
-                      <p style={{ fontSize: 12, fontWeight: 500, color: "var(--color-body)" }}>{file.name}</p>
+                      {file.url ? (
+                        <button
+                          onClick={() => { setPdfViewerInitialPage(1); setShowPDFViewer(true); }}
+                          style={{ fontSize: 12, fontWeight: 500, color: "var(--color-navy)", background: "none", border: "none", cursor: "pointer", padding: 0, textAlign: "left", textDecoration: "underline", textDecorationStyle: "dotted" }}
+                          title="Open in PDF viewer"
+                        >
+                          {file.name}
+                        </button>
+                      ) : (
+                        <p style={{ fontSize: 12, fontWeight: 500, color: "var(--color-body)" }}>{file.name}</p>
+                      )}
                       <p style={{ fontSize: 10, color: "var(--color-secondary)" }}>
                         {formatFileSize(file.size)}
                         {file.ocrStatus === "ready" && <span style={{ marginLeft: 6, color: "var(--color-success)" }}>✓ Searchable</span>}
@@ -3388,7 +3406,7 @@ function DetailPanelContent({
 
       {/* PDF Viewer overlay — position: fixed, renders above everything */}
       {showPDFViewer && (() => {
-        const pdfFile = localFiles.find((f) => f.url && f.name.toLowerCase().endsWith(".pdf"));
+        const pdfFile = localFiles.find((f) => f.url);
         // Prefer an uploaded/stored file; fall back to external PDF URL for direct-.pdf links.
         const viewerUrl = pdfFile?.url ?? pdfViewerExternalUrl;
         if (!viewerUrl) { setShowPDFViewer(false); return null; }
@@ -3547,6 +3565,12 @@ export default function LiteraturePage() {
     else { document.body.style.overflow = ""; }
     return () => { document.body.style.overflow = ""; };
   }, [collectionsOpen]);
+
+  // Clear the detail panel whenever the lab/project scope changes so a previously
+  // selected item from another scope doesn't remain visible with 0 matching items.
+  useEffect(() => {
+    setSelectedItemId(null);
+  }, [effectiveLitScope, effectiveLitSubProjectId]);
 
   // Derive selectedItem from items so updates are atomic — no two-render flicker
   const selectedItem = items.find((i) => i.id === selectedItemId) ?? null;
