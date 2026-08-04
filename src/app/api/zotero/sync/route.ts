@@ -239,9 +239,22 @@ export async function POST(request: Request) {
         annotationColor, annotationPageLabel, annotationPosition,
       } = ann.data;
 
-      // Parse page number from label (may be "1", "A3", etc. — take integer portion)
-      const rawPage = annotationPageLabel ? parseInt(annotationPageLabel, 10) : NaN;
-      const pageNumber = isNaN(rawPage) ? 1 : Math.max(1, rawPage);
+      // Parse position once — shared by both pageNumber and bbox.
+      // pageIndex is 0-based and maps directly to PDF viewer page numbers (pageIndex 0 = page 1).
+      // annotationPageLabel is the *printed* journal page (e.g. "77" for an article on pp. 77–101)
+      // which does NOT correspond to the PDF's internal page numbers, so we prefer pageIndex.
+      let parsedPos: { pageIndex?: number; rects?: number[][]; width?: number } | null = null;
+      if (annotationPosition) {
+        if (typeof annotationPosition === "string") {
+          try { parsedPos = JSON.parse(annotationPosition); } catch { /* ignore */ }
+        } else if (typeof annotationPosition === "object") {
+          parsedPos = annotationPosition as unknown as typeof parsedPos;
+        }
+      }
+      const pageNumber =
+        typeof parsedPos?.pageIndex === "number" ? parsedPos.pageIndex + 1
+        : annotationPageLabel ? Math.max(1, parseInt(annotationPageLabel, 10))
+        : 1;
 
       const bbox = zoteroPosToBbox(annotationPosition);
       const type =
