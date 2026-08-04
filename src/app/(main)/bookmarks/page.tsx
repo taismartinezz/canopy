@@ -253,6 +253,25 @@ function AddForm({ onAdd, onCancel }: {
   );
 }
 
+// ── Favicon loader for "link" type bookmarks ─────────────────────────────────
+
+function FaviconImg({ url, fallbackColor }: { url: string; fallbackColor: string }) {
+  const [failed, setFailed] = useState(false);
+  const domain = (() => { try { return new URL(url).hostname; } catch { return ""; } })();
+  if (!domain || failed) return <Link2 size={16} color={fallbackColor} />;
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={`https://www.google.com/s2/favicons?domain=${domain}&sz=32`}
+      alt=""
+      width={16}
+      height={16}
+      onError={() => setFailed(true)}
+      style={{ borderRadius: 3, objectFit: "contain" }}
+    />
+  );
+}
+
 // ── Bookmark card ─────────────────────────────────────────────────────────────
 
 function BookmarkCard({ bm, canDelete, onDelete, onEdit }: {
@@ -362,7 +381,11 @@ function BookmarkCard({ bm, canDelete, onDelete, onEdit }: {
           backgroundColor: cfg.bg, display: "flex",
           alignItems: "center", justifyContent: "center", flexShrink: 0,
         }}>
-          <Icon size={16} color={cfg.color} />
+          {type === "link" ? (
+            <FaviconImg url={bm.url} fallbackColor={cfg.color} />
+          ) : (
+            <Icon size={16} color={cfg.color} />
+          )}
         </div>
         <div style={{ display: "flex", gap: 4, alignItems: "center", flexShrink: 0 }}>
           {isInternal && (
