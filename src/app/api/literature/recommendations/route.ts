@@ -6,6 +6,7 @@ import { createClient } from "@supabase/supabase-js";
 export const runtime = "nodejs";
 
 const CACHE_TTL_HOURS = 24;
+const OA_HEADERS = { "User-Agent": "Canopy/1.0 (research-lab-app; mailto:admin@canopy.app)" };
 
 interface RecResult {
   title: string;
@@ -16,11 +17,31 @@ interface RecResult {
   openAlexId: string;
 }
 
+type OAWork = {
+  id: string; display_name: string;
+  authorships?: Array<{ author: { display_name: string } }>;
+  publication_year?: number;
+  primary_location?: { source?: { display_name?: string } };
+  doi?: string;
+};
+
+function mapWork(w: OAWork): RecResult {
+  return {
+    title: w.display_name,
+    authors: (w.authorships ?? []).slice(0, 3).map((a) => a.author.display_name),
+    year: w.publication_year,
+    journal: w.primary_location?.source?.display_name,
+    doi: w.doi?.replace("https://doi.org/", ""),
+    openAlexId: w.id,
+  };
+}
+
 export async function POST(request: Request) {
-  const { doi, sourceItemId, projectId } = (await request.json()) as {
+  const { doi, sourceItemId, projectId, title } = (await request.json()) as {
     doi?: string;
     sourceItemId?: string;
     projectId?: string;
+    title?: string;
   };
 
   if (!doi || !sourceItemId || !projectId) {
@@ -59,49 +80,51 @@ export async function POST(request: Request) {
     });
   }
 
-  // Fetch from OpenAlex
   try {
+    // Primary: look up by DOI and use OpenAlex related_works links
+    let recommendations: RecResult[] = [];
     const workRes = await fetch(
       `https://api.openalex.org/works/doi:${encodeURIComponent(doi)}`,
-      { headers: { "User-Agent": "Canopy/1.0 (research-lab-app; mailto:admin@canopy.app)" } }
+      { headers: OA_HEADERS }
     );
-    if (!workRes.ok) return Response.json({ recommendations: [] });
 
-    const work = await workRes.json() as { related_works?: string[] };
-    const relatedIds: string[] = (work.related_works ?? []).slice(0, 10);
-    if (!relatedIds.length) return Response.json({ recommendations: [] });
+    if (workRes.ok) {
+      const work = await workRes.json() as { related_works?: string[] };
+      const relatedIds: string[] = (work.related_works ?? []).slice(0, 10);
 
-    const recsRes = await fetch(
-      `https://api.openalex.org/works?filter=ids.openalex:${encodeURIComponent(relatedIds.join("|"))}&per_page=5&select=id,display_name,authorships,publication_year,primary_location,doi`,
-      { headers: { "User-Agent": "Canopy/1.0 (research-lab-app; mailto:admin@canopy.app)" } }
-    );
-    if (!recsRes.ok) return Response.json({ recommendations: [] });
+      if (relatedIds.length > 0) {
+        const recsRes = await fetch(
+          `https://api.openalex.org/works?filter=ids.openalex:${encodeURIComponent(relatedIds.join("|"))}&per_page=5&select=id,display_name,authorships,publication_year,primary_location,doi`,
+          { headers: OA_HEADERS }
+        );
+        if (recsRes.ok) {
+          const { results = [] } = await recsRes.json() as { results: OAWork[] };
+          recommendations = results.map(mapWork);
+        }
+      }
+    }
 
-    const { results = [] } = await recsRes.json() as {
-      results: Array<{
-        id: string; display_name: string;
-        authorships?: Array<{ author: { display_name: string } }>;
-        publication_year?: number;
-        primary_location?: { source?: { display_name?: string } };
-        doi?: string;
-      }>;
-    };
+    // Fallback: title keyword search when DOI lookup fails or returns no related works.
+    // Covers cases where the paper is absent from OpenAlex or has an empty related_works list.
+    if (recommendations.length === 0 && title) {
+      const searchRes = await fetch(
+        `https://api.openalex.org/works?search=${encodeURIComponent(title)}&per_page=5&select=id,display_name,authorships,publication_year,primary_location,doi`,
+        { headers: OA_HEADERS }
+      );
+      if (searchRes.ok) {
+        const { results = [] } = await searchRes.json() as { results: OAWork[] };
+        // Exclude the source paper itself (same DOI)
+        const normDoi = doi.toLowerCase();
+        recommendations = results
+          .filter((w) => !w.doi || w.doi.replace("https://doi.org/", "").toLowerCase() !== normDoi)
+          .slice(0, 5)
+          .map(mapWork);
+      }
+    }
 
-    const recommendations: RecResult[] = results.map((w) => ({
-      title: w.display_name,
-      authors: (w.authorships ?? []).slice(0, 3).map((a) => a.author.display_name),
-      year: w.publication_year,
-      journal: w.primary_location?.source?.display_name,
-      doi: w.doi?.replace("https://doi.org/", ""),
-      openAlexId: w.id,
-    }));
-
-    // Delete stale cache entries for this item before inserting fresh ones
-    await supabase
-      .from("lit_recommendation_cache")
-      .delete()
-      .eq("source_item_id", sourceItemId)
-      .eq("project_id", projectId);
+    // Persist to cache and return
+    await supabase.from("lit_recommendation_cache").delete()
+      .eq("source_item_id", sourceItemId).eq("project_id", projectId);
 
     if (recommendations.length > 0) {
       await supabase.from("lit_recommendation_cache").insert(

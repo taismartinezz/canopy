@@ -69,13 +69,81 @@ function formatAuthors(authors: string | string[]) {
   return `${arr[0]} et al.`;
 }
 
+function stripHtml(html: string): string {
+  return html
+    .replace(/<[^>]+>/g, "")
+    .replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&nbsp;/g, " ");
+}
+
+function parseAuthor(raw: string): { last: string; first: string } {
+  const c = raw.indexOf(",");
+  if (c !== -1) return { last: raw.slice(0, c).trim(), first: raw.slice(c + 1).trim() };
+  const parts = raw.trim().split(/\s+/);
+  return { last: parts[parts.length - 1] ?? "", first: parts.slice(0, -1).join(" ") };
+}
+
 function formatCitation(item: LiteratureItem, style: "apa" | "mla" | "chicago"): string {
-  const authors = toAuthorsArray(item.authors).join(", ");
-  if (style === "apa")
-    return `${authors} (${item.year}). ${item.title}. ${item.journal ?? item.publisher ?? ""}${item.volume ? `, ${item.volume}` : ""}${item.pages ? `, ${item.pages}` : ""}.${item.doi ? ` https://doi.org/${item.doi}` : ""}`;
-  if (style === "mla")
-    return `${authors}. "${item.title}." ${item.journal ?? item.publisher ?? ""} ${item.volume ?? ""} (${item.year})${item.pages ? `: ${item.pages}` : ""}.`;
-  return `${authors}. "${item.title}." ${item.journal ?? item.publisher ?? ""} ${item.volume ?? ""} (${item.year}).`;
+  const parsed = toAuthorsArray(item.authors).map(parseAuthor);
+  const journal = item.journal ?? item.publisher ?? "";
+  const year = item.year > 0 ? String(item.year) : "n.d.";
+  const title = stripHtml(item.title);
+
+  if (style === "apa") {
+    // APA 7th: Last, F., Last, F., & Last, F. (Year). Title. Journal, Volume, Pages. DOI
+    const fmt = (a: { last: string; first: string }) =>
+      `${a.last}, ${a.first ? a.first[0].toUpperCase() + "." : ""}`;
+    let authorStr = "";
+    if (parsed.length === 1) {
+      authorStr = fmt(parsed[0]);
+    } else if (parsed.length > 1) {
+      const parts = parsed.map(fmt);
+      const last = parts.pop()!;
+      authorStr = parts.join(", ") + ", & " + last;
+    }
+    const vol = item.volume ? `, ${item.volume}` : "";
+    const pages = item.pages ? `, ${item.pages}` : "";
+    const doi = item.doi ? ` https://doi.org/${item.doi}` : "";
+    return `${authorStr} (${year}). ${title}. ${journal}${vol}${pages}.${doi}`;
+  }
+
+  if (style === "mla") {
+    // MLA 9th: Last, First[, and First Last | , et al.]. "Title." Journal, vol. Volume, Year, pp. Pages.
+    let authorStr = "";
+    if (parsed.length === 1) {
+      const a = parsed[0];
+      authorStr = a.first ? `${a.last}, ${a.first}` : a.last;
+    } else if (parsed.length === 2) {
+      const [a, b] = parsed;
+      authorStr = `${a.first ? `${a.last}, ${a.first}` : a.last}, and ${b.first ? `${b.first} ${b.last}` : b.last}`;
+    } else if (parsed.length > 2) {
+      const a = parsed[0];
+      authorStr = `${a.first ? `${a.last}, ${a.first}` : a.last}, et al.`;
+    }
+    const vol = item.volume ? `, vol. ${item.volume}` : "";
+    const pages = item.pages ? `, pp. ${item.pages}` : "";
+    return `${authorStr}. "${title}." ${journal}${vol}, ${year}${pages}.`;
+  }
+
+  // Chicago 17th: Last, First[, First Last[, and First Last]]. "Title." Journal Volume (Year): Pages. DOI.
+  let authorStr = "";
+  if (parsed.length === 1) {
+    const a = parsed[0];
+    authorStr = a.first ? `${a.last}, ${a.first}` : a.last;
+  } else if (parsed.length === 2) {
+    const [a, b] = parsed;
+    authorStr = `${a.first ? `${a.last}, ${a.first}` : a.last}, and ${b.first ? `${b.first} ${b.last}` : b.last}`;
+  } else if (parsed.length === 3) {
+    const [a, b, c] = parsed;
+    authorStr = `${a.first ? `${a.last}, ${a.first}` : a.last}, ${b.first ? `${b.first} ${b.last}` : b.last}, and ${c.first ? `${c.first} ${c.last}` : c.last}`;
+  } else if (parsed.length > 3) {
+    const a = parsed[0];
+    authorStr = `${a.first ? `${a.last}, ${a.first}` : a.last}, et al.`;
+  }
+  const vol = item.volume ? ` ${item.volume}` : "";
+  const pages = item.pages ? `: ${item.pages}` : "";
+  const doi = item.doi ? ` https://doi.org/${item.doi}.` : "";
+  return `${authorStr}. "${title}." ${journal}${vol} (${year})${pages}.${doi}`;
 }
 
 function guessLitFileType(name: string): string {
@@ -2668,7 +2736,7 @@ function DetailPanelContent({
       const res = await fetch("/api/literature/recommendations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ doi: item.doi, sourceItemId: item.id, projectId }),
+        body: JSON.stringify({ doi: item.doi, sourceItemId: item.id, projectId, title: stripHtml(item.title) }),
       });
       if (!res.ok) throw new Error(`Server error ${res.status}`);
       const { recommendations = [] } = await res.json() as {
@@ -2880,7 +2948,7 @@ function DetailPanelContent({
               {TYPE_ICONS[item.type]}
               <StatusBadge status={localStatus} />
             </div>
-            <p style={{ fontFamily: "var(--font-lora)", fontWeight: 600, fontSize: 13, color: "var(--color-body)", lineHeight: 1.4, margin: 0 }}>{item.title}</p>
+            <p style={{ fontFamily: "var(--font-lora)", fontWeight: 600, fontSize: 13, color: "var(--color-body)", lineHeight: 1.4, margin: 0 }}>{stripHtml(item.title)}</p>
           </div>
           <div className="flex items-center gap-1 shrink-0">
             {onDeleteItem && (
@@ -3305,7 +3373,7 @@ function DetailPanelContent({
                       <button key={id} className="w-full text-left flex items-start gap-2 px-3 py-2.5 rounded-lg" style={{ backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)", borderRadius: 8, minHeight: 44 }}>
                         {TYPE_ICONS[rel.type]}
                         <div className="flex-1 min-w-0">
-                          <p style={{ fontSize: 12, color: "var(--color-body)", lineHeight: 1.35 }}>{rel.title.length > 60 ? rel.title.slice(0, 60) + "…" : rel.title}</p>
+                          <p style={{ fontSize: 12, color: "var(--color-body)", lineHeight: 1.35 }}>{(() => { const t = stripHtml(rel.title); return t.length > 60 ? t.slice(0, 60) + "…" : t; })()}</p>
                           <div className="flex items-center gap-2 mt-1"><span style={{ fontSize: 10, color: "var(--color-secondary)" }}>{rel.year}</span><StatusBadge status={rel.status} /></div>
                         </div>
                       </button>
@@ -3897,7 +3965,18 @@ export default function LiteraturePage() {
     return item.scope === "lab";
   });
 
-  const availableYears = [...new Set(scopedItems.map((i) => i.year).filter(Boolean))].sort((a, b) => b - a);
+  // Extract year from DOI as a fallback for items with missing year metadata.
+  // Handles common patterns like 10.1080/19331681.2025.2501027 where the year is
+  // embedded as a 4-digit segment after the publisher prefix.
+  function itemEffectiveYear(i: LiteratureItem): number {
+    if (i.year > 0) return i.year;
+    if (i.doi) {
+      const m = i.doi.match(/\b(20\d{2}|19\d{2})\b/);
+      if (m) return parseInt(m[1], 10);
+    }
+    return 0;
+  }
+  const availableYears = [...new Set(scopedItems.map(itemEffectiveYear).filter(Boolean))].sort((a, b) => b - a);
 
   const filtered = scopedItems
     .filter((item) => {
@@ -3905,7 +3984,7 @@ export default function LiteraturePage() {
           !toAuthorsArray(item.authors).some((a) => a.toLowerCase().includes(search.toLowerCase()))) return false;
       if (statusFilter !== "all" && item.status !== statusFilter) return false;
       if (typeFilter !== "all" && item.type !== typeFilter) return false;
-      if (yearFilter !== "all" && item.year !== yearFilter) return false;
+      if (yearFilter !== "all" && itemEffectiveYear(item) !== yearFilter) return false;
       if (activeTag && !item.tags.includes(activeTag)) return false;
       if (activeCollection !== "lc0" && !item.collections.includes(activeCollection)) return false;
       return true;
@@ -4064,7 +4143,7 @@ export default function LiteraturePage() {
                         />
                       )}
                       <span style={{ flexShrink: 0, width: 24 }}>{TYPE_ICONS[item.type]}</span>
-                      <span title={item.title} style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 500, color: "var(--color-body)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.title}</span>
+                      <span title={stripHtml(item.title)} style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 500, color: "var(--color-body)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{stripHtml(item.title)}</span>
                       <span style={{ flexShrink: 0, fontSize: 11, color: "var(--color-secondary)", whiteSpace: "nowrap", marginRight: 8 }}>
                         {item.deletedAt ? timeAgo(item.deletedAt) : ""}
                       </span>
@@ -4215,7 +4294,7 @@ export default function LiteraturePage() {
                         />
                       )}
                       <span style={{ flexShrink: 0, width: 28 }}>{TYPE_ICONS[item.type]}</span>
-                      <span title={item.title} style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 500, color: "var(--color-body)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.title}</span>
+                      <span title={stripHtml(item.title)} style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 500, color: "var(--color-body)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{stripHtml(item.title)}</span>
                       {!narrowList && <span style={{ flexShrink: 0, width: 100, fontSize: 12, color: "var(--color-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{formatAuthors(item.authors)}</span>}
                       {!narrowList && <span style={{ flexShrink: 0, width: 70, fontSize: 12, color: "var(--color-secondary)" }}>{item.year > 0 ? item.year : ""}</span>}
                       <span style={{ flexShrink: 0, width: 90 }}><StatusBadge status={item.status} /></span>

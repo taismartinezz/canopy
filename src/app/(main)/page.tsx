@@ -14,6 +14,7 @@ import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import type { Task, CalendarEvent, DashboardPost, TaskStatus, User } from "@/types";
 import { useProject } from "@/context/ProjectContext";
 import Avatar from "@/components/ui/Avatar";
+import { AssigneeStack } from "@/components/tasks/TaskDetailPanel";
 import { Plus, ChevronRight, X } from "lucide-react";
 import Link from "next/link";
 import TaskDetailPanel, { STATUS_CONFIG, STATUS_ORDER } from "@/components/tasks/TaskDetailPanel";
@@ -334,13 +335,7 @@ function MiniTaskCardContent({ task, teamMembers }: { task: Task; teamMembers: U
         <span className="px-2 py-0.5" style={{ backgroundColor: priorityBg, color: priority, fontSize: 11, fontWeight: 600, borderRadius: 4 }}>
           {symbol} {task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}
         </span>
-        <div className="flex items-center">
-          {assignees.slice(0, 3).map((user, i) => (
-            <div key={user!.id} style={{ marginLeft: i > 0 ? -6 : 0, position: "relative", zIndex: 3 - i }}>
-              <Avatar user={user!} size={20} />
-            </div>
-          ))}
-        </div>
+        <AssigneeStack ids={task.assigneeIds} size={20} users={teamMembers} />
       </div>
     </div>
   );
