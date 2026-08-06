@@ -2535,6 +2535,53 @@ function CitationLinker({ text, items, onSelectItem }: {
 const DETAIL_TABS = ["Info", "Abstract", "Notes", "Tags", "Files", "Cite", "Related", "Annotations", "Assigned"] as const;
 type DetailTab = typeof DETAIL_TABS[number];
 
+function DetailTabBar({ tab, setTab }: { tab: DetailTab; setTab: (t: DetailTab) => void }) {
+  const barRef = useRef<HTMLDivElement>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
+  useEffect(() => {
+    const el = barRef.current;
+    if (!el) return;
+    const check = () => {
+      setCanScrollLeft(el.scrollLeft > 4);
+      setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 4);
+    };
+    check();
+    el.addEventListener("scroll", check, { passive: true });
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    return () => { el.removeEventListener("scroll", check); ro.disconnect(); };
+  }, []);
+
+  const scroll = (dir: -1 | 1) => barRef.current?.scrollBy({ left: dir * 120, behavior: "smooth" });
+
+  return (
+    <div style={{ position: "relative", borderBottom: "1px solid var(--color-border)" }}>
+      {canScrollLeft && (
+        <button onClick={() => scroll(-1)} aria-label="Scroll tabs left"
+          style={{ position: "absolute", left: 0, top: 0, bottom: 0, zIndex: 2, width: 28, display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(to right, var(--color-surface) 60%, transparent)", border: "none", cursor: "pointer", padding: 0 }}>
+          <ChevronLeft size={14} color="var(--color-secondary)" />
+        </button>
+      )}
+      <div ref={barRef} className="flex overflow-x-auto px-1" style={{ scrollbarWidth: "none" }}>
+        {DETAIL_TABS.map((t) => (
+          <button key={t} onClick={() => setTab(t)}
+            style={{ fontSize: 12, fontWeight: tab === t ? 600 : 400, color: tab === t ? "var(--color-navy)" : "var(--color-secondary)", backgroundColor: "transparent", border: "none", borderBottom: tab === t ? "2px solid var(--color-navy)" : "2px solid transparent", cursor: "pointer", padding: "10px 10px", whiteSpace: "nowrap", minHeight: 44 }}>
+            {t}
+          </button>
+        ))}
+      </div>
+      {canScrollRight && (
+        <button onClick={() => scroll(1)} aria-label="Scroll tabs right"
+          style={{ position: "absolute", right: 0, top: 0, bottom: 0, zIndex: 2, width: 28, display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(to left, var(--color-surface) 60%, transparent)", border: "none", cursor: "pointer", padding: 0 }}>
+          <ChevronRight size={14} color="var(--color-secondary)" />
+        </button>
+      )}
+    </div>
+  );
+}
+
 function DetailPanelContent({
   item, onClose, onUpdateItem, onDeleteItem, allItems, currentUserId, projectId, onAddItem, subProjectId, teamMembers, onNavigateToItem,
 }: {
@@ -2968,14 +3015,7 @@ function DetailPanelContent({
         </div>
       </div>
 
-      <div className="flex overflow-x-auto px-1" style={{ borderBottom: "1px solid var(--color-border)" }}>
-        {DETAIL_TABS.map((t) => (
-          <button key={t} onClick={() => setTab(t)}
-            style={{ fontSize: 12, fontWeight: tab === t ? 600 : 400, color: tab === t ? "var(--color-navy)" : "var(--color-secondary)", backgroundColor: "transparent", border: "none", borderBottom: tab === t ? "2px solid var(--color-navy)" : "2px solid transparent", cursor: "pointer", padding: "10px 10px", whiteSpace: "nowrap", minHeight: 44 }}>
-            {t}
-          </button>
-        ))}
-      </div>
+      <DetailTabBar tab={tab} setTab={setTab} />
 
       <div className="flex-1 overflow-y-auto">
         {tab === "Info" && (
@@ -3995,8 +4035,7 @@ export default function LiteraturePage() {
   const showingDetailMobile = isMobile && selectedItem !== null;
   const currentUserRole = (teamMembers.find((m) => m.id === currentUserId)?.role ?? "researcher") as UserRole;
 
-  // When the detail panel is open on desktop, drop Authors/Year columns so title isn't squeezed
-  const narrowList = isMobile || (selectedItem !== null && !isMobile);
+  const narrowList = isMobile;
 
   return (
     <div className="flex h-full" style={{ fontFamily: "var(--font-roboto)" }}>

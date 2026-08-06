@@ -64,6 +64,7 @@ function SidebarBody({
   collapsed = false,
   onCollapse,
   onExpand,
+  pastDueCount = 0,
 }: {
   isActive: (href: string) => boolean;
   onLinkClick?: () => void;
@@ -74,6 +75,7 @@ function SidebarBody({
   collapsed?: boolean;
   onCollapse?: () => void;
   onExpand?: () => void;
+  pastDueCount?: number;
 }) {
   // ── Collapsed: icon-only rail ───────────────────────────────────────────────
   if (collapsed) {
@@ -93,28 +95,22 @@ function SidebarBody({
         <nav className="flex-1 flex flex-col items-center px-1.5 py-2 gap-1 overflow-y-auto" aria-label="Main navigation">
           {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
             const active = isActive(href);
+            const showBadge = href === "/reminders" && pastDueCount > 0;
             return (
               <Link
                 key={href}
                 href={href}
                 onClick={onLinkClick}
-                title={label}
-                aria-label={label}
+                title={showBadge ? `${label} (${pastDueCount} past due)` : label}
+                aria-label={showBadge ? `${label} — ${pastDueCount} past due` : label}
                 className="flex items-center justify-center rounded-lg"
-                style={{
-                  width: 36,
-                  height: 36,
-                  backgroundColor: active ? "rgba(27,46,75,0.08)" : "transparent",
-                  color: active ? "var(--color-navy)" : "var(--color-secondary)",
-                  textDecoration: "none",
-                  transition: "background-color 0.12s",
-                  borderLeft: active ? "2.5px solid var(--color-navy)" : "2.5px solid transparent",
-                }}
+                style={{ position: "relative", width: 36, height: 36, backgroundColor: active ? "rgba(27,46,75,0.08)" : "transparent", color: active ? "var(--color-navy)" : "var(--color-secondary)", textDecoration: "none", transition: "background-color 0.12s", borderLeft: active ? "2.5px solid var(--color-navy)" : "2.5px solid transparent" }}
                 aria-current={active ? "page" : undefined}
                 onMouseEnter={(e) => { if (!active) (e.currentTarget as HTMLElement).style.backgroundColor = "rgba(27,46,75,0.04)"; }}
                 onMouseLeave={(e) => { if (!active) (e.currentTarget as HTMLElement).style.backgroundColor = active ? "rgba(27,46,75,0.08)" : "transparent"; }}
               >
                 <Icon size={16} strokeWidth={active ? 2.5 : 1.8} fill={active ? "rgba(27,46,75,0.12)" : "none"} />
+                {showBadge && <span aria-hidden style={{ position: "absolute", top: 4, right: 4, minWidth: 14, height: 14, backgroundColor: "#C0392B", borderRadius: 7, fontSize: 9, fontWeight: 700, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", padding: "0 3px" }}>{pastDueCount > 9 ? "9+" : pastDueCount}</span>}
               </Link>
             );
           })}
@@ -160,6 +156,7 @@ function SidebarBody({
       <nav className="flex-1 px-2 space-y-0.5 overflow-y-auto" aria-label="Main navigation">
         {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
           const active = isActive(href);
+          const showBadge = href === "/reminders" && pastDueCount > 0;
           return (
             <Link
               key={href}
@@ -185,7 +182,8 @@ function SidebarBody({
               onMouseLeave={(e) => { if (!active) (e.currentTarget as HTMLElement).style.backgroundColor = ""; }}
             >
               <Icon size={15} strokeWidth={active ? 2.5 : 1.8} fill={active ? "rgba(27,46,75,0.12)" : "none"} />
-              {label}
+              <span style={{ flex: 1 }}>{label}</span>
+              {showBadge && <span aria-label={`${pastDueCount} past due`} style={{ minWidth: 18, height: 18, backgroundColor: "#C0392B", borderRadius: 9, fontSize: 10, fontWeight: 700, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px", flexShrink: 0 }}>{pastDueCount > 9 ? "9+" : pastDueCount}</span>}
             </Link>
           );
         })}
@@ -332,6 +330,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [team, setTeam] = useState<User[]>([]);
   const [notifications, setNotifications] = useState<SupabaseNotif[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [pastDueCount, setPastDueCount] = useState(0);
   const hasFetched = useRef(false);
 
   // ── Auth gate + notifications ─────────────────────────────────────────────
@@ -402,6 +401,17 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             setUnreadCount((prev) => prev + 1);
           })
           .subscribe();
+
+        // Count past-due reminders for badge
+        const now = new Date().toISOString();
+        const { count: pdCount } = await supabase
+          .from("reminders")
+          .select("id", { count: "exact", head: true })
+          .eq("completed", false)
+          .not("due_at", "is", null)
+          .lt("due_at", now)
+          .or(`user_id.eq.${user.id},assignee_id.eq.${user.id}`);
+        setPastDueCount(pdCount ?? 0);
 
         setProfile(prof);
         setAuthed(true);
@@ -539,9 +549,30 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   if (!authed) {
     return (
-      <div className="flex h-full items-center justify-center" style={{ backgroundColor: "var(--color-canvas)" }}>
-        <div style={{ width: 32, height: 32, border: "3px solid var(--color-border)", borderTopColor: "var(--color-navy)", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
-        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      <div className="flex h-full" style={{ backgroundColor: "var(--color-canvas)" }}>
+        <style>{`@keyframes shimmer{0%{background-position:-400px 0}100%{background-position:400px 0}}.sk{background:linear-gradient(90deg,var(--color-border) 25%,var(--color-surface) 50%,var(--color-border) 75%);background-size:800px 100%;animation:shimmer 1.4s infinite linear;border-radius:6px;}`}</style>
+        {/* Project rail skeleton */}
+        <div className="hidden md:flex flex-col items-center shrink-0" style={{ width: 52, backgroundColor: "var(--color-strip)", borderRight: "1px solid var(--color-border)", paddingTop: 12, gap: 10 }}>
+          <div className="sk" style={{ width: 36, height: 36, borderRadius: 10 }} />
+          <div style={{ width: 28, height: 1, backgroundColor: "var(--color-border)" }} />
+          {[1,2,3].map(i => <div key={i} className="sk" style={{ width: 36, height: 36, borderRadius: 10 }} />)}
+        </div>
+        {/* Nav sidebar skeleton */}
+        <div className="hidden md:flex flex-col shrink-0" style={{ width: 200, borderRight: "1px solid var(--color-border)", padding: "16px 12px", gap: 8 }}>
+          <div className="sk" style={{ width: 100, height: 14 }} />
+          {[1,2,3,4,5,6].map(i => <div key={i} className="sk" style={{ width: `${60 + (i % 3) * 15}%`, height: 12 }} />)}
+          <div style={{ marginTop: 12 }} />
+          <div className="sk" style={{ width: 80, height: 14 }} />
+          {[1,2,3].map(i => <div key={i} className="sk" style={{ width: `${55 + (i % 2) * 20}%`, height: 12 }} />)}
+        </div>
+        {/* Main content skeleton */}
+        <div className="flex-1 flex flex-col" style={{ padding: 24, gap: 16 }}>
+          <div className="sk" style={{ width: 200, height: 24 }} />
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+            {[180, 220, 160, 200].map((w, i) => <div key={i} className="sk" style={{ width: w, height: 80, borderRadius: 8 }} />)}
+          </div>
+          {[1,2,3,4].map(i => <div key={i} className="sk" style={{ width: `${70 + (i % 3) * 10}%`, height: 14 }} />)}
+        </div>
       </div>
     );
   }
@@ -720,6 +751,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           collapsed={navCollapsed}
           onCollapse={() => { setNavCollapsed(true); localStorage.setItem("canopy_nav_collapsed", "true"); }}
           onExpand={() => { setNavCollapsed(false); localStorage.setItem("canopy_nav_collapsed", "false"); }}
+          pastDueCount={pastDueCount}
         />
       </div>
 
@@ -743,6 +775,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           onClose={() => setMobileNavOpen(false)}
           team={team}
           currentUserId={profile?.id ?? ""}
+          pastDueCount={pastDueCount}
         />
       </div>
 
