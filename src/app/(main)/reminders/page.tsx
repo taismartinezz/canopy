@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useMemo, Fragment } from "react";
-import { Plus, Check, List, Trash2, ChevronLeft, ChevronRight, GripVertical, Users, User as UserIcon, Pencil } from "lucide-react";
+import { Plus, Check, List, Trash2, ChevronLeft, ChevronRight, GripVertical, Users, User as UserIcon, Pencil, AlertCircle } from "lucide-react";
 import { DateTimeFields, isoToLocalDate } from "@/components/ui/DateTimePicker";
 import { DndContext, DragOverlay, useDraggable, useDroppable, PointerSensor, KeyboardSensor, useSensor, useSensors } from "@dnd-kit/core";
 import type { DragEndEvent } from "@dnd-kit/core";
@@ -180,13 +180,14 @@ function CompletionCircle({ completing, color, onClick }: { completing: boolean;
 interface ReminderRowProps {
   reminder: Reminder; currentUserId: string; teamMembers: User[]; isDraggable: boolean;
   showScopeHint?: boolean;
+  isPastDue?: boolean;
   onComplete: (id: string) => void; onDelete: (id: string) => void; onEdit: () => void;
   onDragStart?: () => void; onDragEnd?: () => void;
   onDragOver?: (e: React.DragEvent) => void; onDrop?: (e: React.DragEvent) => void;
   isDragging?: boolean;
 }
 
-function ReminderRow({ reminder, currentUserId, teamMembers, isDraggable, showScopeHint, onComplete, onDelete, onEdit, onDragStart, onDragEnd, onDragOver, onDrop, isDragging }: ReminderRowProps) {
+function ReminderRow({ reminder, currentUserId, teamMembers, isDraggable, showScopeHint, isPastDue, onComplete, onDelete, onEdit, onDragStart, onDragEnd, onDragOver, onDrop, isDragging }: ReminderRowProps) {
   const [completing, setCompleting] = useState(false);
   const [hovered, setHovered] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -230,7 +231,8 @@ function ReminderRow({ reminder, currentUserId, teamMembers, isDraggable, showSc
                 {PRIORITY_MARKS[reminder.priority]}
               </span>
             )}
-            <span style={{ fontSize: 15, color: "var(--color-body)", fontFamily: "var(--font-roboto)", lineHeight: 1.3 }}>{reminder.title}</span>
+            {isPastDue && <span title="Past due" style={{ color: "#C0392B", display: "flex", alignItems: "center", flexShrink: 0 }}><AlertCircle size={13} strokeWidth={2.5} /></span>}
+            <span style={{ fontSize: 15, color: isPastDue ? "#C0392B" : "var(--color-body)", fontWeight: isPastDue ? 600 : 400, fontFamily: "var(--font-roboto)", lineHeight: 1.3 }}>{reminder.title}</span>
           </div>
           {reminder.dueAt && (
             <div style={{ fontSize: 12, marginTop: 2, color: "var(--color-secondary)" }}>
@@ -762,13 +764,13 @@ function GroupedView({ includeNoDate, ...props }: CardProps & { includeNoDate: b
     fontSize: 11, fontWeight: 500, color: "var(--color-secondary)", opacity: 0.65, fontFamily: "var(--font-roboto)"
   };
 
-  function renderRows(items: Reminder[]) {
+  function renderRows(items: Reminder[], isPastDue?: boolean) {
     return items.map(r => (
       <Fragment key={r.id}>
         {props.editingId === r.id ? (
           <ReminderEditRow reminder={r} teamMembers={props.teamMembers} currentUserId={props.currentUserId} projectId={props.projectId} onSave={props.onSave} onCancel={props.onCancelEdit} />
         ) : (
-          <DndReminderRow reminder={r} currentUserId={props.currentUserId} teamMembers={props.teamMembers} showScopeHint={props.showScopeHint} onComplete={props.onComplete} onDelete={props.onDelete} onEdit={() => props.onEdit(r.id)} />
+          <DndReminderRow reminder={r} currentUserId={props.currentUserId} teamMembers={props.teamMembers} showScopeHint={props.showScopeHint} isPastDue={isPastDue} onComplete={props.onComplete} onDelete={props.onDelete} onEdit={() => props.onEdit(r.id)} />
         )}
       </Fragment>
     ));
@@ -782,23 +784,31 @@ function GroupedView({ includeNoDate, ...props }: CardProps & { includeNoDate: b
       onDragCancel={() => { setActiveId(null); setOverId(null); }}>
 
       <div style={{ paddingBottom: 24 }}>
-        {sections.map((sec, idx) => (
-          <Fragment key={sec.key}>
-            <div style={{
-              paddingTop: idx === 0 ? 10 : (sec.isSub ? 8 : 14),
-              paddingBottom: 3,
-              paddingLeft: sec.isSub ? 24 : 16,
-              paddingRight: 16,
-            }}>
-              <span style={sec.isSub ? subStyle : hdrStyle}>{sec.label}</span>
-            </div>
-            {!sec.isPastDueHeader && (
-              <DroppableZone id={sec.key} isOver={!!activeId && overId === sec.key} accentColor={accentColor}>
-                {renderRows(sec.items)}
-              </DroppableZone>
-            )}
-          </Fragment>
-        ))}
+        {(() => {
+          let inPastDueBlock = false;
+          return sections.map((sec, idx) => {
+            if (sec.isPastDueHeader) { inPastDueBlock = true; }
+            else if (!sec.isSub) { inPastDueBlock = false; }
+            const isPastDueSection = inPastDueBlock && !sec.isPastDueHeader;
+            return (
+              <Fragment key={sec.key}>
+                <div style={{
+                  paddingTop: idx === 0 ? 10 : (sec.isSub ? 8 : 14),
+                  paddingBottom: 3,
+                  paddingLeft: sec.isSub ? 24 : 16,
+                  paddingRight: 16,
+                }}>
+                  <span style={sec.isPastDueHeader ? { ...hdrStyle, color: "#C0392B" } : sec.isSub ? subStyle : hdrStyle}>{sec.label}</span>
+                </div>
+                {!sec.isPastDueHeader && (
+                  <DroppableZone id={sec.key} isOver={!!activeId && overId === sec.key} accentColor={accentColor}>
+                    {renderRows(sec.items, isPastDueSection)}
+                  </DroppableZone>
+                )}
+              </Fragment>
+            );
+          });
+        })()}
 
         <div>
           {isAdding ? (

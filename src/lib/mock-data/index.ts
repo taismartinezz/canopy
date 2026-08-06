@@ -445,11 +445,11 @@ export const CHECKIN_LABELS: Record<number, string> = {
 };
 
 export const CHECKIN_COLORS: Record<number, string> = {
-  1: "#C0392B",
-  2: "#D97706",
-  3: "#6B7280",
-  4: "#2E7D52",
-  5: "#1B2E4B",
+  1: "#C0392B",  // red       — very low
+  2: "#D97706",  // amber     — low
+  3: "#CA8A04",  // yellow    — neutral midpoint
+  4: "#2E7D52",  // green     — good
+  5: "#059669",  // emerald   — excellent
 };
 
 // ── Journal Entries ───────────────────────────────────────────────────────────
