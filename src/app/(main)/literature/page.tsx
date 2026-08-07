@@ -4035,7 +4035,17 @@ export default function LiteraturePage() {
   const showingDetailMobile = isMobile && selectedItem !== null;
   const currentUserRole = (teamMembers.find((m) => m.id === currentUserId)?.role ?? "researcher") as UserRole;
 
-  const narrowList = isMobile;
+  const listColumnRef = useRef<HTMLDivElement>(null);
+  const [listWidth, setListWidth] = useState(9999);
+  useEffect(() => {
+    const el = listColumnRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([entry]) => setListWidth(entry.contentRect.width));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  // Hide Authors+Year when the list is too narrow to fit all fixed columns without squishing the title
+  const narrowList = isMobile || listWidth < 380;
 
   return (
     <div className="flex h-full" style={{ fontFamily: "var(--font-roboto)" }}>
@@ -4119,7 +4129,7 @@ export default function LiteraturePage() {
 
       {/* Center list / reading progress dashboard / trash */}
       {!showingDetailMobile && (
-        <div className="flex flex-col flex-1 min-w-0" style={{ minWidth: 240, overflow: "hidden", borderRight: selectedItem && !isMobile && !showReadingProgress && !showTrash ? "1px solid var(--color-border)" : undefined }}>
+        <div ref={listColumnRef} className="flex flex-col flex-1 min-w-0" style={{ minWidth: 240, overflow: "hidden", borderRight: selectedItem && !isMobile && !showReadingProgress && !showTrash ? "1px solid var(--color-border)" : undefined }}>
         {showReadingProgress ? (
           <ReadingProgressDashboard
             projectId={projectId}

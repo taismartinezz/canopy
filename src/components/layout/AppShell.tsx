@@ -7,9 +7,7 @@ import {
   LayoutDashboard, CheckSquare, BookOpen, BookMarked, Bookmark, Users,
   Bell, ChevronDown, ChevronLeft, ChevronRight, LogOut, User as UserIcon,
   Menu, X, Settings, CalendarDays, CircleCheck, Plus, Home,
-  AlignJustify, LayoutList,
 } from "lucide-react";
-import { useDensity } from "@/context/DensityContext";
 import { computeInitials } from "@/lib/utils";
 import type { User } from "@/types";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
@@ -36,7 +34,7 @@ function NotifDot({ count }: { count: number }) {
   return (
     <span
       className="absolute -top-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center pointer-events-none"
-      style={{ backgroundColor: "#C0392B", fontSize: 10, fontWeight: 700, color: "#fff" }}
+      style={{ backgroundColor: "var(--color-navy)", fontSize: 10, fontWeight: 700, color: "#fff" }}
     >
       {count > 9 ? "9+" : count}
     </span>
@@ -110,7 +108,7 @@ function SidebarBody({
                 onMouseLeave={(e) => { if (!active) (e.currentTarget as HTMLElement).style.backgroundColor = active ? "rgba(27,46,75,0.08)" : "transparent"; }}
               >
                 <Icon size={16} strokeWidth={active ? 2.5 : 1.8} fill={active ? "rgba(27,46,75,0.12)" : "none"} />
-                {showBadge && <span aria-hidden style={{ position: "absolute", top: 4, right: 4, minWidth: 14, height: 14, backgroundColor: "#C0392B", borderRadius: 7, fontSize: 9, fontWeight: 700, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", padding: "0 3px" }}>{pastDueCount > 9 ? "9+" : pastDueCount}</span>}
+                {showBadge && <span aria-hidden style={{ position: "absolute", top: 4, right: 4, minWidth: 14, height: 14, backgroundColor: "var(--color-navy)", borderRadius: 7, fontSize: 9, fontWeight: 700, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", padding: "0 3px" }}>{pastDueCount > 9 ? "9+" : pastDueCount}</span>}
               </Link>
             );
           })}
@@ -183,7 +181,7 @@ function SidebarBody({
             >
               <Icon size={15} strokeWidth={active ? 2.5 : 1.8} fill={active ? "rgba(27,46,75,0.12)" : "none"} />
               <span style={{ flex: 1 }}>{label}</span>
-              {showBadge && <span aria-label={`${pastDueCount} past due`} style={{ minWidth: 18, height: 18, backgroundColor: "#C0392B", borderRadius: 9, fontSize: 10, fontWeight: 700, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px", flexShrink: 0 }}>{pastDueCount > 9 ? "9+" : pastDueCount}</span>}
+              {showBadge && <span aria-label={`${pastDueCount} past due`} style={{ minWidth: 18, height: 18, backgroundColor: "var(--color-navy)", borderRadius: 9, fontSize: 10, fontWeight: 700, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px", flexShrink: 0 }}>{pastDueCount > 9 ? "9+" : pastDueCount}</span>}
             </Link>
           );
         })}
@@ -316,7 +314,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { projectId, subProjectId, subProjects, activeScope, setActiveSubProject, setActiveScope } = useProject();
-  const { density, toggle: toggleDensity } = useDensity();
   const [navCollapsed, setNavCollapsed]   = useState(false);
   const [showCreate, setShowCreate]       = useState(false);
   const { show: showOnboarding, close: closeOnboarding } = useOnboarding();
@@ -837,21 +834,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 <Users size={11} style={{ opacity: 0.7, flexShrink: 0 }} />
               </Link>
             )}
-
-            {/* Density toggle */}
-            <button
-              onClick={toggleDensity}
-              className="hidden md:flex items-center justify-center rounded-lg transition-colors hover:bg-[rgba(27,46,75,0.06)]"
-              style={{ width: 40, height: 40 }}
-              title={density === "comfortable" ? "Switch to compact density" : "Switch to comfortable density"}
-              aria-label={density === "comfortable" ? "Compact view" : "Comfortable view"}
-            >
-              {density === "comfortable" ? (
-                <LayoutList size={16} color="var(--color-secondary)" />
-              ) : (
-                <AlignJustify size={16} color="var(--color-secondary)" />
-              )}
-            </button>
 
             {/* Notification bell */}
             <div className="relative">

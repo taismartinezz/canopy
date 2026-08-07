@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useProject } from "@/context/ProjectContext";
 import {
-  CHECKIN_QUESTIONS, CHECKIN_LABELS, CHECKIN_COLORS,
+  CHECKIN_QUESTIONS, CHECKIN_LABELS,
 } from "@/lib/mock-data";
 import { supabase } from "@/lib/supabase";
 import type { JournalEntry, CheckinResponse } from "@/types";
@@ -306,7 +306,7 @@ function PromptCard({
 
 // ── Weekly check-in card ──────────────────────────────────────────────────────
 
-const SCORE_COLORS = CHECKIN_COLORS as unknown as Record<number, string>;
+const SCORE_COLOR = "var(--color-navy)";
 const SCORE_LABELS = CHECKIN_LABELS as unknown as Record<number, string>;
 
 function CheckinCard({ question, response, onScore }: {
@@ -316,20 +316,19 @@ function CheckinCard({ question, response, onScore }: {
 }) {
   const selected = response?.score;
   return (
-    <div style={{ backgroundColor: "var(--color-surface)", border: `2px solid ${selected !== undefined ? SCORE_COLORS[selected] : "var(--color-border)"}`, borderRadius: 10, padding: "16px 16px", transition: "border-color 0.2s" }}>
+    <div style={{ backgroundColor: "var(--color-surface)", border: `2px solid ${selected !== undefined ? SCORE_COLOR : "var(--color-border)"}`, borderRadius: 10, padding: "16px 16px", transition: "border-color 0.2s" }}>
       <p style={{ fontSize: 13, color: "var(--color-body)", lineHeight: 1.5, marginBottom: 14 }}>{question.text}</p>
       <div className="flex items-center gap-1.5 md:gap-2">
         {([1, 2, 3, 4, 5] as const).map((score) => {
           const isSelected = selected === score;
-          const color = SCORE_COLORS[score];
           return (
             <button key={score} onClick={() => onScore(score)}
               className="flex flex-col items-center gap-1.5 flex-1 py-2 rounded-lg transition-all"
-              style={{ border: `1px solid ${isSelected ? color : "var(--color-border)"}`, backgroundColor: isSelected ? `${color}14` : "transparent", cursor: "pointer", minHeight: 52 }}
+              style={{ border: `1px solid ${isSelected ? SCORE_COLOR : "var(--color-border)"}`, backgroundColor: isSelected ? "rgba(27,46,75,0.08)" : "transparent", cursor: "pointer", minHeight: 52 }}
               aria-label={`${score}: ${SCORE_LABELS[score]}`} aria-pressed={isSelected}
             >
-              <span className="w-4 h-4 rounded-full border-2 flex items-center justify-center" style={{ borderColor: isSelected ? color : "var(--color-border)", backgroundColor: isSelected ? color : "transparent" }} />
-              <span style={{ fontSize: 11, fontWeight: 600, color: isSelected ? color : "var(--color-secondary)", textAlign: "center", lineHeight: 1.2 }}>{score}</span>
+              <span className="w-4 h-4 rounded-full border-2 flex items-center justify-center" style={{ borderColor: isSelected ? SCORE_COLOR : "var(--color-border)", backgroundColor: isSelected ? SCORE_COLOR : "transparent" }} />
+              <span style={{ fontSize: 11, fontWeight: 600, color: isSelected ? SCORE_COLOR : "var(--color-secondary)", textAlign: "center", lineHeight: 1.2 }}>{score}</span>
             </button>
           );
         })}

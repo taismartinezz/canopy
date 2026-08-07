@@ -1417,6 +1417,9 @@ export default function SchedulingPage() {
         <MeetingProposalModal
           currentUserId={currentUserId}
           teamMembers={teamMembers}
+          allAvailabilities={allAvailabilities}
+          proposals={proposals}
+          events={events}
           onSubmit={handleProposal}
           onClose={() => setShowProposalModal(false)}
         />
