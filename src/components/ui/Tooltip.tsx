@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useRef, useCallback, useId } from "react";
+import { useState, useRef, useCallback, useId, useEffect } from "react";
+import { createPortal } from "react-dom";
 
 interface TooltipProps {
   label: string;
@@ -9,63 +10,90 @@ interface TooltipProps {
   placement?: "top" | "bottom" | "left" | "right";
 }
 
-export default function Tooltip({ label, children, delay = 500, placement = "bottom" }: TooltipProps) {
+export default function Tooltip({ label, children, delay = 450, placement = "bottom" }: TooltipProps) {
   const [visible, setVisible] = useState(false);
+  const [coords, setCoords] = useState({ top: 0, left: 0 });
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const triggerRef = useRef<HTMLSpanElement>(null);
   const id = useId();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => { setMounted(true); }, []);
+
+  const compute = useCallback(() => {
+    const el = triggerRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const GAP = 7;
+    switch (placement) {
+      case "top":    return { top: r.top - GAP,          left: r.left + r.width / 2 };
+      case "left":   return { top: r.top + r.height / 2, left: r.left - GAP };
+      case "right":  return { top: r.top + r.height / 2, left: r.right + GAP };
+      default:       return { top: r.bottom + GAP,       left: r.left + r.width / 2 };
+    }
+  }, [placement]);
 
   const show = useCallback(() => {
-    timer.current = setTimeout(() => setVisible(true), delay);
-  }, [delay]);
+    timer.current = setTimeout(() => {
+      const c = compute();
+      if (c) { setCoords(c); setVisible(true); }
+    }, delay);
+  }, [delay, compute]);
 
   const hide = useCallback(() => {
     if (timer.current) clearTimeout(timer.current);
     setVisible(false);
   }, []);
 
-  const placementStyle: React.CSSProperties = (() => {
+  const transformForPlacement: React.CSSProperties = (() => {
     switch (placement) {
-      case "top":    return { bottom: "calc(100% + 6px)", left: "50%", transform: "translateX(-50%)" };
-      case "left":   return { right: "calc(100% + 6px)", top: "50%", transform: "translateY(-50%)" };
-      case "right":  return { left: "calc(100% + 6px)", top: "50%", transform: "translateY(-50%)" };
-      default:       return { top: "calc(100% + 6px)", left: "50%", transform: "translateX(-50%)" };
+      case "top":   return { transform: "translate(-50%, -100%)" };
+      case "left":  return { transform: "translate(-100%, -50%)" };
+      case "right": return { transform: "translateY(-50%)" };
+      default:      return { transform: "translateX(-50%)" };
     }
   })();
 
   return (
-    <span
-      style={{ position: "relative", display: "inline-flex", alignItems: "center" }}
-      onMouseEnter={show}
-      onMouseLeave={hide}
-      onFocus={show}
-      onBlur={hide}
-      onClick={hide}
-    >
-      {children}
-      {visible && label && (
+    <>
+      <span
+        ref={triggerRef}
+        style={{ position: "relative", display: "inline-flex", alignItems: "center" }}
+        onMouseEnter={show}
+        onMouseLeave={hide}
+        onFocus={show}
+        onBlur={hide}
+        onClick={hide}
+      >
+        {children}
+      </span>
+      {mounted && visible && label && createPortal(
         <span
           role="tooltip"
           id={id}
           style={{
-            position: "absolute",
-            ...placementStyle,
+            position: "fixed",
+            top: coords.top,
+            left: coords.left,
+            ...transformForPlacement,
             whiteSpace: "nowrap",
-            backgroundColor: "rgba(15,23,42,0.88)",
+            backgroundColor: "rgba(15,23,42,0.92)",
             color: "#fff",
             fontSize: 11,
             fontWeight: 500,
-            fontFamily: "var(--font-roboto)",
+            fontFamily: "var(--font-roboto, sans-serif)",
             borderRadius: 5,
             padding: "4px 8px",
             pointerEvents: "none",
-            zIndex: 9999,
+            zIndex: 99999,
             letterSpacing: "0.01em",
             lineHeight: 1.4,
           }}
         >
           {label}
-        </span>
+        </span>,
+        document.body
       )}
-    </span>
+    </>
   );
 }

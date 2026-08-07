@@ -6,7 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard, CheckSquare, BookOpen, BookMarked, Bookmark, Users,
   Bell, ChevronDown, ChevronLeft, ChevronRight, LogOut, User as UserIcon,
-  Menu, X, Settings, CalendarDays, CircleCheck, Plus, Home,
+  Menu, X, Settings, CalendarDays, CircleCheck, Plus, Home, Search,
 } from "lucide-react";
 import { computeInitials } from "@/lib/utils";
 import type { User } from "@/types";
@@ -18,6 +18,7 @@ import CanopyLogo from "@/components/ui/CanopyLogo";
 import CreateProjectModal from "@/components/projects/CreateProjectModal";
 import OnboardingModal, { useOnboarding } from "@/components/ui/OnboardingModal";
 import Tooltip from "@/components/ui/Tooltip";
+import GlobalSearch from "@/components/ui/GlobalSearch";
 const NAV_ITEMS = [
   { href: "/",            label: "Dashboard",  icon: LayoutDashboard },
   { href: "/tasks",       label: "Tasks",      icon: CheckSquare     },
@@ -832,6 +833,20 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </div>
 
           <div className="flex items-center gap-2 ml-auto">
+            {/* Global search button */}
+            <Tooltip label="Search (⌘K)" placement="bottom">
+              <button
+                onClick={() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", metaKey: true, bubbles: true }))}
+                className="hidden sm:flex items-center gap-2 px-3 rounded-lg transition-colors hover:bg-[rgba(27,46,75,0.06)]"
+                style={{ height: 34, fontSize: 12, color: "var(--color-secondary)", border: "1px solid var(--color-border)", backgroundColor: "var(--color-canvas)" }}
+                aria-label="Open search"
+              >
+                <Search size={13} />
+                <span>Search</span>
+                <kbd style={{ fontSize: 10, fontFamily: "monospace", backgroundColor: "var(--color-strip)", borderRadius: 4, padding: "1px 5px", color: "var(--color-secondary)", marginLeft: 2 }}>⌘K</kbd>
+              </button>
+            </Tooltip>
+
             {/* Institution badge — links to team page */}
             {project?.institution && (
               <Link href="/team" title="View team" className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 shrink-0 transition-opacity hover:opacity-90"
@@ -913,6 +928,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       </div>
     </div>
     <Toast />
+    {projectId && <GlobalSearch projectId={projectId} />}
     {showCreate && <CreateProjectModal onClose={() => setShowCreate(false)} />}
     {showOnboarding && authed && <OnboardingModal onClose={closeOnboarding} />}
 </>

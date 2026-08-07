@@ -749,7 +749,9 @@ type CSLJsonItem = {
 const CSL_TYPE_MAP: Record<string, LiteratureType> = {
   "article-journal": "article", "article-magazine": "article",
   "article-newspaper": "article", article: "article",
+  "paper-conference": "article", "speech": "article",
   book: "book", chapter: "book", incollection: "book",
+  "book-chapter": "book",
   report: "report", thesis: "thesis", phdthesis: "thesis",
   manuscript: "preprint", preprint: "preprint",
 };
@@ -2678,6 +2680,14 @@ function DetailPanelContent({
     setLocalFiles(item.files);
   }, [item.files]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Auto-advance reading status when the Read tab is opened: unread → reading
+  useEffect(() => {
+    if (tab === "Read" && localStatus === "unread") {
+      updateStatus("reading");
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab]);
+
   // Eagerly fetch annotations whenever item changes — not just when the Annotations tab is open.
   // This ensures the PDF viewer's `annotations` prop is populated before the viewer mounts.
   useEffect(() => {
@@ -3486,7 +3496,17 @@ function DetailPanelContent({
                   </button>
                 )}
               </div>
-              {!item.doi && <p style={{ fontSize: 12, color: "var(--color-secondary)" }}>Add a DOI to this item to enable AI suggestions.</p>}
+              {!item.doi && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  <p style={{ fontSize: 12, color: "var(--color-secondary)" }}>
+                    A DOI is required for similarity search (uses OpenAlex). External or preprint papers without a DOI can be added manually via the Info tab.
+                  </p>
+                  <button onClick={() => setTab("Info")}
+                    style={{ alignSelf: "flex-start", fontSize: 12, fontWeight: 600, padding: "5px 12px", borderRadius: 6, backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)", color: "var(--color-navy)", cursor: "pointer" }}>
+                    Add DOI in Info →
+                  </button>
+                </div>
+              )}
               {recsLoading && <p style={{ fontSize: 12, color: "var(--color-secondary)" }}>Fetching suggestions from OpenAlex…</p>}
               {recsError && <p style={{ fontSize: 12, color: "var(--color-error)" }}>{recsError}</p>}
               {recs.filter((r) => !r.dismissed).map((rec) => (
@@ -3853,6 +3873,7 @@ export default function LiteraturePage() {
   const [showTrash, setShowTrash]       = useState(false);
   const [trashItems, setTrashItems]     = useState<LiteratureItem[]>([]);
   const [loadingTrash, setLoadingTrash] = useState(false);
+  const [myAssignedItemIds, setMyAssignedItemIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     function check() { setIsMobile(window.innerWidth < 768); }
@@ -3897,6 +3918,18 @@ export default function LiteraturePage() {
                 avatarUrl: p?.avatar_url ?? undefined,
               } as User;
             }));
+          }
+        });
+
+      // Fetch items assigned to the current user so they appear in personal scope
+      supabase
+        .from("lit_assigned_readings")
+        .select("item_id")
+        .eq("project_id", projectId)
+        .eq("assignee_id", user.id)
+        .then(({ data: assignedRows }) => {
+          if (assignedRows) {
+            setMyAssignedItemIds(new Set(assignedRows.map((r) => r.item_id as string)));
           }
         });
 
@@ -4040,6 +4073,8 @@ export default function LiteraturePage() {
   const scopedItems = items.filter((item) => {
     if (effectiveLitScope === "all") return true;
     if (effectiveLitScope === "personal") {
+      // Assigned items (from any scope) always appear in the assignee's personal view
+      if (myAssignedItemIds.has(item.id)) return true;
       if (!item.scope || item.scope !== "personal") return false;
       if (effectiveLitSubProjectId === "__general__") return !(item as LiteratureItem & { subProjectId?: string }).subProjectId;
       if (effectiveLitSubProjectId) return (item as LiteratureItem & { subProjectId?: string }).subProjectId === effectiveLitSubProjectId;

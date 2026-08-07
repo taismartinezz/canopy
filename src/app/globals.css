@@ -187,3 +187,73 @@ body {
   to   { opacity: 1; transform: translateX(-50%) translateY(0); }
 }
 .animate-slide-up-fade { animation: slide-up-fade-in 0.2s ease-out; }
+
+/* ── Dark mode ─────────────────────────────────────────────────────────────── */
+/*
+ * Light values live in @theme above.
+ * Dark overrides are declared on:
+ *   - :root:not([data-theme="light"])  inside the prefers-color-scheme:dark MQ
+ *   - :root[data-theme="dark"]         for the explicit toggle (wins over MQ)
+ */
+:root {
+  /* explicit light anchor — same as @theme, ensures MQ override reads correctly */
+  --color-canvas:       #F6F8FC;
+  --color-sidebar:      #E8ECF1;
+  --color-strip:        #D8DCE3;
+  --color-surface:      #FFFFFF;
+  --color-navy:         #1B2E4B;
+  --color-navy-hover:   #2E4A6F;
+  --color-navy-dim:     rgba(27,46,75,0.06);
+  --color-navy-scrim:   rgba(27,46,75,0.15);
+  --color-body:         #2D2D2D;
+  --color-secondary:    #6B6B6B;
+  --color-border:       #DDE1E7;
+  --color-success:      #2E7D52;
+  --color-warning:      #A0622A;
+  --color-error:        #C0392B;
+  --color-error-bg:     #FDDCDC;
+  --color-warning-bg:   #FDEFD4;
+  --color-success-bg:   #D4EDE0;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --color-canvas:       #111827;
+    --color-sidebar:      #0F1623;
+    --color-strip:        #1A2438;
+    --color-surface:      #1A2336;
+    --color-navy:         #2A4A78;
+    --color-navy-hover:   #3A5A8F;
+    --color-navy-dim:     rgba(100,160,255,0.08);
+    --color-navy-scrim:   rgba(0,0,0,0.50);
+    --color-body:         #E2E8F0;
+    --color-secondary:    #8B9BB4;
+    --color-border:       #253048;
+    --color-success:      #3A9E63;
+    --color-warning:      #B8742E;
+    --color-error:        #D64B3B;
+    --color-error-bg:     rgba(214,75,59,0.18);
+    --color-warning-bg:   rgba(184,116,46,0.15);
+    --color-success-bg:   rgba(58,158,99,0.15);
+  }
+}
+
+:root[data-theme="dark"] {
+  --color-canvas:       #111827;
+  --color-sidebar:      #0F1623;
+  --color-strip:        #1A2438;
+  --color-surface:      #1A2336;
+  --color-navy:         #2A4A78;
+  --color-navy-hover:   #3A5A8F;
+  --color-navy-dim:     rgba(100,160,255,0.08);
+  --color-navy-scrim:   rgba(0,0,0,0.50);
+  --color-body:         #E2E8F0;
+  --color-secondary:    #8B9BB4;
+  --color-border:       #253048;
+  --color-success:      #3A9E63;
+  --color-warning:      #B8742E;
+  --color-error:        #D64B3B;
+  --color-error-bg:     rgba(214,75,59,0.18);
+  --color-warning-bg:   rgba(184,116,46,0.15);
+  --color-success-bg:   rgba(58,158,99,0.15);
+}

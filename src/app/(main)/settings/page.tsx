@@ -2,9 +2,10 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Copy, Check, RefreshCw, User, Lock, Bell, Building2, Clock } from "lucide-react";
+import { Copy, Check, RefreshCw, User, Lock, Bell, Building2, Clock, Monitor, Moon, Sun } from "lucide-react";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { showToast } from "@/components/ui/Toast";
+import { useTheme } from "@/context/ThemeContext";
 import type { WorkingHours } from "@/types";
 
 // ── Working-hours helpers ─────────────────────────────────────────────────────
@@ -78,6 +79,7 @@ const readonlyInputStyle: React.CSSProperties = {
 
 export default function SettingsPage() {
   const router = useRouter();
+  const { theme, setTheme } = useTheme();
   const [profile, setProfile] = useState<any>(null);
   const [project, setProject] = useState<any>(null);
   const [inviteCodes, setInviteCodes] = useState<{ id: string; code: string; used_by: string | null }[]>([]);
@@ -398,6 +400,44 @@ export default function SettingsPage() {
             style={{ alignSelf: "flex-start", minHeight: 44, height: 38, padding: "0 20px", backgroundColor: savingSchedule ? "var(--color-border)" : "var(--color-navy)", color: "#fff", border: "none", borderRadius: 8, fontFamily: "var(--font-roboto)", fontWeight: 600, fontSize: 13, cursor: savingSchedule ? "default" : "pointer" }}>
             {savingSchedule ? "Saving…" : "Save schedule settings"}
           </button>
+        </div>
+      </section>
+
+      {/* Appearance section */}
+      <section style={sectionStyle} aria-labelledby="settings-appearance-heading">
+        <div style={sectionHeaderStyle}>
+          <Monitor size={16} color="var(--color-navy)" />
+          <h2 id="settings-appearance-heading" style={{ fontFamily: "var(--font-lora)", fontWeight: 600, fontSize: 15, color: "var(--color-navy)", margin: 0 }}>
+            Appearance
+          </h2>
+        </div>
+        <div style={{ padding: "20px" }}>
+          <p style={{ ...labelStyle, marginBottom: 12 }}>Theme</p>
+          <div style={{ display: "flex", gap: 10 }}>
+            {([
+              { value: "light", icon: <Sun size={15} />, label: "Light" },
+              { value: "dark",  icon: <Moon size={15} />, label: "Dark" },
+              { value: "system", icon: <Monitor size={15} />, label: "System" },
+            ] as { value: "light" | "dark" | "system"; icon: React.ReactNode; label: string }[]).map(({ value, icon, label }) => (
+              <button
+                key={value}
+                onClick={() => setTheme(value)}
+                style={{
+                  display: "flex", alignItems: "center", gap: 7,
+                  padding: "8px 16px", borderRadius: 8, cursor: "pointer",
+                  fontSize: 13, fontWeight: 600,
+                  border: `1.5px solid ${theme === value ? "var(--color-navy)" : "var(--color-border)"}`,
+                  backgroundColor: theme === value ? "var(--color-navy)" : "transparent",
+                  color: theme === value ? "#fff" : "var(--color-secondary)",
+                  transition: "all 0.15s",
+                  minHeight: 40,
+                }}
+              >
+                {icon}
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
       </section>
 

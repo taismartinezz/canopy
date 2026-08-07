@@ -201,6 +201,7 @@ export interface LiteratureCollection {
 
 export interface AnnotationBbox {
   x: number; y: number; w: number; h: number;  // 0–1 fractions of page canvas dimensions
+  rects?: { x: number; y: number; w: number; h: number }[]; // per-line rects for multi-line selections
 }
 
 export interface LitAnnotation {
