@@ -10,7 +10,7 @@ import { useProject } from "@/context/ProjectContext";
 import { computeInitials } from "@/lib/utils";
 import type {
   User, WeeklyAvailability, MeetingProposal, MeetingResponse,
-  ScheduleEvent, MeetingResponseStatus, SubProject,
+  ScheduleEvent, MeetingResponseStatus, SubProject, UserSettings,
 } from "@/types";
 import AvailabilityGrid from "@/components/scheduling/AvailabilityGrid";
 import TeamOverlapView from "@/components/scheduling/TeamOverlapView";
@@ -1005,6 +1005,7 @@ export default function SchedulingPage() {
 
   // Scheduling data
   const [allAvailabilities, setAllAvailabilities] = useState<WeeklyAvailability[]>([]);
+  const [allUserSettings, setAllUserSettings] = useState<UserSettings[]>([]);
   const [proposals, setProposals] = useState<MeetingProposal[]>([]);
   const [events, setEvents] = useState<ScheduleEvent[]>([]);
 
@@ -1065,6 +1066,23 @@ export default function SchedulingPage() {
           slots: (row.slots as string[]) ?? [],
           updatedAt: row.updated_at as string,
         })));
+      }
+
+      // Fetch user settings (timezone + working hours) for all team members
+      const memberIds = (members ?? []).map(m => m.user_id as string);
+      if (memberIds.length > 0) {
+        const { data: settingsData } = await supabase
+          .from("user_settings")
+          .select("*")
+          .in("user_id", memberIds);
+        if (settingsData) {
+          setAllUserSettings(settingsData.map(row => ({
+            userId: row.user_id as string,
+            timezone: (row.timezone as string) ?? "America/New_York",
+            workingHours: (row.working_hours as UserSettings["workingHours"]) ?? {},
+            updatedAt: row.updated_at as string,
+          })));
+        }
       }
 
       const { data: propData } = await supabase
@@ -1418,6 +1436,7 @@ export default function SchedulingPage() {
           currentUserId={currentUserId}
           teamMembers={teamMembers}
           allAvailabilities={allAvailabilities}
+          allUserSettings={allUserSettings}
           proposals={proposals}
           events={events}
           onSubmit={handleProposal}

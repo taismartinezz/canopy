@@ -1032,9 +1032,13 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
         if (!att) continue;
         setUploadStatus(`Fetching PDF: ${att.filename}…`);
         try {
+          const { data: { session: pdfSession } } = await supabase.auth.getSession();
           const pdfRes = await fetch("/api/zotero/fetch-pdf", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+              "Content-Type": "application/json",
+              ...(pdfSession?.access_token ? { Authorization: `Bearer ${pdfSession.access_token}` } : {}),
+            },
             body: JSON.stringify({
               apiKey: apiKey.trim(), zoteroUserId: zoteroUserId.trim(),
               ...(selectedGroupId ? { groupId: selectedGroupId } : {}),
@@ -1717,9 +1721,13 @@ function DOILookupModal({ onSave, onMerge, onClose, projectId, currentUserId, su
       setLoading(true);
       // Try server-side SerpApi route first (handles arbitrary Scholar URLs)
       try {
+        const { data: { session: serpSession } } = await supabase.auth.getSession();
         const serpRes = await fetch("/api/scholar-search", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            ...(serpSession?.access_token ? { Authorization: `Bearer ${serpSession.access_token}` } : {}),
+          },
           body: JSON.stringify({ url: input }),
         });
         if (serpRes.ok) {
@@ -2780,9 +2788,13 @@ function DetailPanelContent({
     if (!item.doi) return;
     setRecsLoading(true); setRecsError(""); setRecsFetched(true);
     try {
+      const { data: { session: recsSession } } = await supabase.auth.getSession();
       const res = await fetch("/api/literature/recommendations", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(recsSession?.access_token ? { Authorization: `Bearer ${recsSession.access_token}` } : {}),
+        },
         body: JSON.stringify({ doi: item.doi, sourceItemId: item.id, projectId, title: stripHtml(item.title) }),
       });
       if (!res.ok) throw new Error(`Server error ${res.status}`);

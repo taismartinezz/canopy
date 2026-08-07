@@ -2,9 +2,39 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Copy, Check, RefreshCw, User, Lock, Bell, Building2 } from "lucide-react";
+import { Copy, Check, RefreshCw, User, Lock, Bell, Building2, Clock } from "lucide-react";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { showToast } from "@/components/ui/Toast";
+import type { WorkingHours } from "@/types";
+
+// ── Working-hours helpers ─────────────────────────────────────────────────────
+
+const DAY_LABELS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+
+const DEFAULT_WORKING_HOURS: WorkingHours = {
+  "0": { start: "09:00", end: "17:00" },
+  "1": { start: "09:00", end: "17:00" },
+  "2": { start: "09:00", end: "17:00" },
+  "3": { start: "09:00", end: "17:00" },
+  "4": { start: "09:00", end: "17:00" },
+  "5": null,
+  "6": null,
+};
+
+const COMMON_TIMEZONES = [
+  "America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles",
+  "America/Anchorage", "America/Honolulu", "America/Toronto", "America/Vancouver",
+  "America/Mexico_City", "America/Sao_Paulo", "America/Buenos_Aires",
+  "Europe/London", "Europe/Dublin", "Europe/Lisbon",
+  "Europe/Paris", "Europe/Berlin", "Europe/Madrid", "Europe/Rome",
+  "Europe/Amsterdam", "Europe/Stockholm", "Europe/Warsaw", "Europe/Zurich",
+  "Europe/Helsinki", "Europe/Athens", "Europe/Istanbul",
+  "Africa/Cairo", "Africa/Johannesburg", "Africa/Lagos",
+  "Asia/Dubai", "Asia/Kolkata", "Asia/Dhaka", "Asia/Bangkok",
+  "Asia/Singapore", "Asia/Hong_Kong", "Asia/Shanghai", "Asia/Tokyo",
+  "Asia/Seoul", "Australia/Sydney", "Australia/Melbourne", "Pacific/Auckland",
+  "UTC",
+];
 
 const sectionStyle: React.CSSProperties = {
   backgroundColor: "#ffffff",
@@ -56,11 +86,16 @@ export default function SettingsPage() {
   const [generatingCode, setGeneratingCode] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  // Notification preferences (UI only for now)
+  // Notification preferences
   const [notifTaskAssigned, setNotifTaskAssigned] = useState(true);
   const [notifLabWin, setNotifLabWin] = useState(true);
   const [notifDigest, setNotifDigest] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+
+  // Working hours + timezone
+  const [timezone, setTimezone] = useState("America/New_York");
+  const [workingHours, setWorkingHours] = useState<WorkingHours>(DEFAULT_WORKING_HOURS);
+  const [savingSchedule, setSavingSchedule] = useState(false);
 
   useEffect(() => {
     function checkWidth() { setIsMobile(window.innerWidth < 600); }
@@ -87,6 +122,14 @@ export default function SettingsPage() {
           const { data: proj } = await supabase
             .from("projects").select("*").eq("id", membership.project_id).maybeSingle();
           setProject(proj);
+
+          // Load working hours + timezone
+          const { data: userSettings } = await supabase
+            .from("user_settings").select("*").eq("user_id", user.id).maybeSingle();
+          if (userSettings) {
+            setTimezone((userSettings.timezone as string) ?? "America/New_York");
+            setWorkingHours((userSettings.working_hours as WorkingHours) ?? DEFAULT_WORKING_HOURS);
+          }
 
           if (prof?.role === "pi") {
             const { data: codes } = await supabase
@@ -143,6 +186,21 @@ export default function SettingsPage() {
     });
     showToast("Password reset email sent. Check your inbox.");
   }, [profile]);
+
+  const handleSaveSchedule = useCallback(async () => {
+    if (!isSupabaseConfigured) { showToast("Demo mode — settings not persisted."); return; }
+    setSavingSchedule(true);
+    const { data: { session } } = await supabase.auth.getSession();
+    const userId = session?.user?.id;
+    if (!userId) { setSavingSchedule(false); return; }
+    const { error } = await supabase.from("user_settings").upsert(
+      { user_id: userId, timezone, working_hours: workingHours, updated_at: new Date().toISOString() },
+      { onConflict: "user_id" }
+    );
+    setSavingSchedule(false);
+    if (error) { showToast("Failed to save. " + error.message); }
+    else { showToast("Schedule settings saved."); }
+  }, [timezone, workingHours]);
 
   if (loading) return null;
 
@@ -275,6 +333,73 @@ export default function SettingsPage() {
           </div>
         </section>
       )}
+
+      {/* Scheduling section */}
+      <section style={sectionStyle} aria-labelledby="settings-schedule-heading">
+        <div style={sectionHeaderStyle}>
+          <Clock size={16} color="var(--color-navy)" />
+          <h2 id="settings-schedule-heading" style={{ fontFamily: "var(--font-lora)", fontWeight: 600, fontSize: 15, color: "var(--color-navy)", margin: 0 }}>
+            Scheduling &amp; Working Hours
+          </h2>
+        </div>
+        <div style={{ padding: "20px", display: "flex", flexDirection: "column", gap: 20 }}>
+
+          {/* Timezone */}
+          <div>
+            <label htmlFor="tz-select" style={labelStyle}>Time zone</label>
+            <select id="tz-select" value={timezone} onChange={e => setTimezone(e.target.value)}
+              style={{ ...readonlyInputStyle, backgroundColor: "var(--color-canvas)", color: "var(--color-body)", cursor: "pointer", appearance: "auto" }}>
+              {COMMON_TIMEZONES.map(tz => <option key={tz} value={tz}>{tz.replace(/_/g, " ")}</option>)}
+            </select>
+            <p style={{ fontSize: 11, color: "var(--color-secondary)", marginTop: 4 }}>
+              Used for scheduling suggestions and (when enabled) the weekly digest email.
+            </p>
+          </div>
+
+          {/* Per-day working hours */}
+          <div>
+            <span style={labelStyle}>Working hours</span>
+            <p style={{ fontSize: 12, color: "var(--color-secondary)", marginTop: 0, marginBottom: 12 }}>
+              The &ldquo;Find best times&rdquo; feature in Scheduling will only suggest slots within these hours.
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {DAY_LABELS.map((dayName, idx) => {
+                const key = String(idx);
+                const val = workingHours[key];
+                const isOn = val !== null && val !== undefined;
+                return (
+                  <div key={key} style={{ display: "flex", alignItems: "center", gap: 12, minHeight: 40 }}>
+                    <label style={{ display: "flex", alignItems: "center", gap: 8, width: isMobile ? 92 : 110, cursor: "pointer", flexShrink: 0 }}>
+                      <input type="checkbox" checked={isOn}
+                        onChange={e => setWorkingHours(prev => ({ ...prev, [key]: e.target.checked ? { start: "09:00", end: "17:00" } : null }))}
+                        style={{ width: 15, height: 15, accentColor: "var(--color-navy)", cursor: "pointer" }} />
+                      <span style={{ fontSize: 13, color: "var(--color-body)", fontWeight: isOn ? 500 : 400 }}>{dayName}</span>
+                    </label>
+                    {isOn ? (
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <input type="time" value={val!.start}
+                          onChange={e => setWorkingHours(prev => ({ ...prev, [key]: { ...(prev[key] as { start: string; end: string }), start: e.target.value } }))}
+                          style={{ height: 34, border: "1px solid var(--color-border)", borderRadius: 6, padding: "0 8px", fontSize: 13, fontFamily: "var(--font-roboto)", backgroundColor: "var(--color-canvas)", color: "var(--color-body)", outline: "none" }} />
+                        <span style={{ fontSize: 12, color: "var(--color-secondary)" }}>to</span>
+                        <input type="time" value={val!.end}
+                          onChange={e => setWorkingHours(prev => ({ ...prev, [key]: { ...(prev[key] as { start: string; end: string }), end: e.target.value } }))}
+                          style={{ height: 34, border: "1px solid var(--color-border)", borderRadius: 6, padding: "0 8px", fontSize: 13, fontFamily: "var(--font-roboto)", backgroundColor: "var(--color-canvas)", color: "var(--color-body)", outline: "none" }} />
+                      </div>
+                    ) : (
+                      <span style={{ fontSize: 12, color: "var(--color-secondary)", fontStyle: "italic" }}>Off</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <button onClick={handleSaveSchedule} disabled={savingSchedule}
+            style={{ alignSelf: "flex-start", minHeight: 44, height: 38, padding: "0 20px", backgroundColor: savingSchedule ? "var(--color-border)" : "var(--color-navy)", color: "#fff", border: "none", borderRadius: 8, fontFamily: "var(--font-roboto)", fontWeight: 600, fontSize: 13, cursor: savingSchedule ? "default" : "pointer" }}>
+            {savingSchedule ? "Saving…" : "Save schedule settings"}
+          </button>
+        </div>
+      </section>
 
       {/* Notifications section */}
       <section style={sectionStyle} aria-labelledby="settings-notif-heading">

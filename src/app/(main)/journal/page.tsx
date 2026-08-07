@@ -173,9 +173,13 @@ function PromptCard({
     setOriginalText(response);
     setGrammarState("loading");
     try {
+      const { data: { session: grammarSession } } = await supabase.auth.getSession();
       const res = await fetch("/api/fix-grammar", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(grammarSession?.access_token ? { Authorization: `Bearer ${grammarSession.access_token}` } : {}),
+        },
         body: JSON.stringify({ text: response }),
       });
       if (!res.ok) throw new Error("failed");

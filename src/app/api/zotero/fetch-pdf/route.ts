@@ -6,6 +6,11 @@ export const runtime = "nodejs";
 import { createClient } from "@supabase/supabase-js";
 
 export async function POST(request: Request) {
+  // Verify caller is authenticated before touching storage
+  const authHeader = request.headers.get("Authorization") ?? "";
+  const callerToken = authHeader.replace(/^Bearer\s+/i, "").trim();
+  if (!callerToken) return Response.json({ error: "Authorization header required" }, { status: 401 });
+
   const {
     apiKey, zoteroUserId, groupId,
     attachmentKey, projectId, itemId, filename,
@@ -17,6 +22,24 @@ export async function POST(request: Request) {
   if (!apiKey || !zoteroUserId || !attachmentKey || !projectId || !itemId || !filename) {
     console.warn("[fetch-pdf] Missing required fields", { attachmentKey, projectId, itemId, filename });
     return Response.json({ error: "Missing required fields" }, { status: 400 });
+  }
+
+  // Verify caller is a member of the target project
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+  if (supabaseUrl && anonKey) {
+    const userClient = createClient(supabaseUrl, anonKey, {
+      global: { headers: { Authorization: `Bearer ${callerToken}` } },
+      auth: { persistSession: false },
+    });
+    const { data: { user } } = await userClient.auth.getUser(callerToken);
+    if (!user) return Response.json({ error: "Invalid token" }, { status: 401 });
+    const { count } = await userClient
+      .from("team_members")
+      .select("*", { count: "exact", head: true })
+      .eq("project_id", projectId)
+      .eq("user_id", user.id);
+    if (!count) return Response.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const base = groupId
@@ -59,14 +82,14 @@ export async function POST(request: Request) {
 
   console.log(`[fetch-pdf] Downloaded ${bytes.byteLength} bytes for "${filename}" (${attachmentKey})`);
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const storageUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!supabaseUrl || !supabaseKey) {
+  if (!storageUrl || !supabaseKey) {
     console.error("[fetch-pdf] Supabase not configured — missing env vars");
     return Response.json({ error: "Supabase not configured" }, { status: 500 });
   }
 
-  const supabase = createClient(supabaseUrl, supabaseKey);
+  const supabase = createClient(storageUrl, supabaseKey);
   const fileId = crypto.randomUUID();
   const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, "_");
   const storagePath = `${projectId}/${itemId}/${fileId}-${safeName}`;

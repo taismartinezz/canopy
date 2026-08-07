@@ -2,12 +2,22 @@
 
 import { useState } from "react";
 import { X, Sparkles } from "lucide-react";
-import type { User, MeetingProposal, WeeklyAvailability, ScheduleEvent } from "@/types";
+import type { User, MeetingProposal, WeeklyAvailability, ScheduleEvent, UserSettings, WorkingHours } from "@/types";
 import Avatar from "@/components/ui/Avatar";
 
 // Mirror slot constants from AvailabilityGrid — grid covers 9:00–16:30 in 30-min steps
 const HOUR_START = 9;
 const SLOT_COUNT = 16;
+
+const DEFAULT_WORKING_HOURS: WorkingHours = {
+  "0": { start: "09:00", end: "17:00" },
+  "1": { start: "09:00", end: "17:00" },
+  "2": { start: "09:00", end: "17:00" },
+  "3": { start: "09:00", end: "17:00" },
+  "4": { start: "09:00", end: "17:00" },
+  "5": null,
+  "6": null,
+};
 
 const DURATION_OPTIONS = [
   { label: "15 min", value: 15 },
@@ -68,6 +78,7 @@ function findSuggestedTimes(
   attendeeIds: string[],
   durationMinutes: number,
   allAvailabilities: WeeklyAvailability[],
+  allUserSettings: UserSettings[],
   proposals: MeetingProposal[],
   events: ScheduleEvent[],
 ): { slots: SuggestedSlot[]; noAvailData: boolean } {
@@ -85,6 +96,12 @@ function findSuggestedTimes(
   // If nobody has set availability at all, flag it
   const noAvailData = availSets.every(s => s.size === 0);
 
+  // Per-attendee working hours (falls back to 9AM-5PM default)
+  const attendeeWorkingHours = attendeeIds.map(id => {
+    const s = allUserSettings.find(u => u.userId === id);
+    return s?.workingHours ?? DEFAULT_WORKING_HOURS;
+  });
+
   const suggestions: SuggestedSlot[] = [];
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -93,8 +110,15 @@ function findSuggestedTimes(
     const d = new Date(today);
     d.setDate(today.getDate() + offset);
     const jsDay = d.getDay(); // 0=Sun…6=Sat
-    if (jsDay === 0 || jsDay === 6) continue;
-    const gridDay = jsDay - 1; // 0=Mon…4=Fri
+    const gridDay = jsDay - 1; // 0=Mon…4=Fri (jsDay 0=Sun would give -1, filtered below)
+
+    // Skip weekend days (any attendee off) or days where any attendee has no working hours
+    const anyoneOff = attendeeWorkingHours.some(wh => {
+      const dayKey = String(gridDay >= 0 ? gridDay : 6); // Sun = key "6"
+      return wh[dayKey] === null || wh[dayKey] === undefined;
+    });
+    if (jsDay === 0 || jsDay === 6 || anyoneOff) continue;
+
     const dateStr = d.toISOString().split("T")[0];
     const dayLabel = `${FULL_DAY_NAMES[gridDay]}, ${MONTH_NAMES[d.getMonth()]} ${d.getDate()}`;
 
@@ -115,7 +139,18 @@ function findSuggestedTimes(
       busy.push({ startMin: sm, endMin: sm + p.durationMinutes });
     }
 
+    // Compute the intersection of working-hour windows for this day across all attendees
+    const dayKey = String(gridDay);
+    const workWindowStart = Math.max(...attendeeWorkingHours.map(wh => parseTimeToMin((wh[dayKey] as { start: string; end: string }).start)));
+    const workWindowEnd   = Math.min(...attendeeWorkingHours.map(wh => parseTimeToMin((wh[dayKey] as { start: string; end: string }).end)));
+
     for (let s = 0; s <= SLOT_COUNT - requiredSlots && suggestions.length < 3; s++) {
+      const startMin = HOUR_START * 60 + s * 30;
+      const endMin = startMin + durationMinutes;
+
+      // Skip if outside any attendee's working hours
+      if (startMin < workWindowStart || endMin > workWindowEnd) continue;
+
       // All attendees must have every required consecutive slot available
       const allFree = availSets.every(avail => {
         for (let i = s; i < s + requiredSlots; i++) {
@@ -124,9 +159,6 @@ function findSuggestedTimes(
         return true;
       });
       if (!allFree) continue;
-
-      const startMin = HOUR_START * 60 + s * 30;
-      const endMin = startMin + durationMinutes;
 
       // 15-min buffer around any existing event
       const blocked = busy.some(b => startMin < b.endMin + BUFFER_MIN && endMin > b.startMin - BUFFER_MIN);
@@ -145,6 +177,7 @@ interface Props {
   currentUserId: string;
   teamMembers: User[];
   allAvailabilities: WeeklyAvailability[];
+  allUserSettings: UserSettings[];
   proposals: MeetingProposal[];
   events: ScheduleEvent[];
   onSubmit: (proposal: Omit<MeetingProposal, "id" | "createdAt" | "responses">) => void;
@@ -154,7 +187,7 @@ interface Props {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function MeetingProposalModal({
-  currentUserId, teamMembers, allAvailabilities, proposals, events, onSubmit, onClose,
+  currentUserId, teamMembers, allAvailabilities, allUserSettings, proposals, events, onSubmit, onClose,
 }: Props) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -183,7 +216,7 @@ export default function MeetingProposalModal({
   function handleFindTime() {
     setFinding(true);
     const allAttendees = [currentUserId, ...invitees];
-    const result = findSuggestedTimes(allAttendees, duration, allAvailabilities, proposals, events);
+    const result = findSuggestedTimes(allAttendees, duration, allAvailabilities, allUserSettings, proposals, events);
     setSuggestions(result.slots);
     setNoAvailData(result.noAvailData);
     setSelectedSuggestion(null);

@@ -18,6 +18,11 @@ interface SerpResponse {
 }
 
 export async function POST(request: Request) {
+  const authHeader = request.headers.get("Authorization") ?? "";
+  if (!authHeader.replace(/^Bearer\s+/i, "").trim()) {
+    return Response.json({ error: "Authorization header required" }, { status: 401 });
+  }
+
   const { url } = (await request.json()) as { url?: string };
   if (!url?.trim()) return Response.json({ error: "url required" }, { status: 400 });
 
