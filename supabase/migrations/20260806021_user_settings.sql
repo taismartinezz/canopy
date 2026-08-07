@@ -20,16 +20,20 @@ CREATE TABLE IF NOT EXISTS user_settings (
 ALTER TABLE user_settings ENABLE ROW LEVEL SECURITY;
 
 -- Users can read/write only their own settings
+DROP POLICY IF EXISTS "user_settings: owner select" ON user_settings;
 CREATE POLICY "user_settings: owner select"
   ON user_settings FOR SELECT USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "user_settings: owner insert" ON user_settings;
 CREATE POLICY "user_settings: owner insert"
   ON user_settings FOR INSERT WITH CHECK (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "user_settings: owner update" ON user_settings;
 CREATE POLICY "user_settings: owner update"
   ON user_settings FOR UPDATE USING (auth.uid() = user_id);
 
 -- Team members of the same lab can read each other's settings (for scheduling)
+DROP POLICY IF EXISTS "user_settings: team members select" ON user_settings;
 CREATE POLICY "user_settings: team members select"
   ON user_settings FOR SELECT USING (
     EXISTS (
