@@ -75,10 +75,12 @@ export async function POST(request: Request) {
     ? `https://api.zotero.org/groups/${groupId}`
     : `https://api.zotero.org/users/${zoteroUserId}`;
 
-  // When a collection key is provided, scope items to that collection
+  // When a collection key is provided, scope items to that collection.
+  // &recursive=1 ensures sub-collections are included, matching the CSL JSON pass behavior.
   const itemsPath = collectionKey
     ? `${base}/collections/${collectionKey}/items`
     : `${base}/items`;
+  const recursiveSuffix = collectionKey ? "&recursive=1" : "";
 
   // First pass: fetch all non-attachment items in CSL JSON format (batched)
   const items: unknown[] = [];
@@ -122,7 +124,7 @@ export async function POST(request: Request) {
   const linkedUrlItems: Record<string, true> = {};
   let attStart = 0;
   while (true) {
-    const attUrl = `${itemsPath}?itemType=attachment&format=json&limit=100&start=${attStart}`;
+    const attUrl = `${itemsPath}?itemType=attachment&format=json&limit=100&start=${attStart}${recursiveSuffix}`;
     const attRes = await fetch(attUrl, {
       headers: { "Zotero-API-Key": apiKey, "Zotero-API-Version": "3" },
     });
@@ -172,7 +174,7 @@ export async function POST(request: Request) {
   const notesMap: Record<string, string[]> = {};
   let noteStart = 0;
   while (true) {
-    const noteUrl = `${itemsPath}?itemType=note&format=json&limit=100&start=${noteStart}`;
+    const noteUrl = `${itemsPath}?itemType=note&format=json&limit=100&start=${noteStart}${recursiveSuffix}`;
     const noteRes = await fetch(noteUrl, {
       headers: { "Zotero-API-Key": apiKey, "Zotero-API-Version": "3" },
     });
@@ -296,7 +298,7 @@ export async function POST(request: Request) {
   const nativeItems: { key: string; title: string }[] = [];
   let tagStart = 0;
   while (true) {
-    const tagUrl = `${itemsPath}?format=json&limit=100&start=${tagStart}&itemType=-attachment`;
+    const tagUrl = `${itemsPath}?format=json&limit=100&start=${tagStart}&itemType=-attachment${recursiveSuffix}`;
     const tagRes = await fetch(tagUrl, {
       headers: { "Zotero-API-Key": apiKey, "Zotero-API-Version": "3" },
     });
