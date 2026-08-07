@@ -16,7 +16,8 @@ import Toast from "@/components/ui/Toast";
 import Avatar from "@/components/ui/Avatar";
 import CanopyLogo from "@/components/ui/CanopyLogo";
 import CreateProjectModal from "@/components/projects/CreateProjectModal";
-import OnboardingModal, { useOnboarding } from "@/components/ui/OnboardingModal";;
+import OnboardingModal, { useOnboarding } from "@/components/ui/OnboardingModal";
+import Tooltip from "@/components/ui/Tooltip";
 const NAV_ITEMS = [
   { href: "/",            label: "Dashboard",  icon: LayoutDashboard },
   { href: "/tasks",       label: "Tasks",      icon: CheckSquare     },
@@ -602,55 +603,56 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
         {/* Lab home — separate from the logo */}
         <div className="pb-1 flex flex-col items-center">
-          <p style={{ fontSize: 7.5, fontWeight: 700, letterSpacing: "0.1em", color: "var(--color-secondary)", margin: "0 0 3px", textAlign: "center", textTransform: "uppercase", opacity: 0.7 }}>Lab</p>
-          <button
-            onClick={() => { setActiveSubProject(null); setActiveScope("lab"); }}
-            title="Lab home"
-            aria-label="Lab home"
-            className="w-9 h-9 flex items-center justify-center rounded-[10px] transition-colors"
-            style={{
-              backgroundColor: activeScope === "lab" ? "rgba(27,46,75,0.12)" : "transparent",
-              border: activeScope === "lab" ? "1.5px solid rgba(27,46,75,0.25)" : "1.5px solid transparent",
-              cursor: "pointer",
-            }}
-          >
-            <Home size={15} color="var(--color-navy)" />
-          </button>
+          <Tooltip label="Lab home" placement="right">
+            <button
+              onClick={() => { setActiveSubProject(null); setActiveScope("lab"); }}
+              title="Lab home"
+              aria-label="Lab home"
+              className="w-9 h-9 flex items-center justify-center rounded-[10px] transition-colors"
+              style={{
+                backgroundColor: activeScope === "lab" ? "rgba(27,46,75,0.12)" : "transparent",
+                border: activeScope === "lab" ? "1.5px solid rgba(27,46,75,0.25)" : "1.5px solid transparent",
+                cursor: "pointer",
+              }}
+            >
+              <Home size={15} color="var(--color-navy)" />
+            </button>
+          </Tooltip>
         </div>
 
         <div style={{ width: 28, height: 1, backgroundColor: "var(--color-border)", margin: "4px 0" }} />
 
         {/* Sub-project icons + switcher */}
         <div className="flex-1 flex flex-col items-center py-1 gap-1.5 overflow-y-auto" style={{ scrollbarWidth: "none" }}>
-          <p style={{ fontSize: 7.5, fontWeight: 700, letterSpacing: "0.1em", color: "var(--color-secondary)", margin: "2px 0 1px", textAlign: "center", textTransform: "uppercase", opacity: 0.7 }}>Projects</p>
           {/* Show first 5 as icons; if more, show a switcher trigger */}
           {subProjects.slice(0, 5).map((sp) => {
             const isActive = activeScope === "project" && subProjectId === sp.id;
             const bg = sp.color ?? "var(--color-navy)";
             return (
-              <button
-                key={sp.id}
-                onClick={() => { setActiveSubProject(sp.id); setActiveScope("project"); setShowSwitcher(false); }}
-                title={sp.name}
-                aria-current={isActive ? "true" : undefined}
-                className="w-9 h-9 rounded-[10px] flex items-center justify-center shrink-0 transition-all"
-                style={{
-                  backgroundColor: bg,
-                  color: "#fff",
-                  border: isActive ? `2.5px solid rgba(255,255,255,0.8)` : "2.5px solid transparent",
-                  outline: isActive ? `2px solid ${bg}` : "none",
-                  outlineOffset: 1,
-                  cursor: "pointer",
-                  fontFamily: "var(--font-roboto)",
-                  fontSize: 11,
-                  fontWeight: 700,
-                  letterSpacing: "0.02em",
-                  opacity: isActive ? 1 : 0.75,
-                }}
-              >
-                <span aria-hidden="true">{sp.name.slice(0, 2).toUpperCase()}</span>
-                <span className="sr-only">{sp.name}</span>
-              </button>
+              <Tooltip key={sp.id} label={sp.name} placement="right">
+                <button
+                  onClick={() => { setActiveSubProject(sp.id); setActiveScope("project"); setShowSwitcher(false); }}
+                  title={sp.name}
+                  aria-current={isActive ? "true" : undefined}
+                  className="w-9 h-9 rounded-[10px] flex items-center justify-center shrink-0 transition-all"
+                  style={{
+                    backgroundColor: bg,
+                    color: "#fff",
+                    border: isActive ? `2.5px solid rgba(255,255,255,0.8)` : "2.5px solid transparent",
+                    outline: isActive ? `2px solid ${bg}` : "none",
+                    outlineOffset: 1,
+                    cursor: "pointer",
+                    fontFamily: "var(--font-roboto)",
+                    fontSize: 11,
+                    fontWeight: 700,
+                    letterSpacing: "0.02em",
+                    opacity: isActive ? 1 : 0.75,
+                  }}
+                >
+                  <span aria-hidden="true">{sp.name.slice(0, 2).toUpperCase()}</span>
+                  <span className="sr-only">{sp.name}</span>
+                </button>
+              </Tooltip>
             );
           })}
 
@@ -697,38 +699,42 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           )}
 
           {/* Create sub-project */}
-          <button
-            onClick={() => setShowCreate(true)}
-            title="New project"
-            aria-label="New project"
-            className="w-9 h-9 rounded-[10px] flex items-center justify-center shrink-0 transition-colors hover:bg-[rgba(27,46,75,0.08)]"
-            style={{ border: "1.5px dashed var(--color-border)", background: "none", cursor: "pointer", color: "var(--color-secondary)" }}
-          >
-            <Plus size={14} />
-          </button>
+          <Tooltip label="New project" placement="right">
+            <button
+              onClick={() => setShowCreate(true)}
+              title="New project"
+              aria-label="New project"
+              className="w-9 h-9 rounded-[10px] flex items-center justify-center shrink-0 transition-colors hover:bg-[rgba(27,46,75,0.08)]"
+              style={{ border: "1.5px dashed var(--color-border)", background: "none", cursor: "pointer", color: "var(--color-secondary)" }}
+            >
+              <Plus size={14} />
+            </button>
+          </Tooltip>
         </div>
 
         <div style={{ width: 28, height: 1, backgroundColor: "var(--color-border)", margin: "4px 0" }} />
 
         {/* Personal */}
         <div className="pb-3 pt-1 flex flex-col items-center">
-          <button
-            onClick={() => { setActiveSubProject(null); setActiveScope("personal"); }}
-            title={profile?.name ?? "Personal workspace"}
-            aria-label="Personal workspace"
-            className="w-9 h-9 rounded-[10px] flex items-center justify-center transition-colors"
-            style={{
-              backgroundColor: activeScope === "personal" ? "var(--color-navy)" : "rgba(27,46,75,0.1)",
-              color: activeScope === "personal" ? "#fff" : "var(--color-navy)",
-              border: activeScope === "personal" ? "none" : "2px solid var(--color-border)",
-              cursor: "pointer",
-              fontFamily: "var(--font-roboto)",
-              fontSize: 11,
-              fontWeight: 700,
-            }}
-          >
-            {computeInitials(profile?.name ?? "") || (profile?.avatar_initials ?? "??")}
-          </button>
+          <Tooltip label={profile?.name ? `${profile.name} (personal)` : "Personal workspace"} placement="right">
+            <button
+              onClick={() => { setActiveSubProject(null); setActiveScope("personal"); }}
+              title={profile?.name ?? "Personal workspace"}
+              aria-label="Personal workspace"
+              className="w-9 h-9 rounded-[10px] flex items-center justify-center transition-colors"
+              style={{
+                backgroundColor: activeScope === "personal" ? "var(--color-navy)" : "rgba(27,46,75,0.1)",
+                color: activeScope === "personal" ? "#fff" : "var(--color-navy)",
+                border: activeScope === "personal" ? "none" : "2px solid var(--color-border)",
+                cursor: "pointer",
+                fontFamily: "var(--font-roboto)",
+                fontSize: 11,
+                fontWeight: 700,
+              }}
+            >
+              {computeInitials(profile?.name ?? "") || (profile?.avatar_initials ?? "??")}
+            </button>
+          </Tooltip>
         </div>
       </div>
 
@@ -837,43 +843,46 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
             {/* Notification bell */}
             <div className="relative">
-              <button
-                onClick={() => {
-                  const opening = !notifOpen;
-                  setNotifOpen(opening);
-                  setProfileOpen(false);
-                  if (opening && unreadCount > 0 && profile?.id) {
-                    supabase
-                      .from("notifications")
-                      .update({ read: true })
-                      .eq("user_id", profile.id)
-                      .eq("read", false)
-                      .then(({ error }) => {
-                        if (!error) {
-                          setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-                          setUnreadCount(0);
-                        }
-                      });
-                  }
-                }}
-                className="relative flex items-center justify-center rounded-lg transition-colors hover:bg-[rgba(27,46,75,0.06)]"
-                style={{ width: 44, height: 44 }}
-                aria-label={`Notifications, ${unreadCount} unread`}
-              >
-                <Bell size={18} color="var(--color-body)" />
-                <NotifDot count={unreadCount} />
-              </button>
+              <Tooltip label="Notifications" placement="bottom">
+                <button
+                  onClick={() => {
+                    const opening = !notifOpen;
+                    setNotifOpen(opening);
+                    setProfileOpen(false);
+                    if (opening && unreadCount > 0 && profile?.id) {
+                      supabase
+                        .from("notifications")
+                        .update({ read: true })
+                        .eq("user_id", profile.id)
+                        .eq("read", false)
+                        .then(({ error }) => {
+                          if (!error) {
+                            setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+                            setUnreadCount(0);
+                          }
+                        });
+                    }
+                  }}
+                  className="relative flex items-center justify-center rounded-lg transition-colors hover:bg-[rgba(27,46,75,0.06)]"
+                  style={{ width: 44, height: 44 }}
+                  aria-label={`Notifications, ${unreadCount} unread`}
+                >
+                  <Bell size={18} color="var(--color-body)" />
+                  <NotifDot count={unreadCount} />
+                </button>
+              </Tooltip>
               {notifOpen && <NotifPanel onClose={() => setNotifOpen(false)} notifications={notifications} />}
             </div>
 
             {/* User avatar */}
             <div className="relative">
-              <button
-                onClick={() => { setProfileOpen(!profileOpen); setNotifOpen(false); }}
-                className="flex items-center gap-1.5 rounded-lg px-1 transition-colors hover:bg-[rgba(27,46,75,0.06)]"
-                style={{ minHeight: 44 }}
-                aria-label="Profile menu"
-              >
+              <Tooltip label="Account" placement="bottom">
+                <button
+                  onClick={() => { setProfileOpen(!profileOpen); setNotifOpen(false); }}
+                  className="flex items-center gap-1.5 rounded-lg px-1 transition-colors hover:bg-[rgba(27,46,75,0.06)]"
+                  style={{ minHeight: 44 }}
+                  aria-label="Profile menu"
+                >
                 <Avatar
                   user={{
                     name: profile?.name ?? "",
@@ -884,7 +893,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                   size={28}
                 />
                 <ChevronDown size={14} color="var(--color-secondary)" className="hidden sm:block" />
-              </button>
+                </button>
+              </Tooltip>
               {profileOpen && (
                 <ProfileMenu
                   user={{ name: profile?.name ?? "", email: profile?.email ?? "" }}
