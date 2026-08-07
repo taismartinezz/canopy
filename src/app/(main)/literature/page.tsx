@@ -1032,9 +1032,13 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
         if (!att) continue;
         setUploadStatus(`Fetching PDF: ${att.filename}…`);
         try {
+          const { data: { session: pdfSession } } = await supabase.auth.getSession();
           const pdfRes = await fetch("/api/zotero/fetch-pdf", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+              "Content-Type": "application/json",
+              ...(pdfSession?.access_token ? { Authorization: `Bearer ${pdfSession.access_token}` } : {}),
+            },
             body: JSON.stringify({
               apiKey: apiKey.trim(), zoteroUserId: zoteroUserId.trim(),
               ...(selectedGroupId ? { groupId: selectedGroupId } : {}),
@@ -1717,9 +1721,13 @@ function DOILookupModal({ onSave, onMerge, onClose, projectId, currentUserId, su
       setLoading(true);
       // Try server-side SerpApi route first (handles arbitrary Scholar URLs)
       try {
+        const { data: { session: serpSession } } = await supabase.auth.getSession();
         const serpRes = await fetch("/api/scholar-search", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            ...(serpSession?.access_token ? { Authorization: `Bearer ${serpSession.access_token}` } : {}),
+          },
           body: JSON.stringify({ url: input }),
         });
         if (serpRes.ok) {
@@ -2780,9 +2788,13 @@ function DetailPanelContent({
     if (!item.doi) return;
     setRecsLoading(true); setRecsError(""); setRecsFetched(true);
     try {
+      const { data: { session: recsSession } } = await supabase.auth.getSession();
       const res = await fetch("/api/literature/recommendations", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(recsSession?.access_token ? { Authorization: `Bearer ${recsSession.access_token}` } : {}),
+        },
         body: JSON.stringify({ doi: item.doi, sourceItemId: item.id, projectId, title: stripHtml(item.title) }),
       });
       if (!res.ok) throw new Error(`Server error ${res.status}`);
@@ -4035,7 +4047,17 @@ export default function LiteraturePage() {
   const showingDetailMobile = isMobile && selectedItem !== null;
   const currentUserRole = (teamMembers.find((m) => m.id === currentUserId)?.role ?? "researcher") as UserRole;
 
-  const narrowList = isMobile;
+  const listColumnRef = useRef<HTMLDivElement>(null);
+  const [listWidth, setListWidth] = useState(9999);
+  useEffect(() => {
+    const el = listColumnRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([entry]) => setListWidth(entry.contentRect.width));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  // Hide Authors+Year when the list is too narrow to fit all fixed columns without squishing the title
+  const narrowList = isMobile || listWidth < 380;
 
   return (
     <div className="flex h-full" style={{ fontFamily: "var(--font-roboto)" }}>
@@ -4119,7 +4141,7 @@ export default function LiteraturePage() {
 
       {/* Center list / reading progress dashboard / trash */}
       {!showingDetailMobile && (
-        <div className="flex flex-col flex-1 min-w-0" style={{ minWidth: 240, overflow: "hidden", borderRight: selectedItem && !isMobile && !showReadingProgress && !showTrash ? "1px solid var(--color-border)" : undefined }}>
+        <div ref={listColumnRef} className="flex flex-col flex-1 min-w-0" style={{ minWidth: 240, overflow: "hidden", borderRight: selectedItem && !isMobile && !showReadingProgress && !showTrash ? "1px solid var(--color-border)" : undefined }}>
         {showReadingProgress ? (
           <ReadingProgressDashboard
             projectId={projectId}

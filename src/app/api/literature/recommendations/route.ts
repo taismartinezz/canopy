@@ -37,6 +37,11 @@ function mapWork(w: OAWork): RecResult {
 }
 
 export async function POST(request: Request) {
+  // Verify caller is authenticated before touching any project data
+  const authHeader = request.headers.get("Authorization") ?? "";
+  const token = authHeader.replace(/^Bearer\s+/i, "").trim();
+  if (!token) return Response.json({ recommendations: [] }, { status: 401 });
+
   const { doi, sourceItemId, projectId, title } = (await request.json()) as {
     doi?: string;
     sourceItemId?: string;
@@ -53,6 +58,21 @@ export async function POST(request: Request) {
   if (!supabaseUrl || !supabaseKey) {
     return Response.json({ recommendations: [] });
   }
+
+  // Verify the caller is a member of the requested project using their own token
+  const userClient = createClient(supabaseUrl, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? supabaseKey, {
+    global: { headers: { Authorization: `Bearer ${token}` } },
+    auth: { persistSession: false },
+  });
+  const { data: { user } } = await userClient.auth.getUser(token);
+  if (!user) return Response.json({ recommendations: [] }, { status: 401 });
+
+  const { count } = await userClient
+    .from("team_members")
+    .select("*", { count: "exact", head: true })
+    .eq("project_id", projectId)
+    .eq("user_id", user.id);
+  if (!count) return Response.json({ recommendations: [] }, { status: 403 });
 
   const supabase = createClient(supabaseUrl, supabaseKey);
 

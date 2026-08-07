@@ -333,6 +333,17 @@ export interface DashboardPost {
 
 // ── Scheduling ────────────────────────────────────────────────────────────────
 
+// Per-day working hours; key = "0" (Mon) … "6" (Sun), null = day off
+export type DayWorkingHours = { start: string; end: string } | null;
+export type WorkingHours = Record<string, DayWorkingHours>;
+
+export interface UserSettings {
+  userId: string;
+  timezone: string;         // IANA timezone string, e.g. "America/New_York"
+  workingHours: WorkingHours;
+  updatedAt: string;
+}
+
 // "day-slot" key where day=0..4 (Mon-Fri), slot=0..15 (9:00-16:30 in 30-min steps)
 export interface WeeklyAvailability {
   userId: string;

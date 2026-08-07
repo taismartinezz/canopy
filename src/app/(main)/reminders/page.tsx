@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useMemo, Fragment } from "react";
-import { Plus, Check, List, Trash2, ChevronLeft, ChevronRight, GripVertical, Users, User as UserIcon, Pencil, AlertCircle } from "lucide-react";
+import { Plus, Check, List, Trash2, ChevronLeft, ChevronRight, GripVertical, Users, User as UserIcon, Pencil } from "lucide-react";
 import { DateTimeFields, isoToLocalDate } from "@/components/ui/DateTimePicker";
 import { DndContext, DragOverlay, useDraggable, useDroppable, PointerSensor, KeyboardSensor, useSensor, useSensors } from "@dnd-kit/core";
 import type { DragEndEvent } from "@dnd-kit/core";
@@ -231,8 +231,7 @@ function ReminderRow({ reminder, currentUserId, teamMembers, isDraggable, showSc
                 {PRIORITY_MARKS[reminder.priority]}
               </span>
             )}
-            {isPastDue && <span title="Past due" style={{ color: "#C0392B", display: "flex", alignItems: "center", flexShrink: 0 }}><AlertCircle size={13} strokeWidth={2.5} /></span>}
-            <span style={{ fontSize: 15, color: isPastDue ? "#C0392B" : "var(--color-body)", fontWeight: isPastDue ? 600 : 400, fontFamily: "var(--font-roboto)", lineHeight: 1.3 }}>{reminder.title}</span>
+            <span style={{ fontSize: 15, color: "var(--color-body)", fontWeight: 400, fontFamily: "var(--font-roboto)", lineHeight: 1.3 }}>{reminder.title}</span>
           </div>
           {reminder.dueAt && (
             <div style={{ fontSize: 12, marginTop: 2, color: "var(--color-secondary)" }}>
@@ -798,7 +797,7 @@ function GroupedView({ includeNoDate, ...props }: CardProps & { includeNoDate: b
                   paddingLeft: sec.isSub ? 24 : 16,
                   paddingRight: 16,
                 }}>
-                  <span style={sec.isPastDueHeader ? { ...hdrStyle, color: "#C0392B" } : sec.isSub ? subStyle : hdrStyle}>{sec.label}</span>
+                  <span style={sec.isSub ? subStyle : hdrStyle}>{sec.label}</span>
                 </div>
                 {!sec.isPastDueHeader && (
                   <DroppableZone id={sec.key} isOver={!!activeId && overId === sec.key} accentColor={accentColor}>
