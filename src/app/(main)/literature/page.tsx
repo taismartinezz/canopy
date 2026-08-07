@@ -9,6 +9,7 @@ import { useProject } from "@/context/ProjectContext";
 import type { LiteratureItem, ReadStatus, LiteratureType, LibraryScope, LiteratureFile, LitAnnotation, LitAssignedReading, LitRecommendation, AssignmentReadingStatus, SubProject, User, UserRole } from "@/types";
 import Avatar from "@/components/ui/Avatar";
 import PDFViewer from "@/components/literature/PDFViewer";
+import PDFViewerInline from "@/components/literature/PDFViewerInline";
 import {
   Plus, Search, Download, FileText, File as FileIcon, X, Trash2,
   Tag, Star, ExternalLink, Copy, Check, ChevronLeft, ChevronRight,
@@ -2540,7 +2541,7 @@ function CitationLinker({ text, items, onSelectItem }: {
 
 // ── Detail panel ──────────────────────────────────────────────────────────────
 
-const DETAIL_TABS = ["Info", "Abstract", "Notes", "Tags", "Files", "Cite", "Related", "Annotations", "Assigned"] as const;
+const DETAIL_TABS = ["Info", "Abstract", "Notes", "Tags", "Files", "Read", "Cite", "Related", "Annotations", "Assigned"] as const;
 type DetailTab = typeof DETAIL_TABS[number];
 
 function DetailTabBar({ tab, setTab }: { tab: DetailTab; setTab: (t: DetailTab) => void }) {
@@ -3386,6 +3387,37 @@ function DetailPanelContent({
             </div>
           </div>
         )}
+
+        {tab === "Read" && (() => {
+          const pdfFile = localFiles.find((f) => f.url);
+          const externalPdfUrl = !pdfFile && item.url && (() => {
+            try { return new URL(item.url!).pathname.toLowerCase().endsWith(".pdf") ? item.url : null; } catch { return null; }
+          })();
+          const pdfUrl = pdfFile?.url ?? externalPdfUrl ?? null;
+          if (!pdfUrl) {
+            return (
+              <div className="px-4 py-8 flex flex-col items-center gap-3" style={{ textAlign: "center" }}>
+                <p style={{ fontSize: 13, color: "var(--color-secondary)" }}>No PDF attached to this item.</p>
+                <button onClick={() => setTab("Files")}
+                  style={{ fontSize: 12, fontWeight: 600, padding: "7px 16px", borderRadius: 7, backgroundColor: "var(--color-navy)", color: "#fff", border: "none", cursor: "pointer" }}>
+                  Attach a PDF
+                </button>
+              </div>
+            );
+          }
+          return (
+            <div style={{ height: "calc(100vh - 160px)", minHeight: 400 }}>
+              <PDFViewerInline
+                url={pdfUrl}
+                itemId={item.id}
+                currentUserId={currentUserId}
+                annotations={annotations}
+                onAnnotationAdded={(a) => setAnnotations((prev) => [...prev, a])}
+                onOpenFullscreen={() => { setPdfViewerInitialPage(1); setShowPDFViewer(true); }}
+              />
+            </div>
+          );
+        })()}
 
         {tab === "Cite" && (
           <div className="px-4 py-4">

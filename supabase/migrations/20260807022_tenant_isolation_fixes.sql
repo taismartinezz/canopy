@@ -26,6 +26,7 @@
 -- code before you're a member) is handled exclusively via the RPC below.
 
 DROP POLICY IF EXISTS "anyone can look up a code" ON invite_codes;
+DROP POLICY IF EXISTS "lab members can read own invite codes" ON invite_codes;
 
 CREATE POLICY "lab members can read own invite codes"
   ON invite_codes FOR SELECT USING (
@@ -60,6 +61,7 @@ $$;
 -- ── 2. sub_project_invite_codes: restrict direct reads ────────────────────────
 
 DROP POLICY IF EXISTS "anyone can look up a project invite" ON sub_project_invite_codes;
+DROP POLICY IF EXISTS "lab members can read own sub_project invite codes" ON sub_project_invite_codes;
 
 CREATE POLICY "lab members can read own sub_project invite codes"
   ON sub_project_invite_codes FOR SELECT USING (
