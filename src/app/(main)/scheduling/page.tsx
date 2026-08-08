@@ -355,6 +355,7 @@ function CalendarTab({
   function renderWeekView() {
     const ws = getWeekStart(anchor);
     const days = Array.from({ length: 7 }, (_, i) => addDays(ws, i));
+    const hasEvents = days.some(d => calEvents.some(e => e.date === makeDateStr(d)));
     return (
       <>
         <div style={{ display: "grid", gridTemplateColumns: "50px repeat(7, 1fr)", borderBottom: "1px solid var(--color-border)" }}>
@@ -372,12 +373,26 @@ function CalendarTab({
             );
           })}
         </div>
-        {renderTimeGrid(days)}
+        {hasEvents ? renderTimeGrid(days) : (
+          <EmptyState
+            icon={Calendar}
+            heading="No events scheduled this week"
+            body="Click a day header or add one below."
+            action={
+              <button
+                onClick={() => openAdd(makeDateStr(days.find(d => makeDateStr(d) === todayStr) ?? days[0]))}
+                style={{ fontSize: 13, fontWeight: 600, padding: "8px 18px", borderRadius: 7, backgroundColor: "var(--color-btn-primary)", color: "#fff", border: "none", cursor: "pointer" }}>
+                + Add event
+              </button>
+            }
+          />
+        )}
       </>
     );
   }
 
   function renderDayView() {
+    const hasEvents = calEvents.some(e => e.date === makeDateStr(anchor));
     return (
       <>
         <div style={{ display: "grid", gridTemplateColumns: "50px 1fr", borderBottom: "1px solid var(--color-border)" }}>
@@ -387,7 +402,19 @@ function CalendarTab({
             <div style={{ fontSize: 22, fontWeight: 700, color: makeDateStr(anchor) === todayStr ? "var(--color-navy)" : "var(--color-body)" }}>{anchor.getDate()}</div>
           </div>
         </div>
-        {renderTimeGrid([anchor])}
+        {hasEvents ? renderTimeGrid([anchor]) : (
+          <EmptyState
+            icon={Calendar}
+            heading="No events today"
+            action={
+              <button
+                onClick={() => openAdd(makeDateStr(anchor))}
+                style={{ fontSize: 13, fontWeight: 600, padding: "8px 18px", borderRadius: 7, backgroundColor: "var(--color-btn-primary)", color: "#fff", border: "none", cursor: "pointer" }}>
+                + Add event
+              </button>
+            }
+          />
+        )}
       </>
     );
   }
