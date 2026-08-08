@@ -38,7 +38,7 @@ const STATUS_LABELS: Record<TaskStatus, string> = {
   todo: "To Do", in_progress: "In Progress", in_review: "In Review", done: "Done",
 };
 const STATUS_COLORS: Record<TaskStatus, string> = {
-  todo: "#64748B", in_progress: "#1B2E4B", in_review: "#A0622A", done: "#2E7D52",
+  todo: "var(--status-todo-text)", in_progress: "var(--color-navy)", in_review: "var(--color-warning)", done: "var(--color-success)",
 };
 const PROMPT_CATEGORY_LABELS: Record<PromptCategory, string> = {
   emotional_processing: "Emotional Processing",
@@ -74,9 +74,10 @@ function FieldInput({
   multiline?: boolean; minHeight?: number;
 }) {
   const style: React.CSSProperties = {
-    width: "100%", border: "1px solid #DDE1E7", borderRadius: 8,
+    width: "100%", border: "1px solid var(--color-border)", borderRadius: 8,
     fontFamily: "var(--font-roboto)", fontWeight: 400, fontSize: 14,
-    color: "#2D2D2D", outline: "none", boxSizing: "border-box",
+    color: "var(--color-body)", backgroundColor: "var(--color-surface)",
+    outline: "none", boxSizing: "border-box",
     padding: multiline ? "10px 14px" : "0 14px",
     resize: multiline ? "vertical" : undefined,
     minHeight: multiline ? (minHeight ?? 120) : 36,
@@ -89,8 +90,8 @@ function FieldInput({
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         style={style}
-        onFocus={(e) => { e.currentTarget.style.borderColor = "#1B2E4B"; }}
-        onBlur={(e) => { e.currentTarget.style.borderColor = "#DDE1E7"; }}
+        onFocus={(e) => { e.currentTarget.style.borderColor = "var(--color-navy)"; }}
+        onBlur={(e) => { e.currentTarget.style.borderColor = "var(--color-border)"; }}
       />
     );
   }
@@ -101,8 +102,8 @@ function FieldInput({
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
       style={style}
-      onFocus={(e) => { e.currentTarget.style.borderColor = "#1B2E4B"; }}
-      onBlur={(e) => { e.currentTarget.style.borderColor = "#DDE1E7"; }}
+      onFocus={(e) => { e.currentTarget.style.borderColor = "var(--color-navy)"; }}
+      onBlur={(e) => { e.currentTarget.style.borderColor = "var(--color-border)"; }}
     />
   );
 }
@@ -112,7 +113,7 @@ function TagPill({ label, onRemove }: { label: string; onRemove?: () => void }) 
     <span style={{
       display: "inline-flex", alignItems: "center", gap: 4,
       padding: "4px 10px", borderRadius: 20,
-      border: "1px solid #1B2E4B", color: "#1B2E4B",
+      border: "1px solid var(--color-navy)", color: "var(--color-navy)",
       fontFamily: "var(--font-roboto)", fontWeight: 400, fontSize: 13,
     }}>
       {label}
@@ -120,7 +121,7 @@ function TagPill({ label, onRemove }: { label: string; onRemove?: () => void }) 
         <button
           onClick={onRemove}
           aria-label={`Remove ${label}`}
-          style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex", alignItems: "center", color: "#1B2E4B", minWidth: 16, minHeight: 16 }}
+          style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex", alignItems: "center", color: "var(--color-navy)", minWidth: 16, minHeight: 16 }}
         >
           <X size={12} />
         </button>
@@ -132,10 +133,10 @@ function TagPill({ label, onRemove }: { label: string; onRemove?: () => void }) 
 function StatCard({ label, count }: { label: string; count: number }) {
   return (
     <div style={{
-      backgroundColor: "#fff", borderRadius: 10, border: "1px solid #DDE1E7",
+      backgroundColor: "var(--color-surface)", borderRadius: 10, border: "1px solid var(--color-border)",
       padding: "16px 20px", display: "flex", flexDirection: "column", gap: 4,
     }}>
-      <span style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 24, color: "#1B2E4B", lineHeight: 1 }}>
+      <span style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 24, color: "var(--color-navy)", lineHeight: 1 }}>
         {count}
       </span>
       <span style={{ fontFamily: "var(--font-roboto)", fontWeight: 400, fontSize: 12, color: "#6B6B6B" }}>

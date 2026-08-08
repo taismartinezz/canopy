@@ -236,6 +236,11 @@ body {
   /* ── Structure ── */
   --color-border:       #DDE1E7;
   --color-dimmed-bg:    rgba(0,0,0,0.06);   /* inactive pill/button fill */
+  --color-surface-2:    #F6F8FC;            /* elevated input/readonly surface */
+
+  /* ── Primary button ── */
+  --color-btn-primary:       #1B2E4B;
+  --color-btn-primary-hover: #263F64;
 
   /* ── Semantic ── */
   --color-success:      #2E7D52;
@@ -291,6 +296,9 @@ body {
     --color-secondary:    #8E8E93;
     --color-border:       rgba(84,84,88,0.65);
     --color-dimmed-bg:    rgba(255,255,255,0.08);
+    --color-surface-2:    #2C2C2E;
+    --color-btn-primary:       #006ADB;
+    --color-btn-primary-hover: #1A80EF;
     --color-success:      #30D158;
     --color-warning:      #FF9F0A;
     --color-error:        #FF453A;
@@ -340,6 +348,9 @@ body {
   --color-secondary:    #8E8E93;
   --color-border:       rgba(84,84,88,0.65);
   --color-dimmed-bg:    rgba(255,255,255,0.08);
+  --color-surface-2:    #2C2C2E;
+  --color-btn-primary:       #006ADB;
+  --color-btn-primary-hover: #1A80EF;
   --color-success:      #30D158;
   --color-warning:      #FF9F0A;
   --color-error:        #FF453A;
@@ -374,3 +385,30 @@ body {
   --priority-low-text:      #30D158;
   --priority-low-bg:        rgba(48,209,88,0.15);
 }
+
+/* ── Global form-element dark mode styles ─────────────────────────────────────
+ * Browsers default inputs to white — override so they sit on the dark surface.
+ * Excludes checkboxes, radios, range, and color pickers (browser-native UI).
+ */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+  :root:not([data-theme="light"]) textarea,
+  :root:not([data-theme="light"]) select {
+    background-color: var(--color-surface-2);
+    color: var(--color-body);
+    border-color: var(--color-border);
+    color-scheme: dark;
+  }
+  :root:not([data-theme="light"]) input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"])::placeholder,
+  :root:not([data-theme="light"]) textarea::placeholder { color: var(--color-secondary); }
+}
+:root[data-theme="dark"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+:root[data-theme="dark"] textarea,
+:root[data-theme="dark"] select {
+  background-color: var(--color-surface-2);
+  color: var(--color-body);
+  border-color: var(--color-border);
+  color-scheme: dark;
+}
+:root[data-theme="dark"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"])::placeholder,
+:root[data-theme="dark"] textarea::placeholder { color: var(--color-secondary); }

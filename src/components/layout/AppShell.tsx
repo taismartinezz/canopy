@@ -19,6 +19,17 @@ import CreateProjectModal from "@/components/projects/CreateProjectModal";
 import OnboardingModal, { useOnboarding } from "@/components/ui/OnboardingModal";
 import Tooltip from "@/components/ui/Tooltip";
 import GlobalSearch from "@/components/ui/GlobalSearch";
+
+function contrastTextColor(hex: string): "#000000" | "#ffffff" {
+  if (!/^#[0-9A-Fa-f]{6}$/.test(hex)) return "#ffffff";
+  const r = parseInt(hex.slice(1, 3), 16) / 255;
+  const g = parseInt(hex.slice(3, 5), 16) / 255;
+  const b = parseInt(hex.slice(5, 7), 16) / 255;
+  const lin = (c: number) => c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  const L = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+  return L > 0.179 ? "#000000" : "#ffffff";
+}
+
 const NAV_ITEMS = [
   { href: "/",            label: "Dashboard",  icon: LayoutDashboard },
   { href: "/tasks",       label: "Tasks",      icon: CheckSquare     },
@@ -634,11 +645,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 <button
                   onClick={() => { setActiveSubProject(sp.id); setActiveScope("project"); setShowSwitcher(false); }}
                   title={sp.name}
+                  aria-label={`Project: ${sp.name}`}
                   aria-current={isActive ? "true" : undefined}
                   className="w-9 h-9 rounded-[10px] flex items-center justify-center shrink-0 transition-all"
                   style={{
                     backgroundColor: bg,
-                    color: "#fff",
+                    color: contrastTextColor(bg),
                     border: isActive ? `2.5px solid rgba(255,255,255,0.8)` : "2.5px solid transparent",
                     outline: isActive ? `2px solid ${bg}` : "none",
                     outlineOffset: 1,
@@ -651,7 +663,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                   }}
                 >
                   <span aria-hidden="true">{sp.name.slice(0, 2).toUpperCase()}</span>
-                  <span className="sr-only">{sp.name}</span>
                 </button>
               </Tooltip>
             );
