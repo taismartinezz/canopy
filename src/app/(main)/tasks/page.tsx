@@ -11,7 +11,7 @@ import {
   SortableContext, useSortable, verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { LayoutGrid, List, Search, Plus, MoreHorizontal, ChevronDown, Bookmark, X as XIcon, User as UserIcon, Users } from "lucide-react";
+import { LayoutGrid, List, Search, Plus, MoreHorizontal, ChevronDown, Bookmark, User as UserIcon, Users } from "lucide-react";
 import { formatDate, TASKS as MOCK_TASKS, USERS, getStoredProject } from "@/lib/mock-data";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { useProject } from "@/context/ProjectContext";
@@ -685,52 +685,6 @@ export default function TasksPage() {
   const [subtaskCounts, setSubtaskCounts] = useState<Record<string, { total: number; done: number }>>({});
   const [taskNavStack, setTaskNavStack] = useState<Task[]>([]);
 
-  // ── Saved views (localStorage) ────────────────────────────────────────────────
-  type SavedView = { id: string; name: string; filters: { member: string; priority: string; search: string } };
-  const [savedViews, setSavedViews] = useState<SavedView[]>([]);
-  const [activeViewId, setActiveViewId] = useState<string | null>(null);
-  const [namingView, setNamingView] = useState(false);
-  const [viewNameInput, setViewNameInput] = useState("");
-
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem("canopy_saved_views_tasks");
-      if (stored) setSavedViews(JSON.parse(stored) as SavedView[]);
-    } catch { /* ignore */ }
-  }, []);
-
-  function saveCurrentView() {
-    if (!viewNameInput.trim()) return;
-    const view: SavedView = {
-      id: crypto.randomUUID(),
-      name: viewNameInput.trim(),
-      filters: { member: filterMember, priority: filterPriority, search },
-    };
-    const next = [...savedViews, view];
-    setSavedViews(next);
-    localStorage.setItem("canopy_saved_views_tasks", JSON.stringify(next));
-    setNamedView(view.id);
-    setNamingView(false);
-    setViewNameInput("");
-  }
-
-  function setNamedView(id: string | null) {
-    setActiveViewId(id);
-    if (id === null) { return; }
-    const v = savedViews.find((sv) => sv.id === id);
-    if (!v) return;
-    setFilterMember(v.filters.member);
-    setFilterPriority(v.filters.priority);
-    setSearch(v.filters.search);
-  }
-
-  function deleteView(id: string) {
-    const next = savedViews.filter((v) => v.id !== id);
-    setSavedViews(next);
-    localStorage.setItem("canopy_saved_views_tasks", JSON.stringify(next));
-    if (activeViewId === id) setActiveViewId(null);
-  }
-
   useEffect(() => {
     if (!isSupabaseConfigured) {
       // Demo mode — use mock data, restoring any in-session mutations from sessionStorage
@@ -1155,72 +1109,6 @@ export default function TasksPage() {
             <Plus size={13} />
             <span className="hidden sm:inline">Add Task</span>
           </button>
-        </div>
-
-        {/* Saved views strip */}
-        <div className="flex items-center gap-1 overflow-x-auto pb-0" style={{ scrollbarWidth: "none" }}>
-          <button
-            onClick={() => { setActiveViewId(null); setSearch(""); setFilterMember("all"); setFilterPriority("all"); }}
-            style={{
-              fontSize: 12, fontWeight: activeViewId === null ? 600 : 400,
-              color: activeViewId === null ? "var(--color-navy)" : "var(--color-secondary)",
-              padding: "4px 10px", border: "none", background: "none", cursor: "pointer",
-              borderBottom: activeViewId === null ? "2px solid var(--color-navy)" : "2px solid transparent",
-              marginBottom: -1, whiteSpace: "nowrap",
-            }}
-          >
-            Default
-          </button>
-          {savedViews.map((v) => (
-            <div key={v.id} className="relative group/viewtab flex items-center" style={{ marginBottom: -1 }}>
-              <button
-                onClick={() => setNamedView(v.id)}
-                style={{
-                  fontSize: 12, fontWeight: activeViewId === v.id ? 600 : 400,
-                  color: activeViewId === v.id ? "var(--color-navy)" : "var(--color-secondary)",
-                  padding: "4px 10px", border: "none", background: "none", cursor: "pointer",
-                  borderBottom: activeViewId === v.id ? "2px solid var(--color-navy)" : "2px solid transparent",
-                  whiteSpace: "nowrap",
-                  paddingRight: 22,
-                }}
-              >
-                {v.name}
-              </button>
-              <button
-                onClick={() => deleteView(v.id)}
-                className="absolute right-1 opacity-0 group-hover/viewtab:opacity-100 transition-opacity"
-                style={{ padding: 2, border: "none", background: "none", cursor: "pointer", lineHeight: 1 }}
-                aria-label="Delete view"
-              >
-                <XIcon size={10} color="var(--color-secondary)" />
-              </button>
-            </div>
-          ))}
-          {namingView ? (
-            <form
-              onSubmit={(e) => { e.preventDefault(); saveCurrentView(); }}
-              className="flex items-center gap-1"
-            >
-              <input
-                autoFocus
-                value={viewNameInput}
-                onChange={(e) => setViewNameInput(e.target.value)}
-                placeholder="View name…"
-                onKeyDown={(e) => { if (e.key === "Escape") { setNamingView(false); setViewNameInput(""); } }}
-                style={{ fontSize: 12, height: 26, padding: "0 8px", border: "1px solid var(--color-border)", borderRadius: 5, outline: "none", width: 120 }}
-              />
-              <button type="submit" style={{ fontSize: 11, fontWeight: 600, color: "var(--color-navy)", background: "none", border: "none", cursor: "pointer", padding: "2px 6px" }}>Save</button>
-              <button type="button" onClick={() => { setNamingView(false); setViewNameInput(""); }} style={{ fontSize: 11, color: "var(--color-secondary)", background: "none", border: "none", cursor: "pointer", padding: "2px 4px" }}>Cancel</button>
-            </form>
-          ) : (
-            <button
-              onClick={() => setNamingView(true)}
-              style={{ fontSize: 12, color: "var(--color-secondary)", padding: "4px 8px", border: "none", background: "none", cursor: "pointer", whiteSpace: "nowrap", marginBottom: -1 }}
-              title="Save current filters as a view"
-            >
-              + Save view
-            </button>
-          )}
         </div>
 
         {/* Search + filters row */}

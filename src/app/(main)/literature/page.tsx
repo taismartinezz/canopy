@@ -361,7 +361,7 @@ function AddItemModal({
       >
         <div className="flex items-center justify-between mb-5">
           <h2 style={{ fontFamily: "var(--font-lora)", fontWeight: 600, fontSize: 16, color: "var(--color-navy)", margin: 0 }}>Add item</h2>
-          <button onClick={onClose} className="flex items-center justify-center rounded-lg hover:bg-[rgba(27,46,75,0.06)]" style={{ width: 36, height: 36 }} aria-label="Close"><X size={16} color="var(--color-secondary)" /></button>
+          <button onClick={onClose} className="flex items-center justify-center rounded-lg hover:bg-[var(--color-navy-dim)]" style={{ width: 36, height: 36 }} aria-label="Close"><X size={16} color="var(--color-secondary)" /></button>
         </div>
 
         <div className="space-y-3">
@@ -1375,7 +1375,7 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
       <div style={{ backgroundColor: "var(--color-surface)", maxWidth: 480, width: "100%", borderRadius: 10, padding: 28, boxShadow: "0 8px 40px rgba(27,46,75,0.18)", maxHeight: "90dvh", overflowY: "auto" }}>
         <div className="flex items-center justify-between mb-4">
           <h2 style={{ fontFamily: "var(--font-lora)", fontWeight: 600, fontSize: 16, color: "var(--color-navy)", margin: 0 }}>Import from Zotero</h2>
-          <button onClick={onClose} className="flex items-center justify-center rounded-lg hover:bg-[rgba(27,46,75,0.06)]" style={{ width: 36, height: 36 }}><X size={16} color="var(--color-secondary)" /></button>
+          <button onClick={onClose} className="flex items-center justify-center rounded-lg hover:bg-[var(--color-navy-dim)]" style={{ width: 36, height: 36 }}><X size={16} color="var(--color-secondary)" /></button>
         </div>
 
         {/* Tab: File vs API */}
@@ -1864,7 +1864,7 @@ function DOILookupModal({ onSave, onMerge, onClose, projectId, currentUserId, su
       <div style={{ backgroundColor: "var(--color-surface)", maxWidth: 480, width: "100%", borderRadius: 10, padding: 28, boxShadow: "0 8px 40px rgba(27,46,75,0.18)", maxHeight: "90dvh", overflowY: "auto" }} onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
           <h2 style={{ fontFamily: "var(--font-lora)", fontWeight: 600, fontSize: 16, color: "var(--color-navy)", margin: 0 }}>Add by DOI / BibTeX / URL</h2>
-          <button onClick={onClose} className="flex items-center justify-center rounded-lg hover:bg-[rgba(27,46,75,0.06)]" style={{ width: 36, height: 36 }}><X size={16} color="var(--color-secondary)" /></button>
+          <button onClick={onClose} className="flex items-center justify-center rounded-lg hover:bg-[var(--color-navy-dim)]" style={{ width: 36, height: 36 }}><X size={16} color="var(--color-secondary)" /></button>
         </div>
 
         <div className="flex rounded-lg p-0.5 mb-4" style={{ backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)", width: "fit-content" }}>
@@ -2030,7 +2030,7 @@ function CollectionsSidebar({
           {onCollapse && (
             <button
               onClick={onCollapse}
-              className="opacity-0 group-hover/litpanel:opacity-100 transition-opacity flex items-center justify-center rounded-lg hover:bg-[rgba(27,46,75,0.06)]"
+              className="opacity-0 group-hover/litpanel:opacity-100 transition-opacity flex items-center justify-center rounded-lg hover:bg-[var(--color-navy-dim)]"
               style={{ width: 32, height: 32 }}
               title="Collapse panel"
               aria-label="Collapse panel"
@@ -2038,10 +2038,10 @@ function CollectionsSidebar({
               <ChevronLeft size={15} color="var(--color-secondary)" />
             </button>
           )}
-          {showClose && <button onClick={onClose} className="flex items-center justify-center rounded-lg hover:bg-[rgba(27,46,75,0.06)]" style={{ width: 44, height: 44 }} aria-label="Close"><X size={16} color="var(--color-secondary)" /></button>}
-          {onImportZotero && <button onClick={onImportZotero} className="flex items-center justify-center rounded-lg hover:bg-[rgba(27,46,75,0.06)]" style={{ width: 32, height: 32 }} title="Import from Zotero" aria-label="Import from Zotero"><Upload size={15} color="var(--color-body)" /></button>}
-          {onAddByDOI && <button onClick={onAddByDOI} className="flex items-center justify-center rounded-lg hover:bg-[rgba(27,46,75,0.06)]" style={{ width: 32, height: 32 }} title="Add by DOI / BibTeX / URL" aria-label="Add by DOI"><Link2 size={15} color="var(--color-body)" /></button>}
-          <button onClick={onAddItem} className="flex items-center justify-center rounded-lg hover:bg-[rgba(27,46,75,0.06)]" style={{ width: 44, height: 44 }} aria-label="Add item">
+          {showClose && <button onClick={onClose} className="flex items-center justify-center rounded-lg hover:bg-[var(--color-navy-dim)]" style={{ width: 44, height: 44 }} aria-label="Close"><X size={16} color="var(--color-secondary)" /></button>}
+          {onImportZotero && <button onClick={onImportZotero} className="flex items-center justify-center rounded-lg hover:bg-[var(--color-navy-dim)]" style={{ width: 32, height: 32 }} title="Import from Zotero" aria-label="Import from Zotero"><Upload size={15} color="var(--color-body)" /></button>}
+          {onAddByDOI && <button onClick={onAddByDOI} className="flex items-center justify-center rounded-lg hover:bg-[var(--color-navy-dim)]" style={{ width: 32, height: 32 }} title="Add by DOI / BibTeX / URL" aria-label="Add by DOI"><Link2 size={15} color="var(--color-body)" /></button>}
+          <button onClick={onAddItem} className="flex items-center justify-center rounded-lg hover:bg-[var(--color-navy-dim)]" style={{ width: 44, height: 44 }} aria-label="Add item">
             <Plus size={14} color="var(--color-navy)" />
           </button>
         </div>
@@ -2082,7 +2082,7 @@ function CollectionsSidebar({
             <button
               onClick={() => setShowTrash(true)}
               style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "6px 10px 6px 11px", borderRadius: 7, border: "none", borderLeft: `3px solid ${showTrash ? "#C0392B" : "transparent"}`, cursor: "pointer", backgroundColor: showTrash ? "rgba(192,57,43,0.08)" : "transparent", textAlign: "left", boxSizing: "border-box", fontFamily: "var(--font-roboto)", marginBottom: 1 }}
-              onMouseEnter={(e) => { if (!showTrash) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "rgba(0,0,0,0.04)"; }}
+              onMouseEnter={(e) => { if (!showTrash) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "var(--color-navy-dim)"; }}
               onMouseLeave={(e) => { if (!showTrash) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "transparent"; }}
             >
               <Trash2 size={13} color={showTrash ? "#C0392B" : "var(--color-secondary)"} />
@@ -2097,7 +2097,7 @@ function CollectionsSidebar({
           <button
             onClick={onReadingProgress}
             style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "6px 10px 6px 11px", borderRadius: 7, border: "none", borderLeft: `3px solid ${showReadingProgress ? "#6366F1" : "transparent"}`, cursor: "pointer", backgroundColor: showReadingProgress ? "rgba(99,102,241,0.09)" : "transparent", textAlign: "left", boxSizing: "border-box", fontFamily: "var(--font-roboto)" }}
-            onMouseEnter={(e) => { if (!showReadingProgress) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "rgba(0,0,0,0.04)"; }}
+            onMouseEnter={(e) => { if (!showReadingProgress) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "var(--color-navy-dim)"; }}
             onMouseLeave={(e) => { if (!showReadingProgress) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "transparent"; }}
           >
             <BarChart2 size={14} color={showReadingProgress ? "#6366F1" : "var(--color-secondary)"} />
@@ -3056,7 +3056,7 @@ function DetailPanelContent({
                 <Trash2 size={14} />
               </button>
             )}
-            <button onClick={onClose} className="flex items-center justify-center rounded-lg hover:bg-[rgba(27,46,75,0.06)]" style={{ width: 44, height: 44 }} aria-label="Close"><X size={15} color="var(--color-secondary)" /></button>
+            <button onClick={onClose} className="flex items-center justify-center rounded-lg hover:bg-[var(--color-navy-dim)]" style={{ width: 44, height: 44 }} aria-label="Close"><X size={15} color="var(--color-secondary)" /></button>
           </div>
         </div>
       </div>
@@ -3352,7 +3352,7 @@ function DetailPanelContent({
                     </div>
                     {file.url ? (
                       <a href={file.url} target="_blank" rel="noopener noreferrer"
-                        className="flex items-center justify-center rounded hover:bg-[rgba(27,46,75,0.06)]"
+                        className="flex items-center justify-center rounded hover:bg-[var(--color-navy-dim)]"
                         style={{ width: 36, height: 36 }} title="Open / download" aria-label="Open file">
                         <Download size={12} color="var(--color-navy)" />
                       </a>
@@ -4440,9 +4440,9 @@ export default function LiteraturePage() {
                   const isChecked = selectedIds.has(item.id);
                   return (
                     <button key={item.id} onClick={() => setSelectedItemId(isSelected ? null : item.id)} className="w-full text-left"
-                      style={{ display: "flex", alignItems: "center", gap: 8, paddingLeft: isMobile ? 12 : 16, paddingRight: isMobile ? 12 : 16, paddingTop: 10, paddingBottom: 10, backgroundColor: isSelected ? "rgba(27,46,75,0.06)" : isChecked ? "rgba(27,46,75,0.04)" : "transparent", borderLeft: isSelected ? "3px solid var(--color-navy)" : "3px solid transparent", borderBottom: "1px solid var(--color-border)", minHeight: 48 }}
-                      onMouseEnter={(e) => { if (!isSelected) (e.currentTarget as HTMLElement).style.backgroundColor = "#F8FAFF"; }}
-                      onMouseLeave={(e) => { if (!isSelected) (e.currentTarget as HTMLElement).style.backgroundColor = isChecked ? "rgba(27,46,75,0.04)" : ""; }}
+                      style={{ display: "flex", alignItems: "center", gap: 8, paddingLeft: isMobile ? 12 : 16, paddingRight: isMobile ? 12 : 16, paddingTop: 10, paddingBottom: 10, backgroundColor: isSelected ? "var(--color-navy-dim)" : isChecked ? "var(--color-navy-dim)" : "transparent", borderLeft: isSelected ? "3px solid var(--color-navy)" : "3px solid transparent", borderBottom: "1px solid var(--color-border)", minHeight: 48 }}
+                      onMouseEnter={(e) => { if (!isSelected) (e.currentTarget as HTMLElement).style.backgroundColor = "var(--color-navy-dim)"; }}
+                      onMouseLeave={(e) => { if (!isSelected) (e.currentTarget as HTMLElement).style.backgroundColor = isChecked ? "var(--color-navy-dim)" : ""; }}
                     >
                       {selectMode && (
                         <input type="checkbox" checked={isChecked}

@@ -825,7 +825,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           <div className="hidden md:flex items-center gap-1.5 min-w-0">
             {project?.name && (
               <Link href="/" style={{ fontSize: 12, color: "var(--color-secondary)", whiteSpace: "nowrap", textDecoration: "none" }}
-                className="transition-opacity hover:opacity-70">
+                className="transition-colors hover:text-[var(--color-body)] hover:underline">
                 {project.name}
               </Link>
             )}
@@ -858,13 +858,16 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               </button>
             </Tooltip>
 
-            {/* Institution badge — links to team page */}
+            {/* Institution badge — navigates to team page */}
             {project?.institution && (
-              <Link href="/team" title="View team" className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 shrink-0 transition-opacity hover:opacity-90"
-                style={{ backgroundColor: "var(--color-navy)", color: "#fff", borderRadius: 20, fontSize: 11, fontWeight: 600, whiteSpace: "nowrap", textDecoration: "none", cursor: "pointer" }}>
-                {project.institution}
-                <Users size={11} style={{ opacity: 0.7, flexShrink: 0 }} />
-              </Link>
+              <Tooltip label="View lab team" placement="bottom">
+                <Link href="/team" aria-label={`View ${project.institution} team`}
+                  className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 shrink-0 transition-opacity hover:opacity-80"
+                  style={{ backgroundColor: "var(--color-btn-primary)", color: "#fff", borderRadius: 20, fontSize: 11, fontWeight: 600, whiteSpace: "nowrap", textDecoration: "none" }}>
+                  {project.institution}
+                  <Users size={11} style={{ opacity: 0.7, flexShrink: 0 }} />
+                </Link>
+              </Tooltip>
             )}
 
             {/* Notification bell */}

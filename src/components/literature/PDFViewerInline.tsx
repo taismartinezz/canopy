@@ -261,6 +261,8 @@ export default function PDFViewerInline({
         <div
           style={{
             minWidth: `${renderedWidth + 24}px`,
+            width: "100%",
+            boxSizing: "border-box",
             display: "flex",
             justifyContent: "center",
             padding: "12px",
