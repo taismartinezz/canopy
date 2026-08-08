@@ -237,9 +237,21 @@ type SupabaseNotif = {
   body?: string;
   read: boolean;
   created_at: string;
+  related_id?: string;
 };
 
-function NotifPanel({ onClose, notifications }: { onClose: () => void; notifications: SupabaseNotif[] }) {
+function notifHref(n: SupabaseNotif): string {
+  if (n.type === "task_assigned") return "/tasks";
+  if (n.type === "reading_assigned") return "/literature";
+  if (n.type === "lab_win") return "/dashboard";
+  return "/dashboard";
+}
+
+function NotifPanel({ onClose, notifications, onNavigate }: {
+  onClose: () => void;
+  notifications: SupabaseNotif[];
+  onNavigate: (n: SupabaseNotif) => void;
+}) {
   return (
     <div
       className="absolute right-0 top-full mt-2 animate-fade-in"
@@ -257,13 +269,18 @@ function NotifPanel({ onClose, notifications }: { onClose: () => void; notificat
           <p className="px-4 py-6 text-center" style={{ color: "var(--color-secondary)", fontSize: 13 }}>No notifications</p>
         ) : (
           notifications.map((n) => (
-            <div key={n.id} className="px-4 py-3" style={{ backgroundColor: n.read ? undefined : "var(--color-navy-dim)", borderBottom: "1px solid var(--color-border)" }}>
-              <p style={{ fontSize: 13, color: "var(--color-body)" }}>
+            <button
+              key={n.id}
+              onClick={() => { onNavigate(n); onClose(); }}
+              className="w-full text-left px-4 py-3 transition-colors hover:bg-[var(--color-navy-dim)]"
+              style={{ backgroundColor: n.read ? undefined : "var(--color-navy-dim)", borderBottom: "1px solid var(--color-border)", display: "block", border: "none", cursor: "pointer", fontFamily: "inherit" }}
+            >
+              <p style={{ fontSize: 13, color: "var(--color-body)", margin: 0 }}>
                 {!n.read && <span className="inline-block w-2 h-2 rounded-full mr-2" style={{ backgroundColor: "var(--color-navy)", verticalAlign: "middle" }} />}
                 {n.title}{n.body ? `: ${n.body}` : ""}
               </p>
-              <p style={{ fontSize: 11, color: "var(--color-secondary)", marginTop: 2 }}>{relTime(n.created_at)}</p>
-            </div>
+              <p style={{ fontSize: 11, color: "var(--color-secondary)", marginTop: 2, margin: "2px 0 0" }}>{relTime(n.created_at)}</p>
+            </button>
           ))
         )}
       </div>
@@ -900,7 +917,21 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                   <NotifDot count={unreadCount} />
                 </button>
               </Tooltip>
-              {notifOpen && <NotifPanel onClose={() => setNotifOpen(false)} notifications={notifications} />}
+              {notifOpen && (
+                <NotifPanel
+                  onClose={() => setNotifOpen(false)}
+                  notifications={notifications}
+                  onNavigate={(n) => {
+                    if (!n.read) {
+                      supabase.from("notifications").update({ read: true }).eq("id", n.id)
+                        .then(() => setNotifications((prev) => prev.map((x) => x.id === n.id ? { ...x, read: true } : x)));
+                      setUnreadCount((c) => Math.max(0, c - 1));
+                    }
+                    router.push(notifHref(n));
+                    setNotifOpen(false);
+                  }}
+                />
+              )}
             </div>
 
             {/* User avatar */}

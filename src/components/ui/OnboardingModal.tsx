@@ -170,7 +170,7 @@ const STEPS: { title: string; body: string; hint: string; Icon: () => React.Reac
   {
     Icon: IllustrationBookmarks,
     title: "Bookmarks and Files",
-    body: "Bookmarks are for links your team shares: papers, protocols, supplier pages, Zoom recordings, or any URL. PDFs and datasets live on each Literature item's Files tab, viewable in the in-app reader.",
+    body: "Bookmarks are for links your team shares: papers, protocols, supplier pages, Zoom recordings, or any URL. PDFs and datasets attach directly to each Literature item under its Files tab.",
     hint: "Bookmarks are automatically categorized by URL type (paper, doc, sheet, code, and more).",
   },
   {

@@ -1137,24 +1137,44 @@ export default function TasksPage() {
             <option value="low">Low</option>
           </FilterSelect>
         </div>
+
+        {/* Mobile scope chips — lab-home only, hidden on md+ where sidebar shows */}
+        {isLabHome && (
+          <div className="md:hidden flex items-center gap-2 overflow-x-auto py-2" style={{ scrollbarWidth: "none" }}>
+            {sidebarSections.map((s) => (
+              <button key={s.id} onClick={s.onClick}
+                style={{ flexShrink: 0, fontSize: 12, fontWeight: s.isActive ? 700 : 500, padding: "5px 12px", borderRadius: 20, border: `1px solid ${s.isActive ? s.color : "var(--color-border)"}`, backgroundColor: s.isActive ? `${s.color}18` : "transparent", color: s.isActive ? s.color : "var(--color-secondary)", cursor: "pointer", whiteSpace: "nowrap", fontFamily: "var(--font-roboto)" }}>
+                {s.label}
+              </button>
+            ))}
+            {subProjects.map((sp) => (
+              <button key={sp.id} onClick={() => setTaskScope(sp.id)}
+                style={{ flexShrink: 0, fontSize: 12, fontWeight: taskScope === sp.id ? 700 : 500, padding: "5px 12px", borderRadius: 20, border: `1px solid ${taskScope === sp.id ? (sp.color ?? "#1B2E4B") : "var(--color-border)"}`, backgroundColor: taskScope === sp.id ? `${sp.color ?? "#1B2E4B"}18` : "transparent", color: taskScope === sp.id ? (sp.color ?? "#1B2E4B") : "var(--color-secondary)", cursor: "pointer", whiteSpace: "nowrap", fontFamily: "var(--font-roboto)" }}>
+                {sp.name}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Content = ScopeSidebar + Board/List */}
       <div className="flex flex-1 overflow-hidden">
         {isLabHome && (
-          <ScopeSidebar
-            sections={sidebarSections}
-            subProjects={subProjects}
-            selectedSubProjectId={isSubProjectScope ? taskScope : null}
-            projectCounts={projectTaskCounts}
-            onSelectSubProject={(id) => setTaskScope(id)}
-            collapsed={sidebarCollapsed}
-            onToggleCollapse={() => setSidebarCollapsed(c => {
-              const next = !c;
-              try { localStorage.setItem("canopy_tasks_sidebar_collapsed", String(next)); } catch {}
-              return next;
-            })}
-          />
+          <div className="hidden md:flex">
+            <ScopeSidebar
+              sections={sidebarSections}
+              subProjects={subProjects}
+              selectedSubProjectId={isSubProjectScope ? taskScope : null}
+              projectCounts={projectTaskCounts}
+              onSelectSubProject={(id) => setTaskScope(id)}
+              collapsed={sidebarCollapsed}
+              onToggleCollapse={() => setSidebarCollapsed(c => {
+                const next = !c;
+                try { localStorage.setItem("canopy_tasks_sidebar_collapsed", String(next)); } catch {}
+                return next;
+              })}
+            />
+          </div>
         )}
         <div className="flex-1 overflow-auto p-4 md:p-6">
         {loading && (
