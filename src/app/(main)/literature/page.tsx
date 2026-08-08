@@ -1281,16 +1281,29 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
       const apiMerges: { existing: LiteratureItem; incoming: LiteratureItem }[] = [];
       const newKeyMap: Record<string, string> = {};
       const newAnnotationsMap: Record<string, import("@/app/api/zotero/sync/route").ZoteroAnnotation[]> = {};
+      const parseErrors: string[] = [];
       let dupeCount = 0;
       for (const z of raw) {
-        const title = (Array.isArray(z.title) ? z.title[0] : z.title) ?? "";
-        // Normalize DOI on ingest so stored values are consistent regardless of source format
-        const rawDoi = z.DOI?.trim();
-        const doi = rawDoi ? normalizeDoi(rawDoi) : undefined;
-        const authors = parseCSLAuthors(z.author);
-        const year = z.issued?.["date-parts"]?.[0]?.[0] ?? 0;
+        let title: string;
+        let rawDoi: string | undefined;
+        let doi: string | undefined;
+        let authors: string[];
+        let year: number;
+        let zoteroKey: string | undefined;
+        try {
+          title = (Array.isArray(z.title) ? z.title[0] : z.title) ?? "";
+          if (!title) { parseErrors.push(`Skipped item with no title (key: ${(z as {id?:string}).id ?? "unknown"})`); continue; }
+          // Normalize DOI on ingest so stored values are consistent regardless of source format
+          rawDoi = z.DOI?.trim();
+          doi = rawDoi ? normalizeDoi(rawDoi) : undefined;
+          authors = parseCSLAuthors(z.author);
+          year = z.issued?.["date-parts"]?.[0]?.[0] ?? 0;
+          zoteroKey = (z as {id?: string}).id?.split("/").pop();
+        } catch (parseErr) {
+          parseErrors.push(`Could not parse item: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`);
+          continue;
+        }
         const itemId = crypto.randomUUID();
-        const zoteroKey = (z as {id?: string}).id?.split("/").pop();
         if (zoteroKey) newKeyMap[itemId] = zoteroKey;
         // Collect structured annotations for this item (populated into lit_annotations on import)
         if (zoteroKey && rawAnnotationsMap?.[zoteroKey]?.length) {
@@ -1340,7 +1353,11 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
         }
         items.push(incomingItem);
       }
-      console.log(`[ZoteroSync] result: ${items.length} new, ${dupeCount} dupes, ${apiMerges.length} merge candidates`);
+      console.log(`[ZoteroSync] result: ${items.length} new, ${dupeCount} dupes, ${apiMerges.length} merge candidates, ${parseErrors.length} parse errors`);
+      if (parseErrors.length > 0) {
+        setSyncWarnings((prev) => [...prev, ...parseErrors]);
+        console.warn("[ZoteroSync] parse errors:", parseErrors);
+      }
       setFileName(`Zotero API: ${items.length + apiMerges.length} items`);
       setParsed(items); setPendingMerges(apiMerges); setMergeDupes(true);
       setAnnotationsForImport(newAnnotationsMap);
@@ -2346,124 +2363,130 @@ function AssignReadingForm({ itemId, projectId, assignedBy, teamMembers, onAssig
   teamMembers: User[];
   onAssigned: (a: LitAssignedReading) => void;
 }) {
-  const [assigneeId, setAssigneeId]       = useState("");
-  const [dueDate, setDueDate]             = useState("");
-  const [note, setNote]                   = useState("");
-  const [initialStatus, setInitialStatus] = useState<AssignmentReadingStatus>("not_started");
-  const [saving, setSaving]               = useState(false);
-  const [error, setError]                 = useState("");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [note, setNote]               = useState("");
+  const [saving, setSaving]           = useState(false);
+  const [error, setError]             = useState("");
 
-  const selectedMember = teamMembers.find((m) => m.id === assigneeId) ?? null;
+  // Exclude the current user — you can't assign a reading to yourself
+  const assignableMembers = teamMembers.filter((m) => m.id !== assignedBy);
 
-  async function handleAssign() {
-    if (!assigneeId.trim()) return;
-    setSaving(true);
-    setError("");
-
-    const newA: LitAssignedReading = {
-      id: crypto.randomUUID(), itemId, projectId, assignedBy,
-      assigneeId, dueDate: dueDate || undefined,
-      note: note.trim() || undefined, readingStatus: initialStatus,
-      createdAt: new Date().toISOString(),
-    };
-    const { error: insertErr } = await supabase.from("lit_assigned_readings").insert({
-      id: newA.id, item_id: itemId, project_id: projectId, assigned_by: assignedBy,
-      assignee_id: assigneeId, due_date: dueDate || null, note: note.trim() || null,
-      reading_status: initialStatus,
+  function toggle(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
     });
-    if (insertErr) {
-      console.error("[Assign reading]", insertErr);
-      const friendly =
-        insertErr.code === "23503" ? "User not found. Make sure they've joined the project." :
-        insertErr.code === "23505" ? "This reading is already assigned to that user." :
-        "Failed to assign. Please try again.";
-      setError(friendly);
-      setSaving(false);
-      return;
-    }
-    onAssigned(newA);
-    setAssigneeId(""); setDueDate(""); setNote(""); setInitialStatus("not_started"); setSaving(false);
+    setError("");
   }
 
-  const inputStyle12: React.CSSProperties = {
-    width: "100%", height: 34, border: "1px solid var(--color-border)", borderRadius: 6,
-    padding: "0 10px", fontSize: 12, fontFamily: "var(--font-roboto)", outline: "none", boxSizing: "border-box",
-  };
+  async function handleAssign() {
+    if (selectedIds.size === 0) return;
+    setSaving(true);
+    setError("");
+    const errors: string[] = [];
+    const now = new Date().toISOString();
+
+    for (const assigneeId of selectedIds) {
+      const newA: LitAssignedReading = {
+        id: crypto.randomUUID(), itemId, projectId, assignedBy,
+        assigneeId, note: note.trim() || undefined,
+        readingStatus: "not_started", createdAt: now,
+      };
+      const { error: insertErr } = await supabase.from("lit_assigned_readings").insert({
+        id: newA.id, item_id: itemId, project_id: projectId, assigned_by: assignedBy,
+        assignee_id: assigneeId, note: note.trim() || null, reading_status: "not_started",
+      });
+      if (insertErr) {
+        const member = teamMembers.find((m) => m.id === assigneeId);
+        const name = member?.name.split(" ")[0] ?? assigneeId.slice(0, 8);
+        errors.push(
+          insertErr.code === "23505"
+            ? `Already assigned to ${name}`
+            : `Failed for ${name}: ${insertErr.message}`
+        );
+      } else {
+        onAssigned(newA);
+      }
+    }
+
+    if (errors.length > 0) setError(errors.join(" · "));
+    else { setSelectedIds(new Set()); setNote(""); }
+    setSaving(false);
+  }
+
+  const count = selectedIds.size;
 
   return (
     <div className="mt-2 p-3 rounded-lg" style={{ backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)" }}>
-      <p style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-secondary)", marginBottom: 8 }}>Assign to a team member</p>
-      <div className="space-y-2">
+      <p style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-secondary)", marginBottom: 8 }}>
+        Assign to team members
+      </p>
 
-        {/* Team member picker */}
-        {teamMembers.length > 0 ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-            {teamMembers.map((member) => {
-              const selected = assigneeId === member.id;
-              return (
-                <button
-                  key={member.id}
-                  onClick={() => { setAssigneeId(selected ? "" : member.id); setError(""); }}
-                  style={{
-                    display: "flex", alignItems: "center", gap: 8,
-                    padding: "6px 10px", borderRadius: 7, border: "none", textAlign: "left",
-                    cursor: "pointer", backgroundColor: selected ? "rgba(27,46,75,0.08)" : "transparent",
-                    outline: selected ? "1.5px solid var(--color-navy)" : "none",
-                    transition: "background-color 100ms ease",
-                    fontFamily: "var(--font-roboto)",
-                  }}
-                  onMouseEnter={(e) => { if (!selected) (e.currentTarget as HTMLElement).style.backgroundColor = "rgba(0,0,0,0.04)"; }}
-                  onMouseLeave={(e) => { if (!selected) (e.currentTarget as HTMLElement).style.backgroundColor = "transparent"; }}
-                >
-                  <Avatar user={member} size={24} />
-                  <span style={{ fontSize: 13, color: "var(--color-body)", fontWeight: selected ? 600 : 400, flex: 1 }}>{member.name}</span>
-                  {selected && (
-                    <span style={{ width: 16, height: 16, borderRadius: "50%", backgroundColor: "var(--color-navy)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                      <Check size={9} color="#fff" strokeWidth={3} />
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        ) : (
-          <input
-            value={assigneeId}
-            onChange={(e) => { setAssigneeId(e.target.value); setError(""); }}
-            placeholder="User ID or email"
-            style={inputStyle12}
-            onFocus={(e) => { e.currentTarget.style.borderColor = "var(--color-navy)"; }}
-            onBlur={(e) => { e.currentTarget.style.borderColor = "var(--color-border)"; }}
-          />
-        )}
-
-        <div className="flex gap-2">
-          <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)}
-            style={{ flex: 1, height: 34, border: "1px solid var(--color-border)", borderRadius: 6, padding: "0 10px", fontSize: 12, fontFamily: "var(--font-roboto)", outline: "none" }}
-            onFocus={(e) => { e.currentTarget.style.borderColor = "var(--color-navy)"; }} onBlur={(e) => { e.currentTarget.style.borderColor = "var(--color-border)"; }} />
-          <select value={initialStatus} onChange={(e) => setInitialStatus(e.target.value as AssignmentReadingStatus)}
-            style={{ height: 34, border: "1px solid var(--color-border)", borderRadius: 6, padding: "0 8px", fontSize: 12, fontFamily: "var(--font-roboto)", outline: "none", color: "var(--color-body)", backgroundColor: "var(--color-surface)", cursor: "pointer" }}>
-            <option value="not_started">Not Started</option>
-            <option value="in_progress">In Progress</option>
-            <option value="done">Done</option>
-          </select>
+      {assignableMembers.length === 0 ? (
+        <p style={{ fontSize: 12, color: "var(--color-secondary)" }}>No other team members to assign to.</p>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 2, marginBottom: 8 }}>
+          {assignableMembers.map((member) => {
+            const checked = selectedIds.has(member.id);
+            return (
+              <label
+                key={member.id}
+                style={{
+                  display: "flex", alignItems: "center", gap: 10,
+                  padding: "7px 10px", borderRadius: 7, cursor: "pointer",
+                  backgroundColor: checked ? "rgba(27,46,75,0.08)" : "transparent",
+                  outline: checked ? "1.5px solid var(--color-navy)" : "1.5px solid transparent",
+                  transition: "background-color 100ms ease",
+                  userSelect: "none",
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={() => toggle(member.id)}
+                  style={{ width: 15, height: 15, accentColor: "var(--color-navy)", cursor: "pointer", flexShrink: 0 }}
+                />
+                <Avatar user={member} size={22} />
+                <span style={{ fontSize: 13, color: "var(--color-body)", fontWeight: checked ? 600 : 400, flex: 1 }}>
+                  {member.name}
+                </span>
+                <span style={{ fontSize: 11, color: "var(--color-secondary)", textTransform: "capitalize" }}>{member.role}</span>
+              </label>
+            );
+          })}
         </div>
+      )}
 
-        <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note (optional)"
-          style={inputStyle12}
-          onFocus={(e) => { e.currentTarget.style.borderColor = "var(--color-navy)"; }} onBlur={(e) => { e.currentTarget.style.borderColor = "var(--color-border)"; }} />
+      <input
+        value={note}
+        onChange={(e) => setNote(e.target.value)}
+        placeholder="Note (optional)"
+        style={{ width: "100%", height: 34, border: "1px solid var(--color-border)", borderRadius: 6, padding: "0 10px", fontSize: 12, fontFamily: "var(--font-roboto)", outline: "none", boxSizing: "border-box", marginBottom: 8 }}
+        onFocus={(e) => { e.currentTarget.style.borderColor = "var(--color-navy)"; }}
+        onBlur={(e) => { e.currentTarget.style.borderColor = "var(--color-border)"; }}
+      />
 
-        {error && <p style={{ fontSize: 11, color: "var(--color-error)", margin: 0 }}>{error}</p>}
+      {error && <p style={{ fontSize: 11, color: "var(--color-error)", margin: "0 0 6px" }}>{error}</p>}
 
-        <button
-          onClick={handleAssign}
-          disabled={!assigneeId.trim() || saving}
-          style={{ fontSize: 12, fontWeight: 700, padding: "6px 14px", borderRadius: 7, backgroundColor: "var(--color-navy)", color: "#fff", border: "none", cursor: "pointer", minHeight: 36, opacity: (!assigneeId.trim() || saving) ? 0.5 : 1, display: "flex", alignItems: "center", gap: 6 }}
-        >
-          {selectedMember && <Avatar user={selectedMember} size={16} />}
-          {saving ? "Assigning…" : selectedMember ? `Assign to ${selectedMember.name.split(" ")[0]}` : "Assign"}
-        </button>
-      </div>
+      <button
+        onClick={handleAssign}
+        disabled={count === 0 || saving}
+        style={{
+          fontSize: 12, fontWeight: 700, padding: "6px 14px", borderRadius: 7,
+          backgroundColor: "var(--color-navy)", color: "#fff", border: "none", cursor: "pointer",
+          minHeight: 36, opacity: count === 0 || saving ? 0.5 : 1,
+          display: "flex", alignItems: "center", gap: 6,
+        }}
+      >
+        {saving
+          ? "Assigning…"
+          : count === 0
+          ? "Select members"
+          : count === 1
+          ? `Assign to ${teamMembers.find((m) => m.id === [...selectedIds][0])?.name.split(" ")[0] ?? "1 member"}`
+          : `Assign to ${count} members`}
+      </button>
     </div>
   );
 }
@@ -3772,7 +3795,20 @@ function DetailPanelContent({
                 )}
               <AssignReadingForm itemId={item.id} projectId={projectId} assignedBy={currentUserId}
                 teamMembers={teamMembers}
-                onAssigned={(a) => setAssigned((prev) => [...prev, a])} />
+                onAssigned={(a) => {
+                  setAssigned((prev) => [...prev, a]);
+                  // Fire email notification — best-effort, non-blocking
+                  const assignerName = teamMembers.find((m) => m.id === currentUserId)?.name ?? "A teammate";
+                  fetch("/api/email/send", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      type: "reading_assigned",
+                      recipientId: a.assigneeId,
+                      payload: { paperTitle: item.title, assignerName },
+                    }),
+                  }).catch((e) => console.warn("[email] reading_assigned:", e));
+                }} />
             </div>
           );
         })()}

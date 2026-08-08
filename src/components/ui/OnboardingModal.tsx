@@ -61,6 +61,28 @@ function IllustrationTasks() {
   );
 }
 
+function IllustrationJournal() {
+  return (
+    <svg viewBox="0 0 80 80" width={64} height={64} fill="none" aria-hidden="true">
+      {/* Open notebook */}
+      <rect x="12" y="14" width="56" height="52" rx="4" stroke="var(--color-navy)" strokeWidth="2" />
+      <line x1="40" y1="14" x2="40" y2="66" stroke="var(--color-navy)" strokeWidth="1.5" strokeLinecap="round" opacity="0.35" />
+      {/* Binding dots */}
+      <circle cx="40" cy="24" r="1.5" fill="var(--color-navy)" opacity="0.4" />
+      <circle cx="40" cy="34" r="1.5" fill="var(--color-navy)" opacity="0.4" />
+      <circle cx="40" cy="44" r="1.5" fill="var(--color-navy)" opacity="0.4" />
+      {/* Writing lines left page */}
+      <line x1="18" y1="27" x2="35" y2="27" stroke="var(--color-navy)" strokeWidth="1.2" strokeLinecap="round" opacity="0.45" />
+      <line x1="18" y1="34" x2="35" y2="34" stroke="var(--color-navy)" strokeWidth="1.2" strokeLinecap="round" opacity="0.45" />
+      <line x1="18" y1="41" x2="30" y2="41" stroke="var(--color-navy)" strokeWidth="1.2" strokeLinecap="round" opacity="0.35" />
+      {/* Lock icon on right page — signals privacy */}
+      <rect x="48" y="32" width="16" height="12" rx="2" stroke="var(--color-navy)" strokeWidth="1.5" opacity="0.7" />
+      <path d="M51 32 v-4 a5 5 0 0 1 10 0 v4" stroke="var(--color-navy)" strokeWidth="1.5" strokeLinecap="round" opacity="0.7" />
+      <circle cx="56" cy="38" r="1.5" fill="var(--color-navy)" opacity="0.7" />
+    </svg>
+  );
+}
+
 function IllustrationLiterature() {
   return (
     <svg viewBox="0 0 80 80" width={64} height={64} fill="none" aria-hidden="true">
@@ -132,6 +154,12 @@ const STEPS: { title: string; body: string; hint: string; Icon: () => React.Reac
     title: "Tasks",
     body: "Plan and track research work on a Kanban board or list. Assign teammates, set due dates, and move cards from To Do through In Progress to Done. Tasks scope automatically to your active project.",
     hint: "Use the Board view to see workload at a glance and List view for quick bulk editing.",
+  },
+  {
+    Icon: IllustrationJournal,
+    title: "Journal — your private space",
+    body: "Write field notes, research reflections, and meeting prep in your personal journal. Journal entries are only visible to you — no teammate or PI can read them.",
+    hint: "Journal is the only private space in Canopy. Tasks, literature, and bookmarks are shared with your lab.",
   },
   {
     Icon: IllustrationLiterature,
@@ -294,6 +322,13 @@ export function useOnboarding() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (!localStorage.getItem(LS_KEY)) setShow(true);
+
+    function handleRetrigger() {
+      localStorage.removeItem(LS_KEY);
+      setShow(true);
+    }
+    window.addEventListener("canopy:show-onboarding", handleRetrigger);
+    return () => window.removeEventListener("canopy:show-onboarding", handleRetrigger);
   }, []);
 
   return { show, open: () => setShow(true), close: () => setShow(false) };

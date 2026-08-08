@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Copy, Check, RefreshCw, User, Lock, Bell, Building2, Clock, Monitor, Moon, Sun } from "lucide-react";
+import { Copy, Check, RefreshCw, User, Lock, Bell, Building2, Clock, Monitor, Moon, Sun, MapPin } from "lucide-react";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { showToast } from "@/components/ui/Toast";
 import { useTheme } from "@/context/ThemeContext";
@@ -470,8 +470,32 @@ export default function SettingsPage() {
             </label>
           ))}
           <p style={{ fontSize: 11, color: "var(--color-secondary)", marginTop: 4 }}>
-            Email notification delivery coming soon.
+            Email delivery is active — emails are sent when the{" "}
+            <code style={{ fontFamily: "monospace", fontSize: 10, backgroundColor: "var(--color-canvas)", padding: "1px 4px", borderRadius: 3 }}>RESEND_API_KEY</code>{" "}
+            environment variable is configured.
           </p>
+        </div>
+      </section>
+
+      {/* Tour section */}
+      <section style={sectionStyle} aria-labelledby="settings-tour-heading">
+        <div style={sectionHeaderStyle}>
+          <MapPin size={16} color="var(--color-navy)" />
+          <h2 id="settings-tour-heading" style={{ fontFamily: "var(--font-lora)", fontWeight: 600, fontSize: 15, color: "var(--color-navy)", margin: 0 }}>
+            Welcome Tour
+          </h2>
+        </div>
+        <div style={{ padding: "20px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
+          <div>
+            <p style={{ fontSize: 13, fontWeight: 600, color: "var(--color-body)", margin: "0 0 3px" }}>Show me around again</p>
+            <p style={{ fontSize: 12, color: "var(--color-secondary)", margin: 0 }}>Re-open the onboarding tour from the beginning.</p>
+          </div>
+          <button
+            onClick={() => window.dispatchEvent(new CustomEvent("canopy:show-onboarding"))}
+            style={{ fontSize: 12, fontWeight: 700, padding: "8px 18px", borderRadius: 8, backgroundColor: "var(--color-navy)", color: "#fff", border: "none", cursor: "pointer", minHeight: 40, flexShrink: 0 }}
+          >
+            Start tour
+          </button>
         </div>
       </section>
     </div>

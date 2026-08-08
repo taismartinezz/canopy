@@ -88,7 +88,7 @@ export async function POST(request: Request) {
   const limit = 100;
 
   while (true) {
-    const url = `${itemsPath}?format=csljson&limit=${limit}&start=${start}&itemType=-attachment`;
+    const url = `${itemsPath}?format=csljson&limit=${limit}&start=${start}&itemType=-attachment${recursiveSuffix}`;
     const res = await fetch(url, {
       headers: {
         "Zotero-API-Key": apiKey,
