@@ -72,7 +72,7 @@ const readonlyInputStyle: React.CSSProperties = {
   fontFamily: "var(--font-roboto)",
   fontSize: 14,
   color: "var(--color-secondary)",
-  backgroundColor: "#F6F8FC",
+  backgroundColor: "var(--color-surface-2)",
   outline: "none",
   boxSizing: "border-box",
 };
@@ -208,15 +208,15 @@ export default function SettingsPage() {
 
   return (
     <div style={{ maxWidth: 640, margin: "0 auto", padding: isMobile ? "16px" : "32px 20px", fontFamily: "var(--font-roboto)" }}>
-      <h1 style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 22, color: "var(--color-navy)", margin: "0 0 24px" }}>
+      <h1 style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 22, color: "var(--color-body)", margin: "0 0 24px" }}>
         Settings
       </h1>
 
       {/* Profile section */}
       <section style={sectionStyle} aria-labelledby="settings-profile-heading">
         <div style={sectionHeaderStyle}>
-          <User size={16} color="var(--color-navy)" />
-          <h2 id="settings-profile-heading" style={{ fontFamily: "var(--font-lora)", fontWeight: 600, fontSize: 15, color: "var(--color-navy)", margin: 0 }}>
+          <User size={16} color="var(--color-secondary)" />
+          <h2 id="settings-profile-heading" style={{ fontFamily: "var(--font-lora)", fontWeight: 500, fontSize: 15, color: "var(--color-body)", margin: 0 }}>
             Profile
           </h2>
         </div>
@@ -239,9 +239,9 @@ export default function SettingsPage() {
           )}
           <button
             onClick={() => router.push("/profile")}
-            style={{ minHeight: 44, height: 38, padding: "0 16px", backgroundColor: "var(--color-navy)", color: "#fff", border: "none", borderRadius: 8, fontFamily: "var(--font-roboto)", fontWeight: 600, fontSize: 13, cursor: "pointer" }}
-            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "#2E4A6F"; }}
-            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "var(--color-navy)"; }}
+            style={{ minHeight: 44, height: 38, padding: "0 16px", backgroundColor: "var(--color-btn-primary)", color: "#fff", border: "none", borderRadius: 8, fontFamily: "var(--font-roboto)", fontWeight: 600, fontSize: 13, cursor: "pointer" }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "var(--color-btn-primary-hover)"; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "var(--color-btn-primary)"; }}
           >
             Edit profile
           </button>
@@ -251,8 +251,8 @@ export default function SettingsPage() {
       {/* Account section */}
       <section style={sectionStyle} aria-labelledby="settings-account-heading">
         <div style={sectionHeaderStyle}>
-          <Lock size={16} color="var(--color-navy)" />
-          <h2 id="settings-account-heading" style={{ fontFamily: "var(--font-lora)", fontWeight: 600, fontSize: 15, color: "var(--color-navy)", margin: 0 }}>
+          <Lock size={16} color="var(--color-secondary)" />
+          <h2 id="settings-account-heading" style={{ fontFamily: "var(--font-lora)", fontWeight: 500, fontSize: 15, color: "var(--color-body)", margin: 0 }}>
             Account
           </h2>
         </div>
@@ -274,8 +274,8 @@ export default function SettingsPage() {
       {profile?.role === "pi" && (
         <section style={sectionStyle} aria-labelledby="settings-invite-heading">
           <div style={sectionHeaderStyle}>
-            <Building2 size={16} color="var(--color-navy)" />
-            <h2 id="settings-invite-heading" style={{ fontFamily: "var(--font-lora)", fontWeight: 600, fontSize: 15, color: "var(--color-navy)", margin: 0 }}>
+            <Building2 size={16} color="var(--color-secondary)" />
+            <h2 id="settings-invite-heading" style={{ fontFamily: "var(--font-lora)", fontWeight: 500, fontSize: 15, color: "var(--color-body)", margin: 0 }}>
               Lab &amp; Invite
             </h2>
           </div>
@@ -327,7 +327,7 @@ export default function SettingsPage() {
             <button
               onClick={handleGenerateCode}
               disabled={generatingCode}
-              style={{ marginTop: 16, minHeight: 44, height: 38, padding: "0 16px", display: "flex", alignItems: "center", gap: 6, backgroundColor: "var(--color-navy)", color: "#fff", border: "none", borderRadius: 8, fontFamily: "var(--font-roboto)", fontWeight: 600, fontSize: 13, cursor: "pointer" }}
+              style={{ marginTop: 16, minHeight: 44, height: 38, padding: "0 16px", display: "flex", alignItems: "center", gap: 6, backgroundColor: "var(--color-btn-primary)", color: "#fff", border: "none", borderRadius: 8, fontFamily: "var(--font-roboto)", fontWeight: 600, fontSize: 13, cursor: "pointer" }}
             >
               <RefreshCw size={13} />
               {generatingCode ? "Generating…" : "Generate new invite code"}
@@ -339,8 +339,8 @@ export default function SettingsPage() {
       {/* Scheduling section */}
       <section style={sectionStyle} aria-labelledby="settings-schedule-heading">
         <div style={sectionHeaderStyle}>
-          <Clock size={16} color="var(--color-navy)" />
-          <h2 id="settings-schedule-heading" style={{ fontFamily: "var(--font-lora)", fontWeight: 600, fontSize: 15, color: "var(--color-navy)", margin: 0 }}>
+          <Clock size={16} color="var(--color-secondary)" />
+          <h2 id="settings-schedule-heading" style={{ fontFamily: "var(--font-lora)", fontWeight: 500, fontSize: 15, color: "var(--color-body)", margin: 0 }}>
             Scheduling &amp; Working Hours
           </h2>
         </div>
@@ -350,7 +350,7 @@ export default function SettingsPage() {
           <div>
             <label htmlFor="tz-select" style={labelStyle}>Time zone</label>
             <select id="tz-select" value={timezone} onChange={e => setTimezone(e.target.value)}
-              style={{ ...readonlyInputStyle, backgroundColor: "var(--color-canvas)", color: "var(--color-body)", cursor: "pointer", appearance: "auto" }}>
+              style={{ ...readonlyInputStyle, backgroundColor: "var(--color-surface-2)", color: "var(--color-body)", cursor: "pointer", appearance: "auto" }}>
               {COMMON_TIMEZONES.map(tz => <option key={tz} value={tz}>{tz.replace(/_/g, " ")}</option>)}
             </select>
             <p style={{ fontSize: 11, color: "var(--color-secondary)", marginTop: 4 }}>
@@ -381,11 +381,11 @@ export default function SettingsPage() {
                       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                         <input type="time" value={val!.start}
                           onChange={e => setWorkingHours(prev => ({ ...prev, [key]: { ...(prev[key] as { start: string; end: string }), start: e.target.value } }))}
-                          style={{ height: 34, border: "1px solid var(--color-border)", borderRadius: 6, padding: "0 8px", fontSize: 13, fontFamily: "var(--font-roboto)", backgroundColor: "var(--color-canvas)", color: "var(--color-body)", outline: "none" }} />
+                          style={{ height: 34, border: "1px solid var(--color-border)", borderRadius: 6, padding: "0 8px", fontSize: 13, fontFamily: "var(--font-roboto)", backgroundColor: "var(--color-surface-2)", color: "var(--color-body)", outline: "none" }} />
                         <span style={{ fontSize: 12, color: "var(--color-secondary)" }}>to</span>
                         <input type="time" value={val!.end}
                           onChange={e => setWorkingHours(prev => ({ ...prev, [key]: { ...(prev[key] as { start: string; end: string }), end: e.target.value } }))}
-                          style={{ height: 34, border: "1px solid var(--color-border)", borderRadius: 6, padding: "0 8px", fontSize: 13, fontFamily: "var(--font-roboto)", backgroundColor: "var(--color-canvas)", color: "var(--color-body)", outline: "none" }} />
+                          style={{ height: 34, border: "1px solid var(--color-border)", borderRadius: 6, padding: "0 8px", fontSize: 13, fontFamily: "var(--font-roboto)", backgroundColor: "var(--color-surface-2)", color: "var(--color-body)", outline: "none" }} />
                       </div>
                     ) : (
                       <span style={{ fontSize: 12, color: "var(--color-secondary)", fontStyle: "italic" }}>Off</span>
@@ -397,7 +397,7 @@ export default function SettingsPage() {
           </div>
 
           <button onClick={handleSaveSchedule} disabled={savingSchedule}
-            style={{ alignSelf: "flex-start", minHeight: 44, height: 38, padding: "0 20px", backgroundColor: savingSchedule ? "var(--color-border)" : "var(--color-navy)", color: "#fff", border: "none", borderRadius: 8, fontFamily: "var(--font-roboto)", fontWeight: 600, fontSize: 13, cursor: savingSchedule ? "default" : "pointer" }}>
+            style={{ alignSelf: "flex-start", minHeight: 44, height: 38, padding: "0 20px", backgroundColor: savingSchedule ? "var(--color-border)" : "var(--color-btn-primary)", color: "#fff", border: "none", borderRadius: 8, fontFamily: "var(--font-roboto)", fontWeight: 600, fontSize: 13, cursor: savingSchedule ? "default" : "pointer" }}>
             {savingSchedule ? "Saving…" : "Save schedule settings"}
           </button>
         </div>
@@ -406,14 +406,14 @@ export default function SettingsPage() {
       {/* Appearance section */}
       <section style={sectionStyle} aria-labelledby="settings-appearance-heading">
         <div style={sectionHeaderStyle}>
-          <Monitor size={16} color="var(--color-navy)" />
-          <h2 id="settings-appearance-heading" style={{ fontFamily: "var(--font-lora)", fontWeight: 600, fontSize: 15, color: "var(--color-navy)", margin: 0 }}>
+          <Monitor size={16} color="var(--color-secondary)" />
+          <h2 id="settings-appearance-heading" style={{ fontFamily: "var(--font-lora)", fontWeight: 500, fontSize: 15, color: "var(--color-body)", margin: 0 }}>
             Appearance
           </h2>
         </div>
         <div style={{ padding: "20px" }}>
           <p style={{ ...labelStyle, marginBottom: 12 }}>Theme</p>
-          <div style={{ display: "flex", gap: 10 }}>
+          <div role="group" aria-label="Theme" style={{ display: "flex", gap: 10 }}>
             {([
               { value: "light", icon: <Sun size={15} />, label: "Light" },
               { value: "dark",  icon: <Moon size={15} />, label: "Dark" },
@@ -422,12 +422,13 @@ export default function SettingsPage() {
               <button
                 key={value}
                 onClick={() => setTheme(value)}
+                aria-pressed={theme === value}
                 style={{
                   display: "flex", alignItems: "center", gap: 7,
                   padding: "8px 16px", borderRadius: 8, cursor: "pointer",
                   fontSize: 13, fontWeight: 600,
-                  border: `1.5px solid ${theme === value ? "var(--color-navy)" : "var(--color-border)"}`,
-                  backgroundColor: theme === value ? "var(--color-navy)" : "transparent",
+                  border: `1.5px solid ${theme === value ? "var(--color-btn-primary)" : "var(--color-border)"}`,
+                  backgroundColor: theme === value ? "var(--color-btn-primary)" : "transparent",
                   color: theme === value ? "#fff" : "var(--color-secondary)",
                   transition: "all 0.15s",
                   minHeight: 40,
@@ -444,8 +445,8 @@ export default function SettingsPage() {
       {/* Notifications section */}
       <section style={sectionStyle} aria-labelledby="settings-notif-heading">
         <div style={sectionHeaderStyle}>
-          <Bell size={16} color="var(--color-navy)" />
-          <h2 id="settings-notif-heading" style={{ fontFamily: "var(--font-lora)", fontWeight: 600, fontSize: 15, color: "var(--color-navy)", margin: 0 }}>
+          <Bell size={16} color="var(--color-secondary)" />
+          <h2 id="settings-notif-heading" style={{ fontFamily: "var(--font-lora)", fontWeight: 500, fontSize: 15, color: "var(--color-body)", margin: 0 }}>
             Notifications
           </h2>
         </div>
@@ -480,8 +481,8 @@ export default function SettingsPage() {
       {/* Tour section */}
       <section style={sectionStyle} aria-labelledby="settings-tour-heading">
         <div style={sectionHeaderStyle}>
-          <MapPin size={16} color="var(--color-navy)" />
-          <h2 id="settings-tour-heading" style={{ fontFamily: "var(--font-lora)", fontWeight: 600, fontSize: 15, color: "var(--color-navy)", margin: 0 }}>
+          <MapPin size={16} color="var(--color-secondary)" />
+          <h2 id="settings-tour-heading" style={{ fontFamily: "var(--font-lora)", fontWeight: 500, fontSize: 15, color: "var(--color-body)", margin: 0 }}>
             Welcome Tour
           </h2>
         </div>
@@ -492,7 +493,7 @@ export default function SettingsPage() {
           </div>
           <button
             onClick={() => window.dispatchEvent(new CustomEvent("canopy:show-onboarding"))}
-            style={{ fontSize: 12, fontWeight: 700, padding: "8px 18px", borderRadius: 8, backgroundColor: "var(--color-navy)", color: "#fff", border: "none", cursor: "pointer", minHeight: 40, flexShrink: 0 }}
+            style={{ fontSize: 12, fontWeight: 700, padding: "8px 18px", borderRadius: 8, backgroundColor: "var(--color-btn-primary)", color: "#fff", border: "none", cursor: "pointer", minHeight: 40, flexShrink: 0 }}
           >
             Start tour
           </button>
