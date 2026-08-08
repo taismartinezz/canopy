@@ -2566,52 +2566,54 @@ function CitationLinker({ text, items, onSelectItem }: {
 
 // ── Detail panel ──────────────────────────────────────────────────────────────
 
-const DETAIL_TABS = ["Info", "Abstract", "Notes", "Tags", "Files", "Read", "Cite", "Related", "Annotations", "Assigned"] as const;
-type DetailTab = typeof DETAIL_TABS[number];
+const PRIMARY_TABS = ["Info", "Abstract", "Notes", "Tags", "Files", "Assigned"] as const;
+const MORE_TABS = ["Cite", "Related", "Annotations"] as const;
+type DetailTab = typeof PRIMARY_TABS[number] | typeof MORE_TABS[number];
 
 function DetailTabBar({ tab, setTab }: { tab: DetailTab; setTab: (t: DetailTab) => void }) {
-  const barRef = useRef<HTMLDivElement>(null);
-  const [canScrollLeft, setCanScrollLeft] = useState(false);
-  const [canScrollRight, setCanScrollRight] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const el = barRef.current;
-    if (!el) return;
-    const check = () => {
-      setCanScrollLeft(el.scrollLeft > 4);
-      setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 4);
+    if (!moreOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (moreRef.current && !moreRef.current.contains(e.target as Node)) setMoreOpen(false);
     };
-    check();
-    el.addEventListener("scroll", check, { passive: true });
-    const ro = new ResizeObserver(check);
-    ro.observe(el);
-    return () => { el.removeEventListener("scroll", check); ro.disconnect(); };
-  }, []);
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [moreOpen]);
 
-  const scroll = (dir: -1 | 1) => barRef.current?.scrollBy({ left: dir * 120, behavior: "smooth" });
+  const isMoreActive = (MORE_TABS as readonly string[]).includes(tab);
 
   return (
-    <div style={{ position: "relative", borderBottom: "1px solid var(--color-border)" }}>
-      {canScrollLeft && (
-        <button onClick={() => scroll(-1)} aria-label="Scroll tabs left"
-          style={{ position: "absolute", left: 0, top: 0, bottom: 0, zIndex: 2, width: 28, display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(to right, var(--color-surface) 60%, transparent)", border: "none", cursor: "pointer", padding: 0 }}>
-          <ChevronLeft size={14} color="var(--color-secondary)" />
+    <div style={{ display: "flex", alignItems: "stretch", borderBottom: "1px solid var(--color-border)" }}>
+      {PRIMARY_TABS.map((t) => (
+        <button key={t} onClick={() => setTab(t)}
+          style={{ fontSize: 12, fontWeight: tab === t ? 600 : 400, color: tab === t ? "var(--color-navy)" : "var(--color-secondary)", backgroundColor: "transparent", border: "none", borderBottom: tab === t ? "2px solid var(--color-navy)" : "2px solid transparent", cursor: "pointer", padding: "10px 8px", whiteSpace: "nowrap", minHeight: 44 }}>
+          {t}
         </button>
-      )}
-      <div ref={barRef} className="flex overflow-x-auto px-1" style={{ scrollbarWidth: "none" }}>
-        {DETAIL_TABS.map((t) => (
-          <button key={t} onClick={() => setTab(t)}
-            style={{ fontSize: 12, fontWeight: tab === t ? 600 : 400, color: tab === t ? "var(--color-navy)" : "var(--color-secondary)", backgroundColor: "transparent", border: "none", borderBottom: tab === t ? "2px solid var(--color-navy)" : "2px solid transparent", cursor: "pointer", padding: "10px 10px", whiteSpace: "nowrap", minHeight: 44 }}>
-            {t}
-          </button>
-        ))}
+      ))}
+      <div ref={moreRef} style={{ position: "relative", marginLeft: "auto" }}>
+        <button
+          onClick={() => setMoreOpen((v) => !v)}
+          aria-expanded={moreOpen}
+          aria-label="More tabs"
+          style={{ fontSize: 15, fontWeight: isMoreActive ? 600 : 400, color: isMoreActive ? "var(--color-navy)" : "var(--color-secondary)", backgroundColor: "transparent", border: "none", borderBottom: isMoreActive ? "2px solid var(--color-navy)" : "2px solid transparent", cursor: "pointer", padding: "10px 12px", minHeight: 44, letterSpacing: "0.05em" }}>
+          ⋯
+        </button>
+        {moreOpen && (
+          <div style={{ position: "absolute", right: 0, top: "calc(100% + 2px)", zIndex: 20, backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 8, boxShadow: "0 4px 16px rgba(0,0,0,0.12)", minWidth: 130, padding: "4px 0" }}>
+            {MORE_TABS.map((t) => (
+              <button key={t} onClick={() => { setTab(t); setMoreOpen(false); }}
+                style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 14px", fontSize: 13, fontWeight: tab === t ? 600 : 400, color: tab === t ? "var(--color-navy)" : "var(--color-body)", backgroundColor: "transparent", border: "none", cursor: "pointer" }}
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = "var(--color-navy-dim)"; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = "transparent"; }}>
+                {t}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
-      {canScrollRight && (
-        <button onClick={() => scroll(1)} aria-label="Scroll tabs right"
-          style={{ position: "absolute", right: 0, top: 0, bottom: 0, zIndex: 2, width: 28, display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(to left, var(--color-surface) 60%, transparent)", border: "none", cursor: "pointer", padding: 0 }}>
-          <ChevronRight size={14} color="var(--color-secondary)" />
-        </button>
-      )}
     </div>
   );
 }
@@ -2702,14 +2704,6 @@ function DetailPanelContent({
   useEffect(() => {
     setLocalFiles(item.files);
   }, [item.files]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Auto-advance reading status when the Read tab is opened: unread → reading
-  useEffect(() => {
-    if (tab === "Read" && localStatus === "unread") {
-      updateStatus("reading");
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab]);
 
   // Eagerly fetch annotations whenever item changes — not just when the Annotations tab is open.
   // This ensures the PDF viewer's `annotations` prop is populated before the viewer mounts.
@@ -3420,37 +3414,6 @@ function DetailPanelContent({
             </div>
           </div>
         )}
-
-        {tab === "Read" && (() => {
-          const pdfFile = localFiles.find((f) => f.url);
-          const externalPdfUrl = !pdfFile && item.url && (() => {
-            try { return new URL(item.url!).pathname.toLowerCase().endsWith(".pdf") ? item.url : null; } catch { return null; }
-          })();
-          const pdfUrl = pdfFile?.url ?? externalPdfUrl ?? null;
-          if (!pdfUrl) {
-            return (
-              <div className="px-4 py-8 flex flex-col items-center gap-3" style={{ textAlign: "center" }}>
-                <p style={{ fontSize: 13, color: "var(--color-secondary)" }}>No PDF attached to this item.</p>
-                <button onClick={() => setTab("Files")}
-                  style={{ fontSize: 12, fontWeight: 600, padding: "7px 16px", borderRadius: 7, backgroundColor: "var(--color-navy)", color: "#fff", border: "none", cursor: "pointer" }}>
-                  Attach a PDF
-                </button>
-              </div>
-            );
-          }
-          return (
-            <div style={{ height: "calc(100vh - 160px)", minHeight: 400 }}>
-              <PDFViewerInline
-                url={pdfUrl}
-                itemId={item.id}
-                currentUserId={currentUserId}
-                annotations={annotations}
-                onAnnotationAdded={(a) => setAnnotations((prev) => [...prev, a])}
-                onOpenFullscreen={() => { setPdfViewerInitialPage(1); setShowPDFViewer(true); }}
-              />
-            </div>
-          );
-        })()}
 
         {tab === "Cite" && (
           <div className="px-4 py-4">
