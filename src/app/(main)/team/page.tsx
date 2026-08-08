@@ -434,7 +434,7 @@ export default function TeamPage() {
                 return (
                   <span style={{
                     fontSize: 12, fontWeight: 700, letterSpacing: "0.03em",
-                    backgroundColor: "rgba(27,46,75,0.10)", color: "var(--color-navy)",
+                    backgroundColor: "var(--color-navy-dim)", color: "var(--color-navy)",
                     padding: "3px 10px", borderRadius: 20, whiteSpace: "nowrap",
                   }}>
                     {displayName}
@@ -496,7 +496,19 @@ export default function TeamPage() {
         )}
 
         {/* Team grid */}
-        {loading && <p style={{ fontSize: 13, color: "var(--color-secondary)", marginBottom: 16 }}>Loading team…</p>}
+        {loading && (
+          <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 280px), 1fr))" }}>
+            {[1,2,3].map((i) => (
+              <div key={i} style={{ backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 12, padding: 20, display: "flex", gap: 14, alignItems: "flex-start" }}>
+                <div style={{ width: 44, height: 44, borderRadius: "50%", backgroundColor: "var(--color-dimmed-bg)", flexShrink: 0 }} />
+                <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
+                  <div style={{ height: 14, borderRadius: 6, backgroundColor: "var(--color-dimmed-bg)", width: "60%" }} />
+                  <div style={{ height: 11, borderRadius: 6, backgroundColor: "var(--color-dimmed-bg)", width: "40%" }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
         {!loading && visibleTeam.length === 0 && (
           <p style={{ fontSize: 13, color: "var(--color-secondary)", marginBottom: 16 }}>
             {activeScope === "project" ? "No members in this project yet." : "Your team will appear here once collaborators join."}
