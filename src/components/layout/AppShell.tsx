@@ -84,7 +84,7 @@ function SidebarBody({
         <div className="flex items-center justify-center py-2.5" style={{ borderBottom: "1px solid var(--color-border)", width: "100%" }}>
           <button
             onClick={onExpand}
-            className="flex items-center justify-center rounded-lg transition-colors hover:bg-[rgba(27,46,75,0.06)]"
+            className="flex items-center justify-center rounded-lg transition-colors hover:bg-[var(--color-navy-dim)]"
             style={{ width: 36, height: 36 }}
             title="Expand sidebar"
             aria-label="Expand sidebar"
@@ -104,12 +104,12 @@ function SidebarBody({
                 title={showBadge ? `${label} (${pastDueCount} past due)` : label}
                 aria-label={showBadge ? `${label} — ${pastDueCount} past due` : label}
                 className="flex items-center justify-center rounded-lg"
-                style={{ position: "relative", width: 36, height: 36, backgroundColor: active ? "rgba(27,46,75,0.08)" : "transparent", color: active ? "var(--color-navy)" : "var(--color-secondary)", textDecoration: "none", transition: "background-color 0.12s", borderLeft: active ? "2.5px solid var(--color-navy)" : "2.5px solid transparent" }}
+                style={{ position: "relative", width: 36, height: 36, backgroundColor: active ? "var(--color-navy-dim)" : "transparent", color: active ? "var(--color-navy)" : "var(--color-secondary)", textDecoration: "none", transition: "background-color 0.12s", borderLeft: active ? "2.5px solid var(--color-navy)" : "2.5px solid transparent" }}
                 aria-current={active ? "page" : undefined}
-                onMouseEnter={(e) => { if (!active) (e.currentTarget as HTMLElement).style.backgroundColor = "rgba(27,46,75,0.04)"; }}
-                onMouseLeave={(e) => { if (!active) (e.currentTarget as HTMLElement).style.backgroundColor = active ? "rgba(27,46,75,0.08)" : "transparent"; }}
+                onMouseEnter={(e) => { if (!active) (e.currentTarget as HTMLElement).style.backgroundColor = "var(--color-navy-dim)"; }}
+                onMouseLeave={(e) => { if (!active) (e.currentTarget as HTMLElement).style.backgroundColor = active ? "var(--color-navy-dim)" : "transparent"; }}
               >
-                <Icon size={16} strokeWidth={active ? 2.5 : 1.8} fill={active ? "rgba(27,46,75,0.12)" : "none"} />
+                <Icon size={16} strokeWidth={active ? 2.5 : 1.8} fill={active ? "var(--color-navy-dim)" : "none"} />
                 {showBadge && <span aria-hidden style={{ position: "absolute", top: 4, right: 4, minWidth: 14, height: 14, backgroundColor: "var(--color-navy)", borderRadius: 7, fontSize: 9, fontWeight: 700, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", padding: "0 3px" }}>{pastDueCount > 9 ? "9+" : pastDueCount}</span>}
               </Link>
             );
@@ -131,7 +131,7 @@ function SidebarBody({
           {onCollapse && (
             <button
               onClick={onCollapse}
-              className="opacity-0 group-hover/sidenav:opacity-100 transition-opacity flex items-center justify-center rounded-lg hover:bg-[rgba(27,46,75,0.06)]"
+              className="opacity-0 group-hover/sidenav:opacity-100 transition-opacity flex items-center justify-center rounded-lg hover:bg-[var(--color-navy-dim)]"
               style={{ width: 32, height: 32 }}
               title="Collapse sidebar"
               aria-label="Collapse sidebar"
@@ -142,7 +142,7 @@ function SidebarBody({
           {showCloseButton && (
             <button
               onClick={onClose}
-              className="flex items-center justify-center rounded-lg transition-colors hover:bg-[rgba(27,46,75,0.06)]"
+              className="flex items-center justify-center rounded-lg transition-colors hover:bg-[var(--color-navy-dim)]"
               style={{ width: 44, height: 44 }}
               aria-label="Close navigation"
             >
@@ -164,7 +164,7 @@ function SidebarBody({
               onClick={onLinkClick}
               className="flex items-center gap-2.5 rounded-lg transition-colors"
               style={{
-                backgroundColor: active ? "rgba(27,46,75,0.08)" : undefined,
+                backgroundColor: active ? "var(--color-navy-dim)" : undefined,
                 color: active ? "var(--color-navy)" : "var(--color-secondary)",
                 fontWeight: active ? 600 : 400,
                 fontSize: 13,
@@ -178,10 +178,10 @@ function SidebarBody({
                 borderLeft: active ? "2.5px solid var(--color-navy)" : "2.5px solid transparent",
               }}
               aria-current={active ? "page" : undefined}
-              onMouseEnter={(e) => { if (!active) (e.currentTarget as HTMLElement).style.backgroundColor = "rgba(27,46,75,0.04)"; }}
+              onMouseEnter={(e) => { if (!active) (e.currentTarget as HTMLElement).style.backgroundColor = "var(--color-navy-dim)"; }}
               onMouseLeave={(e) => { if (!active) (e.currentTarget as HTMLElement).style.backgroundColor = ""; }}
             >
-              <Icon size={15} strokeWidth={active ? 2.5 : 1.8} fill={active ? "rgba(27,46,75,0.12)" : "none"} />
+              <Icon size={15} strokeWidth={active ? 2.5 : 1.8} fill={active ? "var(--color-navy-dim)" : "none"} />
               <span style={{ flex: 1 }}>{label}</span>
               {showBadge && <span aria-label={`${pastDueCount} past due`} style={{ minWidth: 18, height: 18, backgroundColor: "var(--color-navy)", borderRadius: 9, fontSize: 10, fontWeight: 700, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px", flexShrink: 0 }}>{pastDueCount > 9 ? "9+" : pastDueCount}</span>}
             </Link>
@@ -246,7 +246,7 @@ function NotifPanel({ onClose, notifications }: { onClose: () => void; notificat
           <p className="px-4 py-6 text-center" style={{ color: "var(--color-secondary)", fontSize: 13 }}>No notifications</p>
         ) : (
           notifications.map((n) => (
-            <div key={n.id} className="px-4 py-3" style={{ backgroundColor: n.read ? undefined : "rgba(27,46,75,0.03)", borderBottom: "1px solid var(--color-border)" }}>
+            <div key={n.id} className="px-4 py-3" style={{ backgroundColor: n.read ? undefined : "var(--color-navy-dim)", borderBottom: "1px solid var(--color-border)" }}>
               <p style={{ fontSize: 13, color: "var(--color-body)" }}>
                 {!n.read && <span className="inline-block w-2 h-2 rounded-full mr-2" style={{ backgroundColor: "var(--color-navy)", verticalAlign: "middle" }} />}
                 {n.title}{n.body ? `: ${n.body}` : ""}
@@ -281,20 +281,20 @@ function ProfileMenu({ user, onClose, onSignOut, onNavigateProfile, onNavigateSe
       <div className="py-1">
         <button
           onClick={() => { onNavigateProfile(); onClose(); }}
-          className="w-full flex items-center gap-2.5 px-4 text-left transition-colors hover:bg-[rgba(27,46,75,0.06)]"
+          className="w-full flex items-center gap-2.5 px-4 text-left transition-colors hover:bg-[var(--color-navy-dim)]"
           style={{ fontSize: 13, color: "var(--color-body)", minHeight: 44 }}
         >
           <UserIcon size={14} /> Profile
         </button>
         <button
           onClick={() => { onNavigateSettings(); onClose(); }}
-          className="w-full flex items-center gap-2.5 px-4 text-left transition-colors hover:bg-[rgba(27,46,75,0.06)]"
+          className="w-full flex items-center gap-2.5 px-4 text-left transition-colors hover:bg-[var(--color-navy-dim)]"
           style={{ fontSize: 13, color: "var(--color-body)", minHeight: 44 }}
         >
           <Settings size={14} /> Settings
         </button>
         <div style={{ borderTop: "1px solid var(--color-border)", marginTop: 4, paddingTop: 4 }}>
-          <button onClick={onSignOut} className="w-full flex items-center gap-2.5 px-4 text-left transition-colors hover:bg-[rgba(27,46,75,0.06)]" style={{ fontSize: 13, color: "var(--color-error)", minHeight: 44 }}>
+          <button onClick={onSignOut} className="w-full flex items-center gap-2.5 px-4 text-left transition-colors hover:bg-[var(--color-navy-dim)]" style={{ fontSize: 13, color: "var(--color-error)", minHeight: 44 }}>
             <LogOut size={14} /> Sign out
           </button>
         </div>
@@ -611,8 +611,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               aria-label="Lab home"
               className="w-9 h-9 flex items-center justify-center rounded-[10px] transition-colors"
               style={{
-                backgroundColor: activeScope === "lab" ? "rgba(27,46,75,0.12)" : "transparent",
-                border: activeScope === "lab" ? "1.5px solid rgba(27,46,75,0.25)" : "1.5px solid transparent",
+                backgroundColor: activeScope === "lab" ? "var(--color-navy-dim)" : "transparent",
+                border: activeScope === "lab" ? "1.5px solid var(--color-border)" : "1.5px solid transparent",
                 cursor: "pointer",
               }}
             >
@@ -664,7 +664,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 onClick={() => setShowSwitcher((v) => !v)}
                 title="All projects"
                 aria-label="Switch project"
-                className="w-9 h-9 rounded-[10px] flex items-center justify-center shrink-0 transition-colors hover:bg-[rgba(27,46,75,0.12)]"
+                className="w-9 h-9 rounded-[10px] flex items-center justify-center shrink-0 transition-colors hover:bg-[var(--color-navy-dim)]"
                 style={{ border: "1px solid var(--color-border)", background: "var(--color-canvas)", cursor: "pointer", color: "var(--color-secondary)", fontFamily: "var(--font-roboto)", fontSize: 10, fontWeight: 700 }}
               >
                 +{subProjects.length - 5}
@@ -686,8 +686,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                       <button
                         key={sp.id}
                         onClick={() => { setActiveSubProject(sp.id); setActiveScope("project"); setShowSwitcher(false); }}
-                        className="flex items-center gap-2.5 w-full text-left transition-colors hover:bg-[rgba(27,46,75,0.05)]"
-                        style={{ padding: "7px 14px", border: "none", background: isActive ? "rgba(27,46,75,0.06)" : "transparent", cursor: "pointer", fontFamily: "var(--font-roboto)" }}
+                        className="flex items-center gap-2.5 w-full text-left transition-colors hover:bg-[var(--color-navy-dim)]"
+                        style={{ padding: "7px 14px", border: "none", background: isActive ? "var(--color-navy-dim)" : "transparent", cursor: "pointer", fontFamily: "var(--font-roboto)" }}
                       >
                         <span style={{ width: 10, height: 10, borderRadius: 3, backgroundColor: sp.color ?? "var(--color-navy)", flexShrink: 0 }} />
                         <span style={{ fontSize: 13, fontWeight: isActive ? 700 : 400, color: "var(--color-body)" }}>{sp.name}</span>
@@ -705,7 +705,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               onClick={() => setShowCreate(true)}
               title="New project"
               aria-label="New project"
-              className="w-9 h-9 rounded-[10px] flex items-center justify-center shrink-0 transition-colors hover:bg-[rgba(27,46,75,0.08)]"
+              className="w-9 h-9 rounded-[10px] flex items-center justify-center shrink-0 transition-colors hover:bg-[var(--color-navy-dim)]"
               style={{ border: "1.5px dashed var(--color-border)", background: "none", cursor: "pointer", color: "var(--color-secondary)" }}
             >
               <Plus size={14} />
@@ -724,7 +724,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               aria-label="Personal workspace"
               className="w-9 h-9 rounded-[10px] flex items-center justify-center transition-colors"
               style={{
-                backgroundColor: activeScope === "personal" ? "var(--color-navy)" : "rgba(27,46,75,0.1)",
+                backgroundColor: activeScope === "personal" ? "var(--color-navy)" : "var(--color-navy-dim)",
                 color: activeScope === "personal" ? "#fff" : "var(--color-navy)",
                 border: activeScope === "personal" ? "none" : "2px solid var(--color-border)",
                 cursor: "pointer",
@@ -794,7 +794,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           {/* Hamburger — mobile only */}
           <button
             onClick={() => setMobileNavOpen(true)}
-            className="md:hidden flex items-center justify-center rounded-lg transition-colors hover:bg-[rgba(27,46,75,0.06)] shrink-0"
+            className="md:hidden flex items-center justify-center rounded-lg transition-colors hover:bg-[var(--color-navy-dim)] shrink-0"
             style={{ width: 44, height: 44 }}
             aria-label="Open navigation"
             aria-expanded={mobileNavOpen}
@@ -837,7 +837,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <Tooltip label="Search (⌘K)" placement="bottom">
               <button
                 onClick={() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", metaKey: true, bubbles: true }))}
-                className="hidden sm:flex items-center gap-2 px-3 rounded-lg transition-colors hover:bg-[rgba(27,46,75,0.06)]"
+                className="hidden sm:flex items-center gap-2 px-3 rounded-lg transition-colors hover:bg-[var(--color-navy-dim)]"
                 style={{ height: 34, fontSize: 12, color: "var(--color-secondary)", border: "1px solid var(--color-border)", backgroundColor: "var(--color-canvas)" }}
                 aria-label="Open search"
               >
@@ -878,7 +878,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                         });
                     }
                   }}
-                  className="relative flex items-center justify-center rounded-lg transition-colors hover:bg-[rgba(27,46,75,0.06)]"
+                  className="relative flex items-center justify-center rounded-lg transition-colors hover:bg-[var(--color-navy-dim)]"
                   style={{ width: 44, height: 44 }}
                   aria-label={`Notifications, ${unreadCount} unread`}
                 >
@@ -894,7 +894,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               <Tooltip label="Account" placement="bottom">
                 <button
                   onClick={() => { setProfileOpen(!profileOpen); setNotifOpen(false); }}
-                  className="flex items-center gap-1.5 rounded-lg px-1 transition-colors hover:bg-[rgba(27,46,75,0.06)]"
+                  className="flex items-center gap-1.5 rounded-lg px-1 transition-colors hover:bg-[var(--color-navy-dim)]"
                   style={{ minHeight: 44 }}
                   aria-label="Profile menu"
                 >

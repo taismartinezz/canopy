@@ -38,7 +38,7 @@ const COMMON_TIMEZONES = [
 ];
 
 const sectionStyle: React.CSSProperties = {
-  backgroundColor: "#ffffff",
+  backgroundColor: "var(--color-surface)",
   border: "1px solid var(--color-border)",
   borderRadius: 10,
   overflow: "hidden",

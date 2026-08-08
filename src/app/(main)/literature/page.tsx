@@ -39,9 +39,9 @@ function collectionIcon(iconName: string, active: boolean) {
 }
 
 const STATUS_CONFIG: Record<ReadStatus, { label: string; color: string; bg: string }> = {
-  read:    { label: "Read",    color: "#2E7D52", bg: "#D4EDE0" },
-  reading: { label: "Reading", color: "#A0622A", bg: "#FDEFD4" },
-  unread:  { label: "Unread",  color: "#64748B", bg: "#F1F5F9" },
+  read:    { label: "Read",    color: "var(--lit-read-color)",    bg: "var(--lit-read-bg)" },
+  reading: { label: "Reading", color: "var(--lit-reading-color)", bg: "var(--lit-reading-bg)" },
+  unread:  { label: "Unread",  color: "var(--lit-unread-color)",  bg: "var(--lit-unread-bg)" },
 };
 
 function StatusBadge({ status }: { status: ReadStatus }) {
