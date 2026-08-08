@@ -188,72 +188,189 @@ body {
 }
 .animate-slide-up-fade { animation: slide-up-fade-in 0.2s ease-out; }
 
-/* ── Dark mode ─────────────────────────────────────────────────────────────── */
-/*
- * Light values live in @theme above.
- * Dark overrides are declared on:
- *   - :root:not([data-theme="light"])  inside the prefers-color-scheme:dark MQ
- *   - :root[data-theme="dark"]         for the explicit toggle (wins over MQ)
+/* ── Theme tokens (light baseline + dark overrides) ─────────────────────────
+ *
+ * Light values here anchor the CSS-variable layer (separate from @theme
+ * which powers Tailwind utilities).  Dark overrides follow Apple's Human
+ * Interface Guidelines dark-mode layering:
+ *   Background:   #000000  (system)
+ *   Cards/panels: #1C1C1E  (secondary)
+ *   Strip/strips: #2C2C2E  (tertiary)
+ *   Modals:       #3A3A3C  (quaternary — used by popover/dialog surfaces)
+ *   Primary text: #F5F5F7  (off-white, not pure #FFFFFF)
+ *   Secondary:    #8E8E93  (Apple secondaryLabel)
+ *   Separator:    rgba(84,84,88,0.65)  (Apple separator)
+ *   Accent:       #0A84FF  (Apple systemBlue dark)
+ *   Green:        #30D158  (Apple systemGreen dark)
+ *   Orange:       #FF9F0A  (Apple systemOrange dark)
+ *   Red:          #FF453A  (Apple systemRed dark)
+ *
+ * Badge/pill backgrounds use tinted translucent fills instead of solid
+ * light colors, which is how Apple renders status chips in dark contexts.
+ *
+ * Dark overrides apply via:
+ *   @media prefers-color-scheme:dark  (system default)
+ *   :root[data-theme="dark"]          (manual toggle — wins over MQ)
+ *
+ * --color-navy-dim is also used for hover/active tints in Tailwind classes.
+ * In dark mode it flips to a white-tinted value so hovers remain visible.
  */
+
 :root {
-  /* explicit light anchor — same as @theme, ensures MQ override reads correctly */
+  /* ── Surface stack ── */
   --color-canvas:       #F6F8FC;
   --color-sidebar:      #E8ECF1;
   --color-strip:        #D8DCE3;
   --color-surface:      #FFFFFF;
+
+  /* ── Brand / accent ── */
   --color-navy:         #1B2E4B;
   --color-navy-hover:   #2E4A6F;
   --color-navy-dim:     rgba(27,46,75,0.06);
   --color-navy-scrim:   rgba(27,46,75,0.15);
+
+  /* ── Text ── */
   --color-body:         #2D2D2D;
   --color-secondary:    #6B6B6B;
+
+  /* ── Structure ── */
   --color-border:       #DDE1E7;
+  --color-dimmed-bg:    rgba(0,0,0,0.06);   /* inactive pill/button fill */
+
+  /* ── Semantic ── */
   --color-success:      #2E7D52;
   --color-warning:      #A0622A;
   --color-error:        #C0392B;
   --color-error-bg:     #FDDCDC;
   --color-warning-bg:   #FDEFD4;
   --color-success-bg:   #D4EDE0;
+
+  /* ── Literature reading-status badge tokens ── */
+  --lit-read-color:     #2E7D52;
+  --lit-read-bg:        #D4EDE0;
+  --lit-reading-color:  #A0622A;
+  --lit-reading-bg:     #FDEFD4;
+  --lit-unread-color:   #64748B;
+  --lit-unread-bg:      #F1F5F9;
+
+  /* ── Task / priority status tokens (dark-mode-overrideable) ── */
+  --status-todo-dot:        #94A3B8;
+  --status-todo-text:       #64748B;
+  --status-todo-bg:         #F1F5F9;
+  --status-inprogress-dot:  #1B2E4B;
+  --status-inprogress-text: #1B2E4B;
+  --status-inprogress-bg:   rgba(27,46,75,0.09);
+  --status-inreview-dot:    #A0622A;
+  --status-inreview-text:   #A0622A;
+  --status-inreview-bg:     rgba(160,98,42,0.10);
+  --status-done-dot:        #2E7D52;
+  --status-done-text:       #2E7D52;
+  --status-done-bg:         rgba(46,125,82,0.10);
+  --priority-high-dot:      #C0392B;
+  --priority-high-text:     #C0392B;
+  --priority-high-bg:       #FDDCDC;
+  --priority-medium-dot:    #A0622A;
+  --priority-medium-text:   #A0622A;
+  --priority-medium-bg:     #FDEFD4;
+  --priority-low-dot:       #2E7D52;
+  --priority-low-text:      #2E7D52;
+  --priority-low-bg:        #D4EDE0;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --color-canvas:       #111827;
-    --color-sidebar:      #0F1623;
-    --color-strip:        #1A2438;
-    --color-surface:      #1A2336;
-    --color-navy:         #2A4A78;
-    --color-navy-hover:   #3A5A8F;
-    --color-navy-dim:     rgba(100,160,255,0.08);
-    --color-navy-scrim:   rgba(0,0,0,0.50);
-    --color-body:         #E2E8F0;
-    --color-secondary:    #8B9BB4;
-    --color-border:       #253048;
-    --color-success:      #3A9E63;
-    --color-warning:      #B8742E;
-    --color-error:        #D64B3B;
-    --color-error-bg:     rgba(214,75,59,0.18);
-    --color-warning-bg:   rgba(184,116,46,0.15);
-    --color-success-bg:   rgba(58,158,99,0.15);
+    --color-canvas:       #000000;
+    --color-sidebar:      #1C1C1E;
+    --color-strip:        #2C2C2E;
+    --color-surface:      #1C1C1E;
+    --color-navy:         #0A84FF;
+    --color-navy-hover:   #409CFF;
+    --color-navy-dim:     rgba(255,255,255,0.08);
+    --color-navy-scrim:   rgba(0,0,0,0.65);
+    --color-body:         #F5F5F7;
+    --color-secondary:    #8E8E93;
+    --color-border:       rgba(84,84,88,0.65);
+    --color-dimmed-bg:    rgba(255,255,255,0.08);
+    --color-success:      #30D158;
+    --color-warning:      #FF9F0A;
+    --color-error:        #FF453A;
+    --color-error-bg:     rgba(255,69,58,0.18);
+    --color-warning-bg:   rgba(255,159,10,0.15);
+    --color-success-bg:   rgba(48,209,88,0.15);
+    --lit-read-color:     #30D158;
+    --lit-read-bg:        rgba(48,209,88,0.16);
+    --lit-reading-color:  #FF9F0A;
+    --lit-reading-bg:     rgba(255,159,10,0.15);
+    --lit-unread-color:   #8E8E93;
+    --lit-unread-bg:      rgba(142,142,147,0.14);
+    --status-todo-dot:        #636366;
+    --status-todo-text:       #8E8E93;
+    --status-todo-bg:         rgba(142,142,147,0.14);
+    --status-inprogress-dot:  #0A84FF;
+    --status-inprogress-text: #0A84FF;
+    --status-inprogress-bg:   rgba(10,132,255,0.16);
+    --status-inreview-dot:    #FF9F0A;
+    --status-inreview-text:   #FF9F0A;
+    --status-inreview-bg:     rgba(255,159,10,0.15);
+    --status-done-dot:        #30D158;
+    --status-done-text:       #30D158;
+    --status-done-bg:         rgba(48,209,88,0.15);
+    --priority-high-dot:      #FF453A;
+    --priority-high-text:     #FF453A;
+    --priority-high-bg:       rgba(255,69,58,0.16);
+    --priority-medium-dot:    #FF9F0A;
+    --priority-medium-text:   #FF9F0A;
+    --priority-medium-bg:     rgba(255,159,10,0.15);
+    --priority-low-dot:       #30D158;
+    --priority-low-text:      #30D158;
+    --priority-low-bg:        rgba(48,209,88,0.15);
   }
 }
 
 :root[data-theme="dark"] {
-  --color-canvas:       #111827;
-  --color-sidebar:      #0F1623;
-  --color-strip:        #1A2438;
-  --color-surface:      #1A2336;
-  --color-navy:         #2A4A78;
-  --color-navy-hover:   #3A5A8F;
-  --color-navy-dim:     rgba(100,160,255,0.08);
-  --color-navy-scrim:   rgba(0,0,0,0.50);
-  --color-body:         #E2E8F0;
-  --color-secondary:    #8B9BB4;
-  --color-border:       #253048;
-  --color-success:      #3A9E63;
-  --color-warning:      #B8742E;
-  --color-error:        #D64B3B;
-  --color-error-bg:     rgba(214,75,59,0.18);
-  --color-warning-bg:   rgba(184,116,46,0.15);
-  --color-success-bg:   rgba(58,158,99,0.15);
+  --color-canvas:       #000000;
+  --color-sidebar:      #1C1C1E;
+  --color-strip:        #2C2C2E;
+  --color-surface:      #1C1C1E;
+  --color-navy:         #0A84FF;
+  --color-navy-hover:   #409CFF;
+  --color-navy-dim:     rgba(255,255,255,0.08);
+  --color-navy-scrim:   rgba(0,0,0,0.65);
+  --color-body:         #F5F5F7;
+  --color-secondary:    #8E8E93;
+  --color-border:       rgba(84,84,88,0.65);
+  --color-dimmed-bg:    rgba(255,255,255,0.08);
+  --color-success:      #30D158;
+  --color-warning:      #FF9F0A;
+  --color-error:        #FF453A;
+  --color-error-bg:     rgba(255,69,58,0.18);
+  --color-warning-bg:   rgba(255,159,10,0.15);
+  --color-success-bg:   rgba(48,209,88,0.15);
+  --lit-read-color:     #30D158;
+  --lit-read-bg:        rgba(48,209,88,0.16);
+  --lit-reading-color:  #FF9F0A;
+  --lit-reading-bg:     rgba(255,159,10,0.15);
+  --lit-unread-color:   #8E8E93;
+  --lit-unread-bg:      rgba(142,142,147,0.14);
+  --status-todo-dot:        #636366;
+  --status-todo-text:       #8E8E93;
+  --status-todo-bg:         rgba(142,142,147,0.14);
+  --status-inprogress-dot:  #0A84FF;
+  --status-inprogress-text: #0A84FF;
+  --status-inprogress-bg:   rgba(10,132,255,0.16);
+  --status-inreview-dot:    #FF9F0A;
+  --status-inreview-text:   #FF9F0A;
+  --status-inreview-bg:     rgba(255,159,10,0.15);
+  --status-done-dot:        #30D158;
+  --status-done-text:       #30D158;
+  --status-done-bg:         rgba(48,209,88,0.15);
+  --priority-high-dot:      #FF453A;
+  --priority-high-text:     #FF453A;
+  --priority-high-bg:       rgba(255,69,58,0.16);
+  --priority-medium-dot:    #FF9F0A;
+  --priority-medium-text:   #FF9F0A;
+  --priority-medium-bg:     rgba(255,159,10,0.15);
+  --priority-low-dot:       #30D158;
+  --priority-low-text:      #30D158;
+  --priority-low-bg:        rgba(48,209,88,0.15);
 }

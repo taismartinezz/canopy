@@ -25,18 +25,18 @@ import { CSS } from "@dnd-kit/utilities";
 // ── Shared config ─────────────────────────────────────────────────────────────
 
 export const STATUS_CONFIG: Record<TaskStatus, { label: string; dot: string }> = {
-  todo:        { label: "To Do",       dot: "#64748B" },
-  in_progress: { label: "In Progress", dot: "#1B2E4B" },
-  in_review:   { label: "In Review",   dot: "#A0622A" },
-  done:        { label: "Done",        dot: "#2E7D52" },
+  todo:        { label: "To Do",       dot: "var(--status-todo-dot)" },
+  in_progress: { label: "In Progress", dot: "var(--status-inprogress-dot)" },
+  in_review:   { label: "In Review",   dot: "var(--status-inreview-dot)" },
+  done:        { label: "Done",        dot: "var(--status-done-dot)" },
 };
 
 export const STATUS_ORDER: TaskStatus[] = ["todo", "in_progress", "in_review", "done"];
 
 export const PRIORITY_CONFIG: Record<TaskPriority, { label: string; color: string; bg: string; symbol: string }> = {
-  high:   { label: "High",   color: "#C0392B", bg: "#FDDCDC", symbol: "▲" },
-  medium: { label: "Medium", color: "#A0622A", bg: "#FDEFD4", symbol: "●" },
-  low:    { label: "Low",    color: "#2E7D52", bg: "#D4EDE0", symbol: "▼" },
+  high:   { label: "High",   color: "var(--priority-high-text)",   bg: "var(--priority-high-bg)",   symbol: "▲" },
+  medium: { label: "Medium", color: "var(--priority-medium-text)", bg: "var(--priority-medium-bg)", symbol: "●" },
+  low:    { label: "Low",    color: "var(--priority-low-text)",    bg: "var(--priority-low-bg)",    symbol: "▼" },
 };
 
 // ── Subtask row type (exported for use in tasks/page.tsx) ─────────────────────
