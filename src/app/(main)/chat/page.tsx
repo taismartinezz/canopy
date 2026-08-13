@@ -67,7 +67,7 @@ function MessageRow({ msg, prevMsg, currentUserId }: {
   const isOwn = msg.senderId === currentUserId;
   const isContinuation = prevMsg?.senderId === msg.senderId &&
     (new Date(msg.createdAt).getTime() - new Date(prevMsg.createdAt).getTime()) < 5 * 60 * 1000;
-  const avatarUser: User = { id: msg.senderId, name: msg.senderName, email: "", role: "student" as const };
+  const avatarUser: User = { id: msg.senderId, name: msg.senderName, email: "", role: "researcher", avatarColor: "#CBD5E1", avatarInitials: msg.senderName.slice(0, 2).toUpperCase() };
 
   return (
     <div style={{ display: "flex", alignItems: "flex-end", gap: 8, padding: isContinuation ? "1px 16px" : "8px 16px 1px", flexDirection: isOwn ? "row-reverse" : "row" }}>
