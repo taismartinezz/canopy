@@ -694,6 +694,7 @@ export default function BookmarksPage() {
             collapsed={sidebarCollapsed}
             onToggleCollapse={() => setSidebarCollapsed((c) => !c)}
             extraContent={typesExtra}
+            storageKey="canopy_bookmarks_sidebar"
           />
         </div>
       )}

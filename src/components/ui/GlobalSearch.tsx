@@ -28,6 +28,19 @@ const TYPE_COLOR: Record<SearchResult["type"], string> = {
   task: "#1B2E4B", literature: "#2E7D52", reminder: "#A0622A", bookmark: "#7C3AED",
 };
 
+const TASK_STATUS_LABEL: Record<string, string> = {
+  todo:        "To Do",
+  in_progress: "In Progress",
+  in_review:   "In Review",
+  done:        "Done",
+  archived:    "Archived",
+};
+
+function formatTaskStatus(raw: string | null | undefined): string | undefined {
+  if (!raw) return undefined;
+  return TASK_STATUS_LABEL[raw] ?? raw.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 let searchDebounce: ReturnType<typeof setTimeout> | null = null;
 
 export default function GlobalSearch({ projectId }: { projectId: string }) {
@@ -78,7 +91,7 @@ export default function GlobalSearch({ projectId }: { projectId: string }) {
     ]);
 
     for (const t of tasksRes.data ?? []) {
-      hits.push({ id: t.id as string, type: "task", title: t.title as string, subtitle: (t.status as string) ?? undefined, url: "/tasks" });
+      hits.push({ id: t.id as string, type: "task", title: t.title as string, subtitle: formatTaskStatus(t.status as string), url: `/tasks?openTask=${t.id as string}` });
     }
     for (const l of litRes.data ?? []) {
       hits.push({ id: l.id as string, type: "literature", title: l.title as string, subtitle: (l.journal as string) ?? undefined, url: "/literature" });
@@ -104,7 +117,11 @@ export default function GlobalSearch({ projectId }: { projectId: string }) {
 
   function navigate(result: SearchResult) {
     setOpen(false);
-    window.location.href = result.url;
+    if (result.type === "bookmark") {
+      window.open(result.url, "_blank", "noopener,noreferrer");
+    } else {
+      window.location.href = result.url;
+    }
   }
 
   function onKeyDown(e: React.KeyboardEvent) {

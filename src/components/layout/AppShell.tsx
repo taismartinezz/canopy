@@ -6,7 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard, CheckSquare, BookOpen, BookMarked, Bookmark, Users,
   Bell, ChevronDown, ChevronLeft, ChevronRight, LogOut, User as UserIcon,
-  Menu, X, Settings, CalendarDays, CircleCheck, Plus, Home, Search,
+  Menu, X, Settings, CalendarDays, CircleCheck, Plus, Home, Search, MessageSquare,
 } from "lucide-react";
 import { computeInitials } from "@/lib/utils";
 import type { User } from "@/types";
@@ -34,6 +34,7 @@ const NAV_ITEMS = [
   { href: "/",            label: "Dashboard",  icon: LayoutDashboard },
   { href: "/tasks",       label: "Tasks",      icon: CheckSquare     },
   { href: "/journal",     label: "Journal",    icon: BookOpen        },
+  { href: "/chat",        label: "Chat",       icon: MessageSquare   },
   { href: "/reminders",   label: "Reminders",  icon: CircleCheck     },
   { href: "/scheduling",  label: "Scheduling", icon: CalendarDays    },
   { href: "/literature",  label: "Literature", icon: BookMarked      },
@@ -76,6 +77,7 @@ function SidebarBody({
   onCollapse,
   onExpand,
   pastDueCount = 0,
+  chatUnread = 0,
 }: {
   isActive: (href: string) => boolean;
   onLinkClick?: () => void;
@@ -87,6 +89,7 @@ function SidebarBody({
   onCollapse?: () => void;
   onExpand?: () => void;
   pastDueCount?: number;
+  chatUnread?: number;
 }) {
   // ── Collapsed: icon-only rail ───────────────────────────────────────────────
   if (collapsed) {
@@ -106,14 +109,16 @@ function SidebarBody({
         <nav className="flex-1 flex flex-col items-center px-1.5 py-2 gap-1 overflow-y-auto" aria-label="Main navigation">
           {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
             const active = isActive(href);
-            const showBadge = href === "/reminders" && pastDueCount > 0;
+            const badgeCount = href === "/reminders" ? pastDueCount : href === "/chat" ? chatUnread : 0;
+            const showBadge = badgeCount > 0;
+            const badgeLabel = href === "/chat" ? `${badgeCount} unread` : `${badgeCount} past due`;
             return (
               <Link
                 key={href}
                 href={href}
                 onClick={onLinkClick}
-                title={showBadge ? `${label} (${pastDueCount} past due)` : label}
-                aria-label={showBadge ? `${label} — ${pastDueCount} past due` : label}
+                title={showBadge ? `${label} (${badgeLabel})` : label}
+                aria-label={showBadge ? `${label} — ${badgeLabel}` : label}
                 className="flex items-center justify-center rounded-lg"
                 style={{ position: "relative", width: 36, height: 36, backgroundColor: active ? "var(--color-navy-dim)" : "transparent", color: active ? "var(--color-navy)" : "var(--color-secondary)", textDecoration: "none", transition: "background-color 0.12s", borderLeft: active ? "2.5px solid var(--color-navy)" : "2.5px solid transparent" }}
                 aria-current={active ? "page" : undefined}
@@ -121,7 +126,7 @@ function SidebarBody({
                 onMouseLeave={(e) => { if (!active) (e.currentTarget as HTMLElement).style.backgroundColor = active ? "var(--color-navy-dim)" : "transparent"; }}
               >
                 <Icon size={16} strokeWidth={active ? 2.5 : 1.8} fill={active ? "var(--color-navy-dim)" : "none"} />
-                {showBadge && <span aria-hidden style={{ position: "absolute", top: 4, right: 4, minWidth: 14, height: 14, backgroundColor: "var(--color-navy)", borderRadius: 7, fontSize: 9, fontWeight: 700, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", padding: "0 3px" }}>{pastDueCount > 9 ? "9+" : pastDueCount}</span>}
+                {showBadge && <span aria-hidden style={{ position: "absolute", top: 4, right: 4, minWidth: 14, height: 14, backgroundColor: "var(--color-navy)", borderRadius: 7, fontSize: 9, fontWeight: 700, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", padding: "0 3px" }}>{badgeCount > 9 ? "9+" : badgeCount}</span>}
               </Link>
             );
           })}
@@ -167,7 +172,9 @@ function SidebarBody({
       <nav className="flex-1 px-2 space-y-0.5 overflow-y-auto" aria-label="Main navigation">
         {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
           const active = isActive(href);
-          const showBadge = href === "/reminders" && pastDueCount > 0;
+          const badgeCount = href === "/reminders" ? pastDueCount : href === "/chat" ? chatUnread : 0;
+          const showBadge = badgeCount > 0;
+          const badgeLabel = href === "/chat" ? `${badgeCount} unread` : `${badgeCount} past due`;
           return (
             <Link
               key={href}
@@ -194,7 +201,7 @@ function SidebarBody({
             >
               <Icon size={15} strokeWidth={active ? 2.5 : 1.8} fill={active ? "var(--color-navy-dim)" : "none"} />
               <span style={{ flex: 1 }}>{label}</span>
-              {showBadge && <span aria-label={`${pastDueCount} past due`} style={{ minWidth: 18, height: 18, backgroundColor: "var(--color-navy)", borderRadius: 9, fontSize: 10, fontWeight: 700, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px", flexShrink: 0 }}>{pastDueCount > 9 ? "9+" : pastDueCount}</span>}
+              {showBadge && <span aria-label={badgeLabel} style={{ minWidth: 18, height: 18, backgroundColor: "var(--color-navy)", borderRadius: 9, fontSize: 10, fontWeight: 700, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px", flexShrink: 0 }}>{badgeCount > 9 ? "9+" : badgeCount}</span>}
             </Link>
           );
         })}
@@ -243,6 +250,7 @@ type SupabaseNotif = {
 function notifHref(n: SupabaseNotif): string {
   if (n.type === "task_assigned") return "/tasks";
   if (n.type === "reading_assigned") return "/literature";
+  if (n.type === "chat_message") return "/chat";
   if (n.type === "lab_win") return "/dashboard";
   return "/dashboard";
 }
@@ -358,6 +366,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [notifications, setNotifications] = useState<SupabaseNotif[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [pastDueCount, setPastDueCount] = useState(0);
+  const [chatUnread, setChatUnread] = useState(0);
   const hasFetched = useRef(false);
 
   // ── Auth gate + notifications ─────────────────────────────────────────────
@@ -439,6 +448,19 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           .lt("due_at", now)
           .or(`user_id.eq.${user.id},assignee_id.eq.${user.id}`);
         setPastDueCount(pdCount ?? 0);
+
+        // Count unread chat messages (messages since last visit to /chat)
+        try {
+          const lastRead = localStorage.getItem("canopy_chat_last_read") ?? "1970-01-01";
+          const labChannel = `lab:${pid}`;
+          const { count: chatCount } = await supabase
+            .from("chat_messages")
+            .select("id", { count: "exact", head: true })
+            .eq("channel", labChannel)
+            .gt("created_at", lastRead)
+            .neq("sender_id", user.id);
+          setChatUnread(chatCount ?? 0);
+        } catch { /* ignore */ }
 
         setProfile(prof);
         setAuthed(true);
@@ -548,7 +570,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     setNavCollapsed(localStorage.getItem("canopy_nav_collapsed") === "true");
   }, []);
 
-  useEffect(() => { setMobileNavOpen(false); setNotifOpen(false); setProfileOpen(false); }, [pathname]);
+  useEffect(() => {
+    setMobileNavOpen(false); setNotifOpen(false); setProfileOpen(false);
+    if (pathname.startsWith("/chat")) {
+      setChatUnread(0);
+      try { localStorage.setItem("canopy_chat_last_read", new Date().toISOString()); } catch { /* ignore */ }
+    }
+  }, [pathname]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -637,14 +665,17 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               onClick={() => { setActiveSubProject(null); setActiveScope("lab"); }}
               title="Lab home"
               aria-label="Lab home"
-              className="w-9 h-9 flex items-center justify-center rounded-[10px] transition-colors"
+              aria-current={activeScope === "lab" ? "true" : undefined}
+              className="w-9 h-9 flex items-center justify-center rounded-[10px] transition-all"
               style={{
-                backgroundColor: activeScope === "lab" ? "var(--color-navy-dim)" : "transparent",
-                border: activeScope === "lab" ? "1.5px solid var(--color-border)" : "1.5px solid transparent",
+                backgroundColor: activeScope === "lab" ? "var(--color-navy)" : "transparent",
+                border: "2px solid transparent",
+                outline: activeScope === "lab" ? "2px solid var(--color-navy)" : "none",
+                outlineOffset: 1,
                 cursor: "pointer",
               }}
             >
-              <Home size={15} color="var(--color-navy)" />
+              <Home size={15} color={activeScope === "lab" ? "#fff" : "var(--color-navy)"} />
             </button>
           </Tooltip>
         </div>
@@ -750,6 +781,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               onClick={() => { setActiveSubProject(null); setActiveScope("personal"); }}
               title={profile?.name ?? "Personal workspace"}
               aria-label="Personal workspace"
+              aria-current={activeScope === "personal" ? "true" : undefined}
               className="w-9 h-9 rounded-[10px] flex items-center justify-center transition-colors"
               style={{
                 backgroundColor: activeScope === "personal" ? "var(--color-navy)" : "var(--color-navy-dim)",
@@ -784,6 +816,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           onCollapse={() => { setNavCollapsed(true); localStorage.setItem("canopy_nav_collapsed", "true"); }}
           onExpand={() => { setNavCollapsed(false); localStorage.setItem("canopy_nav_collapsed", "false"); }}
           pastDueCount={pastDueCount}
+          chatUnread={chatUnread}
         />
       </div>
 
@@ -808,6 +841,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           team={team}
           currentUserId={profile?.id ?? ""}
           pastDueCount={pastDueCount}
+          chatUnread={chatUnread}
         />
       </div>
 

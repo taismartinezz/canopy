@@ -3855,6 +3855,11 @@ export default function LiteraturePage() {
   const [collectionsOpen, setCollectionsOpen] = useState(false);
   const [panelCollapsed, setPanelCollapsed] = useState(false);
   const [panelTransitionActive, setPanelTransitionActive] = useState(false);
+  const [litPanelWidth, setLitPanelWidth] = useState(() => {
+    try { const s = localStorage.getItem("canopy_lit_panel_width"); if (s) return Math.max(180, Math.min(400, parseInt(s, 10))); } catch { /* ignore */ }
+    return 220;
+  });
+  const litDragState = useRef<{ startX: number; startWidth: number } | null>(null);
   const [isMobile, setIsMobile]         = useState(false);
   const [addItemOpen, setAddItemOpen]       = useState(false);
   const [zoteroImportOpen, setZoteroImportOpen] = useState(false);
@@ -4137,10 +4142,34 @@ export default function LiteraturePage() {
         className="flex-col shrink-0 group/litpanel"
         style={{
           display: isMobile ? "none" : "flex",
-          width: panelCollapsed ? 0 : 220,
+          width: panelCollapsed ? 0 : litPanelWidth,
           overflow: "clip",
           borderRight: panelCollapsed ? "none" : "1px solid var(--color-border)",
           transition: panelTransitionActive ? "width 200ms ease" : "none",
+          position: "relative",
+        }}
+        onMouseMove={(e) => {
+          if (!litDragState.current) return;
+          const delta = e.clientX - litDragState.current.startX;
+          const next = litDragState.current.startWidth + delta;
+          if (next < 140) {
+            litDragState.current = null;
+            document.body.style.userSelect = "";
+            document.body.style.cursor = "";
+            setPanelTransitionActive(true);
+            setPanelCollapsed(true);
+            setTimeout(() => setPanelTransitionActive(false), 220);
+            return;
+          }
+          const clamped = Math.max(180, Math.min(400, next));
+          setLitPanelWidth(clamped);
+        }}
+        onMouseUp={() => {
+          if (!litDragState.current) return;
+          litDragState.current = null;
+          document.body.style.userSelect = "";
+          document.body.style.cursor = "";
+          try { localStorage.setItem("canopy_lit_panel_width", String(litPanelWidth)); } catch { /* ignore */ }
         }}
       >
         <CollectionsSidebar
@@ -4163,6 +4192,31 @@ export default function LiteraturePage() {
           showScopeFilter={isLabHome}
           projectBadge={!isLabHome && activeScope === "project" ? subProjects.find((sp) => sp.id === subProjectId)?.name : undefined}
         />
+        {/* Drag handle — right edge of lit panel */}
+        {!panelCollapsed && (
+          <div
+            role="separator"
+            aria-label="Resize panel"
+            aria-orientation="vertical"
+            tabIndex={0}
+            title="Drag to resize · ← → to adjust"
+            style={{ position: "absolute", top: 0, right: 0, bottom: 0, width: 5, cursor: "col-resize", zIndex: 10, backgroundColor: "transparent", transition: "background-color 0.15s" }}
+            onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.backgroundColor = "var(--color-navy-dim)"; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.backgroundColor = "transparent"; }}
+            onFocus={e => { (e.currentTarget as HTMLDivElement).style.backgroundColor = "var(--color-navy-dim)"; }}
+            onBlur={e => { (e.currentTarget as HTMLDivElement).style.backgroundColor = "transparent"; }}
+            onMouseDown={e => {
+              e.preventDefault();
+              litDragState.current = { startX: e.clientX, startWidth: litPanelWidth };
+              document.body.style.userSelect = "none";
+              document.body.style.cursor = "col-resize";
+            }}
+            onKeyDown={e => {
+              if (e.key === "ArrowRight") { e.preventDefault(); setLitPanelWidth(w => { const n = Math.min(400, w + 10); try { localStorage.setItem("canopy_lit_panel_width", String(n)); } catch { /* ignore */ } return n; }); }
+              if (e.key === "ArrowLeft") { e.preventDefault(); setLitPanelWidth(w => { const n = w - 10; if (n < 140) { setPanelTransitionActive(true); setPanelCollapsed(true); setTimeout(() => setPanelTransitionActive(false), 220); return w; } const clamped = Math.max(180, n); try { localStorage.setItem("canopy_lit_panel_width", String(clamped)); } catch { /* ignore */ } return clamped; }); }
+            }}
+          />
+        )}
       </div>
 
       {/* Peek strip — desktop only, when panel is collapsed */}
