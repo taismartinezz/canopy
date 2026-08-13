@@ -150,8 +150,8 @@ function toCalEvents(events: ScheduleEvent[], proposals: MeetingProposal[]): Cal
     }
     result.push({
       id: e.id, title: e.title, date: e.date, startMin, endMin,
-      color: e.scope === "lab" ? "#1B2E4B" : "#5B7A99",
-      bgColor: e.scope === "lab" ? "rgba(27,46,75,0.10)" : "rgba(91,122,153,0.10)",
+      color: e.scope === "lab" ? "var(--color-navy)" : "var(--color-secondary)",
+      bgColor: "var(--color-navy-dim)",
       type: e.scope === "personal" ? "personal" : "lab",
       isScheduleEvent: true, ownerId: e.createdBy,
     });
@@ -162,7 +162,7 @@ function toCalEvents(events: ScheduleEvent[], proposals: MeetingProposal[]): Cal
     const startMin = h * 60 + m;
     result.push({
       id: p.id, title: p.title, date: p.proposedDate, startMin, endMin: startMin + p.durationMinutes,
-      color: "#2E7D52", bgColor: "rgba(46,125,82,0.10)",
+      color: "var(--color-success)", bgColor: "var(--color-navy-dim)",
       type: "meeting", isScheduleEvent: false, ownerId: p.proposerId,
     });
   }
@@ -341,7 +341,7 @@ function CalendarTab({
                   const nowMin = now.getHours() * 60 + now.getMinutes();
                   if (nowMin < DAY_START_H * 60 || nowMin > DAY_END_H * 60) return null;
                   const nowTop = (nowMin - DAY_START_H * 60) / 60 * HOUR_H;
-                  return <div style={{ position: "absolute", top: nowTop, left: 0, right: 0, height: 2, backgroundColor: "#C0392B", zIndex: 2, pointerEvents: "none" }} />;
+                  return <div style={{ position: "absolute", top: nowTop, left: 0, right: 0, height: 2, backgroundColor: "var(--color-error)", zIndex: 2, pointerEvents: "none" }} />;
                 })()}
                 {laidOut.map(ev => renderEventBlock(ev))}
               </div>
@@ -498,7 +498,7 @@ function CalendarTab({
                   const isToday = ds === todayStr;
                   const hasEv = ds ? calEvents.some(e => e.date === ds) : false;
                   return (
-                    <div key={i} style={{ fontSize: 7, textAlign: "center", lineHeight: "13px", borderRadius: 2, color: isToday ? "#fff" : inM ? "var(--color-body)" : "transparent", backgroundColor: isToday ? "var(--color-navy)" : hasEv ? "rgba(27,46,75,0.12)" : "transparent" }}>
+                    <div key={i} style={{ fontSize: 7, textAlign: "center", lineHeight: "13px", borderRadius: 2, color: isToday ? "#fff" : inM ? "var(--color-body)" : "transparent", backgroundColor: isToday ? "var(--color-navy)" : hasEv ? "var(--color-navy-dim)" : "transparent" }}>
                       {inM ? dn : ""}
                     </div>
                   );
@@ -533,13 +533,13 @@ function CalendarTab({
               {headerLabel()}
             </span>
           </div>
-          <div className="flex" style={{ backgroundColor: "rgba(27,46,75,0.06)", borderRadius: 7, padding: 2 }}>
+          <div className="flex" style={{ backgroundColor: "var(--color-navy-dim)", borderRadius: 7, padding: 2 }}>
             {(["Day", "Week", "Month", "Year"] as const).map(v => {
               const id = v.toLowerCase() as CalView;
               const active = view === id;
               return (
                 <button key={v} onClick={() => setView(id)}
-                  style={{ padding: "4px 10px", borderRadius: 5, border: "none", cursor: "pointer", fontSize: 12, fontWeight: active ? 600 : 400, fontFamily: "var(--font-roboto)", backgroundColor: active ? "#fff" : "transparent", color: active ? "var(--color-navy)" : "var(--color-secondary)", boxShadow: active ? "0 1px 3px rgba(27,46,75,0.10)" : "none" }}>
+                  style={{ padding: "4px 10px", borderRadius: 5, border: "none", cursor: "pointer", fontSize: 12, fontWeight: active ? 600 : 400, fontFamily: "var(--font-roboto)", backgroundColor: active ? "var(--color-segment-active)" : "transparent", color: active ? "var(--color-navy)" : "var(--color-secondary)", boxShadow: active ? "0 1px 3px rgba(0,0,0,0.10)" : "none" }}>
                   {v}
                 </button>
               );
@@ -575,7 +575,7 @@ function CalendarTab({
               </button>
               {formTime && <button onClick={() => setFormTime("")} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11, color: "var(--color-secondary)" }}>clear</button>}
             </div>
-            {showTP && tpPos && <TimePicker value={formTime || "09:00"} accentColor="#1B2E4B" pos={tpPos} onChange={t => setFormTime(t)} onClear={() => { setFormTime(""); setShowTP(false); }} onClose={() => setShowTP(false)} />}
+            {showTP && tpPos && <TimePicker value={formTime || "09:00"} accentColor="var(--color-navy)" pos={tpPos} onChange={t => setFormTime(t)} onClear={() => { setFormTime(""); setShowTP(false); }} onClose={() => setShowTP(false)} />}
             {formError && <p style={{ fontSize: 11, color: "var(--color-error)", margin: 0 }}>{formError}</p>}
             <div className="flex gap-2">
               <button onClick={handleAdd} style={{ height: 32, paddingInline: 16, backgroundColor: "var(--color-navy)", color: "#fff", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Add</button>
@@ -612,7 +612,7 @@ function CalendarTab({
 
       {/* Legend */}
       <div className="flex gap-5">
-        {[{ color: "#1B2E4B", label: "Lab event" }, { color: "#5B7A99", label: "Personal" }, { color: "#2E7D52", label: "Meeting" }].map(({ color, label }) => (
+        {[{ color: "var(--color-navy)", label: "Lab event" }, { color: "var(--color-secondary)", label: "Personal" }, { color: "var(--color-success)", label: "Meeting" }].map(({ color, label }) => (
           <div key={label} className="flex items-center gap-1.5">
             <span style={{ width: 7, height: 7, borderRadius: "50%", backgroundColor: color, display: "inline-block" }} />
             <span style={{ fontSize: 11, color: "var(--color-secondary)" }}>{label}</span>
@@ -735,7 +735,7 @@ function AvailabilityTab({
                 style={{
                   height: 30, paddingInline: 10, borderRadius: 20,
                   border: `1.5px solid ${checked ? "var(--color-navy)" : "var(--color-border)"}`,
-                  backgroundColor: checked ? "rgba(27,46,75,0.07)" : "transparent",
+                  backgroundColor: checked ? "var(--color-navy-dim)" : "transparent",
                   color: checked ? "var(--color-navy)" : "var(--color-secondary)",
                   fontSize: 12, fontWeight: checked ? 600 : 400, cursor: "pointer", fontFamily: "var(--font-roboto)",
                 }}
@@ -805,7 +805,7 @@ function AvailabilityTab({
                   ))}
                 </div>
               )}
-              <div className="flex items-start gap-2 mb-4 px-3 py-2 rounded-lg" style={{ backgroundColor: "rgba(27,46,75,0.05)", border: "1px solid rgba(27,46,75,0.10)" }}>
+              <div className="flex items-start gap-2 mb-4 px-3 py-2 rounded-lg" style={{ backgroundColor: "var(--color-navy-dim)", border: "1px solid var(--color-border)" }}>
                 <Lock size={13} style={{ marginTop: 2, color: "var(--color-navy)", flexShrink: 0 }} />
                 <p style={{ fontSize: 12, color: "var(--color-body)", margin: 0, lineHeight: 1.5 }}>
                   You&apos;re editing your <strong>{availSubProjectId ? (subProjects.find(sp => sp.id === availSubProjectId)?.name ?? "project") : "lab-wide"}</strong> availability. Team members see only the aggregate overlap, not your individual schedule.
@@ -822,13 +822,12 @@ function AvailabilityTab({
               <div
                 className="flex items-start gap-2 p-3 rounded-lg"
                 style={{
-                  backgroundColor: googleConnected ? "rgba(46,125,82,0.07)" : "rgba(27,46,75,0.04)",
-                  border: "1px solid",
-                  borderColor: googleConnected ? "rgba(46,125,82,0.25)" : "var(--color-border)",
+                  backgroundColor: "var(--color-navy-dim)",
+                  border: "1px solid var(--color-border)",
                 }}
               >
                 {googleConnected ? (
-                  <Check size={13} style={{ color: "#2E7D52", marginTop: 2, flexShrink: 0 }} />
+                  <Check size={13} style={{ color: "var(--color-success)", marginTop: 2, flexShrink: 0 }} />
                 ) : (
                   <AlertCircle size={13} style={{ color: "var(--color-secondary)", marginTop: 2, flexShrink: 0 }} />
                 )}
@@ -936,7 +935,7 @@ function MeetingsTab({
             </div>
           </div>
           {!needsResponse && (
-            <span style={{ fontSize: 11, fontWeight: 600, flexShrink: 0, color: isIncoming ? c.text : "var(--color-secondary)", backgroundColor: isIncoming ? c.bg : "rgba(27,46,75,0.06)", borderRadius: 12, padding: "2px 8px" }}>
+            <span style={{ fontSize: 11, fontWeight: 600, flexShrink: 0, color: isIncoming ? c.text : "var(--color-secondary)", backgroundColor: isIncoming ? c.bg : "var(--color-navy-dim)", borderRadius: 12, padding: "2px 8px" }}>
               {isIncoming ? STATUS_LABELS[myStatus as MeetingResponseStatus] : "Proposed"}
             </span>
           )}
@@ -1397,7 +1396,7 @@ export default function SchedulingPage() {
         </div>
 
         {/* Tab bar */}
-        <div className="flex gap-0.5 mb-6 overflow-x-auto" style={{ backgroundColor: "rgba(27,46,75,0.06)", borderRadius: 9, padding: 3 }}>
+        <div className="flex gap-0.5 mb-6 overflow-x-auto" style={{ backgroundColor: "var(--color-navy-dim)", borderRadius: 9, padding: 3 }}>
           {TABS.map(({ id, label, icon: Icon }) => {
             const active = tab === id;
             const hasBadge = id === "meetings" && pendingCount > 0;
@@ -1409,15 +1408,15 @@ export default function SchedulingPage() {
                 style={{
                   flex: "0 0 auto", padding: "7px 14px", borderRadius: 7, border: "none", cursor: "pointer",
                   fontSize: 13, fontWeight: active ? 600 : 400, fontFamily: "var(--font-roboto)",
-                  backgroundColor: active ? "#fff" : "transparent",
+                  backgroundColor: active ? "var(--color-segment-active)" : "transparent",
                   color: active ? "var(--color-navy)" : "var(--color-secondary)",
-                  boxShadow: active ? "0 1px 4px rgba(27,46,75,0.12)" : "none",
+                  boxShadow: active ? "0 1px 4px rgba(0,0,0,0.10)" : "none",
                 }}
               >
                 <Icon size={13} />
                 {label}
                 {hasBadge && (
-                  <span style={{ backgroundColor: "#C0392B", color: "#fff", borderRadius: "50%", width: 16, height: 16, fontSize: 9, fontWeight: 700, display: "inline-flex", alignItems: "center", justifyContent: "center", marginLeft: 2 }}>
+                  <span style={{ backgroundColor: "var(--color-error)", color: "#fff", borderRadius: "50%", width: 16, height: 16, fontSize: 9, fontWeight: 700, display: "inline-flex", alignItems: "center", justifyContent: "center", marginLeft: 2 }}>
                     {pendingCount}
                   </span>
                 )}

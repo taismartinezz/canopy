@@ -237,6 +237,7 @@ body {
   --color-border:       #DDE1E7;
   --color-dimmed-bg:    rgba(0,0,0,0.06);   /* inactive pill/button fill */
   --color-surface-2:    #F6F8FC;            /* elevated input/readonly surface */
+  --color-segment-active: #FFFFFF;          /* active pill in segmented controls */
 
   /* ── Primary button ── */
   --color-btn-primary:       #1B2E4B;
@@ -297,6 +298,7 @@ body {
     --color-border:       rgba(84,84,88,0.65);
     --color-dimmed-bg:    rgba(255,255,255,0.08);
     --color-surface-2:    #2C2C2E;
+    --color-segment-active: rgba(255,255,255,0.16);
     --color-btn-primary:       #006ADB;
     --color-btn-primary-hover: #1A80EF;
     --color-success:      #30D158;
@@ -349,6 +351,7 @@ body {
   --color-border:       rgba(84,84,88,0.65);
   --color-dimmed-bg:    rgba(255,255,255,0.08);
   --color-surface-2:    #2C2C2E;
+  --color-segment-active: rgba(255,255,255,0.16);
   --color-btn-primary:       #006ADB;
   --color-btn-primary-hover: #1A80EF;
   --color-success:      #30D158;
