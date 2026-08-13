@@ -10,6 +10,7 @@ import { useProject } from "@/context/ProjectContext";
 import Avatar from "@/components/ui/Avatar";
 import ClientOnly from "@/components/ui/ClientOnly";
 import type { Reminder, ReminderScope, ReminderPriority, User, SubProject } from "@/types";
+import { useUndoToast } from "@/context/UndoToastContext";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -864,6 +865,7 @@ function UndoToast({ title, onUndo }: { title: string; onUndo: () => void }) {
 interface PendingUndo { reminder: Reminder; timerId: ReturnType<typeof setTimeout>; }
 
 export default function RemindersPage() {
+  const { show: showUndoToast } = useUndoToast();
   const { projectId, activeScope, subProjectId, subProjects, isLoading: projectLoading } = useProject();
   const [currentUserId, setCurrentUserId] = useState("");
   const [teamMembers, setTeamMembers] = useState<User[]>([]);
@@ -1071,7 +1073,16 @@ export default function RemindersPage() {
     }
   }
 
-  function handleDelete(id: string) { setReminders(prev => prev.filter(r => r.id !== id)); commitDelete(id); }
+  function handleDelete(id: string) {
+    const reminder = reminders.find((r) => r.id === id);
+    if (!reminder) return;
+    setReminders((prev) => prev.filter((r) => r.id !== id));
+    showUndoToast(
+      `"${reminder.title}" deleted`,
+      () => setReminders((prev) => [...prev, reminder]),
+      () => commitDelete(id),
+    );
+  }
 
   async function handleUpdate(id: string, updates: UpdatePayload) {
     const newProjectId = updates.scope === "lab" ? (projectId ?? undefined) : undefined;

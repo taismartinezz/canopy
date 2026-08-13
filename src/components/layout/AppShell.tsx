@@ -19,6 +19,7 @@ import CreateProjectModal from "@/components/projects/CreateProjectModal";
 import OnboardingModal, { useOnboarding } from "@/components/ui/OnboardingModal";
 import Tooltip from "@/components/ui/Tooltip";
 import GlobalSearch from "@/components/ui/GlobalSearch";
+import { UndoToastProvider } from "@/context/UndoToastContext";
 
 function contrastTextColor(hex: string): "#000000" | "#ffffff" {
   if (!/^#[0-9A-Fa-f]{6}$/.test(hex)) return "#ffffff";
@@ -1003,7 +1004,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </header>
 
         {/* Page content */}
-        <main className="flex-1 overflow-y-auto overflow-x-hidden min-h-0">{children}</main>
+        <main className="flex-1 overflow-y-auto overflow-x-hidden min-h-0">
+          <UndoToastProvider>{children}</UndoToastProvider>
+        </main>
       </div>
     </div>
     <Toast />

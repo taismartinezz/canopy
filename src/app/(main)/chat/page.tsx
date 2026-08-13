@@ -3,9 +3,11 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { useProject } from "@/context/ProjectContext";
+import { useUndoToast } from "@/context/UndoToastContext";
 import Avatar from "@/components/ui/Avatar";
-import type { User, SubProject } from "@/types";
-import { MessageSquare, Send } from "lucide-react";
+import type { User } from "@/types";
+import { MessageSquare, Send, Pencil, Trash2, Check, X } from "lucide-react";
+import { computeInitials } from "@/lib/utils";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -18,7 +20,8 @@ interface ChatMessage {
   createdAt: string;
 }
 
-type ChannelId = "lab" | "personal" | string; // string = sub-project id
+// Active channel is either the lab channel, a sub-project id, or "dm:<peerId>"
+type ActiveChannel = string;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -30,9 +33,21 @@ function formatTime(iso: string): string {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" }) + " " + d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
 }
 
-function channelKey(projectId: string, channelId: ChannelId): string {
-  if (channelId === "lab" || channelId === "personal") return `${channelId}:${projectId}`;
-  return `project:${channelId}`;
+function resolveChannelKey(projectId: string, currentUserId: string, active: ActiveChannel): string {
+  if (active === "lab") return `lab:${projectId}`;
+  if (active.startsWith("dm:")) {
+    const peerId = active.slice(3);
+    return `dm:${[currentUserId, peerId].sort().join(":")}`;
+  }
+  return `project:${active}`;
+}
+
+function buildAvatarUser(id: string, name: string): User {
+  return {
+    id, name, email: "", role: "researcher",
+    avatarColor: "#CBD5E1",
+    avatarInitials: computeInitials(name) || name.slice(0, 2).toUpperCase(),
+  };
 }
 
 // ── Empty state ───────────────────────────────────────────────────────────────
@@ -42,7 +57,7 @@ function EmptyChatState({ onCompose }: { onCompose: () => void }) {
     <div className="flex flex-col items-center justify-center flex-1 px-6 py-12 text-center gap-3">
       <MessageSquare size={40} style={{ color: "var(--color-border)" }} />
       <p style={{ fontSize: 14, fontWeight: 600, color: "var(--color-body)", margin: 0 }}>
-        No messages yet — say hello!
+        No messages yet
       </p>
       <p style={{ fontSize: 13, color: "var(--color-secondary)", margin: 0 }}>
         Be the first to send a message in this channel.
@@ -59,18 +74,50 @@ function EmptyChatState({ onCompose }: { onCompose: () => void }) {
 
 // ── Message bubble ────────────────────────────────────────────────────────────
 
-function MessageRow({ msg, prevMsg, currentUserId }: {
+function MessageRow({
+  msg, prevMsg, currentUserId, onEdit, onDelete,
+}: {
   msg: ChatMessage;
   prevMsg: ChatMessage | null;
   currentUserId: string;
+  onEdit: (id: string, newContent: string) => void;
+  onDelete: (id: string) => void;
 }) {
   const isOwn = msg.senderId === currentUserId;
   const isContinuation = prevMsg?.senderId === msg.senderId &&
     (new Date(msg.createdAt).getTime() - new Date(prevMsg.createdAt).getTime()) < 5 * 60 * 1000;
-  const avatarUser: User = { id: msg.senderId, name: msg.senderName, email: "", role: "researcher", avatarColor: "#CBD5E1", avatarInitials: msg.senderName.slice(0, 2).toUpperCase() };
+  const avatarUser = buildAvatarUser(msg.senderId, msg.senderName);
+
+  const [hovered, setHovered] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editDraft, setEditDraft] = useState(msg.content);
+  const editRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (editing) {
+      setEditDraft(msg.content);
+      setTimeout(() => editRef.current?.focus(), 30);
+    }
+  }, [editing, msg.content]);
+
+  function commitEdit() {
+    const trimmed = editDraft.trim();
+    if (!trimmed || trimmed === msg.content) { setEditing(false); return; }
+    onEdit(msg.id, trimmed);
+    setEditing(false);
+  }
+
+  function onEditKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); commitEdit(); }
+    if (e.key === "Escape") { setEditing(false); }
+  }
 
   return (
-    <div style={{ display: "flex", alignItems: "flex-end", gap: 8, padding: isContinuation ? "1px 16px" : "8px 16px 1px", flexDirection: isOwn ? "row-reverse" : "row" }}>
+    <div
+      style={{ display: "flex", alignItems: "flex-end", gap: 8, padding: isContinuation ? "1px 16px" : "8px 16px 1px", flexDirection: isOwn ? "row-reverse" : "row", position: "relative" }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
       {!isOwn && (
         <div style={{ width: 28, flexShrink: 0, alignSelf: "flex-end" }}>
           {!isContinuation && <Avatar user={avatarUser} size={28} />}
@@ -83,73 +130,157 @@ function MessageRow({ msg, prevMsg, currentUserId }: {
             <span style={{ fontSize: 10, color: "var(--color-secondary)" }}>{formatTime(msg.createdAt)}</span>
           </div>
         )}
-        <div
-          style={{
-            backgroundColor: isOwn ? "var(--color-btn-primary)" : "var(--color-surface-2)",
-            color: isOwn ? "#fff" : "var(--color-body)",
-            borderRadius: isOwn ? "14px 14px 4px 14px" : "14px 14px 14px 4px",
-            padding: "8px 12px",
-            fontSize: 13,
-            lineHeight: 1.5,
-            wordBreak: "break-word",
-            whiteSpace: "pre-wrap",
-          }}
-        >
-          {msg.content}
-        </div>
-        {isContinuation && (
+        {editing ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 4, width: "100%" }}>
+            <textarea
+              ref={editRef}
+              value={editDraft}
+              onChange={(e) => setEditDraft(e.target.value)}
+              onKeyDown={onEditKeyDown}
+              rows={2}
+              style={{
+                fontSize: 13, lineHeight: 1.5, padding: "8px 10px", borderRadius: 10,
+                border: "1.5px solid var(--color-navy)", outline: "none",
+                resize: "none", fontFamily: "var(--font-roboto)",
+                backgroundColor: "var(--color-surface)", color: "var(--color-body)",
+                width: 260,
+              }}
+            />
+            <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+              <button onClick={() => setEditing(false)} style={{ fontSize: 11, padding: "3px 10px", borderRadius: 6, border: "1px solid var(--color-border)", background: "none", cursor: "pointer", color: "var(--color-secondary)" }}>Cancel</button>
+              <button onClick={commitEdit} style={{ fontSize: 11, padding: "3px 10px", borderRadius: 6, border: "none", background: "var(--color-btn-primary)", color: "#fff", cursor: "pointer", fontWeight: 600 }}>Save</button>
+            </div>
+          </div>
+        ) : (
+          <div
+            style={{
+              backgroundColor: isOwn ? "var(--color-btn-primary)" : "var(--color-surface-2)",
+              color: isOwn ? "#fff" : "var(--color-body)",
+              borderRadius: isOwn ? "14px 14px 4px 14px" : "14px 14px 14px 4px",
+              padding: "8px 12px", fontSize: 13, lineHeight: 1.5,
+              wordBreak: "break-word", whiteSpace: "pre-wrap",
+            }}
+          >
+            {msg.content}
+          </div>
+        )}
+        {isContinuation && !editing && (
           <span style={{ fontSize: 9, color: "var(--color-secondary)", padding: "0 2px" }}>{formatTime(msg.createdAt)}</span>
         )}
       </div>
+
+      {/* Hover actions for own messages */}
+      {isOwn && !editing && hovered && (
+        <div style={{
+          display: "flex", alignItems: "center", gap: 2,
+          position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)",
+          backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)",
+          borderRadius: 8, padding: "2px 4px", boxShadow: "0 1px 4px rgba(0,0,0,0.1)",
+          zIndex: 1,
+        }}>
+          <button
+            onClick={() => setEditing(true)}
+            title="Edit message"
+            aria-label="Edit message"
+            style={{ background: "none", border: "none", cursor: "pointer", padding: "3px 4px", display: "flex", opacity: 0.55, borderRadius: 5, transition: "opacity 0.1s" }}
+            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.opacity = "1"; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.opacity = "0.55"; }}
+          >
+            <Pencil size={12} color="var(--color-body)" />
+          </button>
+          <button
+            onClick={() => onDelete(msg.id)}
+            title="Delete message"
+            aria-label="Delete message"
+            style={{ background: "none", border: "none", cursor: "pointer", padding: "3px 4px", display: "flex", opacity: 0.55, borderRadius: 5, transition: "opacity 0.1s" }}
+            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.opacity = "1"; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.opacity = "0.55"; }}
+          >
+            <Trash2 size={12} color="var(--color-body)" />
+          </button>
+        </div>
+      )}
     </div>
   );
 }
 
 // ── Channel sidebar ───────────────────────────────────────────────────────────
 
-function ChannelSidebar({ activeChannel, onSelect, subProjects }: {
-  activeChannel: ChannelId;
-  onSelect: (id: ChannelId) => void;
-  subProjects: SubProject[];
+function ChannelSidebar({
+  activeChannel, onSelect, labChannelVisible, subProjects, dmPeers,
+}: {
+  activeChannel: ActiveChannel;
+  onSelect: (id: ActiveChannel) => void;
+  labChannelVisible: boolean;
+  subProjects: { id: string; name: string; color?: string | null }[];
+  dmPeers: User[];
 }) {
-  function ChannelRow({ id, label, color }: { id: ChannelId; label: string; color?: string }) {
+  function Row({ id, label, icon, color }: { id: ActiveChannel; label: string; icon?: React.ReactNode; color?: string }) {
     const active = activeChannel === id;
+    const c = color ?? "var(--color-navy)";
     return (
       <button
         onClick={() => onSelect(id)}
         style={{
           display: "flex", alignItems: "center", gap: 8, width: "100%",
           padding: "6px 10px 6px 11px", borderRadius: 7, border: "none",
-          borderLeft: `3px solid ${active ? (color ?? "var(--color-navy)") : "transparent"}`,
+          borderLeft: `3px solid ${active ? c : "transparent"}`,
           cursor: "pointer",
-          backgroundColor: active ? `${color ?? "var(--color-navy)"}18` : "transparent",
+          backgroundColor: active ? `${c}18` : "transparent",
           fontFamily: "var(--font-roboto)", textAlign: "left", boxSizing: "border-box",
-          marginBottom: 1,
-          transition: "background-color 120ms ease",
+          marginBottom: 1, transition: "background-color 120ms ease",
         }}
         onMouseEnter={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "rgba(0,0,0,0.04)"; }}
         onMouseLeave={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "transparent"; }}
       >
-        <MessageSquare size={13} style={{ color: active ? (color ?? "var(--color-navy)") : "var(--color-secondary)", flexShrink: 0 }} />
-        <span style={{ fontSize: 13, color: active ? (color ?? "var(--color-navy)") : "var(--color-body)", fontWeight: active ? 600 : 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        {icon ?? <MessageSquare size={13} style={{ color: active ? c : "var(--color-secondary)", flexShrink: 0 }} />}
+        <span style={{ fontSize: 13, color: active ? c : "var(--color-body)", fontWeight: active ? 600 : 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {label}
         </span>
       </button>
     );
   }
 
+  const sectionLabel = (text: string) => (
+    <p style={{ fontSize: 10, fontWeight: 700, color: "var(--color-secondary)", textTransform: "uppercase", letterSpacing: "0.08em", margin: "10px 0 4px 2px" }}>
+      {text}
+    </p>
+  );
+
   return (
     <div style={{ width: 200, flexShrink: 0, borderRight: "1px solid var(--color-border)", backgroundColor: "var(--color-canvas)", display: "flex", flexDirection: "column", overflowY: "auto" }}>
-      <div style={{ padding: "16px 12px 8px" }}>
-        <p style={{ fontSize: 10, fontWeight: 700, color: "var(--color-secondary)", textTransform: "uppercase", letterSpacing: "0.08em", margin: "0 0 6px 2px" }}>Channels</p>
-        <ChannelRow id="lab" label="Lab" color="#0ea5e9" />
-        <ChannelRow id="personal" label="Personal (DMs)" color="#6366f1" />
-        {subProjects.length > 0 && (
+      <div style={{ padding: "16px 12px 12px" }}>
+        {labChannelVisible && (
           <>
-            <div style={{ height: 1, backgroundColor: "var(--color-border)", margin: "8px 2px 6px" }} />
-            <p style={{ fontSize: 10, fontWeight: 700, color: "var(--color-secondary)", textTransform: "uppercase", letterSpacing: "0.08em", margin: "0 0 6px 2px" }}>Projects</p>
-            {subProjects.map(sp => (
-              <ChannelRow key={sp.id} id={sp.id} label={sp.name} color={sp.color ?? undefined} />
+            {sectionLabel("Channels")}
+            <Row id="lab" label="Lab" color="#0ea5e9" />
+          </>
+        )}
+        {!labChannelVisible && subProjects.length > 0 && (
+          <>
+            {sectionLabel("Channel")}
+            <Row id={subProjects[0].id} label={subProjects[0].name} color={subProjects[0].color ?? undefined} />
+          </>
+        )}
+        {labChannelVisible && subProjects.length > 0 && (
+          <>
+            {sectionLabel("Projects")}
+            {subProjects.map((sp) => (
+              <Row key={sp.id} id={sp.id} label={sp.name} color={sp.color ?? undefined} />
+            ))}
+          </>
+        )}
+        {dmPeers.length > 0 && (
+          <>
+            {sectionLabel("Direct Messages")}
+            {dmPeers.map((peer) => (
+              <Row
+                key={`dm:${peer.id}`}
+                id={`dm:${peer.id}`}
+                label={peer.name}
+                icon={<span style={{ flexShrink: 0, display: "flex" }}><Avatar user={peer} size={18} /></span>}
+                color="var(--color-navy)"
+              />
             ))}
           </>
         )}
@@ -161,10 +292,19 @@ function ChannelSidebar({ activeChannel, onSelect, subProjects }: {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function ChatPage() {
-  const { projectId, subProjects, isLoading: projectLoading } = useProject();
+  const { show: showUndoToast } = useUndoToast();
+  const { projectId, subProjects, activeScope, subProjectId, isLoading: projectLoading } = useProject();
   const [currentUserId, setCurrentUserId] = useState("");
   const [currentUserName, setCurrentUserName] = useState("");
-  const [activeChannel, setActiveChannel] = useState<ChannelId>("lab");
+  const [teamMembers, setTeamMembers] = useState<User[]>([]);
+  const isProjectView = activeScope === "project" && !!subProjectId;
+
+  // Default channel: project view shows that project's channel, lab shows lab channel
+  const defaultChannel = isProjectView && subProjects.find((sp) => sp.id === subProjectId)
+    ? (subProjectId ?? "lab")
+    : "lab";
+
+  const [activeChannel, setActiveChannel] = useState<ActiveChannel>(defaultChannel);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const [draft, setDraft] = useState("");
@@ -172,7 +312,7 @@ export default function ChatPage() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  // Init current user
+  // Auth init
   useEffect(() => {
     if (!isSupabaseConfigured) {
       setCurrentUserId("demo-user");
@@ -187,17 +327,55 @@ export default function ChatPage() {
     });
   }, []);
 
-  // Fetch messages for the active channel
+  // Fetch team/project members
+  useEffect(() => {
+    if (!isSupabaseConfigured || !projectId || !currentUserId) return;
+
+    async function load() {
+      if (isProjectView && subProjectId) {
+        const { data } = await supabase
+          .from("sub_project_members")
+          .select("user_id, user_profiles(name, avatar_color, avatar_initials, avatar_url)")
+          .eq("sub_project_id", subProjectId);
+        if (!data) return;
+        setTeamMembers(data
+          .filter((r) => r.user_id !== currentUserId)
+          .map((r) => {
+            const p = (Array.isArray(r.user_profiles) ? r.user_profiles[0] : r.user_profiles) as Record<string, string> | null;
+            const name = p?.name ?? "Unknown";
+            return { id: r.user_id as string, name, email: "", role: "researcher" as const, avatarColor: p?.avatar_color ?? "#CBD5E1", avatarInitials: computeInitials(name) || (p?.avatar_initials ?? "??"), avatarUrl: p?.avatar_url ?? undefined };
+          }));
+      } else {
+        const { data } = await supabase
+          .from("team_members")
+          .select("user_id, user_profiles(name, avatar_color, avatar_initials, avatar_url)")
+          .eq("project_id", projectId);
+        if (!data) return;
+        setTeamMembers(data
+          .filter((r) => r.user_id !== currentUserId)
+          .map((r) => {
+            const p = (Array.isArray(r.user_profiles) ? r.user_profiles[0] : r.user_profiles) as Record<string, string> | null;
+            const name = p?.name ?? "Unknown";
+            return { id: r.user_id as string, name, email: "", role: "researcher" as const, avatarColor: p?.avatar_color ?? "#CBD5E1", avatarInitials: computeInitials(name) || (p?.avatar_initials ?? "??"), avatarUrl: p?.avatar_url ?? undefined };
+          }));
+      }
+    }
+    load();
+  }, [projectId, currentUserId, isProjectView, subProjectId]);
+
+  // Reset channel when scope changes
+  useEffect(() => {
+    setActiveChannel(defaultChannel);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeScope, subProjectId]);
+
+  // Fetch messages
   const fetchMessages = useCallback(async () => {
     if (!projectId || !currentUserId) return;
     setLoading(true);
-    const key = channelKey(projectId, activeChannel);
+    const key = resolveChannelKey(projectId, currentUserId, activeChannel);
 
-    if (!isSupabaseConfigured) {
-      setMessages([]);
-      setLoading(false);
-      return;
-    }
+    if (!isSupabaseConfigured) { setMessages([]); setLoading(false); return; }
 
     const { data, error } = await supabase
       .from("chat_messages")
@@ -224,7 +402,7 @@ export default function ChatPage() {
 
   useEffect(() => { fetchMessages(); }, [fetchMessages]);
 
-  // Auto-scroll to bottom on new messages
+  // Auto-scroll to bottom
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
@@ -232,28 +410,28 @@ export default function ChatPage() {
   // Realtime subscription
   useEffect(() => {
     if (!isSupabaseConfigured || !projectId || !currentUserId) return;
-    const key = channelKey(projectId, activeChannel);
+    const key = resolveChannelKey(projectId, currentUserId, activeChannel);
     const channel = supabase
       .channel(`chat:${key}`)
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_messages", filter: `channel=eq.${key}` }, async (payload) => {
         const row = payload.new as Record<string, unknown>;
-        // Fetch sender name
         let senderName = "Unknown";
         const { data: prof } = await supabase.from("user_profiles").select("name").eq("id", row.sender_id as string).single();
         if (prof?.name) senderName = prof.name as string;
-
         const newMsg: ChatMessage = {
-          id: row.id as string,
-          channel: row.channel as string,
-          senderId: row.sender_id as string,
-          senderName,
-          content: row.content as string,
-          createdAt: row.created_at as string,
+          id: row.id as string, channel: row.channel as string,
+          senderId: row.sender_id as string, senderName,
+          content: row.content as string, createdAt: row.created_at as string,
         };
-        setMessages((prev) => {
-          if (prev.some((m) => m.id === newMsg.id)) return prev;
-          return [...prev, newMsg];
-        });
+        setMessages((prev) => prev.some((m) => m.id === newMsg.id) ? prev : [...prev, newMsg]);
+      })
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "chat_messages", filter: `channel=eq.${key}` }, (payload) => {
+        const row = payload.new as Record<string, unknown>;
+        setMessages((prev) => prev.map((m) => m.id === row.id ? { ...m, content: row.content as string } : m));
+      })
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "chat_messages", filter: `channel=eq.${key}` }, (payload) => {
+        const row = payload.old as Record<string, unknown>;
+        setMessages((prev) => prev.filter((m) => m.id !== row.id));
       })
       .subscribe();
 
@@ -264,26 +442,16 @@ export default function ChatPage() {
     const text = draft.trim();
     if (!text || sending || !currentUserId || !projectId) return;
     setSending(true);
-    const key = channelKey(projectId, activeChannel);
+    const key = resolveChannelKey(projectId, currentUserId, activeChannel);
 
     if (!isSupabaseConfigured) {
-      // Demo mode: add locally
       setMessages((prev) => [...prev, { id: crypto.randomUUID(), channel: key, senderId: currentUserId, senderName: currentUserName, content: text, createdAt: new Date().toISOString() }]);
-      setDraft("");
-      setSending(false);
-      return;
+      setDraft(""); setSending(false); return;
     }
 
-    const { error } = await supabase.from("chat_messages").insert({
-      channel: key,
-      sender_id: currentUserId,
-      content: text,
-    });
-
-    if (error) {
-      console.error("[Chat] send error:", error);
-    } else {
-      // Optimistic — realtime will confirm; add locally to avoid delay for sender
+    const { error } = await supabase.from("chat_messages").insert({ channel: key, sender_id: currentUserId, content: text });
+    if (error) { console.error("[Chat] send error:", error); }
+    else {
       setMessages((prev) => [...prev, { id: crypto.randomUUID(), channel: key, senderId: currentUserId, senderName: currentUserName, content: text, createdAt: new Date().toISOString() }]);
       setDraft("");
     }
@@ -291,51 +459,86 @@ export default function ChatPage() {
     inputRef.current?.focus();
   }
 
-  function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage();
+  function handleEdit(id: string, newContent: string) {
+    setMessages((prev) => prev.map((m) => m.id === id ? { ...m, content: newContent } : m));
+    if (isSupabaseConfigured) {
+      supabase.from("chat_messages").update({ content: newContent }).eq("id", id)
+        .then(({ error }) => { if (error) console.error("[Chat] edit error:", error); });
     }
   }
 
-  const channelLabel = activeChannel === "lab"
-    ? "Lab"
-    : activeChannel === "personal"
-      ? "Personal (DMs)"
-      : subProjects.find((sp) => sp.id === activeChannel)?.name ?? "Channel";
+  function handleDelete(id: string) {
+    const msg = messages.find((m) => m.id === id);
+    if (!msg) return;
+    setMessages((prev) => prev.filter((m) => m.id !== id));
+    showUndoToast(
+      "Message deleted",
+      () => setMessages((prev) => {
+        const insertIdx = prev.findIndex((m) => m.createdAt > msg.createdAt);
+        if (insertIdx === -1) return [...prev, msg];
+        return [...prev.slice(0, insertIdx), msg, ...prev.slice(insertIdx)];
+      }),
+      async () => {
+        if (!isSupabaseConfigured) return;
+        const { error } = await supabase.from("chat_messages").delete().eq("id", id);
+        if (error) console.error("[Chat] delete error:", error);
+      },
+    );
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+  }
+
+  // Which sub-project is currently the active one (project view)
+  const activeSubProject = isProjectView ? subProjects.find((sp) => sp.id === subProjectId) : null;
+
+  // Channel label for header
+  function channelLabel(): string {
+    if (activeChannel === "lab") return "Lab";
+    if (activeChannel.startsWith("dm:")) {
+      const peerId = activeChannel.slice(3);
+      return teamMembers.find((m) => m.id === peerId)?.name ?? "Direct Message";
+    }
+    return subProjects.find((sp) => sp.id === activeChannel)?.name ?? "Channel";
+  }
+
+  // Sub-projects shown in channel sidebar
+  const visibleSubProjects = isProjectView
+    ? (activeSubProject ? [activeSubProject] : [])
+    : subProjects;
 
   if (projectLoading) {
     return (
       <div className="flex h-full items-center justify-center" style={{ color: "var(--color-secondary)", fontSize: 13 }}>
-        Loading…
+        Loading...
       </div>
     );
   }
 
   return (
     <div className="flex h-full" style={{ fontFamily: "var(--font-roboto)", overflow: "hidden" }}>
-      {/* Channel list */}
       <ChannelSidebar
         activeChannel={activeChannel}
         onSelect={(id) => { setActiveChannel(id); setMessages([]); }}
-        subProjects={subProjects}
+        labChannelVisible={!isProjectView}
+        subProjects={visibleSubProjects}
+        dmPeers={teamMembers}
       />
 
       {/* Message area */}
       <div className="flex flex-col flex-1 overflow-hidden">
-        {/* Header */}
         <div style={{ padding: "12px 20px", borderBottom: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", flexShrink: 0 }}>
           <div className="flex items-center gap-2">
             <MessageSquare size={16} style={{ color: "var(--color-secondary)" }} />
-            <span style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 16, color: "var(--color-navy)" }}>{channelLabel}</span>
+            <span style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 16, color: "var(--color-navy)" }}>{channelLabel()}</span>
           </div>
         </div>
 
-        {/* Messages */}
         <div className="flex-1 overflow-y-auto" style={{ backgroundColor: "var(--color-canvas)" }}>
           {loading && (
             <div className="flex items-center justify-center py-10" style={{ color: "var(--color-secondary)", fontSize: 13 }}>
-              Loading messages…
+              Loading messages...
             </div>
           )}
           {!loading && messages.length === 0 && (
@@ -349,6 +552,8 @@ export default function ChatPage() {
                   msg={msg}
                   prevMsg={i > 0 ? messages[i - 1] : null}
                   currentUserId={currentUserId}
+                  onEdit={handleEdit}
+                  onDelete={handleDelete}
                 />
               ))}
               <div ref={bottomRef} />
@@ -356,53 +561,31 @@ export default function ChatPage() {
           )}
         </div>
 
-        {/* Composer */}
         <div style={{ padding: "12px 16px", borderTop: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", flexShrink: 0 }}>
-          <div
-            style={{
-              display: "flex", alignItems: "flex-end", gap: 8,
-              border: "1px solid var(--color-border)", borderRadius: 10,
-              backgroundColor: "var(--color-surface-2)",
-              padding: "6px 6px 6px 12px",
-            }}
-          >
+          <div style={{ display: "flex", alignItems: "flex-end", gap: 8, border: "1px solid var(--color-border)", borderRadius: 10, backgroundColor: "var(--color-surface-2)", padding: "6px 6px 6px 12px" }}>
             <textarea
               ref={inputRef}
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={`Message ${channelLabel}… (Enter to send, Shift+Enter for newline)`}
+              placeholder={`Message ${channelLabel()}... (Enter to send, Shift+Enter for newline)`}
               rows={1}
               style={{
                 flex: 1, resize: "none", border: "none", outline: "none",
                 background: "transparent", color: "var(--color-body)",
-                fontSize: 13, fontFamily: "var(--font-roboto)", lineHeight: 1.5,
+                fontSize: 13, lineHeight: 1.5, fontFamily: "var(--font-roboto)",
                 maxHeight: 120, overflowY: "auto",
-              }}
-              onInput={(e) => {
-                const el = e.currentTarget;
-                el.style.height = "auto";
-                el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
               }}
             />
             <button
               onClick={sendMessage}
               disabled={!draft.trim() || sending}
               aria-label="Send message"
-              style={{
-                width: 34, height: 34, borderRadius: 8, border: "none",
-                backgroundColor: !draft.trim() || sending ? "var(--color-border)" : "var(--color-btn-primary)",
-                color: "#fff", cursor: !draft.trim() || sending ? "not-allowed" : "pointer",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                transition: "background-color 0.15s", flexShrink: 0,
-              }}
+              style={{ width: 32, height: 32, borderRadius: 7, border: "none", backgroundColor: draft.trim() ? "var(--color-btn-primary)" : "transparent", color: draft.trim() ? "#fff" : "var(--color-secondary)", cursor: draft.trim() ? "pointer" : "default", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "background-color 0.15s" }}
             >
               <Send size={15} />
             </button>
           </div>
-          <p style={{ fontSize: 10, color: "var(--color-secondary)", margin: "4px 2px 0", fontStyle: "italic" }}>
-            Enter to send · Shift+Enter for a new line
-          </p>
         </div>
       </div>
     </div>

@@ -11,6 +11,7 @@ import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { useProject } from "@/context/ProjectContext";
 import type { SubProject } from "@/types";
 import EmptyState from "@/components/ui/EmptyState";
+import { useUndoToast } from "@/context/UndoToastContext";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -468,6 +469,7 @@ function BookmarkCard({ bm, canDelete, onDelete, onEdit }: {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function BookmarksPage() {
+  const { show: showUndoToast } = useUndoToast();
   const { projectId, subProjectId, subProjects, activeScope } = useProject();
   const [bmScope, setBmScope] = useState<BmScope>("all");
   const [selectedSubProjectId, setSelectedSubProjectId] = useState<string | null>(null);
@@ -590,13 +592,18 @@ export default function BookmarksPage() {
     setBookmarks((prev) => prev.map((b) => b.id === optimistic.id ? confirmed : b));
   }
 
-  async function handleDelete(id: string) {
+  function handleDelete(id: string) {
+    const bm = bookmarks.find((b) => b.id === id);
+    if (!bm) return;
     setBookmarks((prev) => prev.filter((b) => b.id !== id));
-    const { error } = await supabase.from("bookmarks").delete().eq("id", id);
-    if (error) {
-      console.error("[Bookmarks] delete error:", error);
-      fetchBookmarks();
-    }
+    showUndoToast(
+      `"${bm.title}" deleted`,
+      () => setBookmarks((prev) => [...prev, bm]),
+      async () => {
+        const { error } = await supabase.from("bookmarks").delete().eq("id", id);
+        if (error) { console.error("[Bookmarks] delete error:", error); fetchBookmarks(); }
+      },
+    );
   }
 
   async function handleEditBookmark(id: string, title: string, url: string) {
