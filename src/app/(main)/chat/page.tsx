@@ -317,6 +317,11 @@ export default function ChatPage() {
     if (!isSupabaseConfigured) {
       setCurrentUserId("demo-user");
       setCurrentUserName("You");
+      setTeamMembers([
+        buildAvatarUser("demo-pi", "Dr. Sarah Chen"),
+        buildAvatarUser("demo-ra", "Marcus Johnson"),
+        buildAvatarUser("demo-grad", "Priya Patel"),
+      ]);
       return;
     }
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -375,7 +380,16 @@ export default function ChatPage() {
     setLoading(true);
     const key = resolveChannelKey(projectId, currentUserId, activeChannel);
 
-    if (!isSupabaseConfigured) { setMessages([]); setLoading(false); return; }
+    if (!isSupabaseConfigured) {
+      setMessages([
+        { id: "demo-1", channel: key, senderId: "demo-pi", senderName: "Dr. Sarah Chen", content: "Good morning everyone! Quick reminder that lab meeting is moved to Thursday this week.", createdAt: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString() },
+        { id: "demo-2", channel: key, senderId: "demo-ra", senderName: "Marcus Johnson", content: "Thanks for the heads up! I'll update my calendar.", createdAt: new Date(Date.now() - 1000 * 60 * 55).toISOString() },
+        { id: "demo-3", channel: key, senderId: "demo-grad", senderName: "Priya Patel", content: "Will the agenda be the same? I was going to present my prelim results.", createdAt: new Date(Date.now() - 1000 * 60 * 40).toISOString() },
+        { id: "demo-4", channel: key, senderId: "demo-pi", senderName: "Dr. Sarah Chen", content: "Yes, same agenda. Priya you're still presenting first -- we're all looking forward to it!", createdAt: new Date(Date.now() - 1000 * 60 * 30).toISOString() },
+        { id: "demo-5", channel: key, senderId: "demo-user", senderName: "You", content: "See everyone Thursday!", createdAt: new Date(Date.now() - 1000 * 60 * 5).toISOString() },
+      ]);
+      setLoading(false); return;
+    }
 
     const { data, error } = await supabase
       .from("chat_messages")
@@ -449,10 +463,12 @@ export default function ChatPage() {
       setDraft(""); setSending(false); return;
     }
 
-    const { error } = await supabase.from("chat_messages").insert({ channel: key, sender_id: currentUserId, content: text });
+    const id = crypto.randomUUID();
+    const createdAt = new Date().toISOString();
+    const { error } = await supabase.from("chat_messages").insert({ id, channel: key, sender_id: currentUserId, content: text, created_at: createdAt });
     if (error) { console.error("[Chat] send error:", error); }
     else {
-      setMessages((prev) => [...prev, { id: crypto.randomUUID(), channel: key, senderId: currentUserId, senderName: currentUserName, content: text, createdAt: new Date().toISOString() }]);
+      setMessages((prev) => [...prev, { id, channel: key, senderId: currentUserId, senderName: currentUserName, content: text, createdAt }]);
       setDraft("");
     }
     setSending(false);

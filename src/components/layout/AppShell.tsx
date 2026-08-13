@@ -20,6 +20,8 @@ import OnboardingModal, { useOnboarding } from "@/components/ui/OnboardingModal"
 import Tooltip from "@/components/ui/Tooltip";
 import GlobalSearch from "@/components/ui/GlobalSearch";
 import { UndoToastProvider } from "@/context/UndoToastContext";
+import ThemeToggle from "@/components/ui/ThemeToggle";
+import KeyboardShortcutsModal from "@/components/ui/KeyboardShortcutsModal";
 
 function contrastTextColor(hex: string): "#000000" | "#ffffff" {
   if (!/^#[0-9A-Fa-f]{6}$/.test(hex)) return "#ffffff";
@@ -79,6 +81,7 @@ function SidebarBody({
   onExpand,
   pastDueCount = 0,
   chatUnread = 0,
+  onShowShortcuts,
 }: {
   isActive: (href: string) => boolean;
   onLinkClick?: () => void;
@@ -91,6 +94,7 @@ function SidebarBody({
   onExpand?: () => void;
   pastDueCount?: number;
   chatUnread?: number;
+  onShowShortcuts?: () => void;
 }) {
   // ── Collapsed: icon-only rail ───────────────────────────────────────────────
   if (collapsed) {
@@ -132,6 +136,20 @@ function SidebarBody({
             );
           })}
         </nav>
+        <div style={{ paddingBottom: 8, display: "flex", flexDirection: "column", alignItems: "center", gap: 2, borderTop: "1px solid var(--color-border)", paddingTop: 6 }}>
+          <ThemeToggle compact />
+          {onShowShortcuts && (
+            <button
+              onClick={onShowShortcuts}
+              title="Keyboard shortcuts"
+              aria-label="Keyboard shortcuts"
+              className="flex items-center justify-center rounded-lg transition-colors hover:bg-[var(--color-navy-dim)]"
+              style={{ width: 32, height: 32, border: "none", background: "none", cursor: "pointer", color: "var(--color-secondary)", fontSize: 13, fontWeight: 700 }}
+            >
+              ?
+            </button>
+          )}
+        </div>
       </div>
     );
   }
@@ -207,6 +225,22 @@ function SidebarBody({
           );
         })}
       </nav>
+
+      {/* Theme + shortcuts footer */}
+      <div style={{ padding: "8px 10px", borderTop: "1px solid var(--color-border)", display: "flex", flexDirection: "column", gap: 4 }}>
+        <ThemeToggle />
+        {onShowShortcuts && (
+          <button
+            onClick={onShowShortcuts}
+            aria-label="Keyboard shortcuts"
+            className="flex items-center gap-2 transition-colors hover:bg-[var(--color-navy-dim)]"
+            style={{ width: "100%", padding: "5px 8px", borderRadius: 7, border: "none", background: "none", cursor: "pointer", textAlign: "left", fontFamily: "var(--font-roboto)" }}
+          >
+            <kbd style={{ fontSize: 11, fontWeight: 700, padding: "1px 5px", borderRadius: 4, border: "1px solid var(--color-border)", backgroundColor: "var(--color-canvas)", color: "var(--color-secondary)", lineHeight: 1.4 }}>?</kbd>
+            <span style={{ fontSize: 12, color: "var(--color-secondary)" }}>Keyboard shortcuts</span>
+          </button>
+        )}
+      </div>
 
       {/* Team member list */}
       <div className="px-3 py-3 shrink-0">
@@ -368,6 +402,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [unreadCount, setUnreadCount] = useState(0);
   const [pastDueCount, setPastDueCount] = useState(0);
   const [chatUnread, setChatUnread] = useState(0);
+  const [showShortcuts, setShowShortcuts] = useState(false);
   const hasFetched = useRef(false);
 
   // ── Auth gate + notifications ─────────────────────────────────────────────
@@ -596,11 +631,33 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.key !== "Escape") return;
-      setMobileNavOpen(false); setNotifOpen(false); setProfileOpen(false);
+      if (e.key === "Escape") {
+        setMobileNavOpen(false); setNotifOpen(false); setProfileOpen(false);
+        setShowShortcuts(false);
+        return;
+      }
+      const inInput = (e.target as HTMLElement).tagName === "INPUT"
+        || (e.target as HTMLElement).tagName === "TEXTAREA"
+        || (e.target as HTMLElement).isContentEditable;
+      if (inInput) return;
+      if (e.key === "?") {
+        e.preventDefault();
+        setShowShortcuts(v => !v);
+        return;
+      }
+      if (e.altKey && !e.metaKey && !e.ctrlKey) {
+        const nav: Record<string, string> = {
+          d: "/", t: "/tasks", j: "/journal", c: "/chat",
+          r: "/reminders", s: "/scheduling", l: "/literature",
+          b: "/bookmarks", m: "/team",
+        };
+        const dest = nav[e.key.toLowerCase()];
+        if (dest) { e.preventDefault(); router.push(dest); }
+      }
     }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -833,6 +890,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           onExpand={() => { setNavCollapsed(false); localStorage.setItem("canopy_nav_collapsed", "false"); }}
           pastDueCount={pastDueCount}
           chatUnread={chatUnread}
+          onShowShortcuts={() => setShowShortcuts(true)}
         />
       </div>
 
@@ -858,6 +916,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           currentUserId={profile?.id ?? ""}
           pastDueCount={pastDueCount}
           chatUnread={chatUnread}
+          onShowShortcuts={() => setShowShortcuts(true)}
         />
       </div>
 
@@ -1028,6 +1087,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     {projectId && <GlobalSearch projectId={projectId} />}
     {showCreate && <CreateProjectModal onClose={() => setShowCreate(false)} />}
     {showOnboarding && authed && <OnboardingModal onClose={closeOnboarding} />}
+    <KeyboardShortcutsModal open={showShortcuts} onClose={() => setShowShortcuts(false)} />
 </>
   );
 }
