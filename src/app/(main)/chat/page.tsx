@@ -393,24 +393,32 @@ export default function ChatPage() {
 
     const { data, error } = await supabase
       .from("chat_messages")
-      .select("id, channel, sender_id, content, created_at, user_profiles!sender_id(name)")
+      .select("id, channel, sender_id, content, created_at")
       .eq("channel", key)
       .order("created_at", { ascending: true })
       .limit(200);
 
     if (error) { console.error("[Chat] fetch error:", error); setLoading(false); return; }
 
-    setMessages((data ?? []).map((row) => {
-      const prof = row.user_profiles as { name?: string } | null;
-      return {
-        id: row.id as string,
-        channel: row.channel as string,
-        senderId: row.sender_id as string,
-        senderName: prof?.name ?? "Unknown",
-        content: row.content as string,
-        createdAt: row.created_at as string,
-      };
-    }));
+    const rows = data ?? [];
+    const senderIds = [...new Set(rows.map((r) => r.sender_id as string))];
+    const nameMap: Record<string, string> = {};
+    if (senderIds.length > 0) {
+      const { data: profiles } = await supabase
+        .from("user_profiles")
+        .select("id, name")
+        .in("id", senderIds);
+      for (const p of profiles ?? []) nameMap[p.id as string] = p.name as string;
+    }
+
+    setMessages(rows.map((row) => ({
+      id: row.id as string,
+      channel: row.channel as string,
+      senderId: row.sender_id as string,
+      senderName: nameMap[row.sender_id as string] ?? "Unknown",
+      content: row.content as string,
+      createdAt: row.created_at as string,
+    })));
     setLoading(false);
   }, [projectId, currentUserId, activeChannel]);
 

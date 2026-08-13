@@ -63,7 +63,7 @@ export default function ThemeToggle({ compact = false }: Props) {
               border: "none",
               cursor: "pointer",
               transition: "background-color 0.12s",
-              backgroundColor: active ? "var(--color-surface)" : "transparent",
+              backgroundColor: active ? "var(--color-segment-active)" : "transparent",
               color: active ? "var(--color-navy)" : "var(--color-secondary)",
               boxShadow: active ? "0 1px 3px rgba(0,0,0,0.10)" : "none",
             }}

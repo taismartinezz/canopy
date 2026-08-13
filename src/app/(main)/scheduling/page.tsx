@@ -539,7 +539,7 @@ function CalendarTab({
               const active = view === id;
               return (
                 <button key={v} onClick={() => setView(id)}
-                  style={{ padding: "4px 10px", borderRadius: 5, border: "none", cursor: "pointer", fontSize: 12, fontWeight: active ? 600 : 400, fontFamily: "var(--font-roboto)", backgroundColor: active ? "var(--color-surface)" : "transparent", color: active ? "var(--color-navy)" : "var(--color-secondary)", boxShadow: active ? "0 1px 3px rgba(0,0,0,0.10)" : "none" }}>
+                  style={{ padding: "4px 10px", borderRadius: 5, border: "none", cursor: "pointer", fontSize: 12, fontWeight: active ? 600 : 400, fontFamily: "var(--font-roboto)", backgroundColor: active ? "var(--color-segment-active)" : "transparent", color: active ? "var(--color-navy)" : "var(--color-secondary)", boxShadow: active ? "0 1px 3px rgba(0,0,0,0.10)" : "none" }}>
                   {v}
                 </button>
               );
@@ -1408,7 +1408,7 @@ export default function SchedulingPage() {
                 style={{
                   flex: "0 0 auto", padding: "7px 14px", borderRadius: 7, border: "none", cursor: "pointer",
                   fontSize: 13, fontWeight: active ? 600 : 400, fontFamily: "var(--font-roboto)",
-                  backgroundColor: active ? "var(--color-surface)" : "transparent",
+                  backgroundColor: active ? "var(--color-segment-active)" : "transparent",
                   color: active ? "var(--color-navy)" : "var(--color-secondary)",
                   boxShadow: active ? "0 1px 4px rgba(0,0,0,0.10)" : "none",
                 }}
