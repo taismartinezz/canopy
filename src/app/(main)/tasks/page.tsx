@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from "react";
+import { useSearchParams } from "next/navigation";
 import { createPortal } from "react-dom";
 import {
   DndContext, DragEndEvent, DragOverlay, DragStartEvent,
@@ -665,6 +666,7 @@ function avatarColorFromId(id: string): string {
 }
 
 export default function TasksPage() {
+  const searchParams = useSearchParams();
   const [view, setView] = useState<"board" | "list">("board");
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
@@ -797,6 +799,15 @@ export default function TasksPage() {
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Open a specific task when navigated from global search (?openTask=<id>)
+  useEffect(() => {
+    const openTaskId = searchParams.get("openTask");
+    if (!openTaskId || loading || tasks.length === 0) return;
+    const task = tasks.find((t) => t.id === openTaskId);
+    if (task) setSelectedTask(task);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, tasks]);
 
   // Realtime: reflect task INSERTs/UPDATEs/DELETEs from other users
   useEffect(() => {
@@ -1173,6 +1184,7 @@ export default function TasksPage() {
                 try { localStorage.setItem("canopy_tasks_sidebar_collapsed", String(next)); } catch {}
                 return next;
               })}
+              storageKey="canopy_tasks_sidebar"
             />
           </div>
         )}
