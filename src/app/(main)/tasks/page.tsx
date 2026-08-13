@@ -26,6 +26,7 @@ import TaskModal from "@/components/tasks/TaskModal";
 import ScopeSidebar, { type ScopeSection } from "@/components/ui/ScopeSidebar";
 import EmptyState from "@/components/ui/EmptyState";
 import { CalendarPicker } from "@/components/ui/DateTimePicker";
+import { useUndoToast } from "@/context/UndoToastContext";
 
 // ── Modal state ───────────────────────────────────────────────────────────────
 
@@ -666,6 +667,7 @@ function avatarColorFromId(id: string): string {
 }
 
 export default function TasksPage() {
+  const { show: showUndoToast } = useUndoToast();
   const searchParams = useSearchParams();
   const [view, setView] = useState<"board" | "list">("board");
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -952,11 +954,17 @@ export default function TasksPage() {
   }, []);
 
   const deleteTask = useCallback((taskId: string) => {
+    const task = tasks.find((t) => t.id === taskId);
+    if (!task) return;
     setTasks((prev) => prev.filter((t) => t.id !== taskId));
     setSelectedTask((prev) => prev?.id === taskId ? null : prev);
-    supabase.from("tasks").delete().eq("id", taskId)
-      .then(({ error }) => { if (error) console.error("[Tasks] deleteTask error:", error); });
-  }, []);
+    showUndoToast(
+      `"${task.title}" deleted`,
+      () => setTasks((prev) => [...prev, task]),
+      () => supabase.from("tasks").delete().eq("id", taskId)
+        .then(({ error }) => { if (error) console.error("[Tasks] deleteTask error:", error); }),
+    );
+  }, [tasks, showUndoToast]);
 
   const archiveDoneTasks = useCallback(() => {
     setTasks((prev) => {

@@ -5,6 +5,7 @@ import {
   formatFileSize,
 } from "@/lib/mock-data";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
+import { useUndoToast } from "@/context/UndoToastContext";
 import { useProject } from "@/context/ProjectContext";
 import type { LiteratureItem, ReadStatus, LiteratureType, LibraryScope, LiteratureFile, LitAnnotation, LitAssignedReading, LitRecommendation, AssignmentReadingStatus, SubProject, User, UserRole } from "@/types";
 import Avatar from "@/components/ui/Avatar";
@@ -3837,6 +3838,7 @@ function mapLitRow(row: Record<string, any>): LiteratureItem {
 // ── Literature page ───────────────────────────────────────────────────────────
 
 export default function LiteraturePage() {
+  const { show: showUndoToast } = useUndoToast();
   const { subProjectId, subProjects, activeScope } = useProject();
   const [items, setItems]               = useState<LiteratureItem[]>([]);
   const [loadingItems, setLoadingItems] = useState(true);
@@ -3986,15 +3988,22 @@ export default function LiteraturePage() {
     }
   }
 
-  async function deleteItem(id: string) {
-    setItems((prev) => prev.filter((item) => item.id !== id));
+  function deleteItem(id: string) {
+    const item = items.find((i) => i.id === id);
+    if (!item) return;
+    setItems((prev) => prev.filter((i) => i.id !== id));
     setSelectedItemId(null);
-    if (isSupabaseConfigured) {
-      const { error } = await supabase.from("literature_items")
-        .update({ deleted_at: new Date().toISOString(), deleted_by: currentUserId || null })
-        .eq("id", id);
-      if (error) console.error("[Literature] soft-delete:", error);
-    }
+    showUndoToast(
+      `"${item.title}" removed`,
+      () => setItems((prev) => [{ ...item, deletedAt: null }, ...prev]),
+      async () => {
+        if (!isSupabaseConfigured) return;
+        const { error } = await supabase.from("literature_items")
+          .update({ deleted_at: new Date().toISOString(), deleted_by: currentUserId || null })
+          .eq("id", id);
+        if (error) console.error("[Literature] soft-delete:", error);
+      },
+    );
   }
 
   async function deleteBulk(ids: string[]) {

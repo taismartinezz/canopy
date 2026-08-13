@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, type ReactNode, useState, useRef, useCallback, useEffect } from "react";
+import { Fragment, type ReactNode, useState, useRef, useCallback } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { SubProject } from "@/types";
 
@@ -28,8 +28,16 @@ interface Props {
 
 const MIN_WIDTH = 180;
 const MAX_WIDTH = 400;
-const SNAP_COLLAPSED_BELOW = 140;
+const SNAP_BELOW = 140;
 const DEFAULT_WIDTH = 210;
+
+function readStoredWidth(key: string): number {
+  try {
+    const s = localStorage.getItem(key + "_width");
+    if (s) return Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, parseInt(s, 10)));
+  } catch { /* ignore */ }
+  return DEFAULT_WIDTH;
+}
 
 function NavRow({ color, label, count, selected, onClick }: {
   color: string; label: string; count: number; selected: boolean; onClick: () => void;
@@ -93,73 +101,66 @@ export default function ScopeSidebar({
   extraContent,
   storageKey,
 }: Props) {
-  const [width, setWidth] = useState(() => {
-    if (!storageKey) return DEFAULT_WIDTH;
-    try {
-      const stored = localStorage.getItem(storageKey + "_width");
-      if (stored) return Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, parseInt(stored, 10)));
-    } catch { /* ignore */ }
-    return DEFAULT_WIDTH;
-  });
-
-  const dragState = useRef<{ startX: number; startWidth: number } | null>(null);
+  const [width, setWidth] = useState(() =>
+    storageKey ? readStoredWidth(storageKey) : DEFAULT_WIDTH
+  );
+  const handleRef = useRef<HTMLDivElement | null>(null);
+  // Track width in a ref so drag closures always see the latest value
+  const widthRef = useRef(width);
+  widthRef.current = width;
 
   const onDragMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
-    dragState.current = { startX: e.clientX, startWidth: width };
+    const startX = e.clientX;
+    const startWidth = widthRef.current;
+    let live = startWidth;
+
     document.body.style.userSelect = "none";
     document.body.style.cursor = "col-resize";
-  }, [width]);
 
-  useEffect(() => {
-    function onMouseMove(e: MouseEvent) {
-      if (!dragState.current) return;
-      const delta = e.clientX - dragState.current.startX;
-      const next = dragState.current.startWidth + delta;
-      if (next < SNAP_COLLAPSED_BELOW) {
-        // snap to collapsed
+    function onMove(ev: MouseEvent) {
+      const next = startWidth + (ev.clientX - startX);
+      if (next < SNAP_BELOW) {
+        cleanup();
         if (!collapsed) onToggleCollapse();
-        dragState.current = null;
-        document.body.style.userSelect = "";
-        document.body.style.cursor = "";
         return;
       }
-      const clamped = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, next));
-      setWidth(clamped);
+      live = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, next));
+      setWidth(live);
     }
-    function onMouseUp() {
-      if (!dragState.current) return;
-      dragState.current = null;
-      document.body.style.userSelect = "";
-      document.body.style.cursor = "";
+
+    function onUp() {
+      cleanup();
       if (storageKey) {
-        try { localStorage.setItem(storageKey + "_width", String(width)); } catch { /* ignore */ }
+        try { localStorage.setItem(storageKey + "_width", String(live)); } catch { /* ignore */ }
       }
     }
-    document.addEventListener("mousemove", onMouseMove);
-    document.addEventListener("mouseup", onMouseUp);
-    return () => {
-      document.removeEventListener("mousemove", onMouseMove);
-      document.removeEventListener("mouseup", onMouseUp);
-    };
-  }, [collapsed, onToggleCollapse, storageKey, width]);
 
-  // Persist width when it changes
-  useEffect(() => {
-    if (!storageKey) return;
-    try { localStorage.setItem(storageKey + "_width", String(width)); } catch { /* ignore */ }
-  }, [storageKey, width]);
+    function cleanup() {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      document.body.style.userSelect = "";
+      document.body.style.cursor = "";
+    }
+
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  }, [collapsed, onToggleCollapse, storageKey]);
 
   function onHandleKeyDown(e: React.KeyboardEvent) {
     if (e.key === "ArrowRight") {
       e.preventDefault();
-      setWidth(w => Math.min(MAX_WIDTH, w + 10));
+      const next = Math.min(MAX_WIDTH, widthRef.current + 10);
+      setWidth(next);
+      if (storageKey) try { localStorage.setItem(storageKey + "_width", String(next)); } catch { /* ignore */ }
     }
     if (e.key === "ArrowLeft") {
       e.preventDefault();
-      const next = width - 10;
-      if (next < SNAP_COLLAPSED_BELOW) { onToggleCollapse(); return; }
-      setWidth(Math.max(MIN_WIDTH, next));
+      const next = widthRef.current - 10;
+      if (next < SNAP_BELOW) { onToggleCollapse(); return; }
+      const clamped = Math.max(MIN_WIDTH, next);
+      setWidth(clamped);
+      if (storageKey) try { localStorage.setItem(storageKey + "_width", String(clamped)); } catch { /* ignore */ }
     }
   }
 
@@ -220,17 +221,18 @@ export default function ScopeSidebar({
             {extraContent}
           </div>
 
-          {/* Drag handle — right edge */}
+          {/* Resize handle on the right edge */}
           <div
+            ref={handleRef}
             role="separator"
             aria-label="Resize sidebar"
             aria-orientation="vertical"
             tabIndex={0}
+            title="Drag to resize, or use arrow keys"
             onMouseDown={onDragMouseDown}
             onKeyDown={onHandleKeyDown}
-            title="Drag to resize · ← → to adjust"
             style={{
-              position: "absolute", top: 0, right: 0, bottom: 0, width: 5,
+              position: "absolute", top: 0, right: 0, bottom: 0, width: 6,
               cursor: "col-resize", zIndex: 10,
               backgroundColor: "transparent",
               transition: "background-color 0.15s",
