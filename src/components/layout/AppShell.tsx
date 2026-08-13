@@ -373,6 +373,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   // ── Auth gate + notifications ─────────────────────────────────────────────
   useEffect(() => {
     let notifChannel: ReturnType<typeof supabase.channel> | null = null;
+    let remindersChannel: ReturnType<typeof supabase.channel> | null = null;
 
     async function init() {
       // ── Prototype (no Supabase) path ──────────────────────────────────────
@@ -440,15 +441,28 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           .subscribe();
 
         // Count past-due reminders for badge
-        const now = new Date().toISOString();
-        const { count: pdCount } = await supabase
-          .from("reminders")
-          .select("id", { count: "exact", head: true })
-          .eq("completed", false)
-          .not("due_at", "is", null)
-          .lt("due_at", now)
-          .or(`user_id.eq.${user.id},assignee_id.eq.${user.id}`);
-        setPastDueCount(pdCount ?? 0);
+        const userId = user.id;
+        async function refreshPastDueCount() {
+          const ts = new Date().toISOString();
+          const { count } = await supabase
+            .from("reminders")
+            .select("id", { count: "exact", head: true })
+            .eq("completed", false)
+            .not("due_at", "is", null)
+            .lt("due_at", ts)
+            .or(`user_id.eq.${userId},assignee_id.eq.${userId}`);
+          setPastDueCount(count ?? 0);
+        }
+
+        await refreshPastDueCount();
+
+        // Re-fetch the badge whenever any reminder row changes (complete, uncomplete, delete, add)
+        remindersChannel = supabase
+          .channel(`reminders-badge:${userId}`)
+          .on("postgres_changes", { event: "INSERT", schema: "public", table: "reminders", filter: `user_id=eq.${userId}` }, () => { refreshPastDueCount(); })
+          .on("postgres_changes", { event: "UPDATE", schema: "public", table: "reminders", filter: `user_id=eq.${userId}` }, () => { refreshPastDueCount(); })
+          .on("postgres_changes", { event: "DELETE", schema: "public", table: "reminders", filter: `user_id=eq.${userId}` }, () => { refreshPastDueCount(); })
+          .subscribe();
 
         // Count unread chat messages (messages since last visit to /chat)
         try {
@@ -497,6 +511,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     return () => {
       subscription.unsubscribe();
       notifChannel?.unsubscribe();
+      remindersChannel?.unsubscribe();
       window.removeEventListener("canopy:toast", onToastEvent);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
