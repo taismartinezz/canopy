@@ -452,7 +452,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         // Count unread chat messages (messages since last visit to /chat)
         try {
           const lastRead = localStorage.getItem("canopy_chat_last_read") ?? "1970-01-01";
-          const labChannel = `lab:${pid}`;
+          const labChannel = `lab:${projectId}`;
           const { count: chatCount } = await supabase
             .from("chat_messages")
             .select("id", { count: "exact", head: true })
