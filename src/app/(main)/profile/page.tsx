@@ -59,7 +59,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
     <p style={{
       fontFamily: "var(--font-roboto)", fontWeight: 700, fontSize: 12,
-      textTransform: "uppercase", letterSpacing: "0.05em", color: "#6B6B6B",
+      textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-secondary)",
       margin: "0 0 10px",
     }}>
       {children}
@@ -139,7 +139,7 @@ function StatCard({ label, count }: { label: string; count: number }) {
       <span style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 24, color: "var(--color-navy)", lineHeight: 1 }}>
         {count}
       </span>
-      <span style={{ fontFamily: "var(--font-roboto)", fontWeight: 400, fontSize: 12, color: "#6B6B6B" }}>
+      <span style={{ fontFamily: "var(--font-roboto)", fontWeight: 400, fontSize: 12, color: "var(--color-secondary)" }}>
         {label}
       </span>
     </div>
@@ -175,8 +175,8 @@ function PromptsModal({
     >
       <div
         style={{
-          backgroundColor: "#fff", maxWidth: 560, width: "100%", borderRadius: 10,
-          border: "1px solid #DDE1E7", boxShadow: "0 8px 32px rgba(27,46,75,0.14)",
+          backgroundColor: "var(--color-surface)", maxWidth: 560, width: "100%", borderRadius: 10,
+          border: "1px solid var(--color-border)", boxShadow: "0 8px 32px rgba(27,46,75,0.14)",
           maxHeight: "85vh", display: "flex", flexDirection: "column",
         }}
         onClick={(e) => e.stopPropagation()}
@@ -184,14 +184,14 @@ function PromptsModal({
         aria-modal="true"
         aria-labelledby="prompts-modal-title"
       >
-        <div style={{ padding: "20px 24px 16px", borderBottom: "1px solid #DDE1E7", flexShrink: 0 }}>
+        <div style={{ padding: "20px 24px 16px", borderBottom: "1px solid var(--color-border)", flexShrink: 0 }}>
           <h2 id="prompts-modal-title" style={{
             fontFamily: "var(--font-lora)", fontWeight: 600, fontSize: 16,
-            color: "#1B2E4B", margin: 0,
+            color: "var(--color-navy)", margin: 0,
           }}>
             Manage Journal Prompts
           </h2>
-          <p style={{ fontFamily: "var(--font-roboto)", fontSize: 13, color: "#6B6B6B", marginTop: 4 }}>
+          <p style={{ fontFamily: "var(--font-roboto)", fontSize: 13, color: "var(--color-secondary)", marginTop: 4 }}>
             Select which prompts are available to your team.
           </p>
         </div>
@@ -200,7 +200,7 @@ function PromptsModal({
             <div key={cat} style={{ marginBottom: 20 }}>
               <p style={{
                 fontFamily: "var(--font-roboto)", fontWeight: 700, fontSize: 11,
-                textTransform: "uppercase", letterSpacing: "0.05em", color: "#6B6B6B",
+                textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-secondary)",
                 marginBottom: 8,
               }}>
                 {PROMPT_CATEGORY_LABELS[cat]}
@@ -215,9 +215,9 @@ function PromptsModal({
                       style={{
                         textAlign: "left", padding: "10px 14px",
                         borderRadius: 8, cursor: "pointer",
-                        fontFamily: "var(--font-roboto)", fontSize: 13, color: "#2D2D2D",
-                        backgroundColor: active ? "rgba(27,46,75,0.04)" : "#fff",
-                        border: active ? "1px solid #1B2E4B" : "1px solid #DDE1E7",
+                        fontFamily: "var(--font-roboto)", fontSize: 13, color: "var(--color-body)",
+                        backgroundColor: active ? "rgba(27,46,75,0.04)" : "var(--color-surface)",
+                        border: active ? "1px solid var(--color-navy)" : "1px solid var(--color-border)",
                         transition: "border-color 120ms ease",
                       }}
                     >
@@ -229,24 +229,24 @@ function PromptsModal({
             </div>
           ))}
         </div>
-        <div style={{ padding: "16px 24px", borderTop: "1px solid #DDE1E7", display: "flex", gap: 8, flexShrink: 0 }}>
+        <div style={{ padding: "16px 24px", borderTop: "1px solid var(--color-border)", display: "flex", gap: 8, flexShrink: 0 }}>
           <button
             onClick={() => { onSave(draft); onClose(); }}
             style={{
-              height: 44, padding: "0 24px", backgroundColor: "#1B2E4B", color: "#fff",
+              height: 44, padding: "0 24px", backgroundColor: "var(--color-navy)", color: "#fff",
               border: "none", borderRadius: 8, fontFamily: "var(--font-roboto)",
               fontWeight: 700, fontSize: 13, cursor: "pointer",
             }}
-            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "#2E4A6F"; }}
-            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "#1B2E4B"; }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "var(--color-navy-hover)"; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "var(--color-navy)"; }}
           >
             Save
           </button>
           <button
             onClick={onClose}
             style={{
-              height: 44, padding: "0 16px", backgroundColor: "#fff", color: "#6B6B6B",
-              border: "1px solid #DDE1E7", borderRadius: 8, fontFamily: "var(--font-roboto)",
+              height: 44, padding: "0 16px", backgroundColor: "var(--color-surface)", color: "var(--color-secondary)",
+              border: "1px solid var(--color-border)", borderRadius: 8, fontFamily: "var(--font-roboto)",
               fontWeight: 600, fontSize: 13, cursor: "pointer",
             }}
           >
@@ -275,8 +275,8 @@ function ArchiveModal({ onClose }: { onClose: () => void }) {
     >
       <div
         style={{
-          backgroundColor: "#fff", maxWidth: 400, width: "100%", borderRadius: 10,
-          border: "1px solid #DDE1E7", boxShadow: "0 8px 32px rgba(27,46,75,0.14)",
+          backgroundColor: "var(--color-surface)", maxWidth: 400, width: "100%", borderRadius: 10,
+          border: "1px solid var(--color-border)", boxShadow: "0 8px 32px rgba(27,46,75,0.14)",
           padding: 28,
         }}
         onClick={(e) => e.stopPropagation()}
@@ -286,12 +286,12 @@ function ArchiveModal({ onClose }: { onClose: () => void }) {
       >
         <h2 id="archive-modal-title" style={{
           fontFamily: "var(--font-lora)", fontWeight: 600, fontSize: 16,
-          color: "#1B2E4B", margin: "0 0 8px",
+          color: "var(--color-navy)", margin: "0 0 8px",
         }}>
           Archive this project?
         </h2>
         <p style={{
-          fontFamily: "var(--font-roboto)", fontSize: 13, color: "#6B6B6B",
+          fontFamily: "var(--font-roboto)", fontSize: 13, color: "var(--color-secondary)",
           lineHeight: 1.6, margin: "0 0 24px",
         }}>
           Team members will lose access. This cannot be undone.
@@ -300,8 +300,8 @@ function ArchiveModal({ onClose }: { onClose: () => void }) {
           <button
             onClick={onClose}
             style={{
-              flex: 1, height: 44, backgroundColor: "#fff", color: "#2D2D2D",
-              border: "1px solid #DDE1E7", borderRadius: 8,
+              flex: 1, height: 44, backgroundColor: "var(--color-surface)", color: "var(--color-body)",
+              border: "1px solid var(--color-border)", borderRadius: 8,
               fontFamily: "var(--font-roboto)", fontWeight: 600, fontSize: 13, cursor: "pointer",
             }}
           >
@@ -310,12 +310,12 @@ function ArchiveModal({ onClose }: { onClose: () => void }) {
           <button
             onClick={onClose}
             style={{
-              flex: 1, height: 44, backgroundColor: "#C0392B", color: "#fff",
+              flex: 1, height: 44, backgroundColor: "var(--color-error)", color: "#fff",
               border: "none", borderRadius: 8,
               fontFamily: "var(--font-roboto)", fontWeight: 700, fontSize: 13, cursor: "pointer",
             }}
-            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "#A93226"; }}
-            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "#C0392B"; }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "var(--color-error)"; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "var(--color-error)"; }}
           >
             Archive
           </button>
@@ -530,6 +530,15 @@ export default function ProfilePage() {
     if (!file) return;
     e.target.value = "";
 
+    if (!file.type.startsWith("image/")) {
+      showToast("Please select an image file (JPG, PNG, GIF, WebP).", "error");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      showToast("Image must be smaller than 5 MB.", "error");
+      return;
+    }
+
     // Show preview immediately
     const reader = new FileReader();
     reader.onload = (ev) => setPhoto(ev.target?.result as string);
@@ -741,7 +750,7 @@ export default function ProfilePage() {
     },
     {
       key: "website", label: "Personal website",
-      icon: <Globe size={16} color="#6B6B6B" />,
+      icon: <Globe size={16} color="var(--color-secondary)" />,
       placeholder: "https://yourname.com",
     },
     {
@@ -806,7 +815,7 @@ export default function ProfilePage() {
             display: "inline-flex", alignItems: "center", gap: 6,
             background: "none", border: "none", cursor: "pointer",
             fontFamily: "var(--font-roboto)", fontWeight: 600, fontSize: 13,
-            color: "#1B2E4B", textDecoration: "none", padding: 0, marginBottom: 24,
+            color: "var(--color-navy)", textDecoration: "none", padding: 0, marginBottom: 24,
             minHeight: 44,
           }}
           onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.opacity = "0.7"; }}
@@ -818,7 +827,7 @@ export default function ProfilePage() {
 
         {/* ── Header section ─────────────────────────────────────────────── */}
         <div style={{
-          backgroundColor: "#fff", borderRadius: 10, border: "1px solid #DDE1E7",
+          backgroundColor: "var(--color-surface)", borderRadius: 10, border: "1px solid var(--color-border)",
           padding: isMobile ? "20px 16px 16px" : "28px 28px 24px", marginBottom: 24,
           display: "flex", flexDirection: isMobile ? "column" : "row",
           gap: isMobile ? 16 : 28, alignItems: isMobile ? "center" : "flex-start",
@@ -854,13 +863,13 @@ export default function ProfilePage() {
               onClick={() => fileInputRef.current?.click()}
               style={{
                 height: 36, minHeight: 44, padding: "0 12px",
-                backgroundColor: "#fff", border: "1px solid #DDE1E7", borderRadius: 7,
+                backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 7,
                 fontFamily: "var(--font-roboto)", fontWeight: 600, fontSize: 11,
-                color: "#1B2E4B", cursor: "pointer", whiteSpace: "nowrap",
+                color: "var(--color-navy)", cursor: "pointer", whiteSpace: "nowrap",
                 display: "flex", alignItems: "center",
               }}
-              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "#B8C4D4"; }}
-              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "#DDE1E7"; }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "var(--color-navy-dim)"; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "var(--color-border)"; }}
             >
               Change photo
             </button>
@@ -871,7 +880,7 @@ export default function ProfilePage() {
                 style={{
                   background: "none", border: "none", cursor: "pointer",
                   fontFamily: "var(--font-roboto)", fontWeight: 400, fontSize: 12,
-                  color: "#C0392B", padding: 0, minHeight: 44, display: "flex", alignItems: "center",
+                  color: "var(--color-error)", padding: 0, minHeight: 44, display: "flex", alignItems: "center",
                 }}
               >
                 Remove photo
@@ -892,7 +901,7 @@ export default function ProfilePage() {
                     onKeyDown={(e) => { if (e.key === "Escape") setEditingName(false); }}
                     style={{
                       fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 24,
-                      color: "#1B2E4B", border: "none", borderBottom: "2px solid #1B2E4B",
+                      color: "var(--color-navy)", border: "none", borderBottom: "2px solid var(--color-navy)",
                       outline: "none", background: "transparent", width: "100%",
                       padding: "0 0 2px",
                     }}
@@ -903,8 +912,8 @@ export default function ProfilePage() {
                     title="Click to edit"
                     style={{
                       fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 24,
-                      color: displayName ? "#1B2E4B" : "#9BAFC4", margin: 0, cursor: "text",
-                      whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                      color: displayName ? "var(--color-navy)" : "var(--color-secondary)", margin: 0, cursor: "text",
+                      wordBreak: "break-word",
                     }}
                   >
                     {displayName || "Set up your profile"}
@@ -917,12 +926,12 @@ export default function ProfilePage() {
                   onClick={handleEnterEditMode}
                   style={{
                     height: 36, minHeight: 44, padding: "0 14px", flexShrink: 0,
-                    backgroundColor: "#fff", border: "1px solid #DDE1E7", borderRadius: 8,
+                    backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 8,
                     fontFamily: "var(--font-roboto)", fontWeight: 600, fontSize: 12,
-                    color: "#1B2E4B", cursor: "pointer", display: "flex", alignItems: "center",
+                    color: "var(--color-navy)", cursor: "pointer", display: "flex", alignItems: "center",
                   }}
-                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "#B8C4D4"; }}
-                  onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "#DDE1E7"; }}
+                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "var(--color-navy-dim)"; }}
+                  onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "var(--color-border)"; }}
                 >
                   Edit profile
                 </button>
@@ -932,13 +941,13 @@ export default function ProfilePage() {
                     onClick={handleSaveProfile}
                     style={{
                       height: 36, minHeight: 44, padding: "0 14px",
-                      backgroundColor: "#1B2E4B", color: "#fff",
+                      backgroundColor: "var(--color-navy)", color: "#fff",
                       border: "none", borderRadius: 8,
                       fontFamily: "var(--font-roboto)", fontWeight: 700, fontSize: 12,
                       cursor: "pointer", display: "flex", alignItems: "center",
                     }}
-                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "#2E4A6F"; }}
-                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "#1B2E4B"; }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "var(--color-navy-hover)"; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "var(--color-navy)"; }}
                   >
                     Save changes
                   </button>
@@ -946,8 +955,8 @@ export default function ProfilePage() {
                     onClick={handleCancelEdit}
                     style={{
                       height: 36, minHeight: 44, padding: "0 12px",
-                      backgroundColor: "#fff", color: "#6B6B6B",
-                      border: "1px solid #DDE1E7", borderRadius: 8,
+                      backgroundColor: "var(--color-surface)", color: "var(--color-secondary)",
+                      border: "1px solid var(--color-border)", borderRadius: 8,
                       fontFamily: "var(--font-roboto)", fontWeight: 600, fontSize: 12,
                       cursor: "pointer", display: "flex", alignItems: "center",
                     }}
@@ -962,7 +971,7 @@ export default function ProfilePage() {
             <div style={{ marginBottom: 8 }}>
               <span style={{
                 display: "inline-block", padding: "3px 10px", borderRadius: 20,
-                backgroundColor: "#1B2E4B", color: "#fff",
+                backgroundColor: "var(--color-navy)", color: "#fff",
                 fontFamily: "var(--font-roboto)", fontWeight: 600, fontSize: 11,
               }}>
                 {roleBadgeLabel}
@@ -978,7 +987,7 @@ export default function ProfilePage() {
                 onKeyDown={(e) => { if (e.key === "Escape") setEditingInstitution(false); }}
                 style={{
                   fontFamily: "var(--font-roboto)", fontWeight: 400, fontSize: 14,
-                  color: "#6B6B6B", border: "none", borderBottom: "1px solid #1B2E4B",
+                  color: "var(--color-secondary)", border: "none", borderBottom: "1px solid var(--color-navy)",
                   outline: "none", background: "transparent", width: "100%", padding: "0 0 2px",
                 }}
               />
@@ -988,7 +997,7 @@ export default function ProfilePage() {
                 title="Click to edit"
                 style={{
                   fontFamily: "var(--font-roboto)", fontWeight: 400, fontSize: 14,
-                  color: "#6B6B6B", margin: 0, cursor: "text",
+                  color: "var(--color-secondary)", margin: 0, cursor: "text",
                   overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "100%",
                 }}
               >
@@ -1000,12 +1009,12 @@ export default function ProfilePage() {
 
         {/* ── Tabs ────────────────────────────────────────────────────────── */}
         <div style={{
-          backgroundColor: "#fff", borderRadius: 10, border: "1px solid #DDE1E7",
+          backgroundColor: "var(--color-surface)", borderRadius: 10, border: "1px solid var(--color-border)",
           overflow: "hidden",
         }}>
           {/* Tab bar */}
           <div style={{
-            display: "flex", borderBottom: "1px solid #DDE1E7",
+            display: "flex", borderBottom: "1px solid var(--color-border)",
             paddingLeft: 4, overflowX: "auto",
           }}>
             {tabs.map((tab) => {
@@ -1019,8 +1028,8 @@ export default function ProfilePage() {
                     padding: isMobile ? "0 12px" : "0 20px", height: 48, minHeight: 44,
                     background: "none", border: "none", cursor: "pointer",
                     fontFamily: "var(--font-roboto)", fontWeight: active ? 600 : 400,
-                    fontSize: isMobile ? 13 : 14, color: active ? "#1B2E4B" : "#6B6B6B",
-                    borderBottom: active ? "2px solid #1B2E4B" : "2px solid transparent",
+                    fontSize: isMobile ? 13 : 14, color: active ? "var(--color-navy)" : "var(--color-secondary)",
+                    borderBottom: active ? "2px solid var(--color-navy)" : "2px solid transparent",
                     transition: "color 120ms ease, border-color 120ms ease",
                     marginBottom: -1, whiteSpace: "nowrap", flexShrink: 0,
                   }}
@@ -1051,7 +1060,7 @@ export default function ProfilePage() {
                   ) : (
                     <p style={{
                       fontFamily: "var(--font-roboto)", fontWeight: 400, fontSize: 14,
-                      color: displayBio ? "#2D2D2D" : "#6B6B6B", lineHeight: 1.7, margin: 0,
+                      color: displayBio ? "var(--color-body)" : "var(--color-secondary)", lineHeight: 1.7, margin: 0,
                     }}>
                       {displayBio || "No bio yet."}
                     </p>
@@ -1080,13 +1089,13 @@ export default function ProfilePage() {
                           onKeyDown={handleAddInterest}
                           placeholder="Add a research interest and press Enter"
                           style={{
-                            height: 36, border: "1px solid #DDE1E7", borderRadius: 8,
+                            height: 36, border: "1px solid var(--color-border)", borderRadius: 8,
                             padding: "0 14px", fontFamily: "var(--font-roboto)",
-                            fontWeight: 400, fontSize: 13, color: "#2D2D2D",
+                            fontWeight: 400, fontSize: 13, color: "var(--color-body)",
                             outline: "none", boxSizing: "border-box",
                           }}
-                          onFocus={(e) => { e.currentTarget.style.borderColor = "#1B2E4B"; }}
-                          onBlur={(e) => { e.currentTarget.style.borderColor = "#DDE1E7"; }}
+                          onFocus={(e) => { e.currentTarget.style.borderColor = "var(--color-navy)"; }}
+                          onBlur={(e) => { e.currentTarget.style.borderColor = "var(--color-border)"; }}
                         />
                       )}
                     </div>
@@ -1096,7 +1105,7 @@ export default function ProfilePage() {
                         {interests.map((tag) => <TagPill key={tag} label={tag} />)}
                       </div>
                     ) : (
-                      <p style={{ fontFamily: "var(--font-roboto)", fontSize: 14, color: "#6B6B6B", margin: 0 }}>
+                      <p style={{ fontFamily: "var(--font-roboto)", fontSize: 14, color: "var(--color-secondary)", margin: 0 }}>
                         No interests added yet.
                       </p>
                     )
@@ -1115,7 +1124,7 @@ export default function ProfilePage() {
                   ) : (
                     <p style={{
                       fontFamily: "var(--font-roboto)", fontWeight: 400, fontSize: 14,
-                      color: displayDepartment ? "#2D2D2D" : "#6B6B6B", margin: 0,
+                      color: displayDepartment ? "var(--color-body)" : "var(--color-secondary)", margin: 0,
                     }}>
                       {displayDepartment || "Not specified."}
                     </p>
@@ -1135,7 +1144,7 @@ export default function ProfilePage() {
                     ) : (
                       <p style={{
                         fontFamily: "var(--font-roboto)", fontWeight: 400, fontSize: 14,
-                        color: displayInstitution ? "#2D2D2D" : "#6B6B6B", margin: 0,
+                        color: displayInstitution ? "var(--color-body)" : "var(--color-secondary)", margin: 0,
                       }}>
                         {displayInstitution || "Not specified."}
                       </p>
@@ -1146,7 +1155,7 @@ export default function ProfilePage() {
                 {/* Member since */}
                 <div>
                   <SectionLabel>Member since</SectionLabel>
-                  <p style={{ fontFamily: "var(--font-roboto)", fontWeight: 400, fontSize: 14, color: "#6B6B6B", margin: 0 }}>
+                  <p style={{ fontFamily: "var(--font-roboto)", fontWeight: 400, fontSize: 14, color: "var(--color-secondary)", margin: 0 }}>
                     {memberSinceDate}
                   </p>
                 </div>
@@ -1162,7 +1171,7 @@ export default function ProfilePage() {
                     <div
                       key={key}
                       style={{
-                        backgroundColor: "#fff", borderRadius: 10, border: "1px solid #DDE1E7",
+                        backgroundColor: "var(--color-surface)", borderRadius: 10, border: "1px solid var(--color-border)",
                         padding: "14px 16px", display: "flex", alignItems: "center", gap: 12,
                         flexWrap: isMobile ? "wrap" : undefined,
                       }}
@@ -1172,7 +1181,7 @@ export default function ProfilePage() {
                       </div>
                       <span style={{
                         fontFamily: "var(--font-roboto)", fontWeight: 600, fontSize: 13,
-                        color: "#2D2D2D", width: isMobile ? 88 : 120, flexShrink: 0,
+                        color: "var(--color-body)", width: isMobile ? 88 : 120, flexShrink: 0,
                       }}>
                         {label}
                       </span>
@@ -1183,14 +1192,14 @@ export default function ProfilePage() {
                           onChange={(e) => setDraftLinks((prev) => ({ ...prev, [key]: e.target.value }))}
                           placeholder={placeholder}
                           style={{
-                            flex: 1, minWidth: 0, height: 36, border: "1px solid #DDE1E7", borderRadius: 8,
+                            flex: 1, minWidth: 0, height: 36, border: "1px solid var(--color-border)", borderRadius: 8,
                             padding: "0 14px", fontFamily: "var(--font-roboto)",
-                            fontWeight: 400, fontSize: 13, color: "#2D2D2D",
+                            fontWeight: 400, fontSize: 13, color: "var(--color-body)",
                             outline: "none", boxSizing: "border-box",
                             width: isMobile ? "100%" : undefined,
                           }}
-                          onFocus={(e) => { e.currentTarget.style.borderColor = "#1B2E4B"; }}
-                          onBlur={(e) => { e.currentTarget.style.borderColor = "#DDE1E7"; }}
+                          onFocus={(e) => { e.currentTarget.style.borderColor = "var(--color-navy)"; }}
+                          onBlur={(e) => { e.currentTarget.style.borderColor = "var(--color-border)"; }}
                         />
                       ) : value ? (
                         <a
@@ -1199,7 +1208,7 @@ export default function ProfilePage() {
                           rel="noopener noreferrer"
                           style={{
                             flex: 1, fontFamily: "var(--font-roboto)", fontWeight: 400,
-                            fontSize: 13, color: "#1B2E4B", textDecoration: "none",
+                            fontSize: 13, color: "var(--color-navy)", textDecoration: "none",
                             overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                           }}
                           onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.textDecoration = "underline"; }}
@@ -1208,7 +1217,7 @@ export default function ProfilePage() {
                           {value.length > 40 ? value.slice(0, 40) + "…" : value}
                         </a>
                       ) : (
-                        <span style={{ flex: 1, fontFamily: "var(--font-roboto)", fontSize: 13, color: "#6B6B6B" }}>
+                        <span style={{ flex: 1, fontFamily: "var(--font-roboto)", fontSize: 13, color: "var(--color-secondary)" }}>
                           Not added
                         </span>
                       )}
@@ -1234,7 +1243,7 @@ export default function ProfilePage() {
                 <div>
                   <SectionLabel>Recent Task Activity</SectionLabel>
                   {recentTasks.length === 0 ? (
-                    <p style={{ fontFamily: "var(--font-roboto)", fontSize: 14, color: "#6B6B6B", margin: 0 }}>
+                    <p style={{ fontFamily: "var(--font-roboto)", fontSize: 14, color: "var(--color-secondary)", margin: 0 }}>
                       No tasks assigned yet.
                     </p>
                   ) : (
@@ -1243,14 +1252,14 @@ export default function ProfilePage() {
                         <div
                           key={task.id}
                           style={{
-                            backgroundColor: "#fff", borderRadius: 8, border: "1px solid #DDE1E7",
+                            backgroundColor: "var(--color-surface)", borderRadius: 8, border: "1px solid var(--color-border)",
                             padding: "12px 16px", display: "flex", alignItems: "center",
                             gap: 12, flexWrap: "wrap",
                           }}
                         >
                           <span style={{
                             flex: 1, fontFamily: "var(--font-roboto)", fontWeight: 500,
-                            fontSize: 13, color: "#2D2D2D", minWidth: 0,
+                            fontSize: 13, color: "var(--color-body)", minWidth: 0,
                             overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                           }}>
                             {task.title}
@@ -1267,7 +1276,7 @@ export default function ProfilePage() {
                           {task.dueDate && (
                             <span style={{
                               fontFamily: "var(--font-roboto)", fontWeight: 400, fontSize: 12,
-                              color: "#6B6B6B", flexShrink: 0,
+                              color: "var(--color-secondary)", flexShrink: 0,
                             }}>
                               Due {new Date(task.dueDate + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                             </span>
@@ -1280,7 +1289,7 @@ export default function ProfilePage() {
 
                 <div>
                   <SectionLabel>Literature Contributions</SectionLabel>
-                  <p style={{ fontFamily: "var(--font-roboto)", fontWeight: 400, fontSize: 13, color: "#6B6B6B", margin: 0 }}>
+                  <p style={{ fontFamily: "var(--font-roboto)", fontWeight: 400, fontSize: 13, color: "var(--color-secondary)", margin: 0 }}>
                     {litCount} {litCount === 1 ? "item" : "items"} added to the Lab Library
                   </p>
                 </div>
@@ -1288,11 +1297,11 @@ export default function ProfilePage() {
                 <div>
                   <SectionLabel>Journal</SectionLabel>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <p style={{ fontFamily: "var(--font-roboto)", fontWeight: 400, fontSize: 13, color: "#6B6B6B", margin: 0 }}>
+                    <p style={{ fontFamily: "var(--font-roboto)", fontWeight: 400, fontSize: 13, color: "var(--color-secondary)", margin: 0 }}>
                       {journalStreak} journal {journalStreak === 1 ? "entry" : "entries"} this month
                     </p>
-                    <Lock size={13} color="#6B6B6B" />
-                    <span style={{ fontFamily: "var(--font-roboto)", fontSize: 12, color: "#6B6B6B" }}>
+                    <Lock size={13} color="var(--color-secondary)" />
+                    <span style={{ fontFamily: "var(--font-roboto)", fontSize: 12, color: "var(--color-secondary)" }}>
                       Only you can see this
                     </span>
                   </div>
@@ -1330,7 +1339,7 @@ export default function ProfilePage() {
                         key={opt.value}
                         style={{
                           display: "flex", alignItems: "center", gap: 10,
-                          fontFamily: "var(--font-roboto)", fontSize: 14, color: "#2D2D2D",
+                          fontFamily: "var(--font-roboto)", fontSize: 14, color: "var(--color-body)",
                           cursor: "pointer", minHeight: 44,
                         }}
                       >
@@ -1340,7 +1349,7 @@ export default function ProfilePage() {
                           value={opt.value}
                           checked={researchParticipation === opt.value}
                           onChange={() => setResearchParticipation(opt.value)}
-                          style={{ accentColor: "#1B2E4B", width: 16, height: 16, flexShrink: 0 }}
+                          style={{ accentColor: "var(--color-navy)", width: 16, height: 16, flexShrink: 0 }}
                         />
                         {opt.label}
                       </label>
@@ -1348,7 +1357,7 @@ export default function ProfilePage() {
                   </div>
                   <p style={{
                     fontFamily: "var(--font-roboto)", fontWeight: 400, fontSize: 12,
-                    color: "#6B6B6B", marginTop: 8,
+                    color: "var(--color-secondary)", marginTop: 8,
                   }}>
                     This controls how your lab's anonymized data contributes to Canopy's research publications.
                   </p>
@@ -1360,12 +1369,12 @@ export default function ProfilePage() {
                     onClick={() => setPromptModalOpen(true)}
                     style={{
                       height: 44, padding: "0 20px",
-                      backgroundColor: "#fff", border: "1px solid #DDE1E7", borderRadius: 8,
+                      backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 8,
                       fontFamily: "var(--font-roboto)", fontWeight: 600, fontSize: 13,
-                      color: "#1B2E4B", cursor: "pointer",
+                      color: "var(--color-navy)", cursor: "pointer",
                     }}
-                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "#B8C4D4"; }}
-                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "#DDE1E7"; }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "var(--color-navy-dim)"; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "var(--color-border)"; }}
                   >
                     Manage prompts ({activePromptIds.length} active)
                   </button>
@@ -1381,20 +1390,20 @@ export default function ProfilePage() {
                       style={{
                         display: "inline-flex", alignItems: "center", gap: 6,
                         height: 36, padding: "0 14px",
-                        backgroundColor: "#fff", border: "1px solid #DDE1E7", borderRadius: 8,
+                        backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 8,
                         fontFamily: "var(--font-roboto)", fontWeight: 600, fontSize: 12,
-                        color: "#1B2E4B", cursor: generatingCode ? "default" : "pointer",
+                        color: "var(--color-navy)", cursor: generatingCode ? "default" : "pointer",
                         opacity: generatingCode ? 0.6 : 1,
                       }}
-                      onMouseEnter={(e) => { if (!generatingCode) (e.currentTarget as HTMLElement).style.borderColor = "#B8C4D4"; }}
-                      onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "#DDE1E7"; }}
+                      onMouseEnter={(e) => { if (!generatingCode) (e.currentTarget as HTMLElement).style.borderColor = "var(--color-navy-dim)"; }}
+                      onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "var(--color-border)"; }}
                     >
                       <Plus size={12} />
                       Generate new code
                     </button>
                   </div>
                   {inviteCodes.length === 0 ? (
-                    <p style={{ fontFamily: "var(--font-roboto)", fontSize: 13, color: "#6B6B6B" }}>
+                    <p style={{ fontFamily: "var(--font-roboto)", fontSize: 13, color: "var(--color-secondary)" }}>
                       No invite codes yet. Generate one to invite researchers.
                     </p>
                   ) : (
@@ -1404,19 +1413,19 @@ export default function ProfilePage() {
                           key={ic.id}
                           style={{
                             display: "flex", alignItems: "center", justifyContent: "space-between",
-                            padding: "10px 14px", border: "1px solid #DDE1E7", borderRadius: 8,
-                            backgroundColor: ic.used_by ? "#F6F8FC" : "#fff",
+                            padding: "10px 14px", border: "1px solid var(--color-border)", borderRadius: 8,
+                            backgroundColor: ic.used_by ? "var(--color-canvas)" : "var(--color-surface)",
                           }}
                         >
                           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
                             <span style={{
                               fontFamily: "var(--font-roboto)", fontWeight: 600, fontSize: 13,
-                              color: ic.used_by ? "#6B6B6B" : "#1B2E4B",
+                              color: ic.used_by ? "var(--color-secondary)" : "var(--color-navy)",
                               letterSpacing: "0.04em",
                             }}>
                               {ic.code}
                             </span>
-                            <span style={{ fontFamily: "var(--font-roboto)", fontSize: 11, color: "#6B6B6B" }}>
+                            <span style={{ fontFamily: "var(--font-roboto)", fontSize: 11, color: "var(--color-secondary)" }}>
                               {ic.used_by ? "Used" : "Available"}
                             </span>
                           </div>
@@ -1426,14 +1435,14 @@ export default function ProfilePage() {
                               style={{
                                 display: "inline-flex", alignItems: "center", gap: 5,
                                 height: 32, padding: "0 12px",
-                                backgroundColor: copiedCodeId === ic.id ? "#EEF5EE" : "#fff",
-                                border: "1px solid #DDE1E7", borderRadius: 7,
+                                backgroundColor: copiedCodeId === ic.id ? "rgba(46,125,82,0.08)" : "var(--color-surface)",
+                                border: "1px solid var(--color-border)", borderRadius: 7,
                                 fontFamily: "var(--font-roboto)", fontWeight: 600, fontSize: 12,
-                                color: copiedCodeId === ic.id ? "#2E7D52" : "#1B2E4B",
+                                color: copiedCodeId === ic.id ? "var(--color-success)" : "var(--color-navy)",
                                 cursor: "pointer", transition: "background-color 150ms ease",
                               }}
-                              onMouseEnter={(e) => { if (copiedCodeId !== ic.id) (e.currentTarget as HTMLElement).style.borderColor = "#B8C4D4"; }}
-                              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "#DDE1E7"; }}
+                              onMouseEnter={(e) => { if (copiedCodeId !== ic.id) (e.currentTarget as HTMLElement).style.borderColor = "var(--color-navy-dim)"; }}
+                              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "var(--color-border)"; }}
                             >
                               {copiedCodeId === ic.id
                                 ? <><Check size={11} />Copied!</>
@@ -1450,22 +1459,22 @@ export default function ProfilePage() {
                   onClick={handleSaveLabSettings}
                   style={{
                     alignSelf: "flex-start", height: 44, padding: "0 24px",
-                    backgroundColor: "#1B2E4B", color: "#fff", border: "none",
+                    backgroundColor: "var(--color-navy)", color: "#fff", border: "none",
                     borderRadius: 8, fontFamily: "var(--font-roboto)", fontWeight: 700,
                     fontSize: 13, cursor: "pointer",
                   }}
-                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "#2E4A6F"; }}
-                  onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "#1B2E4B"; }}
+                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "var(--color-navy-hover)"; }}
+                  onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "var(--color-navy)"; }}
                 >
                   Save lab settings
                 </button>
 
                 <div style={{
-                  border: "1px solid #C0392B", borderRadius: 10, padding: 16, marginTop: 8,
+                  border: "1px solid var(--color-error)", borderRadius: 10, padding: 16, marginTop: 8,
                 }}>
                   <p style={{
                     fontFamily: "var(--font-roboto)", fontWeight: 700, fontSize: 13,
-                    color: "#C0392B", margin: "0 0 12px",
+                    color: "var(--color-error)", margin: "0 0 12px",
                   }}>
                     Danger Zone
                   </p>
@@ -1473,15 +1482,15 @@ export default function ProfilePage() {
                     onClick={() => setArchiveModalOpen(true)}
                     style={{
                       height: 44, padding: "0 20px",
-                      backgroundColor: "#fff", border: "1px solid #C0392B",
+                      backgroundColor: "var(--color-surface)", border: "1px solid var(--color-error)",
                       borderRadius: 8, fontFamily: "var(--font-roboto)", fontWeight: 600,
-                      fontSize: 13, color: "#C0392B", cursor: "pointer",
+                      fontSize: 13, color: "var(--color-error)", cursor: "pointer",
                     }}
                     onMouseEnter={(e) => {
-                      (e.currentTarget as HTMLElement).style.backgroundColor = "#FDF2F1";
+                      (e.currentTarget as HTMLElement).style.backgroundColor = "rgba(192,57,43,0.08)";
                     }}
                     onMouseLeave={(e) => {
-                      (e.currentTarget as HTMLElement).style.backgroundColor = "#fff";
+                      (e.currentTarget as HTMLElement).style.backgroundColor = "var(--color-surface)";
                     }}
                   >
                     Archive project
