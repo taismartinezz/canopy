@@ -14,7 +14,7 @@ function GitHubIcon() {
     <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
       <path
         d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.865 8.17 6.839 9.49.5.092.682-.217.682-.482 0-.237-.008-.866-.013-1.7-2.782.604-3.369-1.341-3.369-1.341-.454-1.155-1.11-1.462-1.11-1.462-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0112 6.836c.85.004 1.705.114 2.504.336 1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.202 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.741 0 .267.18.578.688.48C19.138 20.167 22 16.418 22 12c0-5.523-4.477-10-10-10z"
-        fill="#2D2D2D"
+        fill="var(--color-body)"
       />
     </svg>
   );
@@ -75,14 +75,14 @@ function AuthButton({
         width: "100%",
         height: 48,
         minHeight: 48,
-        backgroundColor: "#ffffff",
-        border: `1px ${dashed ? "dashed" : "solid"} ${hovered ? "#B8C4D4" : "#DDE1E7"}`,
+        backgroundColor: "var(--color-surface)",
+        border: `1px ${dashed ? "dashed" : "solid"} ${hovered ? "var(--color-navy-dim)" : "var(--color-border)"}`,
         borderRadius: 8,
         cursor: "pointer",
         fontFamily: "var(--font-roboto)",
         fontWeight: 600,
         fontSize: 14,
-        color: muted ? "#6B6B6B" : "#2D2D2D",
+        color: muted ? "var(--color-secondary)" : "var(--color-body)",
         boxShadow: hovered ? "0 2px 8px rgba(27,46,75,0.08)" : "none",
         transition: "border-color 150ms ease, box-shadow 150ms ease",
         position: "relative",
@@ -316,7 +316,7 @@ export default function LoginPage() {
     <div
       style={{
         minHeight: "100dvh",
-        backgroundColor: "#F6F8FC",
+        backgroundColor: "var(--color-canvas)",
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
@@ -332,8 +332,8 @@ export default function LoginPage() {
       {/* ── Card ── */}
       <div
         style={{
-          backgroundColor: "#ffffff",
-          border: "1px solid #DDE1E7",
+          backgroundColor: "var(--color-surface)",
+          border: "1px solid var(--color-border)",
           borderRadius: 10,
           maxWidth: 480,
           width: "100%",
@@ -360,7 +360,7 @@ export default function LoginPage() {
               fontFamily: "var(--font-lora)",
               fontWeight: 700,
               fontSize: 22,
-              color: "#1B2E4B",
+              color: "var(--color-navy)",
               letterSpacing: "0.18em",
               textTransform: "uppercase",
             }}
@@ -374,7 +374,7 @@ export default function LoginPage() {
           style={{
             fontFamily: "var(--font-roboto)",
             fontSize: 14,
-            color: "#6B6B6B",
+            color: "var(--color-secondary)",
             textAlign: "center",
             maxWidth: 300,
             lineHeight: 1.6,
@@ -388,7 +388,7 @@ export default function LoginPage() {
         <div
           style={{
             height: 1,
-            backgroundColor: "#DDE1E7",
+            backgroundColor: "var(--color-border)",
             margin: "28px 0",
           }}
           role="separator"
@@ -400,7 +400,7 @@ export default function LoginPage() {
             fontFamily: "var(--font-lora)",
             fontWeight: 600,
             fontSize: 15,
-            color: "#1B2E4B",
+            color: "var(--color-navy)",
             textAlign: "center",
             margin: "0 0 16px",
           }}
@@ -442,18 +442,18 @@ export default function LoginPage() {
             marginBottom: 24,
           }}
         >
-          <div style={{ flex: 1, height: 1, backgroundColor: "#DDE1E7" }} />
+          <div style={{ flex: 1, height: 1, backgroundColor: "var(--color-border)" }} />
           <span
             style={{
               fontFamily: "var(--font-roboto)",
               fontWeight: 400,
               fontSize: 12,
-              color: "#6B6B6B",
+              color: "var(--color-secondary)",
             }}
           >
             or
           </span>
-          <div style={{ flex: 1, height: 1, backgroundColor: "#DDE1E7" }} />
+          <div style={{ flex: 1, height: 1, backgroundColor: "var(--color-border)" }} />
         </div>
 
         {/* Email form */}
@@ -474,22 +474,23 @@ export default function LoginPage() {
                 display: "block",
                 width: "100%",
                 height: 44,
-                border: `1px solid ${nameError ? "#C0392B" : "#DDE1E7"}`,
+                border: `1px solid ${nameError ? "var(--color-error)" : "var(--color-border)"}`,
                 borderRadius: 8,
                 padding: "0 14px",
                 fontFamily: "var(--font-roboto)",
                 fontWeight: 400,
                 fontSize: 14,
-                color: "#2D2D2D",
+                color: "var(--color-body)",
+                backgroundColor: "var(--color-canvas)",
                 outline: "none",
                 boxSizing: "border-box",
                 marginBottom: nameError ? 0 : 10,
               }}
-              onFocus={(e) => { e.currentTarget.style.borderColor = nameError ? "#C0392B" : "#1B2E4B"; }}
-              onBlur={(e) => { e.currentTarget.style.borderColor = nameError ? "#C0392B" : "#DDE1E7"; }}
+              onFocus={(e) => { e.currentTarget.style.borderColor = nameError ? "var(--color-error)" : "var(--color-navy)"; }}
+              onBlur={(e) => { e.currentTarget.style.borderColor = nameError ? "var(--color-error)" : "var(--color-border)"; }}
             />
             {nameError && (
-              <p role="alert" style={{ fontFamily: "var(--font-roboto)", fontSize: 12, color: "#C0392B", margin: "4px 0 10px" }}>
+              <p role="alert" style={{ fontFamily: "var(--font-roboto)", fontSize: 12, color: "var(--color-error)", margin: "4px 0 10px" }}>
                 {nameError}
               </p>
             )}
@@ -506,21 +507,22 @@ export default function LoginPage() {
             display: "block",
             width: "100%",
             height: 44,
-            border: `1px solid ${emailError ? "#C0392B" : "#DDE1E7"}`,
+            border: `1px solid ${emailError ? "var(--color-error)" : "var(--color-border)"}`,
             borderRadius: 8,
             padding: "0 14px",
             fontFamily: "var(--font-roboto)",
             fontWeight: 400,
             fontSize: 14,
-            color: "#2D2D2D",
+            color: "var(--color-body)",
+            backgroundColor: "var(--color-canvas)",
             outline: "none",
             boxSizing: "border-box",
           }}
-          onFocus={(e) => { e.currentTarget.style.borderColor = emailError ? "#C0392B" : "#1B2E4B"; }}
-          onBlur={(e) => { e.currentTarget.style.borderColor = emailError ? "#C0392B" : "#DDE1E7"; }}
+          onFocus={(e) => { e.currentTarget.style.borderColor = emailError ? "var(--color-error)" : "var(--color-navy)"; }}
+          onBlur={(e) => { e.currentTarget.style.borderColor = emailError ? "var(--color-error)" : "var(--color-border)"; }}
         />
         {emailError && (
-          <p role="alert" style={{ fontFamily: "var(--font-roboto)", fontSize: 12, color: "#C0392B", margin: "4px 0 0" }}>
+          <p role="alert" style={{ fontFamily: "var(--font-roboto)", fontSize: 12, color: "var(--color-error)", margin: "4px 0 0" }}>
             {emailError}
           </p>
         )}
@@ -536,18 +538,19 @@ export default function LoginPage() {
               display: "block",
               width: "100%",
               height: 44,
-              border: `1px solid ${passwordError ? "#C0392B" : "#DDE1E7"}`,
+              border: `1px solid ${passwordError ? "var(--color-error)" : "var(--color-border)"}`,
               borderRadius: 8,
               padding: "0 44px 0 14px",
               fontFamily: "var(--font-roboto)",
               fontWeight: 400,
               fontSize: 14,
-              color: "#2D2D2D",
+              color: "var(--color-body)",
+              backgroundColor: "var(--color-canvas)",
               outline: "none",
               boxSizing: "border-box",
             }}
-            onFocus={(e) => { e.currentTarget.style.borderColor = passwordError ? "#C0392B" : "#1B2E4B"; }}
-            onBlur={(e) => { e.currentTarget.style.borderColor = passwordError ? "#C0392B" : "#DDE1E7"; }}
+            onFocus={(e) => { e.currentTarget.style.borderColor = passwordError ? "var(--color-error)" : "var(--color-navy)"; }}
+            onBlur={(e) => { e.currentTarget.style.borderColor = passwordError ? "var(--color-error)" : "var(--color-border)"; }}
           />
           <button
             type="button"
@@ -556,19 +559,19 @@ export default function LoginPage() {
             style={{
               position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)",
               background: "none", border: "none", cursor: "pointer", padding: 4,
-              display: "flex", alignItems: "center", color: "#6B6B6B",
+              display: "flex", alignItems: "center", color: "var(--color-secondary)",
             }}
           >
             {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
           </button>
         </div>
         {passwordError && (
-          <p role="alert" style={{ fontFamily: "var(--font-roboto)", fontSize: 12, color: "#C0392B", margin: "4px 0 0" }}>
+          <p role="alert" style={{ fontFamily: "var(--font-roboto)", fontSize: 12, color: "var(--color-error)", margin: "4px 0 0" }}>
             {passwordError}
           </p>
         )}
         {!passwordError && mode === "signup" && (
-          <p style={{ fontFamily: "var(--font-roboto)", fontSize: 12, color: "#6B6B6B", margin: "4px 0 0", lineHeight: 1.5 }}>
+          <p style={{ fontFamily: "var(--font-roboto)", fontSize: 12, color: "var(--color-secondary)", margin: "4px 0 0", lineHeight: 1.5 }}>
             Use a unique password. Your account protects sensitive research data.
           </p>
         )}
@@ -579,7 +582,7 @@ export default function LoginPage() {
             <button
               type="button"
               onClick={() => { setForgotOpen(true); setForgotEmail(email); setForgotSent(false); setForgotError(""); setEmailError(""); setPasswordError(""); setFormError(""); }}
-              style={{ background: "none", border: "none", padding: 0, fontFamily: "var(--font-roboto)", fontSize: 12, color: "#1B2E4B", cursor: "pointer", textDecoration: "underline" }}
+              style={{ background: "none", border: "none", padding: 0, fontFamily: "var(--font-roboto)", fontSize: 12, color: "var(--color-navy)", cursor: "pointer", textDecoration: "underline" }}
             >
               Forgot password?
             </button>
@@ -588,14 +591,14 @@ export default function LoginPage() {
 
         {/* Inline forgot-password form */}
         {forgotOpen && (
-          <div style={{ marginTop: 12, padding: "14px 16px", backgroundColor: "#F6F8FC", borderRadius: 8, border: "1px solid #DDE1E7" }}>
+          <div style={{ marginTop: 12, padding: "14px 16px", backgroundColor: "var(--color-canvas)", borderRadius: 8, border: "1px solid var(--color-border)" }}>
             {forgotSent ? (
-              <p style={{ fontFamily: "var(--font-roboto)", fontSize: 13, color: "#2E7D52", margin: 0 }}>
+              <p style={{ fontFamily: "var(--font-roboto)", fontSize: 13, color: "var(--color-success)", margin: 0 }}>
                 Check your email for a password reset link.
               </p>
             ) : (
               <>
-                <p style={{ fontFamily: "var(--font-roboto)", fontSize: 13, color: "#2D2D2D", margin: "0 0 10px" }}>
+                <p style={{ fontFamily: "var(--font-roboto)", fontSize: 13, color: "var(--color-body)", margin: "0 0 10px" }}>
                   Enter your email and we&apos;ll send a reset link.
                 </p>
                 <input
@@ -604,12 +607,12 @@ export default function LoginPage() {
                   onChange={(e) => { setForgotEmail(e.target.value); setForgotError(""); }}
                   placeholder="Your email"
                   aria-label="Email for password reset"
-                  style={{ display: "block", width: "100%", height: 40, border: `1px solid ${forgotError ? "#C0392B" : "#DDE1E7"}`, borderRadius: 8, padding: "0 12px", fontFamily: "var(--font-roboto)", fontSize: 13, color: "#2D2D2D", outline: "none", boxSizing: "border-box", marginBottom: forgotError ? 4 : 8 }}
-                  onFocus={(e) => { e.currentTarget.style.borderColor = forgotError ? "#C0392B" : "#1B2E4B"; }}
-                  onBlur={(e) => { e.currentTarget.style.borderColor = forgotError ? "#C0392B" : "#DDE1E7"; }}
+                  style={{ display: "block", width: "100%", height: 40, border: `1px solid ${forgotError ? "var(--color-error)" : "var(--color-border)"}`, borderRadius: 8, padding: "0 12px", fontFamily: "var(--font-roboto)", fontSize: 13, color: "var(--color-body)", backgroundColor: "var(--color-canvas)", outline: "none", boxSizing: "border-box", marginBottom: forgotError ? 4 : 8 }}
+                  onFocus={(e) => { e.currentTarget.style.borderColor = forgotError ? "var(--color-error)" : "var(--color-navy)"; }}
+                  onBlur={(e) => { e.currentTarget.style.borderColor = forgotError ? "var(--color-error)" : "var(--color-border)"; }}
                 />
                 {forgotError && (
-                  <p role="alert" style={{ fontFamily: "var(--font-roboto)", fontSize: 12, color: "#C0392B", margin: "0 0 8px" }}>
+                  <p role="alert" style={{ fontFamily: "var(--font-roboto)", fontSize: 12, color: "var(--color-error)", margin: "0 0 8px" }}>
                     {forgotError}
                   </p>
                 )}
@@ -618,14 +621,14 @@ export default function LoginPage() {
                     type="button"
                     onClick={handleForgotPassword}
                     disabled={forgotLoading}
-                    style={{ flex: 1, height: 38, backgroundColor: "#1B2E4B", color: "#fff", border: "none", borderRadius: 8, fontFamily: "var(--font-roboto)", fontWeight: 700, fontSize: 13, cursor: "pointer" }}
+                    style={{ flex: 1, height: 38, backgroundColor: "var(--color-navy)", color: "#fff", border: "none", borderRadius: 8, fontFamily: "var(--font-roboto)", fontWeight: 700, fontSize: 13, cursor: "pointer" }}
                   >
                     {forgotLoading ? "Sending…" : "Send reset link"}
                   </button>
                   <button
                     type="button"
                     onClick={() => { setForgotOpen(false); setForgotError(""); setFormError(""); }}
-                    style={{ height: 38, padding: "0 14px", backgroundColor: "transparent", color: "#6B6B6B", border: "1px solid #DDE1E7", borderRadius: 8, fontFamily: "var(--font-roboto)", fontSize: 13, cursor: "pointer" }}
+                    style={{ height: 38, padding: "0 14px", backgroundColor: "transparent", color: "var(--color-secondary)", border: "1px solid var(--color-border)", borderRadius: 8, fontFamily: "var(--font-roboto)", fontSize: 13, cursor: "pointer" }}
                   >
                     Cancel
                   </button>
@@ -644,8 +647,8 @@ export default function LoginPage() {
               width: "100%",
               height: 44,
               minHeight: 44,
-              backgroundColor: loading ? "#B8C4D4" : "#1B2E4B",
-              color: "#ffffff",
+              backgroundColor: loading ? "var(--color-navy-dim)" : "var(--color-navy)",
+              color: "var(--color-surface)",
               border: "none",
               borderRadius: 8,
               fontFamily: "var(--font-roboto)",
@@ -656,7 +659,7 @@ export default function LoginPage() {
               transition: "background-color 150ms ease",
             }}
             onMouseEnter={(e) => { if (!loading) (e.currentTarget as HTMLElement).style.backgroundColor = "#2E4A6F"; }}
-            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = loading ? "#B8C4D4" : "#1B2E4B"; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = loading ? "var(--color-navy-dim)" : "var(--color-navy)"; }}
             aria-busy={loading}
           >
             {loading ? "Please wait…" : mode === "signin" ? "Continue with email" : "Create account"}
@@ -670,7 +673,7 @@ export default function LoginPage() {
               fontFamily: "var(--font-roboto)",
               fontWeight: 400,
               fontSize: 12,
-              color: "#C0392B",
+              color: "var(--color-error)",
               margin: "8px 0 0",
             }}
           >
@@ -684,7 +687,7 @@ export default function LoginPage() {
             fontFamily: "var(--font-roboto)",
             fontWeight: 400,
             fontSize: 12,
-            color: "#6B6B6B",
+            color: "var(--color-secondary)",
             textAlign: "center",
             margin: "12px 0 0",
           }}
@@ -693,7 +696,7 @@ export default function LoginPage() {
           <a
             href={mode === "signin" ? "/login?mode=signup" : "/login"}
             onClick={(e) => { e.preventDefault(); setMode(mode === "signin" ? "signup" : "signin"); setEmailError(""); setPasswordError(""); setFormError(""); setForgotOpen(false); }}
-            style={{ color: "#1B2E4B", textDecoration: "underline" }}
+            style={{ color: "var(--color-navy)", textDecoration: "underline" }}
           >
             {mode === "signin" ? "Sign up" : "Sign in"}
           </a>
@@ -705,13 +708,13 @@ export default function LoginPage() {
         style={{
           fontFamily: "var(--font-roboto)",
           fontSize: 12,
-          color: "#6B6B6B",
+          color: "var(--color-secondary)",
           textAlign: "center",
           marginTop: 20,
         }}
       >
         By signing in, you agree to Canopy&apos;s{" "}
-        <a href="/privacy" target="_blank" rel="noopener noreferrer" style={{ color: "#1B2E4B", textDecoration: "underline" }}>
+        <a href="/privacy" target="_blank" rel="noopener noreferrer" style={{ color: "var(--color-navy)", textDecoration: "underline" }}>
           privacy-first principles
         </a>
         .

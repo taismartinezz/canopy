@@ -426,7 +426,7 @@ export default function TeamPage() {
         <div className="flex items-center justify-between mb-5 md:mb-6">
           <div>
             <div className="flex items-center gap-2">
-              <h1 style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 26, color: "var(--color-navy)", margin: 0, lineHeight: 1.2 }}>Team</h1>
+              <h1 style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 22, color: "var(--color-navy)", margin: 0, lineHeight: 1.2 }}>Team</h1>
               {(() => {
                 if (activeScope !== "project") return null;
                 const displayName = subProjects.find((sp) => sp.id === subProjectId)?.name ?? storedProjectName;
