@@ -852,7 +852,8 @@ export default function DashboardPage() {
     // Demo mode fallback (no Supabase)
     const sp = getStoredProject();
     setProjectName(sp.name);
-    setCurrentUserFirstName(getUser(CURRENT_USER_ID).name.trim().split(/\s+/)[0]);
+    const mockUser = getUser(CURRENT_USER_ID);
+    if (mockUser?.name) setCurrentUserFirstName(mockUser.name.trim().split(/\s+/)[0]);
     if (!localStorage.getItem("canopy_project")) {
       setTasks(TASKS);
       setDashPosts(DASHBOARD_POSTS);
