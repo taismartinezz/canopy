@@ -9,7 +9,7 @@ export interface ScopeSection {
   label: string;
   color: string;
   icon: ReactNode;
-  count: number;
+  count?: number;
   isActive: boolean;
   onClick: () => void;
 }
@@ -23,6 +23,7 @@ interface Props {
   collapsed: boolean;
   onToggleCollapse: () => void;
   extraContent?: ReactNode;
+  fullContent?: ReactNode;
   storageKey?: string;
 }
 
@@ -40,7 +41,7 @@ function readStoredWidth(key: string): number {
 }
 
 function NavRow({ color, label, count, selected, onClick }: {
-  color: string; label: string; count: number; selected: boolean; onClick: () => void;
+  color: string; label: string; count?: number; selected: boolean; onClick: () => void;
 }) {
   return (
     <button
@@ -59,9 +60,11 @@ function NavRow({ color, label, count, selected, onClick }: {
       <span style={{ flex: 1, fontSize: 13, color: selected ? color : "var(--color-body)", fontWeight: selected ? 600 : 400, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
         {label}
       </span>
-      <span style={{ fontSize: 11, fontWeight: 600, color: selected ? color : "var(--color-secondary)", backgroundColor: selected ? `${color}20` : "rgba(0,0,0,0.06)", borderRadius: 10, padding: "1px 7px", flexShrink: 0, minWidth: 20, textAlign: "center" }}>
-        {count}
-      </span>
+      {count !== undefined && (
+        <span style={{ fontSize: 11, fontWeight: 600, color: selected ? color : "var(--color-secondary)", backgroundColor: selected ? `${color}20` : "rgba(0,0,0,0.06)", borderRadius: 10, padding: "1px 7px", flexShrink: 0, minWidth: 20, textAlign: "center" }}>
+          {count}
+        </span>
+      )}
     </button>
   );
 }
@@ -99,13 +102,13 @@ export default function ScopeSidebar({
   collapsed,
   onToggleCollapse,
   extraContent,
+  fullContent,
   storageKey,
 }: Props) {
   const [width, setWidth] = useState(() =>
     storageKey ? readStoredWidth(storageKey) : DEFAULT_WIDTH
   );
   const handleRef = useRef<HTMLDivElement | null>(null);
-  // Track width in a ref so drag closures always see the latest value
   const widthRef = useRef(width);
   widthRef.current = width;
 
@@ -166,9 +169,12 @@ export default function ScopeSidebar({
 
   const effectiveWidth = collapsed ? 52 : width;
 
+  // Suppress unused-variable warnings for dead props that remain in interface for compatibility
+  void subProjects; void selectedSubProjectId; void projectCounts; void onSelectSubProject;
+
   return (
     <div
-      className="group/scopesidebar flex flex-col h-full"
+      className="group/scopesidebar group/litpanel flex flex-col h-full"
       style={{
         width: effectiveWidth,
         flexShrink: 0,
@@ -192,34 +198,42 @@ export default function ScopeSidebar({
               <ChevronRight size={15} color="var(--color-secondary)" />
             </button>
           </div>
-          <div className="flex flex-col items-center px-1.5 py-2 gap-0.5">
-            {sections.map(s => (
-              <IconRailBtn key={s.id} isActive={s.isActive} color={s.color} icon={s.icon} label={s.label} onClick={s.onClick} />
-            ))}
-          </div>
+          {sections.length > 0 && (
+            <div className="flex flex-col items-center px-1.5 py-2 gap-0.5">
+              {sections.map(s => (
+                <IconRailBtn key={s.id} isActive={s.isActive} color={s.color} icon={s.icon} label={s.label} onClick={s.onClick} />
+              ))}
+            </div>
+          )}
         </>
       ) : (
         <>
-          <div className="flex items-center justify-end" style={{ padding: "10px 10px 4px" }}>
-            <button
-              onClick={onToggleCollapse}
-              className="opacity-0 group-hover/scopesidebar:opacity-100 transition-opacity flex items-center justify-center rounded-lg hover:bg-[rgba(27,46,75,0.06)]"
-              style={{ width: 32, height: 32 }}
-              title="Collapse sidebar"
-              aria-label="Collapse sidebar"
-            >
-              <ChevronLeft size={15} color="var(--color-secondary)" />
-            </button>
-          </div>
-          <div style={{ padding: "4px 8px 20px", overflowY: "auto", flex: 1 }}>
-            {sections.map((s, i) => (
-              <Fragment key={s.id}>
-                <NavRow color={s.color} label={s.label} count={s.count} selected={s.isActive} onClick={s.onClick} />
-                {i === 0 && <div style={{ height: 1, backgroundColor: "var(--color-border)", margin: "5px 2px" }} />}
-              </Fragment>
-            ))}
-            {extraContent}
-          </div>
+          {fullContent ? (
+            fullContent
+          ) : (
+            <>
+              <div className="flex items-center justify-end" style={{ padding: "10px 10px 4px" }}>
+                <button
+                  onClick={onToggleCollapse}
+                  className="opacity-0 group-hover/scopesidebar:opacity-100 transition-opacity flex items-center justify-center rounded-lg hover:bg-[rgba(27,46,75,0.06)]"
+                  style={{ width: 32, height: 32 }}
+                  title="Collapse sidebar"
+                  aria-label="Collapse sidebar"
+                >
+                  <ChevronLeft size={15} color="var(--color-secondary)" />
+                </button>
+              </div>
+              <div style={{ padding: "4px 8px 20px", overflowY: "auto", flex: 1 }}>
+                {sections.map((s, i) => (
+                  <Fragment key={s.id}>
+                    <NavRow color={s.color} label={s.label} count={s.count} selected={s.isActive} onClick={s.onClick} />
+                    {i === 0 && <div style={{ height: 1, backgroundColor: "var(--color-border)", margin: "5px 2px" }} />}
+                  </Fragment>
+                ))}
+                {extraContent}
+              </div>
+            </>
+          )}
 
           {/* Resize handle on the right edge */}
           <div

@@ -6,7 +6,8 @@ import { useProject } from "@/context/ProjectContext";
 import { useUndoToast } from "@/context/UndoToastContext";
 import Avatar from "@/components/ui/Avatar";
 import type { User } from "@/types";
-import { MessageSquare, Send, Pencil, Trash2, Check, X } from "lucide-react";
+import { MessageSquare, Send, Pencil, Trash2, Check, X, Hash } from "lucide-react";
+import ScopeSidebar, { type ScopeSection } from "@/components/ui/ScopeSidebar";
 import { computeInitials } from "@/lib/utils";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -204,91 +205,6 @@ function MessageRow({
   );
 }
 
-// ── Channel sidebar ───────────────────────────────────────────────────────────
-
-function ChannelSidebar({
-  activeChannel, onSelect, labChannelVisible, subProjects, dmPeers,
-}: {
-  activeChannel: ActiveChannel;
-  onSelect: (id: ActiveChannel) => void;
-  labChannelVisible: boolean;
-  subProjects: { id: string; name: string; color?: string | null }[];
-  dmPeers: User[];
-}) {
-  function Row({ id, label, icon, color }: { id: ActiveChannel; label: string; icon?: React.ReactNode; color?: string }) {
-    const active = activeChannel === id;
-    const c = color ?? "var(--color-navy)";
-    return (
-      <button
-        onClick={() => onSelect(id)}
-        style={{
-          display: "flex", alignItems: "center", gap: 8, width: "100%",
-          padding: "6px 10px 6px 11px", borderRadius: 7, border: "none",
-          borderLeft: `3px solid ${active ? c : "transparent"}`,
-          cursor: "pointer",
-          backgroundColor: active ? `${c}18` : "transparent",
-          fontFamily: "var(--font-roboto)", textAlign: "left", boxSizing: "border-box",
-          marginBottom: 1, transition: "background-color 120ms ease",
-        }}
-        onMouseEnter={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "rgba(0,0,0,0.04)"; }}
-        onMouseLeave={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "transparent"; }}
-      >
-        {icon ?? <MessageSquare size={13} style={{ color: active ? c : "var(--color-secondary)", flexShrink: 0 }} />}
-        <span style={{ fontSize: 13, color: active ? c : "var(--color-body)", fontWeight: active ? 600 : 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {label}
-        </span>
-      </button>
-    );
-  }
-
-  const sectionLabel = (text: string) => (
-    <p style={{ fontSize: 10, fontWeight: 700, color: "var(--color-secondary)", textTransform: "uppercase", letterSpacing: "0.08em", margin: "10px 0 4px 2px" }}>
-      {text}
-    </p>
-  );
-
-  return (
-    <div style={{ width: 200, flexShrink: 0, borderRight: "1px solid var(--color-border)", backgroundColor: "var(--color-canvas)", display: "flex", flexDirection: "column", overflowY: "auto" }}>
-      <div style={{ padding: "16px 12px 12px" }}>
-        {labChannelVisible && (
-          <>
-            {sectionLabel("Channels")}
-            <Row id="lab" label="Lab" color="#0ea5e9" />
-          </>
-        )}
-        {!labChannelVisible && subProjects.length > 0 && (
-          <>
-            {sectionLabel("Channel")}
-            <Row id={subProjects[0].id} label={subProjects[0].name} color={subProjects[0].color ?? undefined} />
-          </>
-        )}
-        {labChannelVisible && subProjects.length > 0 && (
-          <>
-            {sectionLabel("Projects")}
-            {subProjects.map((sp) => (
-              <Row key={sp.id} id={sp.id} label={sp.name} color={sp.color ?? undefined} />
-            ))}
-          </>
-        )}
-        {dmPeers.length > 0 && (
-          <>
-            {sectionLabel("Direct Messages")}
-            {dmPeers.map((peer) => (
-              <Row
-                key={`dm:${peer.id}`}
-                id={`dm:${peer.id}`}
-                label={peer.name}
-                icon={<span style={{ flexShrink: 0, display: "flex" }}><Avatar user={peer} size={18} /></span>}
-                color="var(--color-navy)"
-              />
-            ))}
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
-
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function ChatPage() {
@@ -305,6 +221,7 @@ export default function ChatPage() {
     : "lab";
 
   const [activeChannel, setActiveChannel] = useState<ActiveChannel>(defaultChannel);
+  const [chatSidebarCollapsed, setChatSidebarCollapsed] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const [draft, setDraft] = useState("");
@@ -532,6 +449,59 @@ export default function ChatPage() {
     ? (activeSubProject ? [activeSubProject] : [])
     : subProjects;
 
+  // Build chat sidebar sections (primary channels for the icon rail)
+  const chatSections: ScopeSection[] = !isProjectView
+    ? [{ id: "lab", label: "Lab", color: "#0ea5e9", icon: <Hash size={17} />, isActive: activeChannel === "lab", onClick: () => { setActiveChannel("lab"); setMessages([]); } }]
+    : visibleSubProjects.map(sp => ({ id: sp.id, label: sp.name, color: sp.color ?? "var(--color-navy)", icon: <Hash size={17} />, isActive: activeChannel === sp.id, onClick: () => { setActiveChannel(sp.id); setMessages([]); } }));
+
+  const chatExtraContent = (
+    <>
+      {/* Project sub-channels in lab view */}
+      {!isProjectView && visibleSubProjects.length > 0 && (
+        <>
+          <div style={{ height: 1, backgroundColor: "var(--color-border)", margin: "5px 2px" }} />
+          <p style={{ fontSize: 10, fontWeight: 700, color: "var(--color-secondary)", textTransform: "uppercase", letterSpacing: "0.08em", padding: "3px 11px 4px", margin: 0 }}>Projects</p>
+          {visibleSubProjects.map(sp => {
+            const active = activeChannel === sp.id;
+            const c = sp.color ?? "var(--color-navy)";
+            return (
+              <button key={sp.id} onClick={() => { setActiveChannel(sp.id); setMessages([]); }}
+                style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "6px 10px 6px 11px", borderRadius: 7, border: "none", borderLeft: `3px solid ${active ? c : "transparent"}`, cursor: "pointer", backgroundColor: active ? `${c}18` : "transparent", fontFamily: "var(--font-roboto)", textAlign: "left", boxSizing: "border-box", marginBottom: 1, transition: "background-color 120ms ease" }}
+                onMouseEnter={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "rgba(0,0,0,0.04)"; }}
+                onMouseLeave={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "transparent"; }}
+              >
+                <MessageSquare size={13} style={{ color: active ? c : "var(--color-secondary)", flexShrink: 0 }} />
+                <span style={{ fontSize: 13, color: active ? c : "var(--color-body)", fontWeight: active ? 600 : 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sp.name}</span>
+              </button>
+            );
+          })}
+        </>
+      )}
+      {/* Direct messages */}
+      {teamMembers.length > 0 && (
+        <>
+          <div style={{ height: 1, backgroundColor: "var(--color-border)", margin: "5px 2px" }} />
+          <p style={{ fontSize: 10, fontWeight: 700, color: "var(--color-secondary)", textTransform: "uppercase", letterSpacing: "0.08em", padding: "3px 11px 4px", margin: 0 }}>Direct Messages</p>
+          {teamMembers.map(peer => {
+            const id = `dm:${peer.id}`;
+            const active = activeChannel === id;
+            const c = "var(--color-navy)";
+            return (
+              <button key={id} onClick={() => { setActiveChannel(id); setMessages([]); }}
+                style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "6px 10px 6px 11px", borderRadius: 7, border: "none", borderLeft: `3px solid ${active ? c : "transparent"}`, cursor: "pointer", backgroundColor: active ? `${c}18` : "transparent", fontFamily: "var(--font-roboto)", textAlign: "left", boxSizing: "border-box", marginBottom: 1, transition: "background-color 120ms ease" }}
+                onMouseEnter={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "rgba(0,0,0,0.04)"; }}
+                onMouseLeave={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "transparent"; }}
+              >
+                <span style={{ flexShrink: 0, display: "flex" }}><Avatar user={peer} size={18} /></span>
+                <span style={{ fontSize: 13, color: active ? c : "var(--color-body)", fontWeight: active ? 600 : 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{peer.name}</span>
+              </button>
+            );
+          })}
+        </>
+      )}
+    </>
+  );
+
   if (projectLoading) {
     return (
       <div className="flex h-full items-center justify-center" style={{ color: "var(--color-secondary)", fontSize: 13 }}>
@@ -542,12 +512,12 @@ export default function ChatPage() {
 
   return (
     <div className="flex h-full" style={{ fontFamily: "var(--font-roboto)", overflow: "hidden" }}>
-      <ChannelSidebar
-        activeChannel={activeChannel}
-        onSelect={(id) => { setActiveChannel(id); setMessages([]); }}
-        labChannelVisible={!isProjectView}
-        subProjects={visibleSubProjects}
-        dmPeers={teamMembers}
+      <ScopeSidebar
+        storageKey="chat_sidebar"
+        sections={chatSections}
+        extraContent={chatExtraContent}
+        collapsed={chatSidebarCollapsed}
+        onToggleCollapse={() => setChatSidebarCollapsed(v => !v)}
       />
 
       {/* Message area */}

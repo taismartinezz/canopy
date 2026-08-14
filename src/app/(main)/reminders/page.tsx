@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect, useRef, useMemo, Fragment } from "react";
-import { Plus, Check, List, Trash2, ChevronLeft, ChevronRight, GripVertical, Users, User as UserIcon, Pencil } from "lucide-react";
+import { Plus, Check, List, Trash2, GripVertical, Users, User as UserIcon, Pencil } from "lucide-react";
+import ScopeSidebar, { type ScopeSection } from "@/components/ui/ScopeSidebar";
 import { DateTimeFields, isoToLocalDate } from "@/components/ui/DateTimePicker";
 import { DndContext, DragOverlay, useDraggable, useDroppable, PointerSensor, KeyboardSensor, useSensor, useSensors } from "@dnd-kit/core";
 import type { DragEndEvent } from "@dnd-kit/core";
@@ -501,117 +502,6 @@ function InlineAddRow({ defaultScope, accentColor, teamMembers, onAdd, onClose }
 
 // ── Compact nav row (replaces tall SmartListCard tiles) ──────────────────────
 
-function CompactListCard({ color, label, count, selected, onClick }: {
-  color: string; label: string; count: number; selected: boolean; onClick: () => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      style={{
-        width: "100%", display: "flex", alignItems: "center", gap: 8,
-        padding: "6px 10px 6px 11px", borderRadius: 7,
-        border: "none", borderLeft: `3px solid ${selected ? color : "transparent"}`,
-        cursor: "pointer", backgroundColor: selected ? `${color}18` : "transparent",
-        marginBottom: 1, transition: "background-color 120ms ease, border-left-color 120ms ease",
-        textAlign: "left", boxSizing: "border-box", fontFamily: "var(--font-roboto)",
-      }}
-      onMouseEnter={e => { if (!selected) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "var(--color-dimmed-bg)"; }}
-      onMouseLeave={e => { if (!selected) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "transparent"; }}
-    >
-      <span style={{ flex: 1, fontSize: 13, color: selected ? color : "var(--color-body)", fontWeight: selected ? 600 : 400, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-        {label}
-      </span>
-      <span style={{ fontSize: 11, fontWeight: 600, color: selected ? color : "var(--color-secondary)", backgroundColor: selected ? `${color}20` : "var(--color-dimmed-bg)", borderRadius: 10, padding: "1px 7px", flexShrink: 0, minWidth: 20, textAlign: "center" }}>
-        {count}
-      </span>
-    </button>
-  );
-}
-
-function LeftPanel({ selected, activeReminders, onSelect, collapsed, onToggleCollapse, subProjects, selectedSubProjectId, onSelectSubProject }: {
-  selected: ListType; activeReminders: Reminder[]; onSelect: (l: ListType) => void;
-  collapsed: boolean; onToggleCollapse: () => void;
-  subProjects: SubProject[]; selectedSubProjectId: string | null; onSelectSubProject: (id: string) => void;
-}) {
-  const counts = useMemo(() => ({
-    all:      activeReminders.length,
-    lab:      activeReminders.filter(r => r.scope === "lab").length,
-    personal: activeReminders.filter(r => r.scope === "personal").length,
-  }), [activeReminders]);
-
-  const projectCounts = useMemo(() => {
-    const map: Record<string, number> = {};
-    for (const sp of subProjects) {
-      map[sp.id] = activeReminders.filter(r => r.scope === "project" && r.subProjectId === sp.id).length;
-    }
-    return map;
-  }, [activeReminders, subProjects]);
-
-  return (
-    <div
-      className="group/reminders flex flex-col h-full overflow-hidden"
-      style={{ width: collapsed ? 52 : 210, flexShrink: 0, backgroundColor: "var(--color-canvas)", borderRight: "1px solid var(--color-border)", transition: "width 200ms ease" }}
-    >
-      {collapsed ? (
-        <>
-          <div className="flex items-center justify-center" style={{ borderBottom: "1px solid var(--color-border)", padding: "8px 0" }}>
-            <button onClick={onToggleCollapse} className="flex items-center justify-center rounded-lg transition-colors hover:bg-[rgba(27,46,75,0.06)]" style={{ width: 36, height: 36 }} title="Expand sidebar" aria-label="Expand sidebar">
-              <ChevronRight size={15} color="var(--color-secondary)" />
-            </button>
-          </div>
-          <div className="flex flex-col items-center px-1.5 py-2 gap-0.5">
-            {([["all", <List key="all" size={17} />], ["personal", <UserIcon key="personal" size={17} />], ["lab", <Users key="lab" size={17} />]] as [ListType, React.ReactNode][]).map(([id, icon]) => (
-              <button key={id} onClick={() => onSelect(id)} title={LIST_LABELS[id]} aria-label={LIST_LABELS[id]} className="flex items-center justify-center rounded-lg"
-                style={{ width: 36, height: 36, backgroundColor: selected === id ? "var(--color-navy)" : "transparent", color: selected === id ? "#fff" : "var(--color-body)", border: "none", cursor: "pointer", transition: "background-color 0.12s" }}
-                onMouseEnter={e => { if (selected !== id) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "rgba(27,46,75,0.06)"; }}
-                onMouseLeave={e => { if (selected !== id) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "transparent"; }}>
-                {icon}
-              </button>
-            ))}
-            {subProjects.map(sp => (
-              <button key={sp.id} onClick={() => onSelectSubProject(sp.id)} title={sp.name} aria-label={sp.name} className="flex items-center justify-center rounded-lg"
-                style={{ width: 36, height: 36, backgroundColor: selected === "project" && selectedSubProjectId === sp.id ? sp.color ?? LIST_COLORS.project : "transparent", color: selected === "project" && selectedSubProjectId === sp.id ? "#fff" : "var(--color-body)", border: "none", cursor: "pointer", transition: "background-color 0.12s" }}
-                onMouseEnter={e => { if (!(selected === "project" && selectedSubProjectId === sp.id)) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "rgba(27,46,75,0.06)"; }}
-                onMouseLeave={e => { if (!(selected === "project" && selectedSubProjectId === sp.id)) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "transparent"; }}>
-                <List size={17} />
-              </button>
-            ))}
-          </div>
-        </>
-      ) : (
-        <>
-          <div className="flex items-center justify-end" style={{ padding: "10px 10px 4px" }}>
-            <button onClick={onToggleCollapse} className="opacity-0 group-hover/reminders:opacity-100 transition-opacity flex items-center justify-center rounded-lg hover:bg-[rgba(27,46,75,0.06)]" style={{ width: 32, height: 32 }} title="Collapse sidebar" aria-label="Collapse sidebar">
-              <ChevronLeft size={15} color="var(--color-secondary)" />
-            </button>
-          </div>
-          <div style={{ padding: "4px 8px 20px", overflowY: "auto" }}>
-            <CompactListCard color={LIST_COLORS.all}      label="All"      count={counts.all}      selected={selected === "all"}      onClick={() => onSelect("all")} />
-            <div style={{ height: 1, backgroundColor: "var(--color-border)", margin: "5px 2px" }} />
-            <CompactListCard color={LIST_COLORS.personal} label="Personal" count={counts.personal} selected={selected === "personal"} onClick={() => onSelect("personal")} />
-            <CompactListCard color={LIST_COLORS.lab}      label="Lab"      count={counts.lab}      selected={selected === "lab"}      onClick={() => onSelect("lab")} />
-            {subProjects.length > 0 && (
-              <>
-                <div style={{ height: 1, backgroundColor: "var(--color-border)", margin: "5px 2px" }} />
-                <p style={{ fontSize: 10, fontWeight: 700, color: "var(--color-secondary)", textTransform: "uppercase", letterSpacing: "0.08em", padding: "3px 11px 4px", margin: 0 }}>Projects</p>
-                {subProjects.map(sp => (
-                  <CompactListCard
-                    key={sp.id}
-                    color={sp.color ?? LIST_COLORS.project}
-                    label={sp.name}
-                    count={projectCounts[sp.id] ?? 0}
-                    selected={selected === "project" && selectedSubProjectId === sp.id}
-                    onClick={() => onSelectSubProject(sp.id)}
-                  />
-                ))}
-              </>
-            )}
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
 
 // ── Card wrapper ──────────────────────────────────────────────────────────────
 
@@ -878,12 +768,12 @@ export default function RemindersPage() {
   const [showCompleted, setShowCompleted] = useState(false);
   const [pendingUndo, setPendingUndo] = useState<PendingUndo | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
-    try { return localStorage.getItem("canopy_sidebar_collapsed") === "true"; } catch { return false; }
+    try { return localStorage.getItem("reminders_sidebar_collapsed") === "true"; } catch { return false; }
   });
   function handleToggleCollapse() {
     setSidebarCollapsed(v => {
       const next = !v;
-      try { localStorage.setItem("canopy_sidebar_collapsed", String(next)); } catch {}
+      try { localStorage.setItem("reminders_sidebar_collapsed", String(next)); } catch {}
       return next;
     });
   }
@@ -1133,6 +1023,60 @@ export default function RemindersPage() {
   const allActive = useMemo(() => reminders.filter(r => !r.completed), [reminders]);
   const allCompleted = useMemo(() => reminders.filter(r => r.completed), [reminders]);
 
+  const sidebarCounts = useMemo(() => ({
+    all:      allActive.length,
+    personal: allActive.filter(r => r.scope === "personal").length,
+    lab:      allActive.filter(r => r.scope === "lab").length,
+  }), [allActive]);
+
+  const sidebarProjectCounts = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const sp of subProjects) {
+      map[sp.id] = allActive.filter(r => r.scope === "project" && r.subProjectId === sp.id).length;
+    }
+    return map;
+  }, [allActive, subProjects]);
+
+  const sidebarSections: ScopeSection[] = [
+    { id: "all",      label: "All",      color: LIST_COLORS.all,      icon: <List size={17} />,     count: sidebarCounts.all,      isActive: selectedList === "all",      onClick: () => handleListSelect("all") },
+    { id: "personal", label: "Personal", color: LIST_COLORS.personal, icon: <UserIcon size={17} />, count: sidebarCounts.personal, isActive: selectedList === "personal", onClick: () => handleListSelect("personal") },
+    { id: "lab",      label: "Lab",      color: LIST_COLORS.lab,      icon: <Users size={17} />,    count: sidebarCounts.lab,      isActive: selectedList === "lab",      onClick: () => handleListSelect("lab") },
+  ];
+
+  const sidebarExtraContent = subProjects.length > 0 ? (
+    <>
+      <div style={{ height: 1, backgroundColor: "var(--color-border)", margin: "5px 2px" }} />
+      <p style={{ fontSize: 10, fontWeight: 700, color: "var(--color-secondary)", textTransform: "uppercase", letterSpacing: "0.08em", padding: "3px 11px 4px", margin: 0 }}>Projects</p>
+      {subProjects.map(sp => {
+        const active = selectedList === "project" && selectedSubProjectId === sp.id;
+        const c = sp.color ?? LIST_COLORS.project;
+        return (
+          <button
+            key={sp.id}
+            onClick={() => handleSubProjectSelect(sp.id)}
+            style={{
+              width: "100%", display: "flex", alignItems: "center", gap: 8,
+              padding: "6px 10px 6px 11px", borderRadius: 7,
+              border: "none", borderLeft: `3px solid ${active ? c : "transparent"}`,
+              cursor: "pointer", backgroundColor: active ? `${c}18` : "transparent",
+              marginBottom: 1, transition: "background-color 120ms ease, border-left-color 120ms ease",
+              textAlign: "left", boxSizing: "border-box", fontFamily: "var(--font-roboto)",
+            }}
+            onMouseEnter={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "rgba(0,0,0,0.04)"; }}
+            onMouseLeave={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "transparent"; }}
+          >
+            <span style={{ flex: 1, fontSize: 13, color: active ? c : "var(--color-body)", fontWeight: active ? 600 : 400, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              {sp.name}
+            </span>
+            <span style={{ fontSize: 11, fontWeight: 600, color: active ? c : "var(--color-secondary)", backgroundColor: active ? `${c}20` : "rgba(0,0,0,0.06)", borderRadius: 10, padding: "1px 7px", flexShrink: 0, minWidth: 20, textAlign: "center" }}>
+              {sidebarProjectCounts[sp.id] ?? 0}
+            </span>
+          </button>
+        );
+      })}
+    </>
+  ) : null;
+
   const isLabHome = activeScope === "lab";
   const effectiveList: ListType = isLabHome ? selectedList : (activeScope === "project" ? "project" : "personal");
   const effectiveSubProjectId: string | null = isLabHome ? selectedSubProjectId : (activeScope === "project" ? (subProjectId ?? null) : null);
@@ -1180,8 +1124,14 @@ export default function RemindersPage() {
       <div style={{ display: "flex", height: "100%", overflow: "hidden", backgroundColor: "var(--color-canvas)" }}>
 
         {isLabHome && (
-          <div className="hidden md:block" style={{ height: "100%", flexShrink: 0 }}>
-            <LeftPanel selected={selectedList} activeReminders={allActive} onSelect={handleListSelect} collapsed={sidebarCollapsed} onToggleCollapse={handleToggleCollapse} subProjects={subProjects} selectedSubProjectId={selectedSubProjectId} onSelectSubProject={handleSubProjectSelect} />
+          <div className="hidden md:flex" style={{ height: "100%", flexShrink: 0 }}>
+            <ScopeSidebar
+              storageKey="reminders_sidebar"
+              sections={sidebarSections}
+              extraContent={sidebarExtraContent}
+              collapsed={sidebarCollapsed}
+              onToggleCollapse={handleToggleCollapse}
+            />
           </div>
         )}
 
