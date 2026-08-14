@@ -483,7 +483,9 @@ export default function BookmarksPage() {
   const [showForm, setShowForm] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [activeCategory, setActiveCategory] = useState<FilterCategory>("all");
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try { return localStorage.getItem("bookmarks_sidebar_collapsed") === "true"; } catch { return false; }
+  });
 
   function handleScopeSelect(scope: BmScope, spId?: string) {
     setBmScope(scope);
@@ -699,7 +701,11 @@ export default function BookmarksPage() {
             projectCounts={projectCounts}
             onSelectSubProject={(id) => handleScopeSelect("project", id)}
             collapsed={sidebarCollapsed}
-            onToggleCollapse={() => setSidebarCollapsed((c) => !c)}
+            onToggleCollapse={() => setSidebarCollapsed((c) => {
+              const next = !c;
+              try { localStorage.setItem("bookmarks_sidebar_collapsed", String(next)); } catch { /* ignore */ }
+              return next;
+            })}
             extraContent={typesExtra}
             storageKey="canopy_bookmarks_sidebar"
           />
@@ -731,7 +737,7 @@ export default function BookmarksPage() {
             const activeSp = subProjects.find((s) => s.id === subProjectId);
             return (
               <div className="flex items-center gap-2 mb-5">
-                <h1 style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 24, color: "var(--color-navy)", margin: 0 }}>Bookmarks</h1>
+                <h1 style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 22, color: "var(--color-navy)", margin: 0 }}>Bookmarks</h1>
                 {activeSp && (
                   <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.03em", backgroundColor: "rgba(27,46,75,0.10)", color: "var(--color-navy)", padding: "3px 10px", borderRadius: 20, whiteSpace: "nowrap" }}>
                     {activeSp.name}

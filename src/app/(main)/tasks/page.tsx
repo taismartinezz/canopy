@@ -1096,7 +1096,7 @@ export default function TasksPage() {
       <div className="px-4 md:px-6 pt-3 pb-0" style={{ backgroundColor: "var(--color-surface)", borderBottom: "1px solid var(--color-border)" }}>
         <div className="flex items-center gap-3 mb-2">
           <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 8 }}>
-            <h1 style={{ fontWeight: 700, fontSize: 20, color: "var(--color-navy)", margin: 0 }}>Tasks</h1>
+            <h1 style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 22, color: "var(--color-navy)", margin: 0 }}>Tasks</h1>
             {!isLabHome && activeScope === "project" && (() => {
               const activeSp = subProjects.find((s) => s.id === ctxSubProjectId);
               if (!activeSp) return null;

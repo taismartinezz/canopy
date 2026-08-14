@@ -178,7 +178,7 @@ export default function ScopeSidebar({
       style={{
         width: effectiveWidth,
         flexShrink: 0,
-        backgroundColor: "var(--color-canvas)",
+        backgroundColor: fullContent ? "transparent" : "var(--color-canvas)",
         borderRight: "1px solid var(--color-border)",
         transition: collapsed ? "width 200ms ease" : "none",
         overflow: "hidden",

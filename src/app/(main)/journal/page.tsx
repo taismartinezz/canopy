@@ -11,6 +11,7 @@ import {
   Lock, Mic, MicOff, HelpingHand, Search, Plus, X, Phone,
   ChevronLeft, ChevronRight, Users, Building2, Loader2, CalendarDays, ChevronDown,
 } from "lucide-react";
+import ScopeSidebar from "@/components/ui/ScopeSidebar";
 
 // SpeechRecognition types (not yet in all TypeScript DOM lib versions)
 interface SpeechRecognitionEvent extends Event {
@@ -504,7 +505,7 @@ function JournalSidebarContent({
           {onCollapse && (
             <button
               onClick={onCollapse}
-              className="opacity-0 group-hover/jlist:opacity-100 transition-opacity flex items-center justify-center rounded-lg hover:bg-[rgba(27,46,75,0.06)]"
+              className="opacity-0 group-hover/litpanel:opacity-100 transition-opacity flex items-center justify-center rounded-lg hover:bg-[rgba(27,46,75,0.06)]"
               style={{ width: 32, height: 32 }}
               title="Collapse entry list"
               aria-label="Collapse entry list"
@@ -601,7 +602,14 @@ export default function JournalPage() {
   const [promptPickerOpen, setPromptPickerOpen] = useState(false);
   const [checkinResponses, setCheckinResponses] = useState<CheckinResponse[]>([]);
   const [checkinExpanded, setCheckinExpanded]   = useState(false);
-  const [listCollapsed, setListCollapsed]       = useState(false);
+  const [listCollapsed, setListCollapsed]       = useState(() => {
+    try { return localStorage.getItem("journal_sidebar_collapsed") === "true"; } catch { return false; }
+  });
+  const handleToggleJournalSidebar = () => setListCollapsed(v => {
+    const next = !v;
+    try { localStorage.setItem("journal_sidebar_collapsed", String(next)); } catch { /* ignore */ }
+    return next;
+  });
   const [supportOpen, setSupportOpen]       = useState(false);
   const [search, setSearch]                 = useState("");
   const [entryListOpen, setEntryListOpen]   = useState(false);
@@ -807,38 +815,26 @@ export default function JournalPage() {
         <div className="fixed inset-0 z-20 md:hidden" style={{ backgroundColor: "rgba(0,0,0,0.3)" }} onClick={() => setEntryListOpen(false)} aria-hidden="true" />
       )}
 
-      {/* Desktop sidebar — animates to 0 in focus mode */}
-      <div
-        className="hidden md:flex flex-col shrink-0 overflow-hidden group/jlist"
-        style={{
-          width: listCollapsed ? 0 : 230,
-          borderRight: listCollapsed ? "none" : "1px solid var(--color-border)",
-          transition: "width 200ms ease",
-        }}
-      >
-        <JournalSidebarContent
-          search={search} setSearch={setSearch}
-          groupedEntries={groupedEntries}
-          selectedEntryId={selectedEntryId}
-          onSelectEntry={(id) => {
-            if (id === "new") { handleNewEntry(); } else { handleSelectEntry(id); }
-          }}
-          onCollapse={() => setListCollapsed(true)}
+      {/* Desktop sidebar */}
+      <div className="hidden md:flex" style={{ height: "100%", flexShrink: 0 }}>
+        <ScopeSidebar
+          sections={[]}
+          collapsed={listCollapsed}
+          onToggleCollapse={handleToggleJournalSidebar}
+          storageKey="journal_sidebar"
+          fullContent={
+            <JournalSidebarContent
+              search={search} setSearch={setSearch}
+              groupedEntries={groupedEntries}
+              selectedEntryId={selectedEntryId}
+              onSelectEntry={(id) => {
+                if (id === "new") { handleNewEntry(); } else { handleSelectEntry(id); }
+              }}
+              onCollapse={handleToggleJournalSidebar}
+            />
+          }
         />
       </div>
-
-      {/* Peek strip — appears at left edge of writing area when list is collapsed */}
-      {listCollapsed && (
-        <button
-          className="hidden md:flex shrink-0 items-center justify-center transition-colors hover:bg-[rgba(27,46,75,0.04)]"
-          style={{ width: 16, border: "none", borderRight: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", cursor: "pointer", padding: 0 }}
-          onClick={() => setListCollapsed(false)}
-          title="Expand entry list"
-          aria-label="Expand entry list"
-        >
-          <ChevronRight size={10} color="var(--color-secondary)" />
-        </button>
-      )}
 
       {/* Mobile drawer — unchanged */}
       <div className="md:hidden fixed top-0 left-0 h-full z-30" style={{ width: 280, transform: entryListOpen ? "translateX(0)" : "translateX(-100%)", transition: "transform 0.22s ease-out", borderRight: "1px solid var(--color-border)" }} aria-hidden={!entryListOpen}>
