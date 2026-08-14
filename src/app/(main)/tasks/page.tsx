@@ -307,8 +307,8 @@ function KanbanColumn({
           <div className="flex flex-col gap-2">
             {tasks.length === 0 && (
               <EmptyState
-                variant="column"
-                title="No tasks yet"
+                variant={status === "done" ? "done" : "column"}
+                title={status === "done" ? "No completed tasks" : "No tasks yet"}
                 compact
               />
             )}
