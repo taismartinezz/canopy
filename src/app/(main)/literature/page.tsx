@@ -3865,7 +3865,9 @@ export default function LiteraturePage() {
   const [statusFilter, setStatusFilter] = useState<ReadStatus | "all">("all");
   const [activeTag, setActiveTag]       = useState<string | null>(null);
   const [collectionsOpen, setCollectionsOpen] = useState(false);
-  const [panelCollapsed, setPanelCollapsed] = useState(false);
+  const [panelCollapsed, setPanelCollapsed] = useState(() => {
+    try { return localStorage.getItem("literature_sidebar_collapsed") === "true"; } catch { return false; }
+  });
   const [isMobile, setIsMobile]         = useState(false);
   const [addItemOpen, setAddItemOpen]       = useState(false);
   const [zoteroImportOpen, setZoteroImportOpen] = useState(false);
@@ -4155,7 +4157,11 @@ export default function LiteraturePage() {
         <ScopeSidebar
           sections={[]}
           collapsed={panelCollapsed}
-          onToggleCollapse={() => setPanelCollapsed(v => !v)}
+          onToggleCollapse={() => setPanelCollapsed(v => {
+            const next = !v;
+            try { localStorage.setItem("literature_sidebar_collapsed", String(next)); } catch { /* ignore */ }
+            return next;
+          })}
           storageKey="literature_sidebar"
           fullContent={
             <CollectionsSidebar
@@ -4164,7 +4170,7 @@ export default function LiteraturePage() {
               activeCollection={activeCollection} setActiveCollection={(id) => { setActiveCollection(id); setShowTrash(false); }}
               allTags={allTags} activeTag={activeTag} setActiveTag={(t) => { setActiveTag(t); setShowTrash(false); }}
               items={scopedItems} allItems={items} subProjects={subProjects} onAddItem={() => setAddItemOpen(true)}
-              onCollapse={() => setPanelCollapsed(true)}
+              onCollapse={() => { setPanelCollapsed(true); try { localStorage.setItem("literature_sidebar_collapsed", "true"); } catch { /* ignore */ } }}
               onImportZotero={() => setZoteroImportOpen(true)}
               onAddByDOI={() => setDoiLookupOpen(true)}
               onReadingProgress={() => { setShowReadingProgress((v) => !v); setShowTrash(false); setSelectMode(false); setSelectedIds(new Set()); setSelectedItemId(null); }}

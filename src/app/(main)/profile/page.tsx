@@ -835,11 +835,13 @@ export default function ProfilePage() {
           {/* Avatar column */}
           <div style={{ width: isMobile ? "auto" : 140, flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
             {photo ? (
-              <img
-                src={photo}
-                alt={displayName}
-                style={{ width: 96, height: 96, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }}
-              />
+              <div style={{ width: 96, height: 96, borderRadius: "50%", overflow: "hidden", flexShrink: 0 }}>
+                <img
+                  src={photo}
+                  alt={displayName}
+                  style={{ width: 96, height: 96, objectFit: "cover", display: "block" }}
+                />
+              </div>
             ) : (
               <div style={{
                 width: 96, height: 96, borderRadius: "50%", flexShrink: 0,
