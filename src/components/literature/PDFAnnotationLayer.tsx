@@ -185,11 +185,14 @@ export default function PDFAnnotationLayer({
             New highlight · p.{pageNumber}
           </p>
           <input
-            placeholder="Quoted text (optional)"
+            placeholder="Type quoted text from document (optional)"
             value={text}
             onChange={(e) => setText(e.target.value)}
-            style={{ width: "100%", height: 30, border: "1px solid var(--color-border, #e2e8f0)", borderRadius: 6, padding: "0 8px", fontSize: 12, boxSizing: "border-box", marginBottom: 6, fontFamily: "inherit", backgroundColor: "var(--color-canvas, #f8fafc)", color: "var(--color-body, #1e293b)" }}
+            style={{ width: "100%", height: 30, border: "1px solid var(--color-border, #e2e8f0)", borderRadius: 6, padding: "0 8px", fontSize: 12, boxSizing: "border-box", marginBottom: 2, fontFamily: "inherit", backgroundColor: "var(--color-canvas, #f8fafc)", color: "var(--color-body, #1e293b)" }}
           />
+          <p style={{ fontSize: 10, color: "var(--color-secondary, #64748b)", margin: "0 0 6px", lineHeight: 1.4 }}>
+            The drawn box and this quote are saved independently.
+          </p>
           <textarea
             placeholder="Comment *"
             value={comment}

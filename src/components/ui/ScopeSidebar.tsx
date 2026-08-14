@@ -227,7 +227,7 @@ export default function ScopeSidebar({
                 {sections.map((s, i) => (
                   <Fragment key={s.id}>
                     <NavRow color={s.color} label={s.label} count={s.count} selected={s.isActive} onClick={s.onClick} />
-                    {i === 0 && <div style={{ height: 1, backgroundColor: "var(--color-border)", margin: "5px 2px" }} />}
+                    {i === 0 && sections.length > 1 && <div style={{ height: 1, backgroundColor: "var(--color-border)", margin: "5px 2px" }} />}
                   </Fragment>
                 ))}
                 {extraContent}
