@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Copy, Check, RefreshCw, User, Lock, Bell, Building2, Clock, Monitor, Moon, Sun, MapPin } from "lucide-react";
+import { Copy, Check, RefreshCw, User, Lock, Bell, Building2, Clock, Monitor, Moon, Sun, MapPin, Keyboard } from "lucide-react";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { showToast } from "@/components/ui/Toast";
 import { useTheme } from "@/context/ThemeContext";
@@ -475,6 +475,28 @@ export default function SettingsPage() {
             <code style={{ fontFamily: "monospace", fontSize: 10, backgroundColor: "var(--color-canvas)", padding: "1px 4px", borderRadius: 3 }}>RESEND_API_KEY</code>{" "}
             environment variable is configured.
           </p>
+        </div>
+      </section>
+
+      {/* Keyboard shortcuts section */}
+      <section style={sectionStyle} aria-labelledby="settings-shortcuts-heading">
+        <div style={sectionHeaderStyle}>
+          <Keyboard size={16} color="var(--color-secondary)" />
+          <h2 id="settings-shortcuts-heading" style={{ fontFamily: "var(--font-lora)", fontWeight: 500, fontSize: 15, color: "var(--color-body)", margin: 0 }}>
+            Keyboard Shortcuts
+          </h2>
+        </div>
+        <div style={{ padding: "20px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
+          <div>
+            <p style={{ fontSize: 13, fontWeight: 600, color: "var(--color-body)", margin: "0 0 3px" }}>View all shortcuts</p>
+            <p style={{ fontSize: 12, color: "var(--color-secondary)", margin: 0 }}>See every keyboard shortcut available in Canopy. You can also press <kbd style={{ fontSize: 11, fontWeight: 700, padding: "1px 5px", borderRadius: 4, border: "1px solid var(--color-border)", backgroundColor: "var(--color-canvas)", color: "var(--color-secondary)" }}>?</kbd> anywhere.</p>
+          </div>
+          <button
+            onClick={() => window.dispatchEvent(new CustomEvent("canopy:show-shortcuts"))}
+            style={{ fontSize: 12, fontWeight: 700, padding: "8px 18px", borderRadius: 8, backgroundColor: "var(--color-btn-primary)", color: "#fff", border: "none", cursor: "pointer", minHeight: 40, flexShrink: 0 }}
+          >
+            View shortcuts
+          </button>
         </div>
       </section>
 

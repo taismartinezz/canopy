@@ -692,9 +692,10 @@ export default function DashboardPage() {
   const [tasks, setTasks]             = useState<Task[]>([]);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [modalStatus, setModalStatus] = useState<TaskStatus | null>(null);
-  const [projectName, setProjectName] = useState("");
-  const [projectId, setProjectId]     = useState("");
-  const [userId, setUserId]           = useState("");
+  const [projectName, setProjectName]           = useState("");
+  const [projectId, setProjectId]               = useState("");
+  const [userId, setUserId]                     = useState("");
+  const [currentUserFirstName, setCurrentUserFirstName] = useState("");
   const [teamMembers, setTeamMembers] = useState<User[]>([]);
   const [dashEvents, setDashEvents]   = useState<CalendarEvent[]>([]);
   const [dashActivity, setDashActivity] = useState<ActivityRow[]>([]);
@@ -710,13 +711,15 @@ export default function DashboardPage() {
 
         const { data: up } = await supabase
           .from("user_profiles")
-          .select("project_id, projects(name)")
+          .select("project_id, name, projects(name)")
           .eq("id", user.id)
           .maybeSingle();
 
         if (!up?.project_id) { setLoading(false); return; }
         const pid = up.project_id as string;
         setProjectId(pid);
+
+        if (up.name) setCurrentUserFirstName((up.name as string).trim().split(/\s+/)[0]);
 
         const proj = Array.isArray(up.projects) ? up.projects[0] : up.projects;
         if (proj) setProjectName((proj as Record<string, string>).name ?? "");
@@ -849,6 +852,7 @@ export default function DashboardPage() {
     // Demo mode fallback (no Supabase)
     const sp = getStoredProject();
     setProjectName(sp.name);
+    setCurrentUserFirstName(getUser(CURRENT_USER_ID).name.trim().split(/\s+/)[0]);
     if (!localStorage.getItem("canopy_project")) {
       setTasks(TASKS);
       setDashPosts(DASHBOARD_POSTS);
@@ -878,6 +882,8 @@ export default function DashboardPage() {
   }, [projectId]);
 
   const today = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+  const timeOfDay = (() => { const h = new Date().getHours(); return h < 12 ? "morning" : h < 17 ? "afternoon" : "evening"; })();
+  const greeting = currentUserFirstName ? `Good ${timeOfDay}, ${currentUserFirstName}` : `Good ${timeOfDay}`;
 
   const isLabHome = activeScope === "lab";
   const activeSubProject = !isLabHome && activeScope === "project"
@@ -924,8 +930,8 @@ export default function DashboardPage() {
     <div className="p-4 md:p-6" style={{ maxWidth: 1400 }}>
       {/* Header */}
       <div className="mb-5 md:mb-6">
-        <h1 style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 26, color: "var(--color-navy)", margin: 0, lineHeight: 1.2 }}>
-          {displayTitle}
+        <h1 style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 22, color: "var(--color-navy)", margin: 0, lineHeight: 1.2 }}>
+          {isLabHome ? greeting : displayTitle}
         </h1>
         <p style={{ fontSize: 13, color: "var(--color-secondary)", marginTop: 4 }}>{today}</p>
       </div>

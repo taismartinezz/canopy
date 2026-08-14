@@ -366,7 +366,7 @@ function BookmarkCard({ bm, canDelete, onDelete, onEdit }: {
         display: "flex",
         flexDirection: "column",
         backgroundColor: "var(--color-surface)",
-        border: `1px solid ${hovered ? "#C0CBD8" : "var(--color-border)"}`,
+        border: "1px solid var(--color-border)",
         borderRadius: 10,
         padding: 16,
         minHeight: 148,
@@ -392,8 +392,8 @@ function BookmarkCard({ bm, canDelete, onDelete, onEdit }: {
           {isInternal && (
             <span style={{
               display: "flex", alignItems: "center", gap: 3,
-              fontSize: 10, fontWeight: 700, color: "#0F2544",
-              backgroundColor: "rgba(15,37,68,0.10)", borderRadius: 5,
+              fontSize: 10, fontWeight: 700, color: "var(--color-navy)",
+              backgroundColor: "var(--color-navy-dim)", borderRadius: 5,
               padding: "3px 7px",
             }}>
               <Home size={9} />
