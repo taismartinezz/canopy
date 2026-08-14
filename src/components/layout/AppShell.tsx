@@ -388,6 +388,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { projectId, subProjectId, subProjects, activeScope, setActiveSubProject, setActiveScope } = useProject();
   const [navCollapsed, setNavCollapsed]   = useState(false);
+  const [navWidth, setNavWidth]           = useState(210);
+  const navWidthRef                       = useRef(210);
   const [showCreate, setShowCreate]       = useState(false);
   const { show: showOnboarding, close: closeOnboarding } = useOnboarding();
   const [showSwitcher, setShowSwitcher]   = useState(false);
@@ -619,6 +621,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     setNavCollapsed(localStorage.getItem("canopy_nav_collapsed") === "true");
+    const storedW = parseInt(localStorage.getItem("canopy_nav_width") ?? "210", 10);
+    const w = Math.max(160, Math.min(300, isNaN(storedW) ? 210 : storedW));
+    setNavWidth(w);
+    navWidthRef.current = w;
   }, []);
 
   useEffect(() => {
@@ -872,13 +878,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </div>
 
-      {/* ── Layer 2: Nav sidebar — animates between 52px rail and 210px full ── */}
+      {/* ── Layer 2: Nav sidebar — collapses to 52px icon rail, resizable ── */}
       <div
         className="hidden md:flex flex-col shrink-0 overflow-hidden group/sidenav"
         style={{
-          width: navCollapsed ? 52 : 210,
+          position: "relative",
+          width: navCollapsed ? 52 : navWidth,
           borderRight: "1px solid var(--color-border)",
-          transition: "width 200ms ease",
+          transition: navCollapsed ? "width 200ms ease" : "none",
         }}
       >
         <SidebarBody
@@ -892,6 +899,72 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           chatUnread={chatUnread}
           onShowShortcuts={() => setShowShortcuts(true)}
         />
+        {/* Drag-to-resize handle */}
+        {!navCollapsed && (
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize navigation sidebar"
+            tabIndex={0}
+            title="Drag to resize"
+            style={{
+              position: "absolute", top: 0, right: 0, bottom: 0, width: 6,
+              cursor: "col-resize", zIndex: 10, backgroundColor: "transparent",
+              transition: "background-color 0.15s",
+            }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.backgroundColor = "var(--color-navy-dim)"; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.backgroundColor = "transparent"; }}
+            onFocus={(e) => { (e.currentTarget as HTMLDivElement).style.backgroundColor = "var(--color-navy-dim)"; }}
+            onBlur={(e) => { (e.currentTarget as HTMLDivElement).style.backgroundColor = "transparent"; }}
+            onKeyDown={(e) => {
+              if (e.key === "ArrowRight") {
+                e.preventDefault();
+                const next = Math.min(300, navWidthRef.current + 10);
+                navWidthRef.current = next; setNavWidth(next);
+                localStorage.setItem("canopy_nav_width", String(next));
+              }
+              if (e.key === "ArrowLeft") {
+                e.preventDefault();
+                const next = navWidthRef.current - 10;
+                if (next < 120) { setNavCollapsed(true); localStorage.setItem("canopy_nav_collapsed", "true"); return; }
+                const clamped = Math.max(160, next);
+                navWidthRef.current = clamped; setNavWidth(clamped);
+                localStorage.setItem("canopy_nav_width", String(clamped));
+              }
+            }}
+            onMouseDown={(e) => {
+              e.preventDefault();
+              const startX = e.clientX;
+              const startW = navWidthRef.current;
+              let live = startW;
+              document.body.style.userSelect = "none";
+              document.body.style.cursor = "col-resize";
+              function onMove(ev: MouseEvent) {
+                const next = startW + (ev.clientX - startX);
+                if (next < 120) {
+                  cleanup();
+                  setNavCollapsed(true);
+                  localStorage.setItem("canopy_nav_collapsed", "true");
+                  return;
+                }
+                live = Math.max(160, Math.min(300, next));
+                navWidthRef.current = live; setNavWidth(live);
+              }
+              function onUp() {
+                cleanup();
+                localStorage.setItem("canopy_nav_width", String(live));
+              }
+              function cleanup() {
+                document.removeEventListener("mousemove", onMove);
+                document.removeEventListener("mouseup", onUp);
+                document.body.style.userSelect = "";
+                document.body.style.cursor = "";
+              }
+              document.addEventListener("mousemove", onMove);
+              document.addEventListener("mouseup", onUp);
+            }}
+          />
+        )}
       </div>
 
       {/* ── Mobile nav drawer — fixed overlay, slide in/out ── */}
