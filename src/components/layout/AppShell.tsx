@@ -388,7 +388,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { projectId, subProjectId, subProjects, activeScope, setActiveSubProject, setActiveScope } = useProject();
   const [navCollapsed, setNavCollapsed]   = useState(false);
-  const [navWidth, setNavWidth]           = useState(210);
+  const [navWidth, setNavWidth]           = useState(() => {
+    try {
+      const s = localStorage.getItem("canopy_nav_width");
+      if (s) { const w = parseInt(s, 10); if (!isNaN(w)) return Math.max(160, Math.min(300, w)); }
+    } catch { /* ignore */ }
+    return 210;
+  });
   const navWidthRef                       = useRef(210);
   const [showCreate, setShowCreate]       = useState(false);
   const { show: showOnboarding, close: closeOnboarding } = useOnboarding();
@@ -531,25 +537,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       if (event === "SIGNED_OUT") router.replace("/login");
     });
 
-    function onToastEvent(e: Event) {
-      const { id, message, type } = (e as CustomEvent<{ id: string; message: string; type: string }>).detail;
-      const notif: SupabaseNotif = {
-        id,
-        type: type === "error" ? "error" : "info",
-        title: message,
-        read: false,
-        created_at: new Date().toISOString(),
-      };
-      setNotifications((prev) => [notif, ...prev]);
-      setUnreadCount((prev) => prev + 1);
-    }
-    window.addEventListener("canopy:toast", onToastEvent);
-
     return () => {
       subscription.unsubscribe();
       notifChannel?.unsubscribe();
       remindersChannel?.unsubscribe();
-      window.removeEventListener("canopy:toast", onToastEvent);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -620,11 +611,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   }, [projectId]);
 
   useEffect(() => {
-    setNavCollapsed(localStorage.getItem("canopy_nav_collapsed") === "true");
-    const storedW = parseInt(localStorage.getItem("canopy_nav_width") ?? "210", 10);
-    const w = Math.max(160, Math.min(300, isNaN(storedW) ? 210 : storedW));
-    setNavWidth(w);
-    navWidthRef.current = w;
+    const collapsed = localStorage.getItem("canopy_nav_collapsed") === "true";
+    setNavCollapsed(collapsed);
+    // Sync ref with the state value already read in useState init
+    navWidthRef.current = navWidth;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -677,8 +668,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   async function handleSignOut() {
     await supabase.auth.signOut();
-    localStorage.clear();
-    router.push("/login");
+    // Remove only auth/session keys; preserve user preferences (theme, sidebar widths)
+    ["canopy_authed", "canopy_project", "pendingInviteCode", "pendingProjectInviteToken"].forEach(k => {
+      try { localStorage.removeItem(k); } catch { /* ignore */ }
+    });
+    router.replace("/login");
   }
 
   if (!authed) {

@@ -732,9 +732,9 @@ export default function BookmarksPage() {
 
         <div style={{ padding: "28px 28px 40px" }}>
 
-          {/* Project context header — shown only in project view (no sidebar) */}
-          {!isLabHome && activeScope === "project" && (() => {
-            const activeSp = subProjects.find((s) => s.id === subProjectId);
+          {/* Page title — always shown */}
+          {(() => {
+            const activeSp = !isLabHome && activeScope === "project" ? subProjects.find((s) => s.id === subProjectId) : null;
             return (
               <div className="flex items-center gap-2 mb-5">
                 <h1 style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 22, color: "var(--color-navy)", margin: 0 }}>Bookmarks</h1>
