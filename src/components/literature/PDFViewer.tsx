@@ -53,8 +53,10 @@ export default function PDFViewer({
 
   useEffect(() => {
     function measure() {
-      if (containerRef.current) {
-        const available = Math.floor(containerRef.current.offsetWidth * 0.65 - 32);
+      // Use the scroll pane's own width (excludes the 280px annotation sidebar)
+      // so the page is sized and centered within its actual container, not the outer div.
+      if (scrollRef.current) {
+        const available = Math.floor(scrollRef.current.offsetWidth - 32);
         setPageWidth(Math.max(400, Math.min(available, 820)));
       }
     }
@@ -254,7 +256,7 @@ export default function PDFViewer({
               Highlights
             </p>
             <p style={{ fontSize: 11, color: "#94a3b8", marginTop: 2, marginBottom: 0 }}>
-              Drag on any page to add a highlight
+              Drag to mark a region. Type the quoted words separately in the popover — the box and the quote are independent.
             </p>
           </div>
 

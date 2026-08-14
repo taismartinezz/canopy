@@ -852,6 +852,9 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
           const { items, notes, merges, tagUpdates, pdfLinks } = parseZoteroRDF(content, existingItems, projectId, currentUserId, scope);
           setParsed(items); setPendingNotes(notes); setPendingMerges(merges); setPendingTagUpdates(tagUpdates);
           setParsedPDFLinks(pdfLinks);
+          if (items.length === 0 && merges.length === 0) {
+            setError("No items found in this file. If you meant to export a single collection, right-click it in Zotero and choose Export Collection… — File → Export Library always exports everything and may have picked up an empty or wrong library.");
+          }
         } else {
           // CSL JSON export
           const raw = JSON.parse(content) as CSLJsonItem[];
@@ -881,6 +884,12 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
             items.push(incomingItem);
           }
           setParsed(items); setPendingMerges(cslMerges);
+          if (items.length === 0 && cslMerges.length === 0) {
+            setError(raw.length === 0
+              ? "No items found in this file. If you meant to export a single collection, right-click it in Zotero and choose Export Collection… — File → Export Library always exports everything and may have picked up an empty or wrong library."
+              : `All ${raw.length} item${raw.length > 1 ? "s" : ""} already exist in your library and were detected as duplicates.`
+            );
+          }
         }
       } catch {
         setError(file.name.toLowerCase().endsWith(".rdf")
@@ -1392,8 +1401,8 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
         {tab === "file" && (
           <>
             <p style={{ fontSize: 12, color: "var(--color-secondary)", marginBottom: 14 }}>
-              In Zotero: <strong>File → Export Library</strong>, then choose <strong>CSL JSON</strong> (metadata only) or <strong>Zotero RDF</strong>. For RDF, check both <strong>Export Files</strong> (includes PDFs) and <strong>Include Annotations</strong> — skipping either silently strips that data. API sync auto-attaches PDFs stored in Zotero cloud.<br /><br />
-              <strong>To import a single collection:</strong> right-click the collection in Zotero → <strong>Export Collection…</strong>, with the same checkboxes.
+              <strong>To export one collection:</strong> right-click it in the Zotero sidebar → <strong>Export Collection…</strong>, choose <strong>Zotero RDF</strong> (or CSL JSON), and check <strong>Export Files</strong> and <strong>Include Annotations</strong> for full fidelity.<br /><br />
+              <strong>To export your whole library:</strong> <strong>File → Export Library</strong> with the same options. For a quick metadata-only export, CSL JSON is faster. API sync (tab above) auto-attaches PDFs stored in Zotero cloud.
             </p>
             <label
               style={{

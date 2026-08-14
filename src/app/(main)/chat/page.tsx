@@ -492,7 +492,12 @@ export default function ChatPage() {
                 onMouseEnter={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "rgba(0,0,0,0.04)"; }}
                 onMouseLeave={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "transparent"; }}
               >
-                <span style={{ flexShrink: 0, display: "flex" }}><Avatar user={peer} size={18} /></span>
+                <span style={{ flexShrink: 0, position: "relative", display: "inline-flex" }}>
+                  <span style={{ borderRadius: "50%", boxShadow: "0 0 0 2px var(--color-canvas)", display: "flex" }}>
+                    <Avatar user={peer} size={22} />
+                  </span>
+                  <span style={{ position: "absolute", bottom: 0, right: 0, width: 7, height: 7, borderRadius: "50%", backgroundColor: "var(--color-secondary)", border: "1.5px solid var(--color-canvas)", opacity: 0.55 }} aria-hidden="true" />
+                </span>
                 <span style={{ fontSize: 13, color: active ? c : "var(--color-body)", fontWeight: active ? 600 : 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{peer.name}</span>
               </button>
             );
