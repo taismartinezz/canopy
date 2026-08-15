@@ -58,6 +58,7 @@ export default function Tooltip({ label, children, delay = 450, placement = "bot
     <>
       <span
         ref={triggerRef}
+        aria-describedby={label ? id : undefined}
         style={{ position: "relative", display: "inline-flex", alignItems: "center" }}
         onMouseEnter={show}
         onMouseLeave={hide}
@@ -67,10 +68,11 @@ export default function Tooltip({ label, children, delay = 450, placement = "bot
       >
         {children}
       </span>
-      {mounted && visible && label && createPortal(
+      {mounted && label && createPortal(
         <span
           role="tooltip"
           id={id}
+          aria-hidden={!visible}
           style={{
             position: "fixed",
             top: coords.top,
@@ -88,6 +90,7 @@ export default function Tooltip({ label, children, delay = 450, placement = "bot
             zIndex: 99999,
             letterSpacing: "0.01em",
             lineHeight: 1.4,
+            visibility: visible ? "visible" : "hidden",
           }}
         >
           {label}
