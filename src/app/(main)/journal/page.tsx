@@ -195,7 +195,7 @@ function PromptCard({
   return (
     <div style={{ backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 10, overflow: "hidden" }}>
       {/* Header row */}
-      <div className="flex items-center justify-between px-4 md:px-5 py-4" style={{ borderBottom: "1px solid var(--color-border)" }}>
+      <div className="flex items-center justify-between px-4 pt-4 pb-3" style={{ borderBottom: "1px solid var(--color-border)" }}>
         <div className="flex items-center gap-3 flex-1 min-w-0">
           <span className="flex items-center justify-center rounded-full shrink-0" style={{ width: 28, height: 28, backgroundColor: "var(--color-navy)", color: "#fff", fontSize: 12, fontWeight: 700 }}>
             {number}
@@ -860,7 +860,7 @@ export default function JournalPage() {
           {/* Header */}
           <div className="flex items-start justify-between mb-7 gap-3">
             <div>
-              <h1 style={{ fontWeight: 700, fontSize: 24, color: "var(--color-navy)", margin: 0, lineHeight: 1.2 }}>
+              <h1 style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 22, color: "var(--color-navy)", margin: 0, lineHeight: 1.2 }}>
                 {isViewingEntry && viewedEntry ? formatEntryDate(viewedEntry.date) : "Today's Entry"}
               </h1>
               <p style={{ fontSize: 13, color: "var(--color-secondary)", marginTop: 5 }}>

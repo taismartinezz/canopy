@@ -349,12 +349,13 @@ export default function ChatPage() {
         />
 
         <div className="flex flex-col flex-1 overflow-hidden">
-          {/* Channel header */}
-          <div style={{ padding: "10px 20px", borderBottom: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", flexShrink: 0 }}>
+          {/* Page title + channel header */}
+          <div style={{ padding: "12px 24px", borderBottom: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", flexShrink: 0 }}>
+            <h1 style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 22, color: "var(--color-navy)", margin: "0 0 2px" }}>Chat</h1>
             <div className="flex items-center gap-2">
-              {!isDm && <Hash size={16} style={{ color: "var(--color-secondary)", flexShrink: 0 }} />}
-              <span style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 22, color: "var(--color-navy)" }}>{channelLabel()}</span>
-              {!isDm && <span style={{ fontSize: 12, color: "var(--color-secondary)", marginLeft: 4 }}>{memberCount} members</span>}
+              {!isDm && <Hash size={14} style={{ color: "var(--color-secondary)", flexShrink: 0 }} />}
+              <span style={{ fontSize: 13, fontWeight: 600, color: "var(--color-secondary)" }}>{channelLabel()}</span>
+              {!isDm && <span style={{ fontSize: 12, color: "var(--color-secondary)" }}>{memberCount} members</span>}
             </div>
           </div>
 

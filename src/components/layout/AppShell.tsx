@@ -131,7 +131,25 @@ function SidebarBody({
     return (
       <aside className="flex flex-col h-full items-center" aria-label="Site navigation" style={{ backgroundColor: "var(--color-sidebar)", paddingTop: 6, paddingBottom: 6, gap: 2 }}>
 
-        {/* Workspace avatar — opens scope switcher */}
+        {/* Canopy logo — static branding anchor */}
+        <div style={{ ...ICON_BTN, flexShrink: 0, pointerEvents: "none" }} aria-hidden="true">
+          <CanopyLogo size={22} />
+        </div>
+
+        {/* Expand toggle */}
+        <button
+          onClick={onExpand}
+          className="transition-colors hover:bg-[var(--color-navy-dim)]"
+          style={{ ...ICON_BTN, color: "var(--color-secondary)", background: "none", border: "none", cursor: "pointer" }}
+          aria-expanded={false}
+          aria-label="Expand sidebar"
+        >
+          <ChevronRight size={15} />
+        </button>
+
+        <Divider />
+
+        {/* Workspace avatar — opens scope/project switcher */}
         <div style={{ position: "relative" }}>
           <Tooltip label={projectName || "Workspace"} placement="right">
             <button
@@ -180,6 +198,15 @@ function SidebarBody({
               })}
               <div style={{ borderTop: "1px solid var(--color-border)", margin: "4px 0" }} />
               <button
+                onClick={() => { onPersonal?.(); setWsOpen(false); }}
+                className="flex items-center gap-2.5 w-full text-left transition-colors hover:bg-[var(--color-navy-dim)]"
+                style={{ padding: "7px 14px", border: "none", background: activeScope === "personal" ? "var(--color-navy-dim)" : "transparent", cursor: "pointer", fontFamily: "var(--font-roboto)" }}
+              >
+                <span style={{ width: 10, height: 10, borderRadius: 50, backgroundColor: "var(--color-navy-dim)", border: "1px solid var(--color-border)", flexShrink: 0 }} />
+                <span style={{ fontSize: 13, fontWeight: activeScope === "personal" ? 700 : 400, color: "var(--color-body)" }}>Personal</span>
+              </button>
+              <div style={{ borderTop: "1px solid var(--color-border)", margin: "4px 0" }} />
+              <button
                 onClick={() => { onCreateProject?.(); setWsOpen(false); }}
                 className="flex items-center gap-2.5 w-full text-left transition-colors hover:bg-[var(--color-navy-dim)]"
                 style={{ padding: "7px 14px", border: "none", background: "transparent", cursor: "pointer", fontFamily: "var(--font-roboto)", color: "var(--color-secondary)" }}
@@ -190,17 +217,6 @@ function SidebarBody({
             </div>
           )}
         </div>
-
-        {/* Expand toggle */}
-        <button
-          onClick={onExpand}
-          className="transition-colors hover:bg-[var(--color-navy-dim)]"
-          style={{ ...ICON_BTN, color: "var(--color-secondary)", background: "none", border: "none", cursor: "pointer" }}
-          aria-expanded={false}
-          aria-label="Expand sidebar"
-        >
-          <ChevronRight size={15} />
-        </button>
 
         <Divider />
 
@@ -363,6 +379,15 @@ function SidebarBody({
                 </button>
               );
             })}
+            <div style={{ borderTop: "1px solid var(--color-border)", margin: "4px 0" }} />
+            <button
+              onClick={() => { onPersonal?.(); setWsOpen(false); }}
+              className="flex items-center gap-2.5 w-full text-left transition-colors hover:bg-[var(--color-navy-dim)]"
+              style={{ padding: "7px 14px", border: "none", background: activeScope === "personal" ? "var(--color-navy-dim)" : "transparent", cursor: "pointer", fontFamily: "var(--font-roboto)" }}
+            >
+              <span style={{ width: 10, height: 10, borderRadius: 50, backgroundColor: "var(--color-navy-dim)", border: "1px solid var(--color-border)", flexShrink: 0 }} />
+              <span style={{ fontSize: 13, fontWeight: activeScope === "personal" ? 700 : 400, color: "var(--color-body)" }}>Personal</span>
+            </button>
             <div style={{ borderTop: "1px solid var(--color-border)", margin: "4px 0" }} />
             <button
               onClick={() => { onCreateProject?.(); setWsOpen(false); }}

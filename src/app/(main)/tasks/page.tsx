@@ -455,7 +455,7 @@ export default function TasksPage() {
     <div className="flex flex-col h-full" style={{ fontFamily: "var(--font-roboto)" }}>
 
       {/* Toolbar */}
-      <div className="px-4 md:px-6 pt-3 pb-0" style={{ backgroundColor: "var(--color-surface)", borderBottom: "1px solid var(--color-border)" }}>
+      <div className="px-6 pt-4 pb-3" style={{ backgroundColor: "var(--color-surface)", borderBottom: "1px solid var(--color-border)" }}>
         <div className="flex items-center gap-3 mb-2">
           <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 8 }}>
             <h1 style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 22, color: "var(--color-navy)", margin: 0 }}>Tasks</h1>
@@ -558,7 +558,7 @@ export default function TasksPage() {
             />
           </div>
         )}
-        <div className="flex-1 overflow-auto p-4 md:p-6">
+        <div className="flex-1 overflow-auto p-6">
         {loading && (
           <p style={{ fontSize: 13, color: "var(--color-secondary)", padding: 8 }}>Loading tasks…</p>
         )}
