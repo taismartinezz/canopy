@@ -204,7 +204,7 @@ function WeeklyUpdateBar({ current, onSave }: { current?: string; onSave: (v: st
   }
 
   return (
-    <div className="flex items-center gap-3 px-4 py-3 mb-6 rounded-lg" style={{ backgroundColor: "var(--color-surface)", border: "1px solid var(--color-navy)", borderRadius: 8 }}>
+    <div className="flex items-center gap-3 px-3 mb-6 rounded-lg" style={{ backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)", borderRadius: 7, height: 36 }}>
       <input
         ref={inputRef} value={value} onChange={(e) => setValue(e.target.value)}
         placeholder="What are you working on this week?"
@@ -420,7 +420,7 @@ export default function TeamPage() {
 
   return (
     <div className="flex flex-col h-full overflow-auto" style={{ fontFamily: "var(--font-roboto)" }}>
-      <div className="p-4 md:p-6" style={{ maxWidth: 1200 }}>
+      <div className="p-6">
 
         {/* Header */}
         <div className="flex items-center justify-between mb-5 md:mb-6">

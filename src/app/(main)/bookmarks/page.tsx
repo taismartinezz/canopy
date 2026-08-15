@@ -730,7 +730,7 @@ export default function BookmarksPage() {
             </div>
         )}
 
-        <div style={{ padding: "28px 28px 40px" }}>
+        <div className="p-6">
 
           {/* Page title — always shown */}
           {(() => {

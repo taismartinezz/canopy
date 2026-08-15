@@ -30,7 +30,7 @@ interface Props {
 const MIN_WIDTH = 180;
 const MAX_WIDTH = 400;
 const SNAP_BELOW = 140;
-const DEFAULT_WIDTH = 210;
+const DEFAULT_WIDTH = 220;
 
 function readStoredWidth(key: string): number {
   try {

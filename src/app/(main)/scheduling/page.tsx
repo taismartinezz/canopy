@@ -1385,7 +1385,7 @@ export default function SchedulingPage() {
 
   return (
     <ClientOnly>
-      <div className="px-4 md:px-8 py-6 max-w-5xl mx-auto">
+      <div className="px-6 py-6 max-w-5xl mx-auto">
         <div className="mb-4">
           <h1 style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 22, color: "var(--color-navy)", margin: 0 }}>
             Scheduling
