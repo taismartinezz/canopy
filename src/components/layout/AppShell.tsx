@@ -6,7 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard, CheckSquare, BookOpen, BookMarked, Bookmark, Users,
   Bell, ChevronDown, ChevronLeft, ChevronRight, LogOut, User as UserIcon,
-  Menu, X, Settings, CalendarDays, CircleCheck, Plus, Home, Search, MessageSquare,
+  Menu, X, Settings, CalendarDays, CircleCheck, Plus, Search, MessageSquare,
 } from "lucide-react";
 import { computeInitials } from "@/lib/utils";
 import type { User, SubProject } from "@/types";
@@ -80,7 +80,6 @@ function SidebarBody({
   onExpand,
   pastDueCount = 0,
   chatUnread = 0,
-  // workspace props — only used in collapsed desktop mode
   subProjects = [],
   activeScope = "lab",
   activeSubProjectId = null,
@@ -90,6 +89,8 @@ function SidebarBody({
   onCreateProject,
   onSettings,
   profileInitials = "??",
+  projectName = "",
+  projectColor = "",
 }: {
   isActive: (href: string) => boolean;
   onLinkClick?: () => void;
@@ -111,25 +112,91 @@ function SidebarBody({
   onCreateProject?: () => void;
   onSettings?: () => void;
   profileInitials?: string;
+  projectName?: string;
+  projectColor?: string;
 }) {
-  // ── Collapsed: unified single-column icon rail ──────────────────────────────
-  if (collapsed) {
-    const ICON_BTN = {
-      width: 36, height: 36, display: "flex", alignItems: "center",
-      justifyContent: "center", borderRadius: 8, flexShrink: 0,
-    } as const;
-    const Divider = () => (
-      <div style={{ width: 28, height: 1, backgroundColor: "var(--color-border)", margin: "3px 0", flexShrink: 0 }} />
-    );
-    return (
-      <div className="flex flex-col h-full items-center" style={{ backgroundColor: "var(--color-sidebar)", paddingTop: 6, paddingBottom: 6, gap: 2 }}>
+  const [wsOpen, setWsOpen] = useState(false);
+  const ICON_BTN = {
+    width: 36, height: 36, display: "flex", alignItems: "center",
+    justifyContent: "center", borderRadius: 8, flexShrink: 0,
+  } as const;
+  const Divider = () => (
+    <div style={{ width: 28, height: 1, backgroundColor: "var(--color-border)", margin: "3px 0", flexShrink: 0 }} />
+  );
+  const wsBg = projectColor || "var(--color-navy)";
+  const wsInitials = projectInitials(projectName || "");
 
-        {/* Expand chevron */}
+  // ── Collapsed: single icon column ──────────────────────────────────────────
+  if (collapsed) {
+    return (
+      <aside className="flex flex-col h-full items-center" aria-label="Site navigation" style={{ backgroundColor: "var(--color-sidebar)", paddingTop: 6, paddingBottom: 6, gap: 2 }}>
+
+        {/* Workspace avatar — opens scope switcher */}
+        <div style={{ position: "relative" }}>
+          <Tooltip label={projectName || "Workspace"} placement="right">
+            <button
+              onClick={() => setWsOpen(v => !v)}
+              style={{
+                ...ICON_BTN,
+                backgroundColor: wsBg,
+                color: contrastTextColor(wsBg),
+                border: "none", cursor: "pointer",
+                fontFamily: "var(--font-roboto)", fontSize: 10, fontWeight: 700,
+              }}
+              aria-label={`Workspace: ${projectName || "Lab"}`}
+              aria-expanded={wsOpen}
+            >
+              {wsInitials}
+            </button>
+          </Tooltip>
+          {wsOpen && (
+            <div style={{
+              position: "fixed", left: 52, zIndex: 50,
+              backgroundColor: "var(--color-surface)",
+              border: "1px solid var(--color-border)",
+              borderRadius: 10, boxShadow: "0 8px 32px rgba(27,46,75,0.18)",
+              padding: "8px 0", minWidth: 200, maxHeight: 320, overflowY: "auto",
+            }}>
+              <button
+                onClick={() => { onLabHome?.(); setWsOpen(false); }}
+                className="flex items-center gap-2.5 w-full text-left transition-colors hover:bg-[var(--color-navy-dim)]"
+                style={{ padding: "7px 14px", border: "none", background: activeScope === "lab" ? "var(--color-navy-dim)" : "transparent", cursor: "pointer", fontFamily: "var(--font-roboto)" }}
+              >
+                <span style={{ width: 10, height: 10, borderRadius: 3, backgroundColor: wsBg, flexShrink: 0 }} />
+                <span style={{ fontSize: 13, fontWeight: activeScope === "lab" ? 700 : 400, color: "var(--color-body)" }}>Lab Home</span>
+              </button>
+              {subProjects.map(sp => {
+                const spActive = activeScope === "project" && activeSubProjectId === sp.id;
+                return (
+                  <button key={sp.id}
+                    onClick={() => { onSelectProject?.(sp.id); setWsOpen(false); }}
+                    className="flex items-center gap-2.5 w-full text-left transition-colors hover:bg-[var(--color-navy-dim)]"
+                    style={{ padding: "7px 14px", border: "none", background: spActive ? "var(--color-navy-dim)" : "transparent", cursor: "pointer", fontFamily: "var(--font-roboto)" }}
+                  >
+                    <span style={{ width: 10, height: 10, borderRadius: 3, backgroundColor: sp.color ?? "var(--color-navy)", flexShrink: 0 }} />
+                    <span style={{ fontSize: 13, fontWeight: spActive ? 700 : 400, color: "var(--color-body)" }}>{sp.name}</span>
+                  </button>
+                );
+              })}
+              <div style={{ borderTop: "1px solid var(--color-border)", margin: "4px 0" }} />
+              <button
+                onClick={() => { onCreateProject?.(); setWsOpen(false); }}
+                className="flex items-center gap-2.5 w-full text-left transition-colors hover:bg-[var(--color-navy-dim)]"
+                style={{ padding: "7px 14px", border: "none", background: "transparent", cursor: "pointer", fontFamily: "var(--font-roboto)", color: "var(--color-secondary)" }}
+              >
+                <Plus size={13} />
+                <span style={{ fontSize: 13 }}>New project</span>
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Expand toggle */}
         <button
           onClick={onExpand}
           className="transition-colors hover:bg-[var(--color-navy-dim)]"
-          style={{ ...ICON_BTN, color: "var(--color-secondary)", background: "none", border: "none", cursor: "pointer", marginBottom: 2 }}
-          title="Expand sidebar"
+          style={{ ...ICON_BTN, color: "var(--color-secondary)", background: "none", border: "none", cursor: "pointer" }}
+          aria-expanded={false}
           aria-label="Expand sidebar"
         >
           <ChevronRight size={15} />
@@ -137,79 +204,7 @@ function SidebarBody({
 
         <Divider />
 
-        {/* Workspace: Lab home */}
-        <Tooltip label="Lab home" placement="right">
-          <button
-            onClick={onLabHome}
-            style={{
-              ...ICON_BTN,
-              backgroundColor: activeScope === "lab" ? "var(--color-navy)" : "transparent",
-              color: activeScope === "lab" ? "#fff" : "var(--color-secondary)",
-              border: "none", cursor: "pointer",
-              transition: "background-color 0.12s",
-            }}
-            className={activeScope !== "lab" ? "hover:bg-[var(--color-navy-dim)]" : ""}
-            title="Lab home"
-            aria-label="Lab home"
-            aria-current={activeScope === "lab" ? "true" : undefined}
-          >
-            <Home size={16} />
-          </button>
-        </Tooltip>
-
-        {/* Sub-project avatars (up to 4) */}
-        {subProjects.slice(0, 4).map((sp) => {
-          const spActive = activeScope === "project" && activeSubProjectId === sp.id;
-          const bg = sp.color ?? "var(--color-navy)";
-          return (
-            <Tooltip key={sp.id} label={sp.name} placement="right">
-              <button
-                onClick={() => onSelectProject?.(sp.id)}
-                style={{
-                  ...ICON_BTN,
-                  backgroundColor: bg,
-                  color: contrastTextColor(bg),
-                  border: spActive ? "2px solid rgba(255,255,255,0.7)" : "2px solid transparent",
-                  outline: spActive ? `2px solid ${bg}` : "none",
-                  outlineOffset: 1,
-                  opacity: spActive ? 1 : 0.7,
-                  cursor: "pointer",
-                  fontFamily: "var(--font-roboto)",
-                  fontSize: 10, fontWeight: 700,
-                }}
-                title={sp.name}
-                aria-label={`Project: ${sp.name}`}
-                aria-current={spActive ? "true" : undefined}
-              >
-                {sp.name.slice(0, 2).toUpperCase()}
-              </button>
-            </Tooltip>
-          );
-        })}
-
-        {/* Overflow indicator when there are more than 4 projects */}
-        {subProjects.length > 4 && (
-          <Tooltip label={`${subProjects.length - 4} more project${subProjects.length - 4 > 1 ? "s" : ""}`} placement="right">
-            <button
-              style={{
-                ...ICON_BTN,
-                backgroundColor: "var(--color-canvas)",
-                border: "1px solid var(--color-border)",
-                cursor: "default",
-                fontFamily: "var(--font-roboto)",
-                fontSize: 10, fontWeight: 700,
-                color: "var(--color-secondary)",
-              }}
-              aria-label={`${subProjects.length - 4} more projects`}
-            >
-              +{subProjects.length - 4}
-            </button>
-          </Tooltip>
-        )}
-
-        <Divider />
-
-        {/* Page nav icons — flex-1 so they fill the middle, scrollable if needed */}
+        {/* Page nav icons */}
         <nav className="flex-1 flex flex-col items-center overflow-y-auto" style={{ gap: 2, scrollbarWidth: "none" }} aria-label="Main navigation">
           {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
             const active = isActive(href);
@@ -253,16 +248,15 @@ function SidebarBody({
         <Tooltip label="Settings" placement="right">
           <button
             onClick={onSettings}
-            style={{ ...ICON_BTN, background: "none", border: "none", cursor: "pointer", color: "var(--color-secondary)", transition: "background-color 0.12s" }}
+            style={{ ...ICON_BTN, background: "none", border: "none", cursor: "pointer", color: "var(--color-secondary)" }}
             className="hover:bg-[var(--color-navy-dim)]"
-            title="Settings"
             aria-label="Settings"
           >
             <Settings size={16} />
           </button>
         </Tooltip>
 
-        {/* Personal workspace — pinned at very bottom */}
+        {/* Personal workspace */}
         <Tooltip label="Personal workspace" placement="right">
           <button
             onClick={onPersonal}
@@ -272,10 +266,8 @@ function SidebarBody({
               color: activeScope === "personal" ? "#fff" : "var(--color-navy)",
               border: activeScope === "personal" ? "none" : "2px solid var(--color-border)",
               cursor: "pointer",
-              fontFamily: "var(--font-roboto)",
-              fontSize: 10, fontWeight: 700,
+              fontFamily: "var(--font-roboto)", fontSize: 10, fontWeight: 700,
             }}
-            title="Personal workspace"
             aria-label="Personal workspace"
             aria-current={activeScope === "personal" ? "true" : undefined}
           >
@@ -283,13 +275,13 @@ function SidebarBody({
           </button>
         </Tooltip>
 
-      </div>
+      </aside>
     );
   }
 
   // ── Expanded: full sidebar ──────────────────────────────────────────────────
   return (
-    <div className="flex flex-col h-full" style={{ backgroundColor: "var(--color-sidebar)" }}>
+    <aside className="flex flex-col h-full" aria-label="Site navigation" style={{ backgroundColor: "var(--color-sidebar)" }}>
       {/* Wordmark row — collapse button appears on sidebar hover */}
       <div className="flex items-center justify-between px-4 pt-4 pb-3">
         <span style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 18, color: "var(--color-navy)" }}>
@@ -301,7 +293,7 @@ function SidebarBody({
               onClick={onCollapse}
               className="opacity-0 group-hover/sidenav:opacity-100 transition-opacity flex items-center justify-center rounded-lg hover:bg-[var(--color-navy-dim)]"
               style={{ width: 32, height: 32 }}
-              title="Collapse sidebar"
+              aria-expanded={true}
               aria-label="Collapse sidebar"
             >
               <ChevronLeft size={15} color="var(--color-secondary)" />
@@ -318,6 +310,70 @@ function SidebarBody({
             </button>
           )}
         </div>
+      </div>
+
+      {/* WorkspaceSwitcher */}
+      <div className="px-2 mb-1 shrink-0" style={{ position: "relative" }}>
+        <button
+          onClick={() => setWsOpen(v => !v)}
+          className="flex items-center gap-2.5 w-full rounded-lg transition-colors hover:bg-[var(--color-navy-dim)]"
+          style={{ padding: "6px 10px", border: "none", background: "transparent", cursor: "pointer", textAlign: "left" }}
+          aria-expanded={wsOpen}
+          aria-label="Switch workspace"
+        >
+          <span style={{
+            width: 22, height: 22, borderRadius: 6, backgroundColor: wsBg, flexShrink: 0,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontFamily: "var(--font-roboto)", fontSize: 9, fontWeight: 700,
+            color: contrastTextColor(wsBg),
+          }}>
+            {wsInitials}
+          </span>
+          <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: "var(--color-navy)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {projectName || "Lab"}
+          </span>
+          <ChevronDown size={13} color="var(--color-secondary)" style={{ flexShrink: 0, transform: wsOpen ? "rotate(180deg)" : undefined }} />
+        </button>
+        {wsOpen && (
+          <div style={{
+            position: "absolute", top: "calc(100% + 4px)", left: 8, right: 8, zIndex: 50,
+            backgroundColor: "var(--color-surface)",
+            border: "1px solid var(--color-border)",
+            borderRadius: 10, boxShadow: "0 8px 32px rgba(27,46,75,0.18)",
+            padding: "8px 0", maxHeight: 280, overflowY: "auto",
+          }}>
+            <button
+              onClick={() => { onLabHome?.(); setWsOpen(false); }}
+              className="flex items-center gap-2.5 w-full text-left transition-colors hover:bg-[var(--color-navy-dim)]"
+              style={{ padding: "7px 14px", border: "none", background: activeScope === "lab" ? "var(--color-navy-dim)" : "transparent", cursor: "pointer", fontFamily: "var(--font-roboto)" }}
+            >
+              <span style={{ width: 10, height: 10, borderRadius: 3, backgroundColor: wsBg, flexShrink: 0 }} />
+              <span style={{ fontSize: 13, fontWeight: activeScope === "lab" ? 700 : 400, color: "var(--color-body)" }}>Lab Home</span>
+            </button>
+            {subProjects.map(sp => {
+              const spActive = activeScope === "project" && activeSubProjectId === sp.id;
+              return (
+                <button key={sp.id}
+                  onClick={() => { onSelectProject?.(sp.id); setWsOpen(false); }}
+                  className="flex items-center gap-2.5 w-full text-left transition-colors hover:bg-[var(--color-navy-dim)]"
+                  style={{ padding: "7px 14px", border: "none", background: spActive ? "var(--color-navy-dim)" : "transparent", cursor: "pointer", fontFamily: "var(--font-roboto)" }}
+                >
+                  <span style={{ width: 10, height: 10, borderRadius: 3, backgroundColor: sp.color ?? "var(--color-navy)", flexShrink: 0 }} />
+                  <span style={{ fontSize: 13, fontWeight: spActive ? 700 : 400, color: "var(--color-body)" }}>{sp.name}</span>
+                </button>
+              );
+            })}
+            <div style={{ borderTop: "1px solid var(--color-border)", margin: "4px 0" }} />
+            <button
+              onClick={() => { onCreateProject?.(); setWsOpen(false); }}
+              className="flex items-center gap-2.5 w-full text-left transition-colors hover:bg-[var(--color-navy-dim)]"
+              style={{ padding: "7px 14px", border: "none", background: "transparent", cursor: "pointer", fontFamily: "var(--font-roboto)", color: "var(--color-secondary)" }}
+            >
+              <Plus size={13} />
+              <span style={{ fontSize: 13 }}>New project</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Nav items */}
@@ -387,7 +443,38 @@ function SidebarBody({
           })}
         </div>
       </div>
-    </div>
+
+      {/* Footer: settings + personal workspace */}
+      <div className="px-2 pb-2 shrink-0" style={{ borderTop: "1px solid var(--color-border)", paddingTop: 4 }}>
+        <button
+          onClick={onSettings}
+          className="flex items-center gap-2.5 w-full rounded-lg transition-colors hover:bg-[var(--color-navy-dim)]"
+          style={{ padding: "6px 10px", border: "none", background: "transparent", cursor: "pointer", fontFamily: "var(--font-roboto)", color: "var(--color-secondary)", fontSize: 13, minHeight: 36, textAlign: "left" }}
+          aria-label="Settings"
+        >
+          <Settings size={14} />
+          <span>Settings</span>
+        </button>
+        <button
+          onClick={onPersonal}
+          className="flex items-center gap-2.5 w-full rounded-lg transition-colors hover:bg-[var(--color-navy-dim)]"
+          style={{ padding: "6px 10px", border: "none", background: activeScope === "personal" ? "var(--color-navy-dim)" : "transparent", cursor: "pointer", fontFamily: "var(--font-roboto)", color: activeScope === "personal" ? "var(--color-navy)" : "var(--color-secondary)", fontSize: 13, minHeight: 36, textAlign: "left" }}
+          aria-label="Personal workspace"
+          aria-current={activeScope === "personal" ? "true" : undefined}
+        >
+          <span style={{
+            width: 20, height: 20, borderRadius: 10, flexShrink: 0,
+            backgroundColor: activeScope === "personal" ? "var(--color-navy)" : "var(--color-navy-dim)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontFamily: "var(--font-roboto)", fontSize: 9, fontWeight: 700,
+            color: activeScope === "personal" ? "#fff" : "var(--color-navy)",
+          }}>
+            {profileInitials}
+          </span>
+          <span>Personal</span>
+        </button>
+      </div>
+    </aside>
   );
 }
 
@@ -511,7 +598,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const navWidthRef                       = useRef(210);
   const [showCreate, setShowCreate]       = useState(false);
   const { show: showOnboarding, close: closeOnboarding } = useOnboarding();
-  const [showSwitcher, setShowSwitcher]   = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -797,12 +883,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     return (
       <div className="flex h-full" style={{ backgroundColor: "var(--color-canvas)" }}>
         <style>{`@keyframes shimmer{0%{background-position:-400px 0}100%{background-position:400px 0}}.sk{background:linear-gradient(90deg,var(--color-border) 25%,var(--color-surface) 50%,var(--color-border) 75%);background-size:800px 100%;animation:shimmer 1.4s infinite linear;border-radius:6px;}`}</style>
-        {/* Project rail skeleton */}
-        <div className="hidden md:flex flex-col items-center shrink-0" style={{ width: 52, backgroundColor: "var(--color-strip)", borderRight: "1px solid var(--color-border)", paddingTop: 12, gap: 10 }}>
-          <div className="sk" style={{ width: 36, height: 36, borderRadius: 10 }} />
-          <div style={{ width: 28, height: 1, backgroundColor: "var(--color-border)" }} />
-          {[1,2,3].map(i => <div key={i} className="sk" style={{ width: 36, height: 36, borderRadius: 10 }} />)}
-        </div>
         {/* Nav sidebar skeleton */}
         <div className="hidden md:flex flex-col shrink-0" style={{ width: 200, borderRight: "1px solid var(--color-border)", padding: "16px 12px", gap: 8 }}>
           <div className="sk" style={{ width: 100, height: 14 }} />
@@ -837,175 +917,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         />
       )}
 
-      {/* ── Layer 1: Slack-style project rail — removed from DOM when nav is collapsed ── */}
-      {!navCollapsed && <div
-        className="hidden md:flex flex-col items-center shrink-0"
-        style={{ width: 52, backgroundColor: "var(--color-strip)", borderRight: "1px solid var(--color-border)" }}
-      >
-        {/* Canopy logo — static branding, not interactive */}
-        <div className="pt-3 pb-0 flex flex-col items-center">
-          <div className="w-9 h-9 flex items-center justify-center">
-            <CanopyLogo size={22} />
-          </div>
-        </div>
-
-        {/* Lab home — separate from the logo */}
-        <div className="pb-1 flex flex-col items-center">
-          <Tooltip label="Lab home" placement="right">
-            <button
-              onClick={() => { setActiveSubProject(null); setActiveScope("lab"); }}
-              title="Lab home"
-              aria-label="Lab home"
-              aria-current={activeScope === "lab" ? "true" : undefined}
-              className="w-9 h-9 flex items-center justify-center rounded-[10px] transition-all"
-              style={{
-                backgroundColor: activeScope === "lab" ? "var(--color-navy)" : "transparent",
-                border: "2px solid transparent",
-                outline: activeScope === "lab" ? "2px solid var(--color-navy)" : "none",
-                outlineOffset: 1,
-                cursor: "pointer",
-              }}
-            >
-              <Home size={15} color={activeScope === "lab" ? "#fff" : "var(--color-navy)"} />
-            </button>
-          </Tooltip>
-        </div>
-
-        <div style={{ width: 28, height: 1, backgroundColor: "var(--color-border)", margin: "4px 0" }} />
-
-        {/* Sub-project icons + switcher */}
-        <div className="flex-1 flex flex-col items-center py-1 gap-1.5 overflow-y-auto" style={{ scrollbarWidth: "none" }}>
-          {/* Show first 5 as icons; if more, show a switcher trigger */}
-          {subProjects.slice(0, 5).map((sp) => {
-            const isActive = activeScope === "project" && subProjectId === sp.id;
-            const bg = sp.color ?? "var(--color-navy)";
-            return (
-              <Tooltip key={sp.id} label={sp.name} placement="right">
-                <button
-                  onClick={() => { setActiveSubProject(sp.id); setActiveScope("project"); setShowSwitcher(false); }}
-                  title={sp.name}
-                  aria-label={`Project: ${sp.name}`}
-                  aria-current={isActive ? "true" : undefined}
-                  className="w-9 h-9 rounded-[10px] flex items-center justify-center shrink-0 transition-all"
-                  style={{
-                    backgroundColor: bg,
-                    color: contrastTextColor(bg),
-                    border: isActive ? `2.5px solid rgba(255,255,255,0.8)` : "2.5px solid transparent",
-                    outline: isActive ? `2px solid ${bg}` : "none",
-                    outlineOffset: 1,
-                    cursor: "pointer",
-                    fontFamily: "var(--font-roboto)",
-                    fontSize: 11,
-                    fontWeight: 700,
-                    letterSpacing: "0.02em",
-                    opacity: isActive ? 1 : 0.75,
-                  }}
-                >
-                  <span aria-hidden="true">{sp.name.slice(0, 2).toUpperCase()}</span>
-                </button>
-              </Tooltip>
-            );
-          })}
-
-          {/* Project switcher — shown when >5 projects or as a picker */}
-          {subProjects.length > 5 && (
-            <div style={{ position: "relative" }}>
-              <button
-                onClick={() => setShowSwitcher((v) => !v)}
-                title="All projects"
-                aria-label="Switch project"
-                className="w-9 h-9 rounded-[10px] flex items-center justify-center shrink-0 transition-colors hover:bg-[var(--color-navy-dim)]"
-                style={{ border: "1px solid var(--color-border)", background: "var(--color-canvas)", cursor: "pointer", color: "var(--color-secondary)", fontFamily: "var(--font-roboto)", fontSize: 10, fontWeight: 700 }}
-              >
-                +{subProjects.length - 5}
-              </button>
-              {showSwitcher && (
-                <div
-                  style={{
-                    position: "fixed", left: 58, zIndex: 50,
-                    backgroundColor: "var(--color-surface)",
-                    border: "1px solid var(--color-border)",
-                    borderRadius: 10, boxShadow: "0 8px 32px rgba(27,46,75,0.18)",
-                    padding: "8px 0", minWidth: 200, maxHeight: 320, overflowY: "auto",
-                  }}
-                >
-                  <p style={{ fontSize: 10, fontWeight: 700, color: "var(--color-secondary)", textTransform: "uppercase", letterSpacing: "0.05em", padding: "4px 14px 8px" }}>All projects</p>
-                  {subProjects.map((sp) => {
-                    const isActive = activeScope === "project" && subProjectId === sp.id;
-                    return (
-                      <button
-                        key={sp.id}
-                        onClick={() => { setActiveSubProject(sp.id); setActiveScope("project"); setShowSwitcher(false); }}
-                        className="flex items-center gap-2.5 w-full text-left transition-colors hover:bg-[var(--color-navy-dim)]"
-                        style={{ padding: "7px 14px", border: "none", background: isActive ? "var(--color-navy-dim)" : "transparent", cursor: "pointer", fontFamily: "var(--font-roboto)" }}
-                      >
-                        <span style={{ width: 10, height: 10, borderRadius: 3, backgroundColor: sp.color ?? "var(--color-navy)", flexShrink: 0 }} />
-                        <span style={{ fontSize: 13, fontWeight: isActive ? 700 : 400, color: "var(--color-body)" }}>{sp.name}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Create sub-project */}
-          <Tooltip label="New project" placement="right">
-            <button
-              onClick={() => setShowCreate(true)}
-              title="New project"
-              aria-label="New project"
-              className="w-9 h-9 rounded-[10px] flex items-center justify-center shrink-0 transition-colors hover:bg-[var(--color-navy-dim)]"
-              style={{ border: "1.5px dashed var(--color-border)", background: "none", cursor: "pointer", color: "var(--color-secondary)" }}
-            >
-              <Plus size={14} />
-            </button>
-          </Tooltip>
-        </div>
-
-        <div style={{ width: 28, height: 1, backgroundColor: "var(--color-border)", margin: "4px 0" }} />
-
-        {/* Settings */}
-        <div className="flex flex-col items-center pb-1">
-          <Tooltip label="Settings" placement="right">
-            <button
-              onClick={() => router.push("/settings")}
-              title="Settings"
-              aria-label="Settings"
-              className="w-9 h-9 rounded-[10px] flex items-center justify-center transition-colors hover:bg-[var(--color-navy-dim)]"
-              style={{ border: "none", background: "none", cursor: "pointer", color: "var(--color-secondary)" }}
-            >
-              <Settings size={16} />
-            </button>
-          </Tooltip>
-        </div>
-
-        {/* Personal */}
-        <div className="pb-3 pt-1 flex flex-col items-center">
-          <Tooltip label={profile?.name ? `${profile.name} (personal)` : "Personal workspace"} placement="right">
-            <button
-              onClick={() => { setActiveSubProject(null); setActiveScope("personal"); }}
-              title={profile?.name ?? "Personal workspace"}
-              aria-label="Personal workspace"
-              aria-current={activeScope === "personal" ? "true" : undefined}
-              className="w-9 h-9 rounded-[10px] flex items-center justify-center transition-colors"
-              style={{
-                backgroundColor: activeScope === "personal" ? "var(--color-navy)" : "var(--color-navy-dim)",
-                color: activeScope === "personal" ? "#fff" : "var(--color-navy)",
-                border: activeScope === "personal" ? "none" : "2px solid var(--color-border)",
-                cursor: "pointer",
-                fontFamily: "var(--font-roboto)",
-                fontSize: 11,
-                fontWeight: 700,
-              }}
-            >
-              {computeInitials(profile?.name ?? "") || (profile?.avatar_initials ?? "??")}
-            </button>
-          </Tooltip>
-        </div>
-      </div>}
-
-      {/* ── Layer 2: Nav sidebar — collapses to 52px icon rail, resizable ── */}
+      {/* ── Nav sidebar — collapses to 52px icon rail, resizable ── */}
       <div
         className="hidden md:flex flex-col shrink-0 overflow-hidden group/sidenav"
         style={{
@@ -1033,6 +945,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           onCreateProject={() => setShowCreate(true)}
           onSettings={() => router.push("/settings")}
           profileInitials={computeInitials(profile?.name ?? "") || (profile?.avatar_initials ?? "??")}
+          projectName={project?.name ?? ""}
+          projectColor={project?.color ?? ""}
         />
         {/* Drag-to-resize handle */}
         {!navCollapsed && (
@@ -1124,6 +1038,17 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           currentUserId={profile?.id ?? ""}
           pastDueCount={pastDueCount}
           chatUnread={chatUnread}
+          subProjects={subProjects}
+          activeScope={activeScope}
+          activeSubProjectId={subProjectId}
+          onLabHome={() => { setActiveSubProject(null); setActiveScope("lab"); }}
+          onSelectProject={(id) => { setActiveSubProject(id); setActiveScope("project"); }}
+          onPersonal={() => { setActiveSubProject(null); setActiveScope("personal"); }}
+          onCreateProject={() => setShowCreate(true)}
+          onSettings={() => router.push("/settings")}
+          profileInitials={computeInitials(profile?.name ?? "") || (profile?.avatar_initials ?? "??")}
+          projectName={project?.name ?? ""}
+          projectColor={project?.color ?? ""}
         />
       </div>
 
