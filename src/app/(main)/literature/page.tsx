@@ -12,6 +12,7 @@ import Avatar from "@/components/ui/Avatar";
 import PDFViewer from "@/components/literature/PDFViewer";
 import PDFViewerInline from "@/components/literature/PDFViewerInline";
 import ScopeSidebar from "@/components/ui/ScopeSidebar";
+import PageHeader from "@/components/ui/PageHeader";
 import {
   Plus, Search, Download, FileText, File as FileIcon, X, Trash2,
   Tag, Star, ExternalLink, Copy, Check, ChevronLeft, ChevronRight,
@@ -4145,8 +4146,33 @@ export default function LiteraturePage() {
   // Hide Authors+Year when the list is too narrow to fit all fixed columns without squishing the title
   const narrowList = isMobile || listWidth < 380;
 
+  const litBadgeName = !isLabHome && activeScope === "project"
+    ? subProjects.find((sp) => sp.id === subProjectId)?.name ?? null
+    : null;
+
   return (
-    <div className="flex h-full" style={{ fontFamily: "var(--font-roboto)" }}>
+    <div className="flex flex-col h-full" style={{ fontFamily: "var(--font-roboto)" }}>
+
+      <PageHeader
+        title="Literature"
+        badge={litBadgeName ? (
+          <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.03em", backgroundColor: "rgba(27,46,75,0.10)", color: "var(--color-navy)", padding: "3px 10px", borderRadius: 20, whiteSpace: "nowrap" }}>
+            {litBadgeName}
+          </span>
+        ) : undefined}
+        action={
+          <button
+            onClick={() => setAddItemOpen(true)}
+            className="flex items-center gap-1.5 transition-opacity hover:opacity-90"
+            style={{ backgroundColor: "var(--color-navy)", color: "#fff", fontSize: 12, fontWeight: 600, borderRadius: 7, border: "none", cursor: "pointer", height: 36, padding: "0 14px" }}
+          >
+            <Plus size={13} />
+            <span className="hidden sm:inline">Add Item</span>
+          </button>
+        }
+      />
+
+      <div className="flex flex-1 overflow-hidden">
 
       {collectionsOpen && (
         <div className="fixed inset-0 z-20" style={{ display: isMobile ? "block" : "none", backgroundColor: "rgba(0,0,0,0.3)" }} onClick={() => setCollectionsOpen(false)} aria-hidden="true" />
@@ -4285,12 +4311,6 @@ export default function LiteraturePage() {
             </div>
           </>
         ) : (<>
-          {/* Page header */}
-          <div style={{ padding: "14px 20px 10px", backgroundColor: "var(--color-surface)", flexShrink: 0 }}>
-            <h1 style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 22, color: "var(--color-navy)", margin: 0 }}>
-              Literature
-            </h1>
-          </div>
           {/* Normal list toolbar */}
           {selectMode ? (
             <div className="flex items-center gap-2 px-3 md:px-4 py-2.5 flex-wrap" style={{ backgroundColor: "var(--color-surface)", borderBottom: "1px solid var(--color-border)", minHeight: 52 }}>
@@ -4483,6 +4503,7 @@ export default function LiteraturePage() {
       {addItemOpen && <AddItemModal onSave={addItem} onClose={() => setAddItemOpen(false)} projectId={projectId} currentUserId={currentUserId} subProjectId={subProjectId ?? null} subProjects={subProjects} />}
       {zoteroImportOpen && <ZoteroImportModal existingItems={items} onImport={importItems} onUpdateItem={updateItem} onClose={() => setZoteroImportOpen(false)} projectId={projectId} currentUserId={currentUserId} subProjectId={subProjectId ?? null} subProjects={subProjects} />}
       {doiLookupOpen && <DOILookupModal onSave={addItemFromDOI} onMerge={updateItem} onClose={() => setDoiLookupOpen(false)} projectId={projectId} currentUserId={currentUserId} subProjectId={subProjectId ?? null} subProjects={subProjects} existingItems={items} />}
+      </div>
     </div>
   );
 }

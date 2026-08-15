@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useMemo, Fragment } from "react";
 import { Plus, Check, List, Trash2, GripVertical, Users, User as UserIcon, Pencil } from "lucide-react";
 import ScopeSidebar, { type ScopeSection } from "@/components/ui/ScopeSidebar";
+import PageHeader from "@/components/ui/PageHeader";
 import { DateTimeFields, isoToLocalDate } from "@/components/ui/DateTimePicker";
 import { DndContext, DragOverlay, useDraggable, useDroppable, PointerSensor, KeyboardSensor, useSensor, useSensors } from "@dnd-kit/core";
 import type { DragEndEvent } from "@dnd-kit/core";
@@ -1121,50 +1122,53 @@ export default function RemindersPage() {
 
   return (
     <ClientOnly>
-      <div style={{ display: "flex", height: "100%", overflow: "hidden", backgroundColor: "var(--color-canvas)" }}>
+      <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden", backgroundColor: "var(--color-canvas)" }}>
 
-        {isLabHome && (
-          <div className="hidden md:flex" style={{ height: "100%", flexShrink: 0 }}>
-            <ScopeSidebar
-              storageKey="reminders_sidebar"
-              sections={sidebarSections}
-              extraContent={sidebarExtraContent}
-              collapsed={sidebarCollapsed}
-              onToggleCollapse={handleToggleCollapse}
-            />
-          </div>
-        )}
+        <PageHeader
+          title="Reminders"
+          badge={
+            <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.03em", backgroundColor: `${panelColor}1a`, color: panelColor, padding: "3px 10px", borderRadius: 20, whiteSpace: "nowrap" }}>
+              {panelLabel}
+            </span>
+          }
+        />
 
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+        <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
 
           {isLabHome && (
-            <div className="flex md:hidden" style={{ overflowX: "auto", padding: "12px 16px", gap: 8, borderBottom: "1px solid var(--color-border)", flexShrink: 0 }}>
-              {(["all","personal","lab"] as ListType[]).map(id => {
-                const isAct = selectedList === id && !selectedSubProjectId;
-                return <button key={id} onClick={() => handleListSelect(id)} style={{ height: 32, paddingInline: 14, borderRadius: 20, flexShrink: 0, border: "none", backgroundColor: isAct ? LIST_COLORS[id] : "var(--color-dimmed-bg)", color: isAct ? "#fff" : "var(--color-secondary)", fontSize: 13, fontWeight: isAct ? 700 : 400, cursor: "pointer", fontFamily: "var(--font-roboto)" }}>{LIST_LABELS[id]}</button>;
-              })}
-              {subProjects.map(sp => {
-                const isAct = selectedList === "project" && selectedSubProjectId === sp.id;
-                return <button key={sp.id} onClick={() => handleSubProjectSelect(sp.id)} style={{ height: 32, paddingInline: 14, borderRadius: 20, flexShrink: 0, border: "none", backgroundColor: isAct ? (sp.color ?? LIST_COLORS.project) : "var(--color-dimmed-bg)", color: isAct ? "#fff" : "var(--color-secondary)", fontSize: 13, fontWeight: isAct ? 700 : 400, cursor: "pointer", fontFamily: "var(--font-roboto)" }}>{sp.name}</button>;
-              })}
+            <div className="hidden md:flex" style={{ height: "100%", flexShrink: 0 }}>
+              <ScopeSidebar
+                storageKey="reminders_sidebar"
+                sections={sidebarSections}
+                extraContent={sidebarExtraContent}
+                collapsed={sidebarCollapsed}
+                onToggleCollapse={handleToggleCollapse}
+              />
             </div>
           )}
 
-          <div style={{ padding: "22px 24px 14px", flexShrink: 0 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <h1 style={{ fontSize: 22, fontWeight: 700, color: "var(--color-navy)", margin: 0, fontFamily: "var(--font-lora)", lineHeight: 1 }}>Reminders</h1>
-              <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.03em", backgroundColor: `${panelColor}1a`, color: panelColor, padding: "3px 10px", borderRadius: 20, whiteSpace: "nowrap", fontFamily: "var(--font-roboto)" }}>
-                {panelLabel}
-              </span>
-            </div>
-          </div>
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
 
-          <div style={{ flex: 1, overflowY: "auto" }}>
-            {visible.length > 0 || isAdding || completedVisible.length > 0 ? (
-              <GroupedView {...cardProps} includeNoDate={true} />
-            ) : (
-              <EmptyState panelColor={panelColor} onAdd={() => setIsAdding(true)} />
+            {isLabHome && (
+              <div className="flex md:hidden" style={{ overflowX: "auto", padding: "12px 16px", gap: 8, borderBottom: "1px solid var(--color-border)", flexShrink: 0 }}>
+                {(["all","personal","lab"] as ListType[]).map(id => {
+                  const isAct = selectedList === id && !selectedSubProjectId;
+                  return <button key={id} onClick={() => handleListSelect(id)} style={{ height: 32, paddingInline: 14, borderRadius: 20, flexShrink: 0, border: "none", backgroundColor: isAct ? LIST_COLORS[id] : "var(--color-dimmed-bg)", color: isAct ? "#fff" : "var(--color-secondary)", fontSize: 13, fontWeight: isAct ? 700 : 400, cursor: "pointer", fontFamily: "var(--font-roboto)" }}>{LIST_LABELS[id]}</button>;
+                })}
+                {subProjects.map(sp => {
+                  const isAct = selectedList === "project" && selectedSubProjectId === sp.id;
+                  return <button key={sp.id} onClick={() => handleSubProjectSelect(sp.id)} style={{ height: 32, paddingInline: 14, borderRadius: 20, flexShrink: 0, border: "none", backgroundColor: isAct ? (sp.color ?? LIST_COLORS.project) : "var(--color-dimmed-bg)", color: isAct ? "#fff" : "var(--color-secondary)", fontSize: 13, fontWeight: isAct ? 700 : 400, cursor: "pointer", fontFamily: "var(--font-roboto)" }}>{sp.name}</button>;
+                })}
+              </div>
             )}
+
+            <div style={{ flex: 1, overflowY: "auto" }}>
+              {visible.length > 0 || isAdding || completedVisible.length > 0 ? (
+                <GroupedView {...cardProps} includeNoDate={true} />
+              ) : (
+                <EmptyState panelColor={panelColor} onAdd={() => setIsAdding(true)} />
+              )}
+            </div>
           </div>
         </div>
       </div>

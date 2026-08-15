@@ -123,8 +123,10 @@ function SidebarBody({
   const Divider = () => (
     <div style={{ width: 28, height: 1, backgroundColor: "var(--color-border)", margin: "3px 0", flexShrink: 0 }} />
   );
-  const wsBg = projectColor || "var(--color-navy)";
-  const wsInitials = projectInitials(projectName || "");
+  const activeSubProject = activeScope === "project" ? subProjects.find(sp => sp.id === activeSubProjectId) : null;
+  const wsDisplayName = activeScope === "personal" ? "Personal" : (activeSubProject?.name ?? projectName ?? "");
+  const wsBg = (activeSubProject?.color ?? projectColor) || "var(--color-navy)";
+  const wsInitials = projectInitials(wsDisplayName);
 
   // ── Collapsed: single icon column ──────────────────────────────────────────
   if (collapsed) {
@@ -151,7 +153,7 @@ function SidebarBody({
 
         {/* Workspace avatar — opens scope/project switcher */}
         <div style={{ position: "relative" }}>
-          <Tooltip label={projectName || "Workspace"} placement="right">
+          <Tooltip label={wsDisplayName || "Workspace"} placement="right">
             <button
               onClick={() => setWsOpen(v => !v)}
               style={{
@@ -161,7 +163,7 @@ function SidebarBody({
                 border: "none", cursor: "pointer",
                 fontFamily: "var(--font-roboto)", fontSize: 10, fontWeight: 700,
               }}
-              aria-label={`Workspace: ${projectName || "Lab"}`}
+              aria-label={`Workspace: ${wsDisplayName || "Lab"}`}
               aria-expanded={wsOpen}
             >
               {wsInitials}
@@ -346,7 +348,7 @@ function SidebarBody({
             {wsInitials}
           </span>
           <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: "var(--color-navy)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {projectName || "Lab"}
+            {wsDisplayName || "Lab"}
           </span>
           <ChevronDown size={13} color="var(--color-secondary)" style={{ flexShrink: 0, transform: wsOpen ? "rotate(180deg)" : undefined }} />
         </button>
