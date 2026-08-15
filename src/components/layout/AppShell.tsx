@@ -9,7 +9,7 @@ import {
   Menu, X, Settings, CalendarDays, CircleCheck, Plus, Home, Search, MessageSquare,
 } from "lucide-react";
 import { computeInitials } from "@/lib/utils";
-import type { User } from "@/types";
+import type { User, SubProject } from "@/types";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { useProject } from "@/context/ProjectContext";
 import Toast from "@/components/ui/Toast";
@@ -80,6 +80,16 @@ function SidebarBody({
   onExpand,
   pastDueCount = 0,
   chatUnread = 0,
+  // workspace props — only used in collapsed desktop mode
+  subProjects = [],
+  activeScope = "lab",
+  activeSubProjectId = null,
+  onLabHome,
+  onSelectProject,
+  onPersonal,
+  onCreateProject,
+  onSettings,
+  profileInitials = "??",
 }: {
   isActive: (href: string) => boolean;
   onLinkClick?: () => void;
@@ -92,47 +102,167 @@ function SidebarBody({
   onExpand?: () => void;
   pastDueCount?: number;
   chatUnread?: number;
+  subProjects?: SubProject[];
+  activeScope?: string;
+  activeSubProjectId?: string | null;
+  onLabHome?: () => void;
+  onSelectProject?: (id: string) => void;
+  onPersonal?: () => void;
+  onCreateProject?: () => void;
+  onSettings?: () => void;
+  profileInitials?: string;
 }) {
-  // ── Collapsed: icon-only rail ───────────────────────────────────────────────
+  // ── Collapsed: unified single-column icon rail ──────────────────────────────
   if (collapsed) {
+    const ICON_BTN = {
+      width: 36, height: 36, display: "flex", alignItems: "center",
+      justifyContent: "center", borderRadius: 8, flexShrink: 0,
+    } as const;
+    const Divider = () => (
+      <div style={{ width: 28, height: 1, backgroundColor: "var(--color-border)", margin: "3px 0", flexShrink: 0 }} />
+    );
     return (
-      <div className="flex flex-col h-full items-center" style={{ backgroundColor: "var(--color-sidebar)" }}>
-        <div className="flex items-center justify-center py-2.5" style={{ borderBottom: "1px solid var(--color-border)", width: "100%" }}>
+      <div className="flex flex-col h-full items-center" style={{ backgroundColor: "var(--color-sidebar)", paddingTop: 6, paddingBottom: 6, gap: 2 }}>
+
+        {/* Expand chevron */}
+        <button
+          onClick={onExpand}
+          className="transition-colors hover:bg-[var(--color-navy-dim)]"
+          style={{ ...ICON_BTN, color: "var(--color-secondary)", background: "none", border: "none", cursor: "pointer", marginBottom: 2 }}
+          title="Expand sidebar"
+          aria-label="Expand sidebar"
+        >
+          <ChevronRight size={15} />
+        </button>
+
+        <Divider />
+
+        {/* Workspace section: Lab home */}
+        <Tooltip label="Lab home" placement="right">
           <button
-            onClick={onExpand}
-            className="flex items-center justify-center rounded-lg transition-colors hover:bg-[var(--color-navy-dim)]"
-            style={{ width: 36, height: 36 }}
-            title="Expand sidebar"
-            aria-label="Expand sidebar"
+            onClick={onLabHome}
+            style={{
+              ...ICON_BTN,
+              backgroundColor: activeScope === "lab" ? "var(--color-navy)" : "transparent",
+              color: activeScope === "lab" ? "#fff" : "var(--color-secondary)",
+              border: "none", cursor: "pointer",
+              transition: "background-color 0.12s",
+            }}
+            className={activeScope !== "lab" ? "hover:bg-[var(--color-navy-dim)]" : ""}
+            title="Lab home"
+            aria-label="Lab home"
+            aria-current={activeScope === "lab" ? "true" : undefined}
           >
-            <ChevronRight size={15} color="var(--color-secondary)" />
+            <Home size={16} />
           </button>
-        </div>
-        <nav className="flex-1 flex flex-col items-center px-1.5 py-2 gap-1 overflow-y-auto" aria-label="Main navigation">
+        </Tooltip>
+
+        {/* Sub-project avatars (up to 4) */}
+        {subProjects.slice(0, 4).map((sp) => {
+          const spActive = activeScope === "project" && activeSubProjectId === sp.id;
+          const bg = sp.color ?? "var(--color-navy)";
+          return (
+            <Tooltip key={sp.id} label={sp.name} placement="right">
+              <button
+                onClick={() => onSelectProject?.(sp.id)}
+                style={{
+                  ...ICON_BTN,
+                  backgroundColor: bg,
+                  color: contrastTextColor(bg),
+                  border: spActive ? "2px solid rgba(255,255,255,0.7)" : "2px solid transparent",
+                  outline: spActive ? `2px solid ${bg}` : "none",
+                  outlineOffset: 1,
+                  opacity: spActive ? 1 : 0.7,
+                  cursor: "pointer",
+                  fontFamily: "var(--font-roboto)",
+                  fontSize: 10, fontWeight: 700,
+                }}
+                title={sp.name}
+                aria-label={`Project: ${sp.name}`}
+                aria-current={spActive ? "true" : undefined}
+              >
+                {sp.name.slice(0, 2).toUpperCase()}
+              </button>
+            </Tooltip>
+          );
+        })}
+
+        {/* Personal workspace */}
+        <Tooltip label="Personal workspace" placement="right">
+          <button
+            onClick={onPersonal}
+            style={{
+              ...ICON_BTN,
+              backgroundColor: activeScope === "personal" ? "var(--color-navy)" : "var(--color-navy-dim)",
+              color: activeScope === "personal" ? "#fff" : "var(--color-navy)",
+              border: activeScope === "personal" ? "none" : "2px solid var(--color-border)",
+              cursor: "pointer",
+              fontFamily: "var(--font-roboto)",
+              fontSize: 10, fontWeight: 700,
+            }}
+            title="Personal workspace"
+            aria-label="Personal workspace"
+            aria-current={activeScope === "personal" ? "true" : undefined}
+          >
+            {profileInitials}
+          </button>
+        </Tooltip>
+
+        <Divider />
+
+        {/* Page nav icons */}
+        <nav className="flex flex-col items-center" style={{ gap: 2 }} aria-label="Main navigation">
           {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
             const active = isActive(href);
             const badgeCount = href === "/reminders" ? pastDueCount : href === "/chat" ? chatUnread : 0;
             const showBadge = badgeCount > 0;
             const badgeLabel = href === "/chat" ? `${badgeCount} unread` : `${badgeCount} past due`;
             return (
-              <Link
-                key={href}
-                href={href}
-                onClick={onLinkClick}
-                title={showBadge ? `${label} (${badgeLabel})` : label}
-                aria-label={showBadge ? `${label} — ${badgeLabel}` : label}
-                className="flex items-center justify-center rounded-lg"
-                style={{ position: "relative", width: 36, height: 36, backgroundColor: active ? "var(--color-navy-dim)" : "transparent", color: active ? "var(--color-navy)" : "var(--color-secondary)", textDecoration: "none", transition: "background-color 0.12s", borderLeft: active ? "2.5px solid var(--color-navy)" : "2.5px solid transparent" }}
-                aria-current={active ? "page" : undefined}
-                onMouseEnter={(e) => { if (!active) (e.currentTarget as HTMLElement).style.backgroundColor = "var(--color-navy-dim)"; }}
-                onMouseLeave={(e) => { if (!active) (e.currentTarget as HTMLElement).style.backgroundColor = active ? "var(--color-navy-dim)" : "transparent"; }}
-              >
-                <Icon size={16} strokeWidth={active ? 2.5 : 1.8} fill={active ? "var(--color-navy-dim)" : "none"} />
-                {showBadge && <span aria-hidden style={{ position: "absolute", top: 4, right: 4, minWidth: 14, height: 14, backgroundColor: "var(--color-navy)", borderRadius: 7, fontSize: 9, fontWeight: 700, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", padding: "0 3px" }}>{badgeCount > 9 ? "9+" : badgeCount}</span>}
-              </Link>
+              <Tooltip key={href} label={showBadge ? `${label} (${badgeLabel})` : label} placement="right">
+                <Link
+                  href={href}
+                  onClick={onLinkClick}
+                  aria-label={showBadge ? `${label} — ${badgeLabel}` : label}
+                  style={{
+                    ...ICON_BTN,
+                    position: "relative",
+                    backgroundColor: active ? "var(--color-navy-dim)" : "transparent",
+                    color: active ? "var(--color-navy)" : "var(--color-secondary)",
+                    textDecoration: "none",
+                    transition: "background-color 0.12s",
+                    borderLeft: active ? "2.5px solid var(--color-navy)" : "2.5px solid transparent",
+                  }}
+                  aria-current={active ? "page" : undefined}
+                  onMouseEnter={(e) => { if (!active) (e.currentTarget as HTMLElement).style.backgroundColor = "var(--color-navy-dim)"; }}
+                  onMouseLeave={(e) => { if (!active) (e.currentTarget as HTMLElement).style.backgroundColor = active ? "var(--color-navy-dim)" : "transparent"; }}
+                >
+                  <Icon size={16} strokeWidth={active ? 2.5 : 1.8} />
+                  {showBadge && (
+                    <span aria-hidden style={{ position: "absolute", top: 4, right: 4, minWidth: 14, height: 14, backgroundColor: "var(--color-navy)", borderRadius: 7, fontSize: 9, fontWeight: 700, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", padding: "0 3px" }}>
+                      {badgeCount > 9 ? "9+" : badgeCount}
+                    </span>
+                  )}
+                </Link>
+              </Tooltip>
             );
           })}
         </nav>
+
+        <Divider />
+
+        {/* Settings */}
+        <Tooltip label="Settings" placement="right">
+          <button
+            onClick={onSettings}
+            style={{ ...ICON_BTN, background: "none", border: "none", cursor: "pointer", color: "var(--color-secondary)", transition: "background-color 0.12s" }}
+            className="hover:bg-[var(--color-navy-dim)]"
+            title="Settings"
+            aria-label="Settings"
+          >
+            <Settings size={16} />
+          </button>
+        </Tooltip>
+
       </div>
     );
   }
@@ -687,9 +817,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         />
       )}
 
-      {/* ── Layer 1: Slack-style project rail — desktop only ── */}
+      {/* ── Layer 1: Slack-style project rail — hidden when nav is collapsed (icons merge into Layer 2) ── */}
       <div
-        className="hidden md:flex flex-col items-center shrink-0"
+        className={`hidden ${navCollapsed ? "" : "md:flex"} flex-col items-center shrink-0`}
         style={{ width: 52, backgroundColor: "var(--color-strip)", borderRight: "1px solid var(--color-border)" }}
       >
         {/* Canopy logo — static branding, not interactive */}
@@ -874,6 +1004,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           onExpand={() => { setNavCollapsed(false); localStorage.setItem("canopy_nav_collapsed", "false"); }}
           pastDueCount={pastDueCount}
           chatUnread={chatUnread}
+          subProjects={subProjects}
+          activeScope={activeScope}
+          activeSubProjectId={subProjectId}
+          onLabHome={() => { setActiveSubProject(null); setActiveScope("lab"); }}
+          onSelectProject={(id) => { setActiveSubProject(id); setActiveScope("project"); }}
+          onPersonal={() => { setActiveSubProject(null); setActiveScope("personal"); }}
+          onCreateProject={() => setShowCreate(true)}
+          onSettings={() => router.push("/settings")}
+          profileInitials={computeInitials(profile?.name ?? "") || (profile?.avatar_initials ?? "??")}
         />
         {/* Drag-to-resize handle */}
         {!navCollapsed && (
