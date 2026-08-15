@@ -8,6 +8,7 @@ import type { TeamMember, TaskStatus } from "@/types";
 import Avatar from "@/components/ui/Avatar";
 import { Video, X, Edit3, Check, Minus, Users } from "lucide-react";
 import ProjectMembersModal from "@/components/projects/ProjectMembersModal";
+import PageHeader from "@/components/ui/PageHeader";
 
 // ── Status labels ─────────────────────────────────────────────────────────────
 
@@ -418,69 +419,49 @@ export default function TeamPage() {
       }))
     : team;
 
-  return (
-    <div className="flex flex-col h-full overflow-auto" style={{ fontFamily: "var(--font-roboto)" }}>
-      <div className="p-6">
+  const teamBadgeName = activeScope === "project"
+    ? (subProjects.find((sp) => sp.id === subProjectId)?.name ?? storedProjectName ?? null)
+    : null;
+  const teamSubtitle = activeScope === "project"
+    ? (teamBadgeName ? `Showing members of ${teamBadgeName}.` : `${visibleTeam.length} member${visibleTeam.length !== 1 ? "s" : ""}`)
+    : `${visibleTeam.length} member${visibleTeam.length !== 1 ? "s" : ""} · ${storedProjectName}`;
+  const canManageProject = activeScope === "project" && subProjectId && projectId
+    && (isPi || (subProjects.find((sp) => sp.id === subProjectId)?.createdBy === currentUserId));
 
-        {/* Header */}
-        <div className="flex items-center justify-between mb-5 md:mb-6">
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 22, color: "var(--color-navy)", margin: 0, lineHeight: 1.2 }}>Team</h1>
-              {(() => {
-                if (activeScope !== "project") return null;
-                const displayName = subProjects.find((sp) => sp.id === subProjectId)?.name ?? storedProjectName;
-                if (!displayName) return null;
-                return (
-                  <span style={{
-                    fontSize: 12, fontWeight: 700, letterSpacing: "0.03em",
-                    backgroundColor: "var(--color-navy-dim)", color: "var(--color-navy)",
-                    padding: "3px 10px", borderRadius: 20, whiteSpace: "nowrap",
-                  }}>
-                    {displayName}
-                  </span>
-                );
-              })()}
-            </div>
-            <p style={{ fontSize: 12, color: "var(--color-secondary)", marginTop: 4 }}>
-              {activeScope === "project" ? (() => {
-                const displayName = subProjects.find((sp) => sp.id === subProjectId)?.name ?? storedProjectName;
-                return displayName
-                  ? `Showing members of ${displayName}. Switch projects using the icons on the left to see other rosters.`
-                  : `${visibleTeam.length} member${visibleTeam.length !== 1 ? "s" : ""}`;
-              })() : `${visibleTeam.length} member${visibleTeam.length !== 1 ? "s" : ""} · ${storedProjectName}`}
-            </p>
-          </div>
+  return (
+    <div className="flex flex-col h-full" style={{ fontFamily: "var(--font-roboto)" }}>
+
+      <PageHeader
+        title="Team"
+        badge={teamBadgeName ? (
+          <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.03em", backgroundColor: "var(--color-navy-dim)", color: "var(--color-navy)", padding: "3px 10px", borderRadius: 20, whiteSpace: "nowrap" }}>
+            {teamBadgeName}
+          </span>
+        ) : undefined}
+        subtitle={teamSubtitle}
+        action={
           <div className="flex items-center gap-2">
-            {/* Manage project members — visible to PI or project creator when in project scope */}
-            {activeScope === "project" && subProjectId && projectId && (() => {
-              const activeSp = subProjects.find((sp) => sp.id === subProjectId);
-              const canManage = isPi || (activeSp?.createdBy != null && activeSp.createdBy === currentUserId);
-              if (!canManage) return null;
-              return (
-                <button
-                  onClick={() => setShowMembersModal(true)}
-                  className="flex items-center gap-2 transition-opacity hover:opacity-80"
-                  style={{
-                    border: "1px solid var(--color-border)", borderRadius: 7,
-                    backgroundColor: "var(--color-surface)", color: "var(--color-navy)",
-                    fontSize: 12, fontWeight: 600, cursor: "pointer", minHeight: 44,
-                    padding: "0 14px",
-                  }}
-                >
-                  <Users size={13} /> Manage Members
-                </button>
-              );
-            })()}
+            {canManageProject && (
+              <button
+                onClick={() => setShowMembersModal(true)}
+                className="flex items-center gap-2 transition-opacity hover:opacity-80"
+                style={{ border: "1px solid var(--color-border)", borderRadius: 7, backgroundColor: "var(--color-surface)", color: "var(--color-navy)", fontSize: 12, fontWeight: 600, cursor: "pointer", height: 36, padding: "0 12px" }}
+              >
+                <Users size={13} /> Manage Members
+              </button>
+            )}
             <button
               onClick={() => setMeetingModalOpen(true)}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg transition-opacity hover:opacity-90"
-              style={{ backgroundColor: "var(--color-navy)", color: "#fff", fontSize: 12, fontWeight: 700, border: "none", borderRadius: 7, cursor: "pointer", minHeight: 44 }}
+              className="flex items-center gap-2 transition-opacity hover:opacity-90"
+              style={{ backgroundColor: "var(--color-navy)", color: "#fff", fontSize: 12, fontWeight: 600, border: "none", borderRadius: 7, cursor: "pointer", height: 36, padding: "0 14px" }}
             >
               <Video size={14} /> Start Meeting
             </button>
           </div>
-        </div>
+        }
+      />
+
+      <div className="flex-1 overflow-auto p-6">
 
         <WeeklyUpdateBar current={weeklyUpdate} onSave={setWeeklyUpdate} />
 

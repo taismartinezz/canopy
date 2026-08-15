@@ -15,6 +15,7 @@ import Toast, { showToast } from "@/components/ui/Toast";
 import TaskDetailPanel, { STATUS_ORDER } from "@/components/tasks/TaskDetailPanel";
 import TaskModal from "@/components/tasks/TaskModal";
 import ScopeSidebar, { type ScopeSection } from "@/components/ui/ScopeSidebar";
+import PageHeader from "@/components/ui/PageHeader";
 import EmptyState from "@/components/ui/EmptyState";
 import { useUndoToast } from "@/context/UndoToastContext";
 import { TaskCard } from "./_components/TaskCard";
@@ -451,47 +452,46 @@ export default function TasksPage() {
     outline: "none", cursor: "pointer", paddingLeft: 8, paddingRight: 8,
   };
 
+  const tasksBadgeSp = !isLabHome && activeScope === "project"
+    ? subProjects.find((s) => s.id === ctxSubProjectId) ?? null
+    : null;
+
   return (
     <div className="flex flex-col h-full" style={{ fontFamily: "var(--font-roboto)" }}>
 
-      {/* Toolbar */}
-      <div className="px-6 pt-4 pb-3" style={{ backgroundColor: "var(--color-surface)", borderBottom: "1px solid var(--color-border)" }}>
-        <div className="flex items-center gap-3 mb-2">
-          <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 8 }}>
-            <h1 style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 22, color: "var(--color-navy)", margin: 0 }}>Tasks</h1>
-            {!isLabHome && activeScope === "project" && (() => {
-              const activeSp = subProjects.find((s) => s.id === ctxSubProjectId);
-              if (!activeSp) return null;
-              return (
-                <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.03em", backgroundColor: "rgba(27,46,75,0.10)", color: "var(--color-navy)", padding: "3px 10px", borderRadius: 20, whiteSpace: "nowrap" }}>
-                  {activeSp.name}
-                </span>
-              );
-            })()}
-          </div>
-          <div className="flex items-center rounded-lg p-0.5 shrink-0" style={{ backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)" }}>
-            {(["board", "list"] as const).map((v) => (
-              <button
-                key={v}
-                onClick={() => { setView(v); setSelectedTask(null); }}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md transition-all"
-                style={{ fontSize: 12, fontWeight: 600, backgroundColor: view === v ? "var(--color-navy)" : "transparent", color: view === v ? "#fff" : "var(--color-secondary)", minHeight: 32, minWidth: 40, justifyContent: "center" }}
-              >
-                {v === "board" ? <LayoutGrid size={13} /> : <List size={13} />}
-                <span className="hidden sm:inline">{v === "board" ? "Board" : "List"}</span>
-              </button>
-            ))}
-          </div>
-          <button
-            onClick={() => setModalState({ mode: "add", status: "todo" })}
-            className="flex items-center gap-1.5 px-3 md:px-4 shrink-0 transition-opacity hover:opacity-90"
-            style={{ backgroundColor: "var(--color-navy)", color: "#fff", fontSize: 12, fontWeight: 600, borderRadius: 7, border: "none", cursor: "pointer", height: 36 }}
-          >
-            <Plus size={13} />
-            <span className="hidden sm:inline">Add Task</span>
-          </button>
-        </div>
-
+      <PageHeader
+        title="Tasks"
+        badge={tasksBadgeSp ? (
+          <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.03em", backgroundColor: "rgba(27,46,75,0.10)", color: "var(--color-navy)", padding: "3px 10px", borderRadius: 20, whiteSpace: "nowrap" }}>
+            {tasksBadgeSp.name}
+          </span>
+        ) : undefined}
+        action={
+          <>
+            <div className="flex items-center rounded-lg p-0.5" style={{ backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)" }}>
+              {(["board", "list"] as const).map((v) => (
+                <button
+                  key={v}
+                  onClick={() => { setView(v); setSelectedTask(null); }}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md transition-all"
+                  style={{ fontSize: 12, fontWeight: 600, backgroundColor: view === v ? "var(--color-navy)" : "transparent", color: view === v ? "#fff" : "var(--color-secondary)", minHeight: 32, minWidth: 40, justifyContent: "center" }}
+                >
+                  {v === "board" ? <LayoutGrid size={13} /> : <List size={13} />}
+                  <span className="hidden sm:inline">{v === "board" ? "Board" : "List"}</span>
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={() => setModalState({ mode: "add", status: "todo" })}
+              className="flex items-center gap-1.5 px-3 md:px-4 transition-opacity hover:opacity-90"
+              style={{ backgroundColor: "var(--color-navy)", color: "#fff", fontSize: 12, fontWeight: 600, borderRadius: 7, border: "none", cursor: "pointer", height: 36 }}
+            >
+              <Plus size={13} />
+              <span className="hidden sm:inline">Add Task</span>
+            </button>
+          </>
+        }
+      >
         {/* Search + filters row */}
         <div className="flex items-center gap-2 py-2 flex-wrap">
           <div className="relative flex-1 min-w-0" style={{ minWidth: 120 }}>
@@ -536,7 +536,7 @@ export default function TasksPage() {
             ))}
           </div>
         )}
-      </div>
+      </PageHeader>
 
       {/* Content = ScopeSidebar + Board/List */}
       <div className="flex flex-1 overflow-hidden">

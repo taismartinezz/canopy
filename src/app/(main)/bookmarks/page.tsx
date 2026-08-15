@@ -7,6 +7,7 @@ import {
   Users, User as UserIcon, Home,
 } from "lucide-react";
 import ScopeSidebar, { type ScopeSection } from "@/components/ui/ScopeSidebar";
+import PageHeader from "@/components/ui/PageHeader";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { useProject } from "@/context/ProjectContext";
 import type { SubProject } from "@/types";
@@ -688,8 +689,33 @@ export default function BookmarksPage() {
     </>
   ) : null;
 
+  const bmBadgeSp = !isLabHome && activeScope === "project"
+    ? subProjects.find((s) => s.id === subProjectId) ?? null
+    : null;
+
   return (
-    <div style={{ display: "flex", height: "100%", overflow: "hidden", fontFamily: "var(--font-roboto)" }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden", fontFamily: "var(--font-roboto)" }}>
+
+      <PageHeader
+        title="Bookmarks"
+        badge={bmBadgeSp ? (
+          <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.03em", backgroundColor: "rgba(27,46,75,0.10)", color: "var(--color-navy)", padding: "3px 10px", borderRadius: 20, whiteSpace: "nowrap" }}>
+            {bmBadgeSp.name}
+          </span>
+        ) : undefined}
+        action={!showForm ? (
+          <button
+            onClick={() => setShowForm(true)}
+            className="flex items-center gap-1.5 transition-opacity hover:opacity-90"
+            style={{ backgroundColor: "var(--color-navy)", color: "#fff", fontSize: 12, fontWeight: 600, borderRadius: 7, border: "none", cursor: "pointer", height: 36, padding: "0 14px" }}
+          >
+            <Plus size={13} />
+            Add
+          </button>
+        ) : undefined}
+      />
+
+      <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
 
       {/* ── Left sidebar — desktop only, lab-home context only ───────────── */}
       {isLabHome && (
@@ -731,49 +757,6 @@ export default function BookmarksPage() {
         )}
 
         <div className="p-6">
-
-          {/* Page title — always shown */}
-          {(() => {
-            const activeSp = !isLabHome && activeScope === "project" ? subProjects.find((s) => s.id === subProjectId) : null;
-            return (
-              <div className="flex items-center gap-2 mb-5">
-                <h1 style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 22, color: "var(--color-navy)", margin: 0 }}>Bookmarks</h1>
-                {activeSp && (
-                  <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.03em", backgroundColor: "rgba(27,46,75,0.10)", color: "var(--color-navy)", padding: "3px 10px", borderRadius: 20, whiteSpace: "nowrap" }}>
-                    {activeSp.name}
-                  </span>
-                )}
-              </div>
-            );
-          })()}
-
-          {/* Content header */}
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", marginBottom: 20 }}>
-            {!showForm && (
-              <button
-                onClick={() => setShowForm(true)}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 6,
-                  padding: "0 16px",
-                  height: 40,
-                  backgroundColor: "var(--color-navy)",
-                  color: "#fff",
-                  fontSize: 12,
-                  fontWeight: 700,
-                  border: "none",
-                  borderRadius: 7,
-                  cursor: "pointer",
-                }}
-                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "var(--color-navy-hover)"; }}
-                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "var(--color-navy)"; }}
-              >
-                <Plus size={14} />
-                Add
-              </button>
-            )}
-          </div>
 
           {/* Add form */}
           {showForm && (
@@ -823,6 +806,7 @@ export default function BookmarksPage() {
           )}
 
         </div>
+      </div>
       </div>
     </div>
   );
