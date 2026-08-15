@@ -137,7 +137,7 @@ function SidebarBody({
 
         <Divider />
 
-        {/* Workspace section: Lab home */}
+        {/* Workspace: Lab home */}
         <Tooltip label="Lab home" placement="right">
           <button
             onClick={onLabHome}
@@ -187,31 +187,30 @@ function SidebarBody({
           );
         })}
 
-        {/* Personal workspace */}
-        <Tooltip label="Personal workspace" placement="right">
-          <button
-            onClick={onPersonal}
-            style={{
-              ...ICON_BTN,
-              backgroundColor: activeScope === "personal" ? "var(--color-navy)" : "var(--color-navy-dim)",
-              color: activeScope === "personal" ? "#fff" : "var(--color-navy)",
-              border: activeScope === "personal" ? "none" : "2px solid var(--color-border)",
-              cursor: "pointer",
-              fontFamily: "var(--font-roboto)",
-              fontSize: 10, fontWeight: 700,
-            }}
-            title="Personal workspace"
-            aria-label="Personal workspace"
-            aria-current={activeScope === "personal" ? "true" : undefined}
-          >
-            {profileInitials}
-          </button>
-        </Tooltip>
+        {/* Overflow indicator when there are more than 4 projects */}
+        {subProjects.length > 4 && (
+          <Tooltip label={`${subProjects.length - 4} more project${subProjects.length - 4 > 1 ? "s" : ""}`} placement="right">
+            <button
+              style={{
+                ...ICON_BTN,
+                backgroundColor: "var(--color-canvas)",
+                border: "1px solid var(--color-border)",
+                cursor: "default",
+                fontFamily: "var(--font-roboto)",
+                fontSize: 10, fontWeight: 700,
+                color: "var(--color-secondary)",
+              }}
+              aria-label={`${subProjects.length - 4} more projects`}
+            >
+              +{subProjects.length - 4}
+            </button>
+          </Tooltip>
+        )}
 
         <Divider />
 
-        {/* Page nav icons */}
-        <nav className="flex flex-col items-center" style={{ gap: 2 }} aria-label="Main navigation">
+        {/* Page nav icons — flex-1 so they fill the middle, scrollable if needed */}
+        <nav className="flex-1 flex flex-col items-center overflow-y-auto" style={{ gap: 2, scrollbarWidth: "none" }} aria-label="Main navigation">
           {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
             const active = isActive(href);
             const badgeCount = href === "/reminders" ? pastDueCount : href === "/chat" ? chatUnread : 0;
@@ -260,6 +259,27 @@ function SidebarBody({
             aria-label="Settings"
           >
             <Settings size={16} />
+          </button>
+        </Tooltip>
+
+        {/* Personal workspace — pinned at very bottom */}
+        <Tooltip label="Personal workspace" placement="right">
+          <button
+            onClick={onPersonal}
+            style={{
+              ...ICON_BTN,
+              backgroundColor: activeScope === "personal" ? "var(--color-navy)" : "var(--color-navy-dim)",
+              color: activeScope === "personal" ? "#fff" : "var(--color-navy)",
+              border: activeScope === "personal" ? "none" : "2px solid var(--color-border)",
+              cursor: "pointer",
+              fontFamily: "var(--font-roboto)",
+              fontSize: 10, fontWeight: 700,
+            }}
+            title="Personal workspace"
+            aria-label="Personal workspace"
+            aria-current={activeScope === "personal" ? "true" : undefined}
+          >
+            {profileInitials}
           </button>
         </Tooltip>
 
