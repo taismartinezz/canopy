@@ -4178,7 +4178,14 @@ export default function LiteraturePage() {
       {/* Left panel — collections sidebar with shared resize/collapse shell */}
       {!isMobile && (
         <ScopeSidebar
-          sections={[]}
+          sections={[{
+            id: "library",
+            label: "Library",
+            color: "var(--color-navy)",
+            icon: <Library size={17} />,
+            isActive: true,
+            onClick: () => setPanelCollapsed(false),
+          }]}
           collapsed={panelCollapsed}
           onToggleCollapse={() => setPanelCollapsed(v => {
             const next = !v;
@@ -4374,10 +4381,6 @@ export default function LiteraturePage() {
               <button onClick={() => setSelectMode(true)} className="flex items-center gap-1 shrink-0"
                 style={{ fontSize: 12, fontWeight: 600, color: "var(--color-secondary)", border: "1px solid var(--color-border)", borderRadius: 7, padding: "6px 10px", backgroundColor: "transparent", cursor: "pointer", minHeight: 36, fontFamily: "var(--font-roboto)" }}>
                 Select
-              </button>
-              <button onClick={() => setAddItemOpen(true)} className="flex items-center gap-1 shrink-0"
-                style={{ fontSize: 12, fontWeight: 700, color: "#fff", backgroundColor: "var(--color-navy)", border: "none", borderRadius: 7, padding: "6px 12px", cursor: "pointer", minHeight: 36, fontFamily: "var(--font-roboto)" }}>
-                <Plus size={13} /> Add
               </button>
               {activeTag && (
                 <span className="flex items-center gap-1.5 px-2.5 py-1" style={{ backgroundColor: "rgba(27,46,75,0.06)", border: "1px solid var(--color-navy)", borderRadius: 5, fontSize: 11, color: "var(--color-navy)" }}>

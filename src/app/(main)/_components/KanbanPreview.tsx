@@ -164,8 +164,7 @@ export function KanbanPreview({
             See all <ChevronRight size={13} />
           </Link>
         } />
-        <div style={{ overflowX: "auto", overflowY: "hidden" }}>
-        <div className="p-4 md:p-5 grid gap-4" style={{ gridTemplateColumns: "repeat(4, minmax(240px, 1fr))", minWidth: 960 }}>
+        <div className="p-4 md:p-5 grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))" }}>
           {STATUS_ORDER.map((status) => {
             const cfg = STATUS_CONFIG[status];
             return (
@@ -189,7 +188,6 @@ export function KanbanPreview({
             );
           })}
         </div>
-        </div>
       </Card>
     );
   }
@@ -204,10 +202,9 @@ export function KanbanPreview({
           </Link>
         }
       />
-      <div style={{ overflowX: "auto", overflowY: "hidden", WebkitOverflowScrolling: "touch" }}>
-        <ClientOnly>
-          <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-            <div className="p-4 md:p-5 grid gap-4" style={{ gridTemplateColumns: "repeat(4, minmax(240px, 1fr))", minWidth: 960 }}>
+      <ClientOnly>
+        <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+          <div className="p-4 md:p-5 grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))" }}>
               {STATUS_ORDER.map((status) => (
                 <DroppableColumn
                   key={status}
@@ -220,17 +217,16 @@ export function KanbanPreview({
                   teamMembers={teamMembers}
                 />
               ))}
-            </div>
-            <DragOverlay>
-              {activeTask && (
-                <div style={{ opacity: 0.9, backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 8, boxShadow: "0 8px 24px rgba(27,46,75,0.18)" }}>
-                  <MiniTaskCardContent task={activeTask} teamMembers={teamMembers} />
-                </div>
-              )}
-            </DragOverlay>
-          </DndContext>
-        </ClientOnly>
-      </div>
+          </div>
+          <DragOverlay>
+            {activeTask && (
+              <div style={{ opacity: 0.9, backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 8, boxShadow: "0 8px 24px rgba(27,46,75,0.18)" }}>
+                <MiniTaskCardContent task={activeTask} teamMembers={teamMembers} />
+              </div>
+            )}
+          </DragOverlay>
+        </DndContext>
+      </ClientOnly>
     </Card>
   );
 }
