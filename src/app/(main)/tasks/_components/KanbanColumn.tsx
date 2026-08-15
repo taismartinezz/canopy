@@ -43,7 +43,7 @@ export function KanbanColumn({
         <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--color-body)" }}>
           {cfg.label}
         </span>
-        <span className="flex items-center justify-center w-5 h-5 rounded-full" style={{ backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)", fontSize: 11, fontWeight: 600, color: "var(--color-secondary)" }}>
+        <span style={{ fontSize: 12, fontWeight: 500, color: "var(--color-secondary)" }}>
           {tasks.length}
         </span>
         {status === "done" && tasks.length >= 3 && onArchiveDone && (
