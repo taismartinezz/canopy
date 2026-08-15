@@ -71,10 +71,11 @@ const readonlyInputStyle: React.CSSProperties = {
   padding: "0 12px",
   fontFamily: "var(--font-roboto)",
   fontSize: 14,
-  color: "var(--color-secondary)",
-  backgroundColor: "var(--color-surface-2)",
+  color: "var(--color-body)",
+  backgroundColor: "var(--color-canvas)",
   outline: "none",
   boxSizing: "border-box",
+  cursor: "default",
 };
 
 export default function SettingsPage() {
@@ -208,7 +209,7 @@ export default function SettingsPage() {
 
   return (
     <div style={{ maxWidth: 640, margin: "0 auto", padding: isMobile ? "16px" : "32px 20px", fontFamily: "var(--font-roboto)" }}>
-      <h1 style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 22, color: "var(--color-body)", margin: "0 0 24px" }}>
+      <h1 style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 22, color: "var(--color-navy)", margin: "0 0 24px" }}>
         Settings
       </h1>
 

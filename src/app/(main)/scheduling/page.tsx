@@ -18,6 +18,8 @@ import MeetingProposalModal from "@/components/scheduling/MeetingProposalModal";
 import Avatar from "@/components/ui/Avatar";
 import ClientOnly from "@/components/ui/ClientOnly";
 import { TimePicker, formatTimeDisplay } from "@/components/ui/DateTimePicker";
+import ScopeSidebar, { type ScopeSection } from "@/components/ui/ScopeSidebar";
+import PageHeader from "@/components/ui/PageHeader";
 
 // Sentinel UUID stored in user_availability.sub_project_id to mean "Lab-wide"
 // (NULL can't be used because two NULLs aren't treated as equal by the unique constraint)
@@ -1022,6 +1024,9 @@ export default function SchedulingPage() {
 
   const [tab, setTab] = useState<Tab>("calendar");
   const [showProposalModal, setShowProposalModal] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try { return localStorage.getItem("scheduling_sidebar_collapsed") === "true"; } catch { return false; }
+  });
   const [googleConnected, setGoogleConnected] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -1383,92 +1388,80 @@ export default function SchedulingPage() {
     );
   }
 
+  const schedulingSections: ScopeSection[] = TABS.map(({ id, label, icon: Icon }) => ({
+    id,
+    label,
+    color: "var(--color-navy)",
+    icon: <Icon size={17} />,
+    count: id === "meetings" && pendingCount > 0 ? pendingCount : undefined,
+    isActive: tab === id,
+    onClick: () => setTab(id),
+  }));
+
   return (
     <ClientOnly>
-      <div className="px-6 py-6 max-w-5xl mx-auto">
-        <div className="mb-4">
-          <h1 style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 22, color: "var(--color-navy)", margin: 0 }}>
-            Scheduling
-          </h1>
-          <p style={{ fontSize: 13, color: "var(--color-secondary)", marginTop: 3 }}>
-            Calendar, availability, and meetings with your lab.
-          </p>
-        </div>
-
-        {/* Tab bar */}
-        <div className="flex gap-0.5 mb-6 overflow-x-auto" style={{ backgroundColor: "var(--color-navy-dim)", borderRadius: 9, padding: 3 }}>
-          {TABS.map(({ id, label, icon: Icon }) => {
-            const active = tab === id;
-            const hasBadge = id === "meetings" && pendingCount > 0;
-            return (
-              <button
-                key={id}
-                onClick={() => setTab(id)}
-                className="flex items-center gap-1.5 whitespace-nowrap"
-                style={{
-                  flex: "0 0 auto", padding: "7px 14px", borderRadius: 7, border: "none", cursor: "pointer",
-                  fontSize: 13, fontWeight: active ? 600 : 400, fontFamily: "var(--font-roboto)",
-                  backgroundColor: active ? "var(--color-segment-active)" : "transparent",
-                  color: active ? "var(--color-navy)" : "var(--color-secondary)",
-                  boxShadow: active ? "0 1px 4px rgba(0,0,0,0.10)" : "none",
-                }}
-              >
-                <Icon size={13} />
-                {label}
-                {hasBadge && (
-                  <span style={{ backgroundColor: "var(--color-error)", color: "#fff", borderRadius: "50%", width: 16, height: 16, fontSize: 9, fontWeight: 700, display: "inline-flex", alignItems: "center", justifyContent: "center", marginLeft: 2 }}>
-                    {pendingCount}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-
-        {tab === "calendar" && (
-          <CalendarTab
-            events={events}
-            proposals={proposals}
-            currentUserId={currentUserId}
-            projectId={projectId ?? ""}
-            onAddEvent={handleAddEvent}
-            onDeleteEvent={handleDeleteEvent}
+      <div className="flex flex-col h-full">
+        <PageHeader title="Scheduling" />
+        <div className="flex flex-1 overflow-hidden">
+          <ScopeSidebar
+            sections={schedulingSections}
+            storageKey="scheduling_sidebar"
+            collapsed={sidebarCollapsed}
+            onToggleCollapse={() => setSidebarCollapsed(c => {
+              const next = !c;
+              try { localStorage.setItem("scheduling_sidebar_collapsed", String(next)); } catch {}
+              return next;
+            })}
           />
-        )}
-        {tab === "availability" && (
-          <AvailabilityTab
-            onSave={handleSaveAvailability}
+          <div className="flex-1 overflow-y-auto">
+            <div className="px-6 py-6 max-w-5xl mx-auto">
+              {tab === "calendar" && (
+                <CalendarTab
+                  events={events}
+                  proposals={proposals}
+                  currentUserId={currentUserId}
+                  projectId={projectId ?? ""}
+                  onAddEvent={handleAddEvent}
+                  onDeleteEvent={handleDeleteEvent}
+                />
+              )}
+              {tab === "availability" && (
+                <AvailabilityTab
+                  onSave={handleSaveAvailability}
+                  allAvailabilities={allAvailabilities}
+                  teamMembers={teamMembers}
+                  currentUserId={currentUserId}
+                  googleConnected={googleConnected}
+                  onToggleGoogle={() => setGoogleConnected(c => !c)}
+                  subProjects={subProjects}
+                />
+              )}
+              {tab === "meetings" && (
+                <MeetingsTab
+                  proposals={proposals}
+                  currentUserId={currentUserId}
+                  teamMembers={teamMembers}
+                  onRespond={handleRespond}
+                  onPropose={() => setShowProposalModal(true)}
+                />
+              )}
+            </div>
+          </div>
+        </div>
+
+        {showProposalModal && (
+          <MeetingProposalModal
+            currentUserId={currentUserId}
+            teamMembers={teamMembers}
             allAvailabilities={allAvailabilities}
-            teamMembers={teamMembers}
-            currentUserId={currentUserId}
-            googleConnected={googleConnected}
-            onToggleGoogle={() => setGoogleConnected(c => !c)}
-            subProjects={subProjects}
-          />
-        )}
-        {tab === "meetings" && (
-          <MeetingsTab
+            allUserSettings={allUserSettings}
             proposals={proposals}
-            currentUserId={currentUserId}
-            teamMembers={teamMembers}
-            onRespond={handleRespond}
-            onPropose={() => setShowProposalModal(true)}
+            events={events}
+            onSubmit={handleProposal}
+            onClose={() => setShowProposalModal(false)}
           />
         )}
       </div>
-
-      {showProposalModal && (
-        <MeetingProposalModal
-          currentUserId={currentUserId}
-          teamMembers={teamMembers}
-          allAvailabilities={allAvailabilities}
-          allUserSettings={allUserSettings}
-          proposals={proposals}
-          events={events}
-          onSubmit={handleProposal}
-          onClose={() => setShowProposalModal(false)}
-        />
-      )}
     </ClientOnly>
   );
 }

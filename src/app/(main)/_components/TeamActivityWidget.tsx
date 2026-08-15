@@ -80,7 +80,7 @@ export function TeamActivityWidget({ rows, teamMembers, loading }: { rows: Activ
   return (
     <Card>
       <CardHeader title="Team Activity" onTitleClick={hasMore ? () => setShowAll(v => !v) : undefined} />
-      <div>
+      <div style={{ minHeight: 160, maxHeight: 300, overflowY: "auto" }}>
         {displayed.map((row, i) => {
           const actor = teamMembers.find((u) => u.id === row.user_id);
           const name = actor?.name.split(" ")[0] ?? "Someone";
