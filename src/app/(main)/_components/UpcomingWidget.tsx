@@ -87,7 +87,7 @@ export function UpcomingWidget({
           </div>
         }
       />
-      <div className="px-5 py-3 space-y-3">
+      <div className="px-5 py-3 space-y-3" style={{ minHeight: 160, maxHeight: 300, overflowY: "auto" }}>
         {upcoming.length === 0 && !showForm && (
           <p style={{ color: "var(--color-secondary)", fontSize: 13 }}>No upcoming events.</p>
         )}

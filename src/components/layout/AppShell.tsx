@@ -525,24 +525,37 @@ function notifHref(n: SupabaseNotif): string {
   return "/dashboard";
 }
 
-function NotifPanel({ onClose, notifications, onNavigate }: {
+function NotifPanel({ onClose, notifications, onNavigate, onMarkAllRead }: {
   onClose: () => void;
   notifications: SupabaseNotif[];
   onNavigate: (n: SupabaseNotif) => void;
+  onMarkAllRead?: () => void;
 }) {
+  const hasUnread = notifications.some((n) => !n.read);
   return (
     <div
       className="absolute right-0 top-full mt-2 animate-fade-in"
-      style={{ width: 320, maxWidth: "calc(100vw - 24px)", backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 10, boxShadow: "var(--shadow-card)", zIndex: 100 }}
+      style={{ width: 340, maxWidth: "calc(100vw - 24px)", backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 10, boxShadow: "var(--shadow-card)", zIndex: 100 }}
       role="dialog" aria-label="Notifications"
     >
       <div className="flex items-center justify-between px-4 py-2" style={{ borderBottom: "1px solid var(--color-border)" }}>
         <span style={{ fontFamily: "var(--font-lora)", fontWeight: 600, fontSize: 15, color: "var(--color-navy)" }}>Notifications</span>
-        <button onClick={onClose} style={{ width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center" }} aria-label="Close">
-          <X size={16} color="var(--color-secondary)" />
-        </button>
+        <div className="flex items-center gap-1">
+          {hasUnread && onMarkAllRead && (
+            <button
+              onClick={onMarkAllRead}
+              style={{ fontSize: 11, fontWeight: 600, color: "var(--color-navy)", background: "none", border: "none", cursor: "pointer", padding: "4px 8px", borderRadius: 6 }}
+              className="transition-opacity hover:opacity-70"
+            >
+              Mark all read
+            </button>
+          )}
+          <button onClick={onClose} style={{ width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center" }} aria-label="Close">
+            <X size={16} color="var(--color-secondary)" />
+          </button>
+        </div>
       </div>
-      <div style={{ maxHeight: 320, overflowY: "auto" }}>
+      <div style={{ maxHeight: 400, overflowY: "auto" }}>
         {notifications.length === 0 ? (
           <p className="px-4 py-6 text-center" style={{ color: "var(--color-secondary)", fontSize: 13 }}>No notifications</p>
         ) : (
@@ -1198,6 +1211,17 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                     router.push(notifHref(n));
                     setNotifOpen(false);
                   }}
+                  onMarkAllRead={() => {
+                    if (!profile?.id) return;
+                    supabase.from("notifications").update({ read: true })
+                      .eq("user_id", profile.id).eq("read", false)
+                      .then(({ error }) => {
+                        if (!error) {
+                          setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+                          setUnreadCount(0);
+                        }
+                      });
+                  }}
                 />
               )}
             </div>
@@ -1238,7 +1262,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         {/* Page content */}
         <main className="flex-1 overflow-y-auto overflow-x-hidden min-h-0">
           <UndoToastProvider>
-            <div key={pathname} style={{ animation: "page-in 150ms ease both", minHeight: "100%" }}>
+            <div key={pathname} style={{ animation: "page-in 150ms ease both", height: "100%" }}>
               {children}
             </div>
           </UndoToastProvider>

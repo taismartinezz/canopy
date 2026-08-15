@@ -2053,9 +2053,6 @@ function CollectionsSidebar({
           {showClose && <button onClick={onClose} className="flex items-center justify-center rounded-lg hover:bg-[var(--color-navy-dim)]" style={{ width: 44, height: 44 }} aria-label="Close"><X size={16} color="var(--color-secondary)" /></button>}
           {onImportZotero && <button onClick={onImportZotero} className="flex items-center justify-center rounded-lg hover:bg-[var(--color-navy-dim)]" style={{ width: 32, height: 32 }} title="Import from Zotero" aria-label="Import from Zotero"><Upload size={15} color="var(--color-body)" /></button>}
           {onAddByDOI && <button onClick={onAddByDOI} className="flex items-center justify-center rounded-lg hover:bg-[var(--color-navy-dim)]" style={{ width: 32, height: 32 }} title="Add by DOI / BibTeX / URL" aria-label="Add by DOI"><Link2 size={15} color="var(--color-body)" /></button>}
-          <button onClick={onAddItem} className="flex items-center justify-center rounded-lg hover:bg-[var(--color-navy-dim)]" style={{ width: 44, height: 44 }} aria-label="Add item">
-            <Plus size={14} color="var(--color-navy)" />
-          </button>
         </div>
       </div>
 

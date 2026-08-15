@@ -164,7 +164,8 @@ export function KanbanPreview({
             See all <ChevronRight size={13} />
           </Link>
         } />
-        <div className="p-4 md:p-5 grid gap-4" style={{ gridTemplateColumns: "repeat(4, minmax(240px, 1fr))", overflowX: "auto" }}>
+        <div style={{ overflowX: "auto", overflowY: "hidden" }}>
+        <div className="p-4 md:p-5 grid gap-4" style={{ gridTemplateColumns: "repeat(4, minmax(240px, 1fr))", minWidth: 960 }}>
           {STATUS_ORDER.map((status) => {
             const cfg = STATUS_CONFIG[status];
             return (
@@ -188,6 +189,7 @@ export function KanbanPreview({
             );
           })}
         </div>
+        </div>
       </Card>
     );
   }
@@ -205,7 +207,7 @@ export function KanbanPreview({
       <div style={{ overflowX: "auto", overflowY: "hidden", WebkitOverflowScrolling: "touch" }}>
         <ClientOnly>
           <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-            <div className="p-4 md:p-5 grid gap-4" style={{ gridTemplateColumns: "repeat(4, minmax(240px, 1fr))", minWidth: "min(100%, 960px)" }}>
+            <div className="p-4 md:p-5 grid gap-4" style={{ gridTemplateColumns: "repeat(4, minmax(240px, 1fr))", minWidth: 960 }}>
               {STATUS_ORDER.map((status) => (
                 <DroppableColumn
                   key={status}
