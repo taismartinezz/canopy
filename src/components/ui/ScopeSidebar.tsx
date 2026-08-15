@@ -180,7 +180,7 @@ export default function ScopeSidebar({
         flexShrink: 0,
         backgroundColor: fullContent ? "transparent" : "var(--color-canvas)",
         borderRight: "1px solid var(--color-border)",
-        transition: collapsed ? "width 200ms ease" : "none",
+        transition: "width 220ms ease",
         overflow: "hidden",
         position: "relative",
       }}
@@ -211,28 +211,15 @@ export default function ScopeSidebar({
           {fullContent ? (
             fullContent
           ) : (
-            <>
-              <div className="flex items-center justify-end" style={{ padding: "10px 10px 4px" }}>
-                <button
-                  onClick={onToggleCollapse}
-                  className="opacity-0 group-hover/scopesidebar:opacity-100 transition-opacity flex items-center justify-center rounded-lg hover:bg-[rgba(27,46,75,0.06)]"
-                  style={{ width: 32, height: 32 }}
-                  title="Collapse sidebar"
-                  aria-label="Collapse sidebar"
-                >
-                  <ChevronLeft size={15} color="var(--color-secondary)" />
-                </button>
-              </div>
-              <div style={{ padding: "4px 8px 20px", overflowY: "auto", flex: 1 }}>
-                {sections.map((s, i) => (
-                  <Fragment key={s.id}>
-                    <NavRow color={s.color} label={s.label} count={s.count} selected={s.isActive} onClick={s.onClick} />
-                    {i === 0 && sections.length > 1 && <div style={{ height: 1, backgroundColor: "var(--color-border)", margin: "5px 2px" }} />}
-                  </Fragment>
-                ))}
-                {extraContent}
-              </div>
-            </>
+            <div style={{ padding: "4px 8px 20px", overflowY: "auto", flex: 1 }}>
+              {sections.map((s, i) => (
+                <Fragment key={s.id}>
+                  <NavRow color={s.color} label={s.label} count={s.count} selected={s.isActive} onClick={s.onClick} />
+                  {i === 0 && sections.length > 1 && <div style={{ height: 1, backgroundColor: "var(--color-border)", margin: "5px 2px" }} />}
+                </Fragment>
+              ))}
+              {extraContent}
+            </div>
           )}
 
           {/* Resize handle on the right edge */}
@@ -256,6 +243,23 @@ export default function ScopeSidebar({
             onFocus={e => { (e.currentTarget as HTMLDivElement).style.backgroundColor = "var(--color-navy-dim)"; }}
             onBlur={e => { (e.currentTarget as HTMLDivElement).style.backgroundColor = "transparent"; }}
           />
+
+          {/* Collapse button — floats at the right edge, visible on sidebar hover */}
+          <button
+            onClick={onToggleCollapse}
+            className="opacity-0 group-hover/scopesidebar:opacity-100 transition-opacity flex items-center justify-center"
+            style={{
+              position: "absolute", right: 3, top: "50%", transform: "translateY(-50%)",
+              width: 22, height: 22, borderRadius: "50%",
+              backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)",
+              boxShadow: "0 1px 4px rgba(0,0,0,0.10)",
+              zIndex: 20, cursor: "pointer",
+            }}
+            title="Collapse sidebar"
+            aria-label="Collapse sidebar"
+          >
+            <ChevronLeft size={11} color="var(--color-secondary)" />
+          </button>
         </>
       )}
     </div>

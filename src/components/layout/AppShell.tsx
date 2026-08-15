@@ -1173,22 +1173,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               <Tooltip label="Notifications" placement="bottom">
                 <button
                   onClick={() => {
-                    const opening = !notifOpen;
-                    setNotifOpen(opening);
+                    setNotifOpen(v => !v);
                     setProfileOpen(false);
-                    if (opening && unreadCount > 0 && profile?.id) {
-                      supabase
-                        .from("notifications")
-                        .update({ read: true })
-                        .eq("user_id", profile.id)
-                        .eq("read", false)
-                        .then(({ error }) => {
-                          if (!error) {
-                            setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-                            setUnreadCount(0);
-                          }
-                        });
-                    }
                   }}
                   className="relative flex items-center justify-center rounded-lg transition-colors hover:bg-[var(--color-navy-dim)]"
                   style={{ width: 44, height: 44 }}
