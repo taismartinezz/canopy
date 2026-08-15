@@ -9,9 +9,10 @@ import { supabase } from "@/lib/supabase";
 import type { JournalEntry, CheckinResponse } from "@/types";
 import {
   Lock, Mic, MicOff, HelpingHand, Search, Plus, X, Phone,
-  ChevronLeft, ChevronRight, Users, Building2, Loader2, CalendarDays, ChevronDown,
+  ChevronLeft, ChevronRight, Users, Building2, Loader2, CalendarDays, ChevronDown, BookOpen,
 } from "lucide-react";
-import ScopeSidebar from "@/components/ui/ScopeSidebar";
+import ScopeSidebar, { type ScopeSection } from "@/components/ui/ScopeSidebar";
+import PageHeader from "@/components/ui/PageHeader";
 
 // SpeechRecognition types (not yet in all TypeScript DOM lib versions)
 interface SpeechRecognitionEvent extends Event {
@@ -494,14 +495,8 @@ function JournalSidebarContent({
 }) {
   return (
     <div className="flex flex-col h-full" style={{ backgroundColor: "var(--color-surface)" }}>
-      <div className="flex items-center justify-between px-4 pt-4 pb-3" style={{ borderBottom: "1px solid var(--color-border)" }}>
-        <div>
-          <h2 style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 16, color: "var(--color-navy)", margin: 0 }}>Journal</h2>
-          <p style={{ fontSize: 11, color: "var(--color-secondary)", marginTop: 3 }}>
-            {new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
-          </p>
-        </div>
-        <div className="flex items-center gap-1">
+      {(onCollapse || showClose) && (
+        <div className="flex items-center justify-end gap-1 px-2 pt-2 pb-1">
           {onCollapse && (
             <button
               onClick={onCollapse}
@@ -519,7 +514,7 @@ function JournalSidebarContent({
             </button>
           )}
         </div>
-      </div>
+      )}
       <div className="px-3 py-3" style={{ borderBottom: "1px solid var(--color-border)" }}>
         <button
           onClick={() => onSelectEntry("new")}
@@ -808,35 +803,23 @@ export default function JournalPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const journalSections: ScopeSection[] = [{
+    id: "entries",
+    label: "Entries",
+    color: "var(--color-navy)",
+    icon: <BookOpen size={17} />,
+    isActive: true,
+    onClick: handleToggleJournalSidebar,
+  }];
+
   return (
-    <div className="flex h-full" style={{ fontFamily: "var(--font-roboto)" }}>
+    <div className="flex flex-col h-full" style={{ fontFamily: "var(--font-roboto)" }}>
 
       {entryListOpen && (
         <div className="fixed inset-0 z-20 md:hidden" style={{ backgroundColor: "rgba(0,0,0,0.3)" }} onClick={() => setEntryListOpen(false)} aria-hidden="true" />
       )}
 
-      {/* Desktop sidebar */}
-      <div className="hidden md:flex" style={{ height: "100%", flexShrink: 0 }}>
-        <ScopeSidebar
-          sections={[]}
-          collapsed={listCollapsed}
-          onToggleCollapse={handleToggleJournalSidebar}
-          storageKey="journal_sidebar"
-          fullContent={
-            <JournalSidebarContent
-              search={search} setSearch={setSearch}
-              groupedEntries={groupedEntries}
-              selectedEntryId={selectedEntryId}
-              onSelectEntry={(id) => {
-                if (id === "new") { handleNewEntry(); } else { handleSelectEntry(id); }
-              }}
-              onCollapse={handleToggleJournalSidebar}
-            />
-          }
-        />
-      </div>
-
-      {/* Mobile drawer — unchanged */}
+      {/* Mobile drawer */}
       <div className="md:hidden fixed top-0 left-0 h-full z-30" style={{ width: 280, transform: entryListOpen ? "translateX(0)" : "translateX(-100%)", transition: "transform 0.22s ease-out", borderRight: "1px solid var(--color-border)" }} aria-hidden={!entryListOpen}>
         <JournalSidebarContent
           search={search} setSearch={setSearch}
@@ -849,8 +832,32 @@ export default function JournalPage() {
         />
       </div>
 
-      {/* Main area */}
-      <div className="flex-1 overflow-y-auto flex flex-col">
+      <PageHeader title="Journal" />
+
+      <div className="flex flex-1 overflow-hidden">
+        {/* Desktop sidebar */}
+        <div className="hidden md:flex" style={{ height: "100%", flexShrink: 0 }}>
+          <ScopeSidebar
+            sections={journalSections}
+            collapsed={listCollapsed}
+            onToggleCollapse={handleToggleJournalSidebar}
+            storageKey="journal_sidebar"
+            fullContent={
+              <JournalSidebarContent
+                search={search} setSearch={setSearch}
+                groupedEntries={groupedEntries}
+                selectedEntryId={selectedEntryId}
+                onSelectEntry={(id) => {
+                  if (id === "new") { handleNewEntry(); } else { handleSelectEntry(id); }
+                }}
+                onCollapse={handleToggleJournalSidebar}
+              />
+            }
+          />
+        </div>
+
+        {/* Main area */}
+        <div className="flex-1 overflow-y-auto flex flex-col">
         <div className="flex-1" style={{ maxWidth: 700, margin: "0 auto", padding: "28px 16px 80px", width: "100%" }}>
 
           <button onClick={() => setEntryListOpen(true)} className="md:hidden flex items-center gap-1.5 mb-5 px-3 py-2 rounded-lg hover:bg-[rgba(27,46,75,0.06)] transition-colors" style={{ fontSize: 13, color: "var(--color-navy)", fontWeight: 600, border: "1px solid var(--color-border)", borderRadius: 7, backgroundColor: "var(--color-surface)", minHeight: 44 }}>
@@ -860,9 +867,9 @@ export default function JournalPage() {
           {/* Header */}
           <div className="flex items-start justify-between mb-7 gap-3">
             <div>
-              <h1 style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 22, color: "var(--color-navy)", margin: 0, lineHeight: 1.2 }}>
+              <h2 style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 22, color: "var(--color-navy)", margin: 0, lineHeight: 1.2 }}>
                 {isViewingEntry && viewedEntry ? formatEntryDate(viewedEntry.date) : "Today's Entry"}
-              </h1>
+              </h2>
               <p style={{ fontSize: 13, color: "var(--color-secondary)", marginTop: 5 }}>
                 {isViewingEntry && viewedEntry ? formatFullDate(viewedEntry.date) : formatFullDate(todayISO)}
               </p>
@@ -1042,6 +1049,8 @@ export default function JournalPage() {
             </div>
           </div>
         )}
+      </div>
+
       </div>
 
       {supportOpen      && <SupportModal onClose={() => setSupportOpen(false)} userId={authUserId} projectId={projectId} />}

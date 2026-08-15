@@ -8,6 +8,7 @@ import Avatar from "@/components/ui/Avatar";
 import type { User } from "@/types";
 import { MessageSquare, Send, Hash, ChevronDown, Plus } from "lucide-react";
 import ScopeSidebar, { type ScopeSection } from "@/components/ui/ScopeSidebar";
+import PageHeader from "@/components/ui/PageHeader";
 import { computeInitials } from "@/lib/utils";
 import type { ChatMessage, ActiveChannel, MessageReaction } from "./_components/types";
 import { buildUser, resolveChannelKey, sameDay, DateDivider, TypingIndicator } from "./_components/chatUtils";
@@ -339,26 +340,24 @@ export default function ChatPage() {
   return (
     <>
       <style>{`@keyframes typBounce{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-4px)}}`}</style>
-      <div className="flex h-full" style={{ fontFamily: "var(--font-roboto)", overflow: "hidden" }}>
-        <ScopeSidebar
-          storageKey="chat_sidebar"
-          sections={chatSections}
-          extraContent={chatExtra}
-          collapsed={chatSidebarCollapsed}
-          onToggleCollapse={toggleSidebar}
-        />
-
-        <div className="flex flex-col flex-1 overflow-hidden">
-          {/* Page title + channel header */}
-          <div className="px-6 pt-4 pb-3 shrink-0" style={{ borderBottom: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)" }}>
-            <h1 style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 22, color: "var(--color-navy)", margin: "0 0 2px", lineHeight: 1.2 }}>Chat</h1>
-            <div className="flex items-center gap-2">
-              {!isDm && <Hash size={14} style={{ color: "var(--color-secondary)", flexShrink: 0 }} />}
-              <span style={{ fontSize: 13, fontWeight: 600, color: "var(--color-secondary)" }}>{channelLabel()}</span>
-              {!isDm && <span style={{ fontSize: 12, color: "var(--color-secondary)" }}>{memberCount} members</span>}
-            </div>
+      <div className="flex flex-col h-full" style={{ fontFamily: "var(--font-roboto)", overflow: "hidden" }}>
+        <PageHeader title="Chat">
+          <div className="flex items-center gap-2">
+            {!isDm && <Hash size={14} style={{ color: "var(--color-secondary)", flexShrink: 0 }} />}
+            <span style={{ fontSize: 13, fontWeight: 600, color: "var(--color-secondary)" }}>{channelLabel()}</span>
+            {!isDm && <span style={{ fontSize: 12, color: "var(--color-secondary)" }}>{memberCount} members</span>}
           </div>
+        </PageHeader>
+        <div className="flex flex-1 overflow-hidden">
+          <ScopeSidebar
+            storageKey="chat_sidebar"
+            sections={chatSections}
+            extraContent={chatExtra}
+            collapsed={chatSidebarCollapsed}
+            onToggleCollapse={toggleSidebar}
+          />
 
+          <div className="flex flex-col flex-1 overflow-hidden">
           {/* Messages */}
           <div
             className="flex-1 overflow-y-auto"
@@ -422,18 +421,19 @@ export default function ChatPage() {
               <strong>**bold**</strong>, <em>_italic_</em>, <code style={{ fontFamily: "monospace", fontSize: 10 }}>`code`</code> — Shift+Enter for newline
             </p>
           </div>
-        </div>
+          </div>
 
-        {threadMsg && (
-          <ThreadPanel
-            parent={threadMsg}
-            currentUserId={currentUserId}
-            currentUserName={currentUserName}
-            projectId={projectId ?? ""}
-            onClose={() => setThreadMsg(null)}
-            onReact={handleReact}
-          />
-        )}
+          {threadMsg && (
+            <ThreadPanel
+              parent={threadMsg}
+              currentUserId={currentUserId}
+              currentUserName={currentUserName}
+              projectId={projectId ?? ""}
+              onClose={() => setThreadMsg(null)}
+              onReact={handleReact}
+            />
+          )}
+        </div>
       </div>
     </>
   );
