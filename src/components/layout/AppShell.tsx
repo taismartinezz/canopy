@@ -817,9 +817,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         />
       )}
 
-      {/* ── Layer 1: Slack-style project rail — hidden when nav is collapsed (icons merge into Layer 2) ── */}
-      <div
-        className={`hidden ${navCollapsed ? "" : "md:flex"} flex-col items-center shrink-0`}
+      {/* ── Layer 1: Slack-style project rail — removed from DOM when nav is collapsed ── */}
+      {!navCollapsed && <div
+        className="hidden md:flex flex-col items-center shrink-0"
         style={{ width: 52, backgroundColor: "var(--color-strip)", borderRight: "1px solid var(--color-border)" }}
       >
         {/* Canopy logo — static branding, not interactive */}
@@ -983,7 +983,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             </button>
           </Tooltip>
         </div>
-      </div>
+      </div>}
 
       {/* ── Layer 2: Nav sidebar — collapses to 52px icon rail, resizable ── */}
       <div
