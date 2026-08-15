@@ -10,7 +10,9 @@ import type { JournalEntry, CheckinResponse } from "@/types";
 import {
   Lock, Mic, MicOff, HelpingHand, Search, Plus, X, Phone,
   ChevronLeft, ChevronRight, Users, Building2, Loader2, CalendarDays, ChevronDown, BookOpen,
+  TrendingUp, AlertCircle, Bell,
 } from "lucide-react";
+import { isSupabaseConfigured } from "@/lib/supabase";
 import ScopeSidebar, { type ScopeSection } from "@/components/ui/ScopeSidebar";
 import PageHeader from "@/components/ui/PageHeader";
 
@@ -581,6 +583,181 @@ function EntryListItem({ entry, selected, onClick }: { entry: JournalEntry; sele
   );
 }
 
+// ── Trend chart helpers ───────────────────────────────────────────────────────
+
+const TREND_COLORS = ["#1B2E4B", "#D97706", "#10B981", "#8B5CF6", "#EC4899"];
+const TREND_LABELS = ["Supported", "Workload", "Meaningful", "Boundaries", "Help comfort"];
+const TREND_QS     = ["cq1", "cq2", "cq3", "cq4", "cq5"];
+
+function getMondayISO(d: Date): string {
+  const day = d.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  const m = new Date(d);
+  m.setDate(d.getDate() + diff);
+  return m.toISOString().split("T")[0];
+}
+
+function getLast8Weeks(): string[] {
+  const weeks: string[] = [];
+  const now = new Date();
+  for (let i = 7; i >= 0; i--) {
+    const d = new Date(now);
+    d.setDate(now.getDate() - i * 7);
+    weeks.push(getMondayISO(d));
+  }
+  return weeks;
+}
+
+function shortWeekLabel(isoMonday: string): string {
+  const d = new Date(isoMonday + "T00:00:00");
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function CheckinTrendChart({ entries }: { entries: JournalEntry[] }) {
+  const weeks = getLast8Weeks();
+
+  // Build per-week per-question averages from entries
+  const weekly: Record<string, Record<string, number[]>> = {};
+  for (const e of entries) {
+    if (!e.checkin.length) continue;
+    const wk = getMondayISO(new Date(e.date + "T00:00:00"));
+    if (!weekly[wk]) weekly[wk] = {};
+    for (const r of e.checkin) {
+      if (!weekly[wk][r.questionId]) weekly[wk][r.questionId] = [];
+      weekly[wk][r.questionId].push(r.score);
+    }
+  }
+
+  const avgData: (number | null)[][] = TREND_QS.map(qid =>
+    weeks.map(wk => {
+      const scores = weekly[wk]?.[qid];
+      if (!scores?.length) return null;
+      return scores.reduce((a, b) => a + b, 0) / scores.length;
+    })
+  );
+
+  const hasAnyData = avgData.some(line => line.some(v => v !== null));
+
+  // SVG geometry
+  const W = 520, H = 160;
+  const padL = 28, padR = 16, padT = 12, padB = 36;
+  const plotW = W - padL - padR;
+  const plotH = H - padT - padB;
+  const xStep = plotW / (weeks.length - 1);
+
+  function sx(i: number) { return padL + i * xStep; }
+  function sy(score: number) { return padT + plotH - ((score - 1) / 4) * plotH; }
+
+  function buildPath(scores: (number | null)[]): string {
+    let d = "";
+    let penDown = false;
+    for (let i = 0; i < scores.length; i++) {
+      const v = scores[i];
+      if (v === null) { penDown = false; continue; }
+      const x = sx(i), y = sy(v);
+      d += penDown ? ` L${x.toFixed(1)},${y.toFixed(1)}` : `M${x.toFixed(1)},${y.toFixed(1)}`;
+      penDown = true;
+    }
+    return d;
+  }
+
+  return (
+    <div style={{ maxWidth: 600 }}>
+      <h2 style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 20, color: "var(--color-navy)", margin: "0 0 4px" }}>My Check-in Trends</h2>
+      <p style={{ fontSize: 12, color: "var(--color-secondary)", marginBottom: 24 }}>Your private weekly check-in scores over the past 8 weeks. Only you can see this.</p>
+
+      {!hasAnyData ? (
+        <div style={{ padding: "40px 0", textAlign: "center", color: "var(--color-secondary)", fontSize: 13 }}>
+          No check-in data yet. Complete a weekly check-in to start tracking your trends.
+        </div>
+      ) : (
+        <>
+          <div style={{ overflowX: "auto" }}>
+            <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: "block", minWidth: 320 }}>
+              {/* Grid lines */}
+              {[1, 2, 3, 4, 5].map(s => (
+                <line key={s} x1={padL} y1={sy(s)} x2={W - padR} y2={sy(s)}
+                  stroke="var(--color-border)" strokeWidth={0.5} />
+              ))}
+              {/* Y labels */}
+              {[1, 3, 5].map(s => (
+                <text key={s} x={padL - 5} y={sy(s) + 4} textAnchor="end"
+                  style={{ fontSize: 9, fill: "var(--color-secondary)", fontFamily: "var(--font-roboto)" }}>{s}</text>
+              ))}
+              {/* X week labels */}
+              {weeks.map((wk, i) => (
+                <text key={wk} x={sx(i)} y={H - 4} textAnchor="middle"
+                  style={{ fontSize: 9, fill: "var(--color-secondary)", fontFamily: "var(--font-roboto)" }}>
+                  {i % 2 === 0 ? shortWeekLabel(wk) : ""}
+                </text>
+              ))}
+              {/* Lines + dots */}
+              {TREND_QS.map((qid, qi) => {
+                const scores = avgData[qi];
+                const color = TREND_COLORS[qi];
+                const path = buildPath(scores);
+                return (
+                  <g key={qid}>
+                    {path && <path d={path} fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />}
+                    {scores.map((v, i) => v !== null && (
+                      <circle key={i} cx={sx(i)} cy={sy(v)} r={3.5} fill={color} />
+                    ))}
+                  </g>
+                );
+              })}
+            </svg>
+          </div>
+
+          {/* Legend */}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "8px 16px", marginTop: 12 }}>
+            {TREND_QS.map((qid, qi) => (
+              <div key={qid} style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                <div style={{ width: 12, height: 3, borderRadius: 2, backgroundColor: TREND_COLORS[qi] }} />
+                <span style={{ fontSize: 11, color: "var(--color-secondary)" }}>{TREND_LABELS[qi]}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* Score key */}
+          <div style={{ marginTop: 16, padding: "10px 14px", borderRadius: 8, backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)" }}>
+            <p style={{ fontSize: 11, color: "var(--color-secondary)", lineHeight: 1.6, margin: 0 }}>
+              <strong>Score key:</strong> 1 = Strongly Disagree &nbsp;&middot;&nbsp; 3 = Neutral &nbsp;&middot;&nbsp; 5 = Strongly Agree
+            </p>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ── Workload nudge banner ─────────────────────────────────────────────────────
+
+function NudgeBanner({ overdueCount, onSupportClick, onDismiss }: {
+  overdueCount: number;
+  onSupportClick: () => void;
+  onDismiss: () => void;
+}) {
+  return (
+    <div style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "12px 16px", borderRadius: 10, backgroundColor: "rgba(217,119,6,0.07)", border: "1px solid rgba(217,119,6,0.25)", marginBottom: 24 }}>
+      <AlertCircle size={16} color="#D97706" style={{ flexShrink: 0, marginTop: 1 }} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <p style={{ fontSize: 13, fontWeight: 600, color: "var(--color-body)", margin: "0 0 2px" }}>
+          You have {overdueCount} overdue task{overdueCount === 1 ? "" : "s"}
+        </p>
+        <p style={{ fontSize: 12, color: "var(--color-secondary)", margin: 0 }}>
+          Heavy workloads can affect wellbeing.{" "}
+          <button onClick={onSupportClick} style={{ color: "var(--color-navy)", fontWeight: 600, background: "none", border: "none", cursor: "pointer", padding: 0, fontSize: 12, fontFamily: "var(--font-roboto)" }}>
+            Need support?
+          </button>
+        </p>
+      </div>
+      <button onClick={onDismiss} style={{ background: "none", border: "none", cursor: "pointer", padding: 2, color: "var(--color-secondary)", flexShrink: 0 }} aria-label="Dismiss">
+        <X size={13} />
+      </button>
+    </div>
+  );
+}
+
 // ── Journal page ──────────────────────────────────────────────────────────────
 
 export default function JournalPage() {
@@ -610,6 +787,8 @@ export default function JournalPage() {
   const [entryListOpen, setEntryListOpen]   = useState(false);
   const [saveMsg, setSaveMsg]               = useState<{ text: string; color: string } | null>(null);
   const [discardModalOpen, setDiscardModalOpen] = useState(false);
+  const [overdueCount, setOverdueCount]         = useState(0);
+  const [nudgeDismissed, setNudgeDismissed]     = useState(false);
 
   const checkinTotal    = CHECKIN_QUESTIONS.length;
   const checkinAnswered = checkinResponses.length;
@@ -648,7 +827,8 @@ export default function JournalPage() {
     older:   filteredEntries.filter((e) => new Date(e.date) < weekAgo),
   };
 
-  const isViewingEntry = selectedEntryId !== "new";
+  const isTrendsView   = selectedEntryId === "trends";
+  const isViewingEntry = selectedEntryId !== "new" && !isTrendsView;
   const viewedEntry    = isViewingEntry ? entries.find((e) => e.id === selectedEntryId) : null;
 
   function hasDraft() {
@@ -728,7 +908,7 @@ export default function JournalPage() {
 
     const { data, error } = await supabase
       .from("journal_entries")
-      .insert({ user_id: resolvedUserId, content })
+      .insert({ user_id: resolvedUserId, content, ...(projectId ? { project_id: projectId } : {}) })
       .select()
       .single();
 
@@ -803,14 +983,71 @@ export default function JournalPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const journalSections: ScopeSection[] = [{
-    id: "entries",
-    label: "Entries",
-    color: "var(--color-navy)",
-    icon: <BookOpen size={17} />,
-    isActive: true,
-    onClick: handleToggleJournalSidebar,
-  }];
+  // F3: overdue task count for workload nudge
+  useEffect(() => {
+    if (!isSupabaseConfigured) return;
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      const uid = session?.user?.id;
+      if (!uid) return;
+      const today = new Date().toISOString().split("T")[0];
+      const { count } = await supabase
+        .from("tasks")
+        .select("id", { count: "exact", head: true })
+        .contains("assignee_ids", [uid])
+        .lt("due_date", today)
+        .not("status", "eq", "done");
+      setOverdueCount(count ?? 0);
+    });
+  }, []);
+
+  // F4: check-in reminder notification (>10 days since last check-in)
+  useEffect(() => {
+    if (loadingEntries || !isSupabaseConfigured) return;
+    if (daysSinceLastCheckin <= 10) return;
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      const uid = session?.user?.id;
+      if (!uid) return;
+      const { data: settings } = await supabase
+        .from("user_settings")
+        .select("last_checkin_reminder_sent_at")
+        .eq("user_id", uid)
+        .maybeSingle();
+      const lastSent = settings?.last_checkin_reminder_sent_at as string | null;
+      const cooloffMs = 7 * 24 * 60 * 60 * 1000;
+      if (lastSent && Date.now() - new Date(lastSent).getTime() < cooloffMs) return;
+      await supabase.from("notifications").insert({
+        user_id: uid,
+        type: "checkin_reminder",
+        title: "Time for your weekly check-in",
+        body: `It has been over ${Math.floor(daysSinceLastCheckin)} days since your last check-in. How are you doing?`,
+        read: false,
+      });
+      await supabase.from("user_settings").upsert(
+        { user_id: uid, last_checkin_reminder_sent_at: new Date().toISOString() },
+        { onConflict: "user_id" }
+      );
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadingEntries]);
+
+  const journalSections: ScopeSection[] = [
+    {
+      id: "entries",
+      label: "Entries",
+      color: "var(--color-navy)",
+      icon: <BookOpen size={17} />,
+      isActive: !isTrendsView,
+      onClick: () => { if (isTrendsView) setSelectedEntryId("new"); else handleToggleJournalSidebar(); },
+    },
+    {
+      id: "trends",
+      label: "My Trends",
+      color: "#10B981",
+      icon: <TrendingUp size={17} />,
+      isActive: isTrendsView,
+      onClick: () => { setSelectedEntryId("trends"); setListCollapsed(true); },
+    },
+  ];
 
   return (
     <div className="flex flex-col h-full" style={{ fontFamily: "var(--font-roboto)" }}>
@@ -864,8 +1101,22 @@ export default function JournalPage() {
             <ChevronLeft size={15} /> Entries
           </button>
 
-          {/* Header */}
-          <div className="flex items-start justify-between mb-7 gap-3">
+          {/* Trends view */}
+          {isTrendsView && (
+            <CheckinTrendChart entries={entries} />
+          )}
+
+          {/* Workload nudge banner */}
+          {!isTrendsView && !isViewingEntry && !nudgeDismissed && overdueCount >= 5 && (
+            <NudgeBanner
+              overdueCount={overdueCount}
+              onSupportClick={() => setSupportOpen(true)}
+              onDismiss={() => setNudgeDismissed(true)}
+            />
+          )}
+
+          {/* Header (hidden in trends view) */}
+          {!isTrendsView && <div className="flex items-start justify-between mb-7 gap-3">
             <div>
               <h2 style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 22, color: "var(--color-navy)", margin: 0, lineHeight: 1.2 }}>
                 {isViewingEntry && viewedEntry ? formatEntryDate(viewedEntry.date) : "Today's Entry"}
@@ -881,10 +1132,10 @@ export default function JournalPage() {
                 <span className="sm:hidden">Support</span>
               </button>
             )}
-          </div>
+          </div>}
 
           {/* Reflections */}
-          <div className="mb-8">
+          {!isTrendsView && <div className="mb-8">
             <h2 style={{ fontFamily: "var(--font-lora)", fontWeight: 600, fontSize: 16, color: "var(--color-body)", marginBottom: 16 }}>Reflections</h2>
             <div className="space-y-4">
               {isViewingEntry && viewedEntry ? (
@@ -945,10 +1196,10 @@ export default function JournalPage() {
                 </>
               )}
             </div>
-          </div>
+          </div>}
 
           {/* Weekly check-in */}
-          <div className="mb-8">
+          {!isTrendsView && <div className="mb-8">
             {isViewingEntry && viewedEntry ? (
               // Past entry: only render if that entry had check-in data
               viewedEntry.checkin.length > 0 ? (
@@ -1023,11 +1274,11 @@ export default function JournalPage() {
                 </button>
               )
             )}
-          </div>
+          </div>}
         </div>
 
         {/* Save bar */}
-        {!isViewingEntry && (
+        {!isTrendsView && !isViewingEntry && (
           <div className="sticky bottom-0 flex items-center justify-between px-4 md:px-6 py-3 gap-3" style={{ backgroundColor: "var(--color-surface)", borderTop: "1px solid var(--color-border)" }}>
             <span style={{ fontSize: 12, color: "var(--color-secondary)" }} className="hidden sm:block">Your entry is private and encrypted.</span>
             <div className="flex items-center gap-2 ml-auto">

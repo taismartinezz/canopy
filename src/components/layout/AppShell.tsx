@@ -650,7 +650,25 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [pastDueCount, setPastDueCount] = useState(0);
   const [chatUnread, setChatUnread] = useState(0);
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [dndSettings, setDndSettings] = useState<{ enabled: boolean; start: string; end: string; tz: string } | null>(null);
   const hasFetched = useRef(false);
+
+  // Derive whether we're currently in DND (quiet hours) -- client-side display filter only
+  const isDnd = (() => {
+    if (!dndSettings?.enabled) return false;
+    const { start, end, tz } = dndSettings;
+    if (!start || !end) return false;
+    try {
+      const parts = new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "2-digit", minute: "2-digit", hour12: false }).formatToParts(new Date());
+      const h = parseInt(parts.find(p => p.type === "hour")?.value ?? "0");
+      const m = parseInt(parts.find(p => p.type === "minute")?.value ?? "0");
+      const now = h * 60 + m;
+      const [sh, sm] = start.split(":").map(Number);
+      const [eh, em] = end.split(":").map(Number);
+      const s = sh * 60 + sm, e = eh * 60 + em;
+      return s <= e ? now >= s && now < e : now >= s || now < e;
+    } catch { return false; }
+  })();
 
   // ── Auth gate + notifications ─────────────────────────────────────────────
   useEffect(() => {
@@ -695,6 +713,17 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           .select("*")
           .eq("id", user.id)
           .maybeSingle();
+
+        // Load DND / quiet hours
+        const { data: userSettings } = await supabase.from("user_settings").select("dnd_enabled, quiet_hours_start, quiet_hours_end, timezone").eq("user_id", user.id).maybeSingle();
+        if (userSettings) {
+          setDndSettings({
+            enabled: (userSettings.dnd_enabled as boolean) ?? false,
+            start: (userSettings.quiet_hours_start as string) ?? "22:00",
+            end: (userSettings.quiet_hours_end as string) ?? "08:00",
+            tz: (userSettings.timezone as string) ?? "America/New_York",
+          });
+        }
 
         // Fetch notifications
         const { data: notifs, error: notifError } = await supabase
@@ -1178,10 +1207,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                   }}
                   className="relative flex items-center justify-center rounded-lg transition-colors hover:bg-[var(--color-navy-dim)]"
                   style={{ width: 44, height: 44 }}
-                  aria-label={`Notifications, ${unreadCount} unread`}
+                  aria-label={isDnd ? "Notifications (quiet hours active)" : `Notifications, ${unreadCount} unread`}
                 >
                   <Bell size={18} color="var(--color-body)" />
-                  <NotifDot count={unreadCount} />
+                  <NotifDot count={isDnd ? 0 : unreadCount} />
                 </button>
               </Tooltip>
               {notifOpen && (

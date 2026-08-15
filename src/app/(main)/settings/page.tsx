@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Copy, Check, RefreshCw, User, Lock, Bell, Building2, Clock, Monitor, Moon, Sun, MapPin, Keyboard } from "lucide-react";
+import { Copy, Check, RefreshCw, User, Lock, Bell, Building2, Clock, Monitor, Moon, Sun, MapPin, Keyboard, BellOff } from "lucide-react";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { showToast } from "@/components/ui/Toast";
 import { useTheme } from "@/context/ThemeContext";
@@ -100,6 +100,12 @@ export default function SettingsPage() {
   const [workingHours, setWorkingHours] = useState<WorkingHours>(DEFAULT_WORKING_HOURS);
   const [savingSchedule, setSavingSchedule] = useState(false);
 
+  // DND / quiet hours
+  const [dndEnabled, setDndEnabled]               = useState(false);
+  const [quietHoursStart, setQuietHoursStart]     = useState("22:00");
+  const [quietHoursEnd, setQuietHoursEnd]         = useState("08:00");
+  const [savingDnd, setSavingDnd]                 = useState(false);
+
   useEffect(() => {
     function checkWidth() { setIsMobile(window.innerWidth < 600); }
     checkWidth();
@@ -132,6 +138,9 @@ export default function SettingsPage() {
           if (userSettings) {
             setTimezone((userSettings.timezone as string) ?? "America/New_York");
             setWorkingHours((userSettings.working_hours as WorkingHours) ?? DEFAULT_WORKING_HOURS);
+            setDndEnabled((userSettings.dnd_enabled as boolean) ?? false);
+            setQuietHoursStart((userSettings.quiet_hours_start as string) ?? "22:00");
+            setQuietHoursEnd((userSettings.quiet_hours_end as string) ?? "08:00");
           }
 
           if (prof?.role === "pi") {
@@ -204,6 +213,21 @@ export default function SettingsPage() {
     if (error) { showToast("Failed to save. " + error.message); }
     else { showToast("Schedule settings saved."); }
   }, [timezone, workingHours]);
+
+  const handleSaveDnd = useCallback(async () => {
+    if (!isSupabaseConfigured) { showToast("Demo mode -- settings not persisted."); return; }
+    setSavingDnd(true);
+    const { data: { session } } = await supabase.auth.getSession();
+    const userId = session?.user?.id;
+    if (!userId) { setSavingDnd(false); return; }
+    const { error } = await supabase.from("user_settings").upsert(
+      { user_id: userId, dnd_enabled: dndEnabled, quiet_hours_start: quietHoursStart, quiet_hours_end: quietHoursEnd, updated_at: new Date().toISOString() },
+      { onConflict: "user_id" }
+    );
+    setSavingDnd(false);
+    if (error) { showToast("Failed to save. " + error.message); }
+    else { showToast("Focus settings saved."); }
+  }, [dndEnabled, quietHoursStart, quietHoursEnd]);
 
   if (loading) return null;
 
@@ -476,6 +500,50 @@ export default function SettingsPage() {
             <code style={{ fontFamily: "monospace", fontSize: 10, backgroundColor: "var(--color-canvas)", padding: "1px 4px", borderRadius: 3 }}>RESEND_API_KEY</code>{" "}
             environment variable is configured.
           </p>
+        </div>
+      </section>
+
+      {/* Focus / DND section */}
+      <section style={sectionStyle} aria-labelledby="settings-focus-heading">
+        <div style={sectionHeaderStyle}>
+          <BellOff size={16} color="var(--color-secondary)" />
+          <h2 id="settings-focus-heading" style={{ fontFamily: "var(--font-lora)", fontWeight: 500, fontSize: 15, color: "var(--color-body)", margin: 0 }}>
+            Focus &amp; Quiet Hours
+          </h2>
+        </div>
+        <div style={{ padding: "20px", display: "flex", flexDirection: "column", gap: 18 }}>
+          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16 }}>
+            <div>
+              <p style={{ ...labelStyle, marginBottom: 3 }}>Enable quiet hours</p>
+              <p style={{ fontSize: 12, color: "var(--color-secondary)", margin: 0 }}>
+                Suppress notification badges and chat unread counts during the hours you set below.
+              </p>
+            </div>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", flexShrink: 0 }}>
+              <span style={{ fontSize: 12, color: "var(--color-secondary)" }}>{dndEnabled ? "On" : "Off"}</span>
+              <input type="checkbox" checked={dndEnabled} onChange={e => setDndEnabled(e.target.checked)}
+                style={{ width: 16, height: 16, accentColor: "var(--color-navy)", cursor: "pointer" }} />
+            </label>
+          </div>
+          {dndEnabled && (
+            <div>
+              <span style={labelStyle}>Quiet hours window</span>
+              <p style={{ fontSize: 12, color: "var(--color-secondary)", marginTop: 0, marginBottom: 10 }}>
+                Spans midnight if end is earlier than start (e.g. 22:00 to 08:00).
+              </p>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <input type="time" value={quietHoursStart} onChange={e => setQuietHoursStart(e.target.value)}
+                  style={{ height: 36, border: "1px solid var(--color-border)", borderRadius: 7, padding: "0 10px", fontSize: 13, fontFamily: "var(--font-roboto)", backgroundColor: "var(--color-surface-2)", color: "var(--color-body)", outline: "none" }} />
+                <span style={{ fontSize: 12, color: "var(--color-secondary)" }}>to</span>
+                <input type="time" value={quietHoursEnd} onChange={e => setQuietHoursEnd(e.target.value)}
+                  style={{ height: 36, border: "1px solid var(--color-border)", borderRadius: 7, padding: "0 10px", fontSize: 13, fontFamily: "var(--font-roboto)", backgroundColor: "var(--color-surface-2)", color: "var(--color-body)", outline: "none" }} />
+              </div>
+            </div>
+          )}
+          <button onClick={handleSaveDnd} disabled={savingDnd}
+            style={{ alignSelf: "flex-start", minHeight: 44, height: 38, padding: "0 20px", backgroundColor: savingDnd ? "var(--color-border)" : "var(--color-btn-primary)", color: "#fff", border: "none", borderRadius: 8, fontFamily: "var(--font-roboto)", fontWeight: 600, fontSize: 13, cursor: savingDnd ? "default" : "pointer" }}>
+            {savingDnd ? "Saving…" : "Save focus settings"}
+          </button>
         </div>
       </section>
 

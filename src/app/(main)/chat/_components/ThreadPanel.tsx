@@ -106,6 +106,7 @@ export function ThreadPanel({ parent, currentUserId, currentUserName, projectId,
             onEdit={(id, c) => { setReplies(p => p.map(r => r.id === id ? { ...r, content: c } : r)); if (isSupabaseConfigured) supabase.from("chat_messages").update({ content: c }).eq("id", id); }}
             onDelete={id => { const now = new Date().toISOString(); setReplies(p => p.map(r => r.id === id ? { ...r, deletedAt: now } : r)); if (isSupabaseConfigured) supabase.from("chat_messages").update({ deleted_at: now }).eq("id", id); }}
             onReact={onReact}
+            onPin={() => {}}
             onOpenThread={() => {}}
           />
         ))}
