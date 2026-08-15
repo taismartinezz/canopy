@@ -61,7 +61,7 @@ export function PriorityBadge({ priority }: { priority: TaskPriority }) {
   const cfg = PRIORITY_CONFIG[priority];
   return (
     <span
-      className="inline-flex items-center gap-1 px-2 py-0.5"
+      className="inline-flex items-center px-2 py-0.5"
       style={{
         backgroundColor: cfg.bg,
         color: cfg.color,
@@ -71,7 +71,7 @@ export function PriorityBadge({ priority }: { priority: TaskPriority }) {
         fontFamily: "var(--font-roboto)",
       }}
     >
-      {cfg.symbol} {cfg.label}
+      {cfg.label}
     </span>
   );
 }

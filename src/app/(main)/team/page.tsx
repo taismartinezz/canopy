@@ -6,7 +6,7 @@ import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { useProject } from "@/context/ProjectContext";
 import type { TeamMember, TaskStatus } from "@/types";
 import Avatar from "@/components/ui/Avatar";
-import { Video, X, Edit3, Check, Minus, Users } from "lucide-react";
+import { Video, X, Edit3, Check, Users, TrendingUp, ShieldCheck, AlertCircle } from "lucide-react";
 import ProjectMembersModal from "@/components/projects/ProjectMembersModal";
 import PageHeader from "@/components/ui/PageHeader";
 
@@ -18,6 +18,132 @@ const STATUS_LABELS: Record<TaskStatus, string> = {
 const STATUS_COLORS: Record<TaskStatus, string> = {
   todo: "#64748B", in_progress: "#1B2E4B", in_review: "#A0622A", done: "#2E7D52",
 };
+
+// ── PI wellbeing rollup ───────────────────────────────────────────────────────
+
+type RollupRow = { week_start: string; question_id: string; avg_score: number; respondent_count: number };
+
+const ROLLUP_COLORS: Record<string, string> = {
+  cq1: "#1B2E4B", cq2: "#D97706", cq3: "#10B981", cq4: "#8B5CF6", cq5: "#EC4899",
+};
+const ROLLUP_LABELS: Record<string, string> = {
+  cq1: "Support", cq2: "Workload", cq3: "Meaningful", cq4: "Boundaries", cq5: "Help",
+};
+
+function WellbeingRollupPanel({ rows, overdueCount, totalMembers, loading }: {
+  rows: RollupRow[];
+  overdueCount: number | null;
+  totalMembers: number | null;
+  loading: boolean;
+}) {
+  if (loading) {
+    return (
+      <div style={{ padding: "14px 18px", borderRadius: 10, backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", marginBottom: 24 }}>
+        <div style={{ height: 12, width: "40%", backgroundColor: "var(--color-dimmed-bg)", borderRadius: 6 }} />
+      </div>
+    );
+  }
+
+  const qids = ["cq1", "cq2", "cq3", "cq4", "cq5"];
+  const weeks = [...new Set(rows.map(r => r.week_start))].sort();
+
+  return (
+    <div style={{ borderRadius: 10, backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", marginBottom: 24, overflow: "hidden" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 18px", borderBottom: "1px solid var(--color-border)" }}>
+        <TrendingUp size={15} color="var(--color-navy)" />
+        <span style={{ fontFamily: "var(--font-lora)", fontWeight: 600, fontSize: 14, color: "var(--color-navy)" }}>Team Wellbeing (PI view)</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 4, marginLeft: "auto" }}>
+          <ShieldCheck size={12} color="var(--color-secondary)" />
+          <span style={{ fontSize: 10, color: "var(--color-secondary)" }}>min 4 respondents required</span>
+        </div>
+      </div>
+      <div style={{ padding: "14px 18px" }}>
+        {weeks.length === 0 ? (
+          <p style={{ fontSize: 12, color: "var(--color-secondary)", margin: 0 }}>
+            Not enough data yet -- check-ins from at least 4 opted-in members are required to show aggregates.
+          </p>
+        ) : (
+          <>
+            {(() => {
+              const W = 480, H = 130;
+              const padL = 24, padR = 12, padT = 10, padB = 28;
+              const plotW = W - padL - padR;
+              const plotH = H - padT - padB;
+              const xStep = weeks.length > 1 ? plotW / (weeks.length - 1) : 0;
+              function sx(i: number) { return padL + i * xStep; }
+              function sy(s: number) { return padT + plotH - ((s - 1) / 4) * plotH; }
+              function buildPath(qid: string): string {
+                let d = ""; let penDown = false;
+                for (let i = 0; i < weeks.length; i++) {
+                  const row = rows.find(r => r.week_start === weeks[i] && r.question_id === qid);
+                  if (!row) { penDown = false; continue; }
+                  const x = sx(i), y = sy(row.avg_score);
+                  d += penDown ? ` L${x.toFixed(1)},${y.toFixed(1)}` : `M${x.toFixed(1)},${y.toFixed(1)}`;
+                  penDown = true;
+                }
+                return d;
+              }
+              return (
+                <div style={{ overflowX: "auto", marginBottom: 8 }}>
+                  <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: "block", minWidth: 280 }}>
+                    {[1,2,3,4,5].map(s => (
+                      <line key={s} x1={padL} y1={sy(s)} x2={W-padR} y2={sy(s)}
+                        stroke="var(--color-border)" strokeWidth={0.5} />
+                    ))}
+                    {[1,3,5].map(s => (
+                      <text key={s} x={padL-4} y={sy(s)+4} textAnchor="end"
+                        style={{ fontSize: 8, fill: "var(--color-secondary)", fontFamily: "var(--font-roboto)" }}>{s}</text>
+                    ))}
+                    {weeks.map((wk, i) => {
+                      const d = new Date(wk);
+                      const label = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+                      return i % 2 === 0 ? (
+                        <text key={wk} x={sx(i)} y={H-4} textAnchor="middle"
+                          style={{ fontSize: 8, fill: "var(--color-secondary)", fontFamily: "var(--font-roboto)" }}>{label}</text>
+                      ) : null;
+                    })}
+                    {qids.map(qid => {
+                      const color = ROLLUP_COLORS[qid];
+                      const path = buildPath(qid);
+                      return (
+                        <g key={qid}>
+                          {path && <path d={path} fill="none" stroke={color} strokeWidth={1.8} strokeLinejoin="round" strokeLinecap="round" />}
+                          {weeks.map((wk, i) => {
+                            const row = rows.find(r => r.week_start === wk && r.question_id === qid);
+                            return row ? <circle key={i} cx={sx(i)} cy={sy(row.avg_score)} r={3} fill={color} /> : null;
+                          })}
+                        </g>
+                      );
+                    })}
+                  </svg>
+                </div>
+              );
+            })()}
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 12px", marginBottom: 12 }}>
+              {qids.map(qid => (
+                <div key={qid} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                  <div style={{ width: 10, height: 2.5, borderRadius: 2, backgroundColor: ROLLUP_COLORS[qid] }} />
+                  <span style={{ fontSize: 10, color: "var(--color-secondary)" }}>{ROLLUP_LABELS[qid]}</span>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+        {overdueCount !== null && totalMembers !== null && (
+          <div style={{ display: "flex", alignItems: "center", gap: 6, paddingTop: 10, borderTop: "1px solid var(--color-border)", marginTop: 4 }}>
+            <AlertCircle size={12} color="#D97706" />
+            <span style={{ fontSize: 11, color: "var(--color-secondary)" }}>
+              <strong style={{ color: "var(--color-body)" }}>{overdueCount}</strong> total overdue tasks across {totalMembers} opted-in member{totalMembers === 1 ? "" : "s"}
+            </span>
+          </div>
+        )}
+        <p style={{ fontSize: 10, color: "var(--color-secondary)", marginTop: 8, marginBottom: 0 }}>
+          Aggregated from opted-in members only. Individual responses are never shown.
+        </p>
+      </div>
+    </div>
+  );
+}
 
 // ── Start Meeting modal ───────────────────────────────────────────────────────
 
@@ -241,6 +367,10 @@ export default function TeamPage() {
   const [projectTeam, setProjectTeam] = useState<TeamMember[]>([]);
   const [projectScopedCounts, setProjectScopedCounts] = useState<Record<string, Record<TaskStatus, number>>>({});
   const [showMembersModal, setShowMembersModal] = useState(false);
+  const [rollupRows, setRollupRows] = useState<RollupRow[]>([]);
+  const [rollupLoading, setRollupLoading] = useState(false);
+  const [overdueCount, setOverdueCount] = useState<number | null>(null);
+  const [overdueTotalMembers, setOverdueTotalMembers] = useState<number | null>(null);
   const closeMemberPanel = useCallback(() => setSelectedMember(null), []);
   const closeMeetingModal = useCallback(() => setMeetingModalOpen(false), []);
 
@@ -411,6 +541,23 @@ export default function TeamPage() {
     })();
   }, [activeScope, subProjectId]);
 
+  // F2: PI wellbeing rollup -- fetched only when the user is a PI and we have a projectId
+  useEffect(() => {
+    if (!isPi || !projectId || !isSupabaseConfigured) return;
+    setRollupLoading(true);
+    Promise.all([
+      supabase.rpc("get_wellbeing_rollup", { p_project_id: projectId }),
+      supabase.rpc("get_overdue_signal", { p_project_id: projectId }),
+    ]).then(([{ data: rData }, { data: oData }]) => {
+      setRollupRows((rData as RollupRow[] | null) ?? []);
+      if (oData && Array.isArray(oData) && oData.length > 0) {
+        setOverdueCount((oData[0] as { overdue_count: number }).overdue_count);
+        setOverdueTotalMembers((oData[0] as { total_members: number }).total_members);
+      }
+      setRollupLoading(false);
+    });
+  }, [isPi, projectId]);
+
   // In project scope use the directly-fetched list with project-scoped task counts.
   const visibleTeam = activeScope === "project"
     ? projectTeam.map((m) => ({
@@ -465,15 +612,14 @@ export default function TeamPage() {
 
         <WeeklyUpdateBar current={weeklyUpdate} onSave={setWeeklyUpdate} />
 
-        {/* PI aggregate signal — only shown to PI */}
+        {/* PI wellbeing rollup -- only shown to PI */}
         {isPi && (
-          <div className="flex items-center gap-3 px-5 py-3 mb-6 rounded-lg" style={{ backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 8 }}>
-            <Minus size={16} color="#64748B" />
-            <div>
-              <p style={{ fontSize: 13, fontWeight: 600, color: "var(--color-body)" }}>Team well-being trend this week: stable</p>
-              <p style={{ fontSize: 11, color: "var(--color-secondary)", marginTop: 2 }}>Aggregate trend from team check-ins · Visible to PI only</p>
-            </div>
-          </div>
+          <WellbeingRollupPanel
+            rows={rollupRows}
+            overdueCount={overdueCount}
+            totalMembers={overdueTotalMembers}
+            loading={rollupLoading}
+          />
         )}
 
         {/* Team grid */}

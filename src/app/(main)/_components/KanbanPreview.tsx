@@ -16,13 +16,11 @@ import { Card, CardHeader } from "./DashboardCard";
 import { SkeletonLine } from "./TeamActivityWidget";
 
 const PRIORITY_COLORS = { high: "#C0392B", medium: "#A0622A", low: "#2E7D52" };
-const PRIORITY_SYMBOLS = { high: "▲", medium: "●", low: "▼" };
 const PRIORITY_BG = { high: "#FDDCDC", medium: "#FDEFD4", low: "#D4EDE0" };
 
 function MiniTaskCardContent({ task, teamMembers }: { task: Task; teamMembers: User[] }) {
   const priority   = PRIORITY_COLORS[task.priority];
   const priorityBg = PRIORITY_BG[task.priority];
-  const symbol     = PRIORITY_SYMBOLS[task.priority];
   const assignees  = task.assigneeIds
     .map((id) => teamMembers.find((u) => u.id === id) ?? getUser(id))
     .filter(Boolean) as User[];
@@ -35,7 +33,7 @@ function MiniTaskCardContent({ task, teamMembers }: { task: Task; teamMembers: U
       <div className="flex items-center justify-between mt-2">
         <span style={{ fontSize: 12, color: "var(--color-secondary)" }}>{task.dueDate ? formatDate(task.dueDate) : "-"}</span>
         <span className="px-2 py-0.5" style={{ backgroundColor: priorityBg, color: priority, fontSize: 11, fontWeight: 600, borderRadius: 4 }}>
-          {symbol} {task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}
+          {task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}
         </span>
         <AssigneeStack ids={task.assigneeIds} size={20} users={teamMembers} />
       </div>

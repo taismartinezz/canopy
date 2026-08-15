@@ -64,7 +64,7 @@ export function renderMd(text: string): ReactNode[] {
 }
 
 export function renderInline(text: string, offset: number): ReactNode[] {
-  const tokens = text.split(/(\*\*[\s\S]*?\*\*|__[\s\S]*?__|_[\s\S]*?_|\*[^*][\s\S]*?\*|`[^`]*`|\[[\s\S]*?\]\(https?:\/\/[^\s)]+\)|https?:\/\/[^\s]+)/);
+  const tokens = text.split(/(\*\*[\s\S]*?\*\*|__[\s\S]*?__|_[\s\S]*?_|\*[^*][\s\S]*?\*|`[^`]*`|\[[\s\S]*?\]\(https?:\/\/[^\s)]+\)|https?:\/\/[^\s]+|@\w+)/);
   return tokens.map((tok, i) => {
     const k = `i${offset}${i}`;
     if (/^\*\*[\s\S]*\*\*$/.test(tok) && tok.length > 4) return <strong key={k}>{tok.slice(2, -2)}</strong>;
@@ -75,6 +75,7 @@ export function renderInline(text: string, offset: number): ReactNode[] {
     const lm = tok.match(/^\[([\s\S]+?)\]\((https?:\/\/[^\s)]+)\)$/);
     if (lm) return <a key={k} href={lm[2]} target="_blank" rel="noopener noreferrer" style={{ color: "var(--color-navy)", textDecoration: "underline" }}>{lm[1]}</a>;
     if (/^https?:\/\//.test(tok)) return <a key={k} href={tok} target="_blank" rel="noopener noreferrer" style={{ color: "var(--color-navy)", textDecoration: "underline" }}>{tok}</a>;
+    if (/^@\w+$/.test(tok)) return <span key={k} style={{ color: "var(--color-navy)", fontWeight: 600, backgroundColor: "rgba(14,165,233,0.10)", borderRadius: 3, padding: "0 3px" }}>{tok}</span>;
     return tok;
   });
 }
