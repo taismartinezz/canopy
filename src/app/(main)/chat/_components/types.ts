@@ -4,6 +4,13 @@ export interface MessageReaction {
   hasReacted: boolean;
 }
 
+export interface MessageAttachment {
+  url: string;
+  name: string;
+  type: string;
+  size: number;
+}
+
 export interface ChatMessage {
   id: string;
   channel: string;
@@ -16,6 +23,10 @@ export interface ChatMessage {
   deletedAt: string | null;
   threadCount: number;
   reactions: MessageReaction[];
+  mentionedUserIds: string[];
+  isPinned: boolean;
+  threadLastReplierId?: string;
+  attachments: MessageAttachment[];
 }
 
 export type ActiveChannel = string;

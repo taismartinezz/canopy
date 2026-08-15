@@ -1,21 +1,25 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { useProject } from "@/context/ProjectContext";
 import { useUndoToast } from "@/context/UndoToastContext";
 import Avatar from "@/components/ui/Avatar";
 import type { User } from "@/types";
-import { MessageSquare, Send, Hash, ChevronDown, Plus } from "lucide-react";
+import { MessageSquare, Send, Hash, ChevronDown, Plus, Search, Pin, X, FileText } from "lucide-react";
 import ScopeSidebar, { type ScopeSection } from "@/components/ui/ScopeSidebar";
 import PageHeader from "@/components/ui/PageHeader";
 import { computeInitials } from "@/lib/utils";
-import type { ChatMessage, ActiveChannel, MessageReaction } from "./_components/types";
+import type { ChatMessage, ActiveChannel, MessageReaction, MessageAttachment } from "./_components/types";
 import { buildUser, resolveChannelKey, sameDay, DateDivider, TypingIndicator } from "./_components/chatUtils";
 import { MessageRow } from "./_components/MessageRow";
 import { ThreadPanel } from "./_components/ThreadPanel";
 
-// ── Main page ─────────────────────────────────────────────────────────────────
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 export default function ChatPage() {
   const { show: showUndoToast } = useUndoToast();
@@ -39,11 +43,38 @@ export default function ChatPage() {
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [hasNewMessages, setHasNewMessages] = useState(false);
 
+  // F1: Presence
+  const [onlineUserIds, setOnlineUserIds] = useState<Set<string>>(new Set());
+
+  // F2: Unread
+  const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
+
+  // F3: @Mentions autocomplete
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+  const [mentionIndex, setMentionIndex] = useState(0);
+
+  // F4: Pinned panel
+  const [showPinned, setShowPinned] = useState(false);
+
+  // F5: Search
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<ChatMessage[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [highlightedMsgId, setHighlightedMsgId] = useState<string | null>(null);
+
+  // F7: Attachments
+  const [pendingAttachments, setPendingAttachments] = useState<Array<{ file: File; preview?: string }>>([]);
+
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const lastCountRef = useRef(0);
   const typingTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const typingChRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const msgRefsMap = useRef<Map<string, HTMLDivElement>>(new Map());
+  const activeChannelRef = useRef(activeChannel);
+  activeChannelRef.current = activeChannel;
 
   // Auth
   useEffect(() => {
@@ -80,6 +111,63 @@ export default function ChatPage() {
   // Reset channel
   useEffect(() => { setActiveChannel(defaultChannel); setThreadMsg(null); }, [activeScope, subProjectId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // F1: Presence — subscribe when auth is ready
+  useEffect(() => {
+    if (!isSupabaseConfigured || !currentUserId || !projectId) return;
+    const presenceCh = supabase.channel(`presence:${projectId}`, {
+      config: { presence: { key: currentUserId } },
+    })
+      .on("presence", { event: "sync" }, () => {
+        const state = presenceCh.presenceState();
+        setOnlineUserIds(new Set(Object.keys(state)));
+      })
+      .on("presence", { event: "join" }, ({ key }) => {
+        setOnlineUserIds(prev => new Set([...prev, key as string]));
+      })
+      .on("presence", { event: "leave" }, ({ key }) => {
+        setOnlineUserIds(prev => { const n = new Set(prev); n.delete(key as string); return n; });
+      })
+      .subscribe(async (status) => {
+        if (status === "SUBSCRIBED") {
+          await presenceCh.track({ user: currentUserId, at: Date.now() });
+        }
+      });
+    return () => { supabase.removeChannel(presenceCh); };
+  }, [projectId, currentUserId]);
+
+  // F2: Unread — load counts on mount for all known channels
+  useEffect(() => {
+    if (!isSupabaseConfigured || !currentUserId || !projectId) return;
+    async function loadUnread() {
+      const { data } = await supabase
+        .from("chat_read_state")
+        .select("channel, last_read_at")
+        .eq("user_id", currentUserId);
+      if (!data || !data.length) return;
+      const counts: Record<string, number> = {};
+      await Promise.all(data.map(async row => {
+        const { count } = await supabase
+          .from("chat_messages")
+          .select("*", { count: "exact", head: true })
+          .eq("channel", row.channel as string)
+          .is("thread_parent_id", null)
+          .is("deleted_at", null)
+          .gt("created_at", row.last_read_at as string);
+        if ((count ?? 0) > 0) counts[row.channel as string] = count ?? 0;
+      }));
+      setUnreadCounts(counts);
+    }
+    loadUnread();
+  }, [currentUserId, projectId]);
+
+  // F2: Unread — mark current channel read on switch
+  useEffect(() => {
+    if (!isSupabaseConfigured || !currentUserId || !projectId) return;
+    const key = resolveChannelKey(projectId, currentUserId, activeChannel);
+    supabase.from("chat_read_state").upsert({ user_id: currentUserId, channel: key, last_read_at: new Date().toISOString() });
+    setUnreadCounts(prev => { const n = { ...prev }; delete n[key]; return n; });
+  }, [activeChannel, currentUserId, projectId]);
+
   // Fetch messages
   const fetchMessages = useCallback(async () => {
     if (!projectId || !currentUserId) return;
@@ -88,31 +176,52 @@ export default function ChatPage() {
 
     if (!isSupabaseConfigured) {
       setMessages([
-        { id: "d1", channel: key, senderId: "demo-pi", senderName: "Dr. Sarah Chen", content: "Good morning! Lab meeting moved to Thursday.", createdAt: new Date(Date.now() - 7200000).toISOString(), threadParentId: null, deletedAt: null, threadCount: 2, reactions: [{ emoji: "👍", count: 3, hasReacted: true }] },
-        { id: "d2", channel: key, senderId: "demo-ra", senderName: "Marcus Johnson", content: "Thanks for the heads up! I'll update my calendar.", createdAt: new Date(Date.now() - 3300000).toISOString(), threadParentId: null, deletedAt: null, threadCount: 0, reactions: [] },
-        { id: "d3", channel: key, senderId: "demo-grad", senderName: "Priya Patel", content: "Will the agenda be the same? I was going to present my prelim results.", createdAt: new Date(Date.now() - 2400000).toISOString(), threadParentId: null, deletedAt: null, threadCount: 0, reactions: [{ emoji: "🎉", count: 2, hasReacted: false }] },
-        { id: "d4", channel: key, senderId: "demo-pi", senderName: "Dr. Sarah Chen", content: "Yes! Priya you're still presenting first — looking forward to it.", createdAt: new Date(Date.now() - 1800000).toISOString(), threadParentId: null, deletedAt: null, threadCount: 0, reactions: [] },
-        { id: "d5", channel: key, senderId: "demo-user", senderName: "You", content: "See everyone Thursday!", createdAt: new Date(Date.now() - 300000).toISOString(), threadParentId: null, deletedAt: null, threadCount: 0, reactions: [] },
+        { id: "d1", channel: key, senderId: "demo-pi", senderName: "Dr. Sarah Chen", content: "Good morning! Lab meeting moved to Thursday.", createdAt: new Date(Date.now() - 7200000).toISOString(), threadParentId: null, deletedAt: null, threadCount: 2, reactions: [{ emoji: "👍", count: 3, hasReacted: true }], mentionedUserIds: [], isPinned: false, threadLastReplierId: "demo-ra", attachments: [] },
+        { id: "d2", channel: key, senderId: "demo-ra", senderName: "Marcus Johnson", content: "Thanks for the heads up! I'll update my calendar.", createdAt: new Date(Date.now() - 3300000).toISOString(), threadParentId: null, deletedAt: null, threadCount: 0, reactions: [], mentionedUserIds: [], isPinned: false, attachments: [] },
+        { id: "d3", channel: key, senderId: "demo-grad", senderName: "Priya Patel", content: "Will the agenda be the same? I was going to present my prelim results.", createdAt: new Date(Date.now() - 2400000).toISOString(), threadParentId: null, deletedAt: null, threadCount: 0, reactions: [{ emoji: "🎉", count: 2, hasReacted: false }], mentionedUserIds: [], isPinned: true, attachments: [] },
+        { id: "d4", channel: key, senderId: "demo-pi", senderName: "Dr. Sarah Chen", content: "Yes! Priya you're still presenting first — looking forward to it.", createdAt: new Date(Date.now() - 1800000).toISOString(), threadParentId: null, deletedAt: null, threadCount: 0, reactions: [], mentionedUserIds: ["demo-grad"], isPinned: false, attachments: [] },
+        { id: "d5", channel: key, senderId: "demo-user", senderName: "You", content: "See everyone Thursday!", createdAt: new Date(Date.now() - 300000).toISOString(), threadParentId: null, deletedAt: null, threadCount: 0, reactions: [], mentionedUserIds: [], isPinned: false, attachments: [] },
       ]);
       setLoading(false); return;
     }
 
-    const { data, error } = await supabase.from("chat_messages").select("id, channel, sender_id, content, created_at, thread_parent_id, deleted_at").eq("channel", key).is("thread_parent_id", null).order("created_at", { ascending: true }).limit(200);
+    const { data, error } = await supabase
+      .from("chat_messages")
+      .select("id, channel, sender_id, content, created_at, thread_parent_id, deleted_at, is_pinned, mentioned_user_ids, attachments")
+      .eq("channel", key).is("thread_parent_id", null)
+      .order("created_at", { ascending: true }).limit(200);
     if (error) { console.error("[Chat] fetch:", error); setLoading(false); return; }
     const rows = data ?? [];
     const sids = [...new Set(rows.map(r => r.sender_id as string))];
     const nameMap: Record<string, string> = {};
-    if (sids.length) { const { data: ps } = await supabase.from("user_profiles").select("id, name").in("id", sids); for (const p of ps ?? []) nameMap[p.id as string] = p.name as string; }
+    if (sids.length) {
+      const { data: ps } = await supabase.from("user_profiles").select("id, name").in("id", sids);
+      for (const p of ps ?? []) nameMap[p.id as string] = p.name as string;
+    }
 
     const mids = rows.map(r => r.id as string);
     let tcMap: Record<string, number> = {};
     let rxMap: Record<string, MessageReaction[]> = {};
+    let lastReplierMap: Record<string, string> = {};
+
     if (mids.length) {
       const [tc, rx] = await Promise.all([
-        supabase.from("chat_messages").select("thread_parent_id").in("thread_parent_id", mids).then(r => r.data ?? []),
-        supabase.from("message_reactions").select("message_id, emoji, user_id").in("message_id", mids).then(r => r.data ?? []),
+        supabase.from("chat_messages")
+          .select("thread_parent_id, sender_id")
+          .in("thread_parent_id", mids)
+          .is("deleted_at", null)
+          .order("created_at", { ascending: false })
+          .then(r => r.data ?? []),
+        supabase.from("message_reactions")
+          .select("message_id, emoji, user_id")
+          .in("message_id", mids)
+          .then(r => r.data ?? []),
       ]);
-      for (const t of tc) { if (t.thread_parent_id) tcMap[t.thread_parent_id] = (tcMap[t.thread_parent_id] ?? 0) + 1; }
+      for (const t of tc) {
+        const pid = t.thread_parent_id as string;
+        tcMap[pid] = (tcMap[pid] ?? 0) + 1;
+        if (!lastReplierMap[pid]) lastReplierMap[pid] = t.sender_id as string;
+      }
       for (const r of rx) {
         if (!rxMap[r.message_id]) rxMap[r.message_id] = [];
         const ex = rxMap[r.message_id].find(x => x.emoji === r.emoji);
@@ -121,7 +230,22 @@ export default function ChatPage() {
       }
     }
 
-    setMessages(rows.map(row => ({ id: row.id as string, channel: row.channel as string, senderId: row.sender_id as string, senderName: nameMap[row.sender_id as string] ?? "Unknown", content: row.content as string, createdAt: row.created_at as string, threadParentId: null, deletedAt: (row.deleted_at as string | null) ?? null, threadCount: tcMap[row.id as string] ?? 0, reactions: rxMap[row.id as string] ?? [] })));
+    setMessages(rows.map(row => ({
+      id: row.id as string,
+      channel: row.channel as string,
+      senderId: row.sender_id as string,
+      senderName: nameMap[row.sender_id as string] ?? "Unknown",
+      content: row.content as string,
+      createdAt: row.created_at as string,
+      threadParentId: null,
+      deletedAt: (row.deleted_at as string | null) ?? null,
+      threadCount: tcMap[row.id as string] ?? 0,
+      reactions: rxMap[row.id as string] ?? [],
+      mentionedUserIds: (row.mentioned_user_ids as string[]) ?? [],
+      isPinned: (row.is_pinned as boolean) ?? false,
+      threadLastReplierId: lastReplierMap[row.id as string],
+      attachments: (row.attachments as MessageAttachment[]) ?? [],
+    })));
     setLoading(false);
   }, [projectId, currentUserId, activeChannel]);
 
@@ -153,17 +277,40 @@ export default function ChatPage() {
     const ch = supabase.channel(`chat:${key}`)
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_messages", filter: `channel=eq.${key}` }, async payload => {
         const row = payload.new as Record<string, unknown>;
-        if (row.thread_parent_id) return;
+        if (row.thread_parent_id) {
+          // Update thread count + last replier on parent
+          setMessages(prev => prev.map(m => m.id === row.thread_parent_id ? { ...m, threadCount: m.threadCount + 1, threadLastReplierId: row.sender_id as string } : m));
+          // F2: increment unread for non-active channel (thread replies don't affect channel unread)
+          return;
+        }
         let name = "Unknown";
         const { data: p } = await supabase.from("user_profiles").select("name").eq("id", row.sender_id as string).single();
         if (p?.name) name = p.name as string;
-        const nm: ChatMessage = { id: row.id as string, channel: row.channel as string, senderId: row.sender_id as string, senderName: name, content: row.content as string, createdAt: row.created_at as string, threadParentId: null, deletedAt: null, threadCount: 0, reactions: [] };
+        const nm: ChatMessage = {
+          id: row.id as string, channel: row.channel as string,
+          senderId: row.sender_id as string, senderName: name,
+          content: row.content as string, createdAt: row.created_at as string,
+          threadParentId: null, deletedAt: null, threadCount: 0, reactions: [],
+          mentionedUserIds: (row.mentioned_user_ids as string[]) ?? [],
+          isPinned: (row.is_pinned as boolean) ?? false,
+          attachments: (row.attachments as MessageAttachment[]) ?? [],
+        };
         setMessages(prev => prev.some(m => m.id === nm.id) ? prev : [...prev, nm]);
+        // F2: if message is for a channel other than the currently active one, increment unread
+        if (projectId && row.channel !== resolveChannelKey(projectId, currentUserId, activeChannelRef.current)) {
+          setUnreadCounts(prev => ({ ...prev, [row.channel as string]: (prev[row.channel as string] ?? 0) + 1 }));
+        }
       })
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "chat_messages", filter: `channel=eq.${key}` }, payload => {
         const row = payload.new as Record<string, unknown>;
         if (row.thread_parent_id) return;
-        setMessages(prev => prev.map(m => m.id === row.id ? { ...m, content: row.content as string, deletedAt: (row.deleted_at as string | null) ?? null } : m));
+        setMessages(prev => prev.map(m => m.id === row.id ? {
+          ...m,
+          content: row.content as string,
+          deletedAt: (row.deleted_at as string | null) ?? null,
+          isPinned: (row.is_pinned as boolean) ?? m.isPinned,
+          threadLastReplierId: (row.thread_last_replier_id as string | undefined) ?? m.threadLastReplierId,
+        } : m));
       })
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "message_reactions" }, payload => {
         const row = payload.new as Record<string, unknown>;
@@ -209,21 +356,82 @@ export default function ChatPage() {
     try { typingChRef.current.send({ type: "broadcast", event: "typing", payload: { userId: currentUserId, name: currentUserName } }); } catch { /* ignore */ }
   }
 
+  // F7: File handling
+  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    if (!files.length) return;
+    for (const file of files) {
+      const preview = file.type.startsWith("image/") ? URL.createObjectURL(file) : undefined;
+      setPendingAttachments(prev => [...prev, { file, preview }]);
+    }
+    e.target.value = "";
+  }
+
+  async function uploadAttachments(): Promise<MessageAttachment[]> {
+    if (!pendingAttachments.length) return [];
+    if (!isSupabaseConfigured) {
+      return pendingAttachments.map(a => ({ url: a.preview ?? "", name: a.file.name, type: a.file.type, size: a.file.size }));
+    }
+    const results: MessageAttachment[] = [];
+    for (const { file, preview } of pendingAttachments) {
+      const path = `${currentUserId}/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+      const { error } = await supabase.storage.from("chat-attachments").upload(path, file);
+      if (error) { console.error("[Chat] upload:", error); continue; }
+      const { data: { publicUrl } } = supabase.storage.from("chat-attachments").getPublicUrl(path);
+      if (preview) URL.revokeObjectURL(preview);
+      results.push({ url: publicUrl, name: file.name, type: file.type, size: file.size });
+    }
+    return results;
+  }
+
+  // F3: Mention helpers
+  const mentionCandidates = mentionQuery === null ? [] :
+    teamMembers.filter(m => m.name.toLowerCase().startsWith(mentionQuery.toLowerCase())).slice(0, 5);
+
+  function insertMention(member: User) {
+    const el = inputRef.current;
+    if (!el) return;
+    const cursor = el.selectionStart ?? draft.length;
+    const before = draft.slice(0, cursor).replace(/@\w*$/, `@${member.name} `);
+    const after = draft.slice(cursor);
+    setDraft(before + after);
+    setMentionQuery(null);
+    setTimeout(() => { el.focus(); el.setSelectionRange(before.length, before.length); }, 10);
+  }
+
   async function sendMessage() {
     const text = draft.trim();
-    if (!text || sending || !currentUserId || !projectId) return;
+    if (!text && !pendingAttachments.length || sending || !currentUserId || !projectId) return;
     setSending(true);
     const key = resolveChannelKey(projectId, currentUserId, activeChannel);
+
+    // F3: extract mentioned user IDs
+    const mentionedUserIds = teamMembers.filter(m => text.includes(`@${m.name}`)).map(m => m.id);
+
     if (!isSupabaseConfigured) {
-      setMessages(p => [...p, { id: crypto.randomUUID(), channel: key, senderId: currentUserId, senderName: currentUserName, content: text, createdAt: new Date().toISOString(), threadParentId: null, deletedAt: null, threadCount: 0, reactions: [] }]);
-      setDraft(""); setSending(false); return;
+      const attachments = await uploadAttachments();
+      setMessages(p => [...p, { id: crypto.randomUUID(), channel: key, senderId: currentUserId, senderName: currentUserName, content: text, createdAt: new Date().toISOString(), threadParentId: null, deletedAt: null, threadCount: 0, reactions: [], mentionedUserIds, isPinned: false, attachments }]);
+      setDraft(""); setPendingAttachments([]); setSending(false); return;
     }
+
+    const attachments = await uploadAttachments();
     const id = crypto.randomUUID();
     const createdAt = new Date().toISOString();
-    const { error } = await supabase.from("chat_messages").insert({ id, channel: key, sender_id: currentUserId, content: text, created_at: createdAt, thread_parent_id: null });
+    const { error } = await supabase.from("chat_messages").insert({ id, channel: key, sender_id: currentUserId, content: text, created_at: createdAt, thread_parent_id: null, mentioned_user_ids: mentionedUserIds, attachments });
     if (!error) {
-      setMessages(p => [...p, { id, channel: key, senderId: currentUserId, senderName: currentUserName, content: text, createdAt, threadParentId: null, deletedAt: null, threadCount: 0, reactions: [] }]);
-      setDraft("");
+      setMessages(p => [...p, { id, channel: key, senderId: currentUserId, senderName: currentUserName, content: text, createdAt, threadParentId: null, deletedAt: null, threadCount: 0, reactions: [], mentionedUserIds, isPinned: false, attachments }]);
+      setDraft(""); setPendingAttachments([]);
+
+      // F3: create notifications for mentioned users
+      const toNotify = mentionedUserIds.filter(uid => uid !== currentUserId);
+      if (toNotify.length) {
+        const notifs = toNotify.map(uid => ({
+          user_id: uid, type: "task_mention",
+          title: `${currentUserName} mentioned you in ${channelLabel()}`,
+          body: text.slice(0, 100), related_id: id, read: false,
+        }));
+        supabase.from("notifications").insert(notifs).then(({ error: ne }) => { if (ne) console.error("[Chat] mention notif:", ne); });
+      }
     }
     setSending(false);
     inputRef.current?.focus();
@@ -247,6 +455,12 @@ export default function ChatPage() {
     );
   }
 
+  // F4: Pin handler
+  function handlePin(id: string, pin: boolean) {
+    setMessages(p => p.map(m => m.id === id ? { ...m, isPinned: pin } : m));
+    if (isSupabaseConfigured) supabase.from("chat_messages").update({ is_pinned: pin }).eq("id", id);
+  }
+
   async function handleReact(msgId: string, emoji: string) {
     if (!isSupabaseConfigured) {
       setMessages(p => p.map(m => {
@@ -267,6 +481,51 @@ export default function ChatPage() {
     }
   }
 
+  // F6: Thread preview update when reply is added via ThreadPanel
+  function handleReplyAdded(parentId: string, replierId: string) {
+    setMessages(prev => prev.map(m => m.id === parentId ? { ...m, threadCount: m.threadCount + 1, threadLastReplierId: replierId } : m));
+  }
+
+  // F5: Search
+  async function runSearch(q: string) {
+    if (!q.trim() || !projectId || !currentUserId) return;
+    setSearching(true);
+    const key = resolveChannelKey(projectId, currentUserId, activeChannel);
+    if (!isSupabaseConfigured) {
+      const results = messages.filter(m => !m.deletedAt && m.content.toLowerCase().includes(q.toLowerCase()));
+      setSearchResults(results);
+      setSearching(false);
+      return;
+    }
+    const { data } = await supabase.from("chat_messages")
+      .select("id, channel, sender_id, content, created_at, is_pinned, mentioned_user_ids, attachments")
+      .eq("channel", key).is("thread_parent_id", null).is("deleted_at", null)
+      .ilike("content", `%${q}%`)
+      .order("created_at", { ascending: false }).limit(20);
+    const nameMap: Record<string, string> = {};
+    const sids = [...new Set((data ?? []).map(r => r.sender_id as string))];
+    if (sids.length) {
+      const { data: ps } = await supabase.from("user_profiles").select("id, name").in("id", sids);
+      for (const p of ps ?? []) nameMap[p.id as string] = p.name as string;
+    }
+    setSearchResults((data ?? []).map(row => ({
+      id: row.id as string, channel: row.channel as string,
+      senderId: row.sender_id as string, senderName: nameMap[row.sender_id as string] ?? "Unknown",
+      content: row.content as string, createdAt: row.created_at as string,
+      threadParentId: null, deletedAt: null, threadCount: 0, reactions: [],
+      mentionedUserIds: (row.mentioned_user_ids as string[]) ?? [],
+      isPinned: (row.is_pinned as boolean) ?? false, attachments: (row.attachments as MessageAttachment[]) ?? [],
+    })));
+    setSearching(false);
+  }
+
+  function jumpToMessage(id: string) {
+    setSearchOpen(false);
+    setHighlightedMsgId(id);
+    setTimeout(() => { msgRefsMap.current.get(id)?.scrollIntoView({ behavior: "smooth", block: "center" }); }, 50);
+    setTimeout(() => setHighlightedMsgId(null), 2000);
+  }
+
   function toggleSidebar() {
     setChatSidebarCollapsed(v => { const next = !v; try { localStorage.setItem("chat_sidebar_collapsed", String(next)); } catch { /* ignore */ } return next; });
   }
@@ -280,8 +539,17 @@ export default function ChatPage() {
   const visibleSubProjects = isProjectView ? subProjects.filter(sp => sp.id === subProjectId) : subProjects;
 
   const chatSections: ScopeSection[] = !isProjectView
-    ? [{ id: "lab", label: "Lab", color: "#0ea5e9", icon: <Hash size={17} />, isActive: activeChannel === "lab", onClick: () => { setActiveChannel("lab"); setMessages([]); setThreadMsg(null); } }]
-    : visibleSubProjects.map(sp => ({ id: sp.id, label: sp.name, color: sp.color ?? "var(--color-navy)", icon: <Hash size={17} />, isActive: activeChannel === sp.id, onClick: () => { setActiveChannel(sp.id); setMessages([]); setThreadMsg(null); } }));
+    ? [{
+        id: "lab", label: "Lab", color: "#0ea5e9", icon: <Hash size={17} />, isActive: activeChannel === "lab",
+        onClick: () => { setActiveChannel("lab"); setMessages([]); setThreadMsg(null); },
+        count: unreadCounts[resolveChannelKey(projectId ?? "", currentUserId, "lab")] || undefined,
+      }]
+    : visibleSubProjects.map(sp => ({
+        id: sp.id, label: sp.name, color: sp.color ?? "var(--color-navy)", icon: <Hash size={17} />,
+        isActive: activeChannel === sp.id,
+        onClick: () => { setActiveChannel(sp.id); setMessages([]); setThreadMsg(null); },
+        count: unreadCounts[resolveChannelKey(projectId ?? "", currentUserId, sp.id)] || undefined,
+      }));
 
   const chatExtra = (
     <>
@@ -292,6 +560,8 @@ export default function ChatPage() {
           {visibleSubProjects.map(sp => {
             const act = activeChannel === sp.id;
             const c = sp.color ?? "var(--color-navy)";
+            const chKey = resolveChannelKey(projectId ?? "", currentUserId, sp.id);
+            const unread = unreadCounts[chKey] ?? 0;
             return (
               <button key={sp.id} onClick={() => { setActiveChannel(sp.id); setMessages([]); setThreadMsg(null); }}
                 style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "6px 10px 6px 11px", borderRadius: 7, border: "none", borderLeft: `3px solid ${act ? c : "transparent"}`, cursor: "pointer", backgroundColor: act ? `${c}18` : "transparent", fontFamily: "var(--font-roboto)", textAlign: "left", boxSizing: "border-box", marginBottom: 1 }}
@@ -299,7 +569,8 @@ export default function ChatPage() {
                 onMouseLeave={e => { if (!act) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "transparent"; }}
               >
                 <MessageSquare size={13} style={{ color: act ? c : "var(--color-secondary)", flexShrink: 0 }} />
-                <span style={{ fontSize: 13, color: act ? c : "var(--color-body)", fontWeight: act ? 600 : 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sp.name}</span>
+                <span style={{ fontSize: 13, color: act ? c : "var(--color-body)", fontWeight: act || unread > 0 ? 600 : 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{sp.name}</span>
+                {unread > 0 && <span style={{ fontSize: 10, fontWeight: 700, backgroundColor: "var(--color-navy)", color: "#fff", borderRadius: 10, padding: "1px 6px", flexShrink: 0 }}>{unread}</span>}
               </button>
             );
           })}
@@ -313,17 +584,22 @@ export default function ChatPage() {
             const id = `dm:${peer.id}`;
             const act = activeChannel === id;
             const c = "var(--color-navy)";
+            const isOnline = onlineUserIds.has(peer.id);
+            const chKey = resolveChannelKey(projectId ?? "", currentUserId, id);
+            const unread = unreadCounts[chKey] ?? 0;
             return (
               <button key={id} onClick={() => { setActiveChannel(id); setMessages([]); setThreadMsg(null); }}
                 style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "6px 10px 6px 11px", borderRadius: 7, border: "none", borderLeft: `3px solid ${act ? c : "transparent"}`, cursor: "pointer", backgroundColor: act ? `${c}18` : "transparent", fontFamily: "var(--font-roboto)", textAlign: "left", boxSizing: "border-box", marginBottom: 1 }}
                 onMouseEnter={e => { if (!act) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "rgba(0,0,0,0.04)"; }}
                 onMouseLeave={e => { if (!act) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "transparent"; }}
               >
+                {/* F1: Online dot */}
                 <span style={{ flexShrink: 0, position: "relative", display: "inline-flex" }}>
                   <span style={{ borderRadius: "50%", boxShadow: "0 0 0 2px var(--color-canvas)", display: "flex" }}><Avatar user={peer} size={22} /></span>
-                  <span style={{ position: "absolute", bottom: 0, right: 0, width: 7, height: 7, borderRadius: "50%", backgroundColor: "var(--color-secondary)", border: "1.5px solid var(--color-canvas)", opacity: 0.55 }} aria-hidden="true" />
+                  <span style={{ position: "absolute", bottom: 0, right: 0, width: 7, height: 7, borderRadius: "50%", backgroundColor: isOnline ? "#22c55e" : "var(--color-secondary)", border: "1.5px solid var(--color-canvas)", opacity: isOnline ? 1 : 0.45 }} aria-hidden="true" />
                 </span>
-                <span style={{ fontSize: 13, color: act ? c : "var(--color-body)", fontWeight: act ? 600 : 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{peer.name}</span>
+                <span style={{ fontSize: 13, color: act ? c : "var(--color-body)", fontWeight: act || unread > 0 ? 600 : 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{peer.name}</span>
+                {unread > 0 && <span style={{ fontSize: 10, fontWeight: 700, backgroundColor: "var(--color-navy)", color: "#fff", borderRadius: 10, padding: "1px 6px", flexShrink: 0 }}>{unread}</span>}
               </button>
             );
           })}
@@ -336,18 +612,77 @@ export default function ChatPage() {
 
   const memberCount = teamMembers.length + 1;
   const isDm = activeChannel.startsWith("dm:");
+  const pinnedCount = messages.filter(m => m.isPinned && !m.deletedAt).length;
 
   return (
     <>
       <style>{`@keyframes typBounce{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-4px)}}`}</style>
+      {/* Hidden file input */}
+      <input ref={fileInputRef} type="file" multiple accept="image/*,.pdf,.doc,.docx,.txt,.csv,.xlsx" style={{ display: "none" }} onChange={handleFileSelect} />
       <div className="flex flex-col h-full" style={{ fontFamily: "var(--font-roboto)", overflow: "hidden" }}>
         <PageHeader title="Chat">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-1">
             {!isDm && <Hash size={14} style={{ color: "var(--color-secondary)", flexShrink: 0 }} />}
             <span style={{ fontSize: 13, fontWeight: 600, color: "var(--color-secondary)" }}>{channelLabel()}</span>
             {!isDm && <span style={{ fontSize: 12, color: "var(--color-secondary)" }}>{memberCount} members</span>}
+            <div className="flex items-center gap-1 ml-auto">
+              {/* F4: Pinned panel toggle */}
+              <button
+                onClick={() => setShowPinned(v => !v)}
+                title="Pinned messages"
+                style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 8px", borderRadius: 6, border: "none", background: showPinned ? "rgba(27,46,75,0.08)" : "transparent", cursor: "pointer", color: showPinned ? "var(--color-navy)" : "var(--color-secondary)", fontSize: 12 }}
+              >
+                <Pin size={13} />
+                {pinnedCount > 0 && <span style={{ fontWeight: 600 }}>{pinnedCount}</span>}
+              </button>
+              {/* F5: Search toggle */}
+              <button
+                onClick={() => { setSearchOpen(v => !v); if (searchOpen) { setSearchQuery(""); setSearchResults([]); } }}
+                title="Search messages"
+                style={{ display: "flex", alignItems: "center", padding: "4px 6px", borderRadius: 6, border: "none", background: searchOpen ? "rgba(27,46,75,0.08)" : "transparent", cursor: "pointer", color: searchOpen ? "var(--color-navy)" : "var(--color-secondary)" }}
+              >
+                <Search size={14} />
+              </button>
+            </div>
           </div>
         </PageHeader>
+
+        {/* F5: Search bar */}
+        {searchOpen && (
+          <div style={{ padding: "8px 16px", borderBottom: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", flexShrink: 0, display: "flex", gap: 8, alignItems: "center" }}>
+            <Search size={14} color="var(--color-secondary)" style={{ flexShrink: 0 }} />
+            <input
+              autoFocus
+              value={searchQuery}
+              onChange={e => { setSearchQuery(e.target.value); runSearch(e.target.value); }}
+              placeholder={`Search in ${channelLabel()}…`}
+              style={{ flex: 1, border: "none", outline: "none", background: "transparent", fontSize: 13, color: "var(--color-body)", fontFamily: "var(--font-roboto)" }}
+            />
+            {searching && <span style={{ fontSize: 11, color: "var(--color-secondary)" }}>Searching…</span>}
+            <button onClick={() => { setSearchOpen(false); setSearchQuery(""); setSearchResults([]); }} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-secondary)", display: "flex", padding: 2 }}><X size={14} /></button>
+          </div>
+        )}
+
+        {/* F5: Search results */}
+        {searchOpen && searchResults.length > 0 && (
+          <div style={{ borderBottom: "1px solid var(--color-border)", backgroundColor: "var(--color-canvas)", flexShrink: 0, maxHeight: 260, overflowY: "auto" }}>
+            {searchResults.map(r => (
+              <button key={r.id} onClick={() => jumpToMessage(r.id)} style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 16px", borderBottom: "1px solid var(--color-border)", border: "none", background: "none", cursor: "pointer" }}
+                onMouseEnter={e => (e.currentTarget.style.backgroundColor = "var(--color-surface-2)")}
+                onMouseLeave={e => (e.currentTarget.style.backgroundColor = "transparent")}
+              >
+                <div style={{ fontSize: 11, color: "var(--color-secondary)", marginBottom: 2 }}>{r.senderName}</div>
+                <div style={{ fontSize: 13, color: "var(--color-body)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.content}</div>
+              </button>
+            ))}
+          </div>
+        )}
+        {searchOpen && searchQuery && !searching && searchResults.length === 0 && (
+          <div style={{ padding: "10px 16px", backgroundColor: "var(--color-canvas)", borderBottom: "1px solid var(--color-border)", flexShrink: 0 }}>
+            <span style={{ fontSize: 12, color: "var(--color-secondary)" }}>No results for "{searchQuery}"</span>
+          </div>
+        )}
+
         <div className="flex flex-1 overflow-hidden">
           <ScopeSidebar
             storageKey="chat_sidebar"
@@ -357,71 +692,159 @@ export default function ChatPage() {
             onToggleCollapse={toggleSidebar}
           />
 
-          <div className="flex flex-col flex-1 overflow-hidden">
-          {/* Messages */}
-          <div
-            className="flex-1 overflow-y-auto"
-            style={{ backgroundColor: "var(--color-canvas)", position: "relative" }}
-            onScroll={handleScroll}
-          >
-            {loading && <div className="flex items-center justify-center py-10" style={{ color: "var(--color-secondary)", fontSize: 13 }}>Loading messages…</div>}
-            {!loading && messages.length === 0 && (
-              <div className="flex flex-col items-center justify-center flex-1 px-6 py-12 text-center gap-3">
-                <MessageSquare size={40} style={{ color: "var(--color-border)" }} />
-                <p style={{ fontSize: 14, fontWeight: 600, color: "var(--color-body)", margin: 0 }}>No messages yet</p>
-                <p style={{ fontSize: 13, color: "var(--color-secondary)", margin: 0 }}>Be the first to send a message.</p>
-                <button onClick={() => inputRef.current?.focus()} style={{ marginTop: 6, fontSize: 13, fontWeight: 600, padding: "8px 18px", borderRadius: 7, backgroundColor: "var(--color-btn-primary)", color: "#fff", border: "none", cursor: "pointer" }}>Send a message</button>
-              </div>
-            )}
-            {!loading && messages.length > 0 && (
-              <div style={{ paddingTop: 12, paddingBottom: 4 }}>
-                {messages.map((msg, i) => {
-                  const prev = i > 0 ? messages[i - 1] : null;
-                  const showDiv = !prev || !sameDay(prev.createdAt, msg.createdAt);
-                  return (
-                    <div key={msg.id}>
-                      {showDiv && <DateDivider iso={msg.createdAt} />}
-                      <MessageRow msg={msg} prevMsg={prev} currentUserId={currentUserId} onEdit={handleEdit} onDelete={handleDelete} onReact={handleReact} onOpenThread={setThreadMsg} />
-                    </div>
-                  );
-                })}
-                <div ref={bottomRef} />
-              </div>
-            )}
-            {hasNewMessages && (
-              <button onClick={scrollToBottom} style={{ position: "sticky", bottom: 12, left: "50%", transform: "translateX(-50%)", display: "flex", alignItems: "center", gap: 6, padding: "6px 14px", backgroundColor: "var(--color-navy)", color: "#fff", border: "none", borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: "pointer", boxShadow: "0 2px 8px rgba(0,0,0,0.18)", whiteSpace: "nowrap" }}>
-                New messages <ChevronDown size={13} />
-              </button>
-            )}
-          </div>
-
-          <TypingIndicator names={typingUsers.map(u => u.name)} />
-
-          {/* Input bar */}
-          <div style={{ padding: "10px 16px 12px", borderTop: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", flexShrink: 0 }}>
-            <div style={{ display: "flex", alignItems: "flex-end", gap: 8, border: "1px solid var(--color-border)", borderRadius: 10, backgroundColor: "var(--color-canvas)", padding: "6px 6px 6px 10px" }}>
-              <button title="Attach file" aria-label="Attach file" style={{ width: 28, height: 28, borderRadius: 7, border: "none", backgroundColor: "transparent", color: "var(--color-secondary)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                <Plus size={16} />
-              </button>
-              <textarea
-                ref={inputRef}
-                value={draft}
-                onChange={e => { setDraft(e.target.value); broadcastTyping(); }}
-                onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
-                placeholder={`Message ${channelLabel()}…`}
-                rows={1}
-                style={{ flex: 1, resize: "none", border: "none", outline: "none", background: "transparent", color: "var(--color-body)", fontSize: 14, lineHeight: 1.5, fontFamily: "var(--font-roboto)", maxHeight: 120, overflowY: "auto" }}
-              />
-              <button onClick={sendMessage} disabled={!draft.trim() || sending} aria-label="Send message"
-                style={{ width: 32, height: 32, borderRadius: 7, border: "none", backgroundColor: draft.trim() ? "var(--color-btn-primary)" : "transparent", color: draft.trim() ? "#fff" : "var(--color-secondary)", cursor: draft.trim() ? "pointer" : "default", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "background-color 0.15s" }}>
-                <Send size={15} />
-              </button>
+          <div className="flex flex-col flex-1 overflow-hidden" style={{ position: "relative" }}>
+            {/* Messages */}
+            <div
+              className="flex-1 overflow-y-auto"
+              style={{ backgroundColor: "var(--color-canvas)", position: "relative" }}
+              onScroll={handleScroll}
+            >
+              {loading && <div className="flex items-center justify-center py-10" style={{ color: "var(--color-secondary)", fontSize: 13 }}>Loading messages…</div>}
+              {!loading && messages.length === 0 && (
+                <div className="flex flex-col items-center justify-center flex-1 px-6 py-12 text-center gap-3">
+                  <MessageSquare size={40} style={{ color: "var(--color-border)" }} />
+                  <p style={{ fontSize: 14, fontWeight: 600, color: "var(--color-body)", margin: 0 }}>No messages yet</p>
+                  <p style={{ fontSize: 13, color: "var(--color-secondary)", margin: 0 }}>Be the first to send a message.</p>
+                  <button onClick={() => inputRef.current?.focus()} style={{ marginTop: 6, fontSize: 13, fontWeight: 600, padding: "8px 18px", borderRadius: 7, backgroundColor: "var(--color-btn-primary)", color: "#fff", border: "none", cursor: "pointer" }}>Send a message</button>
+                </div>
+              )}
+              {!loading && messages.length > 0 && (
+                <div style={{ paddingTop: 12, paddingBottom: 4 }}>
+                  {messages.map((msg, i) => {
+                    const prev = i > 0 ? messages[i - 1] : null;
+                    const showDiv = !prev || !sameDay(prev.createdAt, msg.createdAt);
+                    return (
+                      <div
+                        key={msg.id}
+                        ref={el => { if (el) msgRefsMap.current.set(msg.id, el); else msgRefsMap.current.delete(msg.id); }}
+                        style={{ transition: "background-color 0.3s", backgroundColor: highlightedMsgId === msg.id ? "rgba(14,165,233,0.10)" : "transparent" }}
+                      >
+                        {showDiv && <DateDivider iso={msg.createdAt} />}
+                        <MessageRow msg={msg} prevMsg={prev} currentUserId={currentUserId} onEdit={handleEdit} onDelete={handleDelete} onReact={handleReact} onOpenThread={setThreadMsg} onPin={handlePin} teamMembers={teamMembers} />
+                      </div>
+                    );
+                  })}
+                  <div ref={bottomRef} />
+                </div>
+              )}
+              {hasNewMessages && (
+                <button onClick={scrollToBottom} style={{ position: "sticky", bottom: 12, left: "50%", transform: "translateX(-50%)", display: "flex", alignItems: "center", gap: 6, padding: "6px 14px", backgroundColor: "var(--color-navy)", color: "#fff", border: "none", borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: "pointer", boxShadow: "0 2px 8px rgba(0,0,0,0.18)", whiteSpace: "nowrap" }}>
+                  New messages <ChevronDown size={13} />
+                </button>
+              )}
             </div>
-            <p style={{ fontSize: 11, color: "var(--color-secondary)", margin: "4px 0 0 10px" }}>
-              <strong>**bold**</strong>, <em>_italic_</em>, <code style={{ fontFamily: "monospace", fontSize: 10 }}>`code`</code> — Shift+Enter for newline
-            </p>
+
+            <TypingIndicator names={typingUsers.map(u => u.name)} />
+
+            {/* Input bar */}
+            <div style={{ padding: "10px 16px 12px", borderTop: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", flexShrink: 0 }}>
+              {/* F7: Pending attachment previews */}
+              {pendingAttachments.length > 0 && (
+                <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
+                  {pendingAttachments.map((a, i) => (
+                    <div key={i} style={{ position: "relative", display: "inline-flex" }}>
+                      {a.preview ? (
+                        <img src={a.preview} alt={a.file.name} style={{ width: 60, height: 60, objectFit: "cover", borderRadius: 6, border: "1px solid var(--color-border)" }} />
+                      ) : (
+                        <div style={{ width: 72, height: 60, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", borderRadius: 6, border: "1px solid var(--color-border)", backgroundColor: "var(--color-canvas)", gap: 3 }}>
+                          <FileText size={18} color="var(--color-secondary)" />
+                          <span style={{ fontSize: 9, color: "var(--color-secondary)", maxWidth: 64, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textAlign: "center" }}>{a.file.name}</span>
+                        </div>
+                      )}
+                      <button onClick={() => setPendingAttachments(p => p.filter((_, j) => j !== i))}
+                        style={{ position: "absolute", top: -5, right: -5, width: 16, height: 16, borderRadius: "50%", backgroundColor: "var(--color-error)", color: "#fff", border: "none", cursor: "pointer", fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1 }}>
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div style={{ position: "relative" }}>
+                {/* F3: Mention autocomplete */}
+                {mentionQuery !== null && mentionCandidates.length > 0 && (
+                  <div style={{ position: "absolute", bottom: "calc(100% + 4px)", left: 0, right: 0, zIndex: 100, backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 8, boxShadow: "0 4px 16px rgba(0,0,0,0.12)", overflow: "hidden" }}>
+                    {mentionCandidates.map((m, i) => (
+                      <button key={m.id} onClick={() => insertMention(m)}
+                        style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "7px 12px", border: "none", background: i === mentionIndex ? "rgba(14,165,233,0.08)" : "transparent", cursor: "pointer", textAlign: "left" }}
+                        onMouseEnter={e => (e.currentTarget.style.backgroundColor = "rgba(14,165,233,0.08)")}
+                        onMouseLeave={e => (e.currentTarget.style.backgroundColor = i === mentionIndex ? "rgba(14,165,233,0.08)" : "transparent")}
+                      >
+                        <Avatar user={m} size={20} />
+                        <span style={{ fontSize: 13, color: "var(--color-body)" }}>{m.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <div style={{ display: "flex", alignItems: "flex-end", gap: 8, border: "1px solid var(--color-border)", borderRadius: 10, backgroundColor: "var(--color-canvas)", padding: "6px 6px 6px 10px" }}>
+                  <button title="Attach file" aria-label="Attach file" onClick={() => fileInputRef.current?.click()} style={{ width: 28, height: 28, borderRadius: 7, border: "none", backgroundColor: "transparent", color: "var(--color-secondary)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <Plus size={16} />
+                  </button>
+                  <textarea
+                    ref={inputRef}
+                    value={draft}
+                    onChange={e => {
+                      const val = e.target.value;
+                      setDraft(val);
+                      broadcastTyping();
+                      const cursor = e.target.selectionStart ?? val.length;
+                      const atMatch = val.slice(0, cursor).match(/@(\w*)$/);
+                      if (atMatch) { setMentionQuery(atMatch[1]); setMentionIndex(0); }
+                      else setMentionQuery(null);
+                    }}
+                    onKeyDown={e => {
+                      if (mentionQuery !== null && mentionCandidates.length > 0) {
+                        if (e.key === "ArrowDown") { e.preventDefault(); setMentionIndex(i => Math.min(i + 1, mentionCandidates.length - 1)); return; }
+                        if (e.key === "ArrowUp") { e.preventDefault(); setMentionIndex(i => Math.max(i - 1, 0)); return; }
+                        if (e.key === "Enter" || e.key === "Tab") { e.preventDefault(); insertMention(mentionCandidates[mentionIndex]); return; }
+                        if (e.key === "Escape") { setMentionQuery(null); return; }
+                      }
+                      if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+                    }}
+                    placeholder={`Message ${channelLabel()}…`}
+                    rows={1}
+                    style={{ flex: 1, resize: "none", border: "none", outline: "none", background: "transparent", color: "var(--color-body)", fontSize: 14, lineHeight: 1.5, fontFamily: "var(--font-roboto)", maxHeight: 120, overflowY: "auto" }}
+                  />
+                  <button onClick={sendMessage} disabled={(!draft.trim() && !pendingAttachments.length) || sending} aria-label="Send message"
+                    style={{ width: 32, height: 32, borderRadius: 7, border: "none", backgroundColor: (draft.trim() || pendingAttachments.length) ? "var(--color-btn-primary)" : "transparent", color: (draft.trim() || pendingAttachments.length) ? "#fff" : "var(--color-secondary)", cursor: (draft.trim() || pendingAttachments.length) ? "pointer" : "default", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "background-color 0.15s" }}>
+                    <Send size={15} />
+                  </button>
+                </div>
+              </div>
+              <p style={{ fontSize: 11, color: "var(--color-secondary)", margin: "4px 0 0 10px" }}>
+                <strong>**bold**</strong>, <em>_italic_</em>, <code style={{ fontFamily: "monospace", fontSize: 10 }}>`code`</code>, @Name — Shift+Enter for newline
+              </p>
+            </div>
           </div>
-          </div>
+
+          {/* F4: Pinned messages panel */}
+          {showPinned && (
+            <div style={{ width: 300, flexShrink: 0, display: "flex", flexDirection: "column", height: "100%", borderLeft: "1px solid var(--color-border)", backgroundColor: "var(--color-canvas)", overflow: "hidden" }}>
+              <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <Pin size={13} color="var(--color-navy)" />
+                  <span style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 14, color: "var(--color-navy)" }}>Pinned Messages</span>
+                </div>
+                <button onClick={() => setShowPinned(false)} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, display: "flex", borderRadius: 6, color: "var(--color-secondary)" }}
+                  onMouseEnter={e => (e.currentTarget.style.backgroundColor = "var(--color-surface-2)")}
+                  onMouseLeave={e => (e.currentTarget.style.backgroundColor = "transparent")}
+                ><X size={15} /></button>
+              </div>
+              <div style={{ flex: 1, overflowY: "auto" }}>
+                {messages.filter(m => m.isPinned && !m.deletedAt).length === 0 ? (
+                  <p style={{ fontSize: 13, color: "var(--color-secondary)", textAlign: "center", padding: "24px 16px" }}>No pinned messages in this channel.</p>
+                ) : messages.filter(m => m.isPinned && !m.deletedAt).map(m => (
+                  <button key={m.id} onClick={() => jumpToMessage(m.id)}
+                    style={{ display: "block", width: "100%", textAlign: "left", padding: "10px 14px", borderBottom: "1px solid var(--color-border)", border: "none", background: "none", cursor: "pointer" }}
+                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = "var(--color-surface-2)")}
+                    onMouseLeave={e => (e.currentTarget.style.backgroundColor = "transparent")}
+                  >
+                    <div style={{ fontSize: 11, fontWeight: 600, color: "var(--color-secondary)", marginBottom: 2 }}>{m.senderName}</div>
+                    <div style={{ fontSize: 13, color: "var(--color-body)", overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" } as React.CSSProperties}>{m.content}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {threadMsg && (
             <ThreadPanel
@@ -431,6 +854,7 @@ export default function ChatPage() {
               projectId={projectId ?? ""}
               onClose={() => setThreadMsg(null)}
               onReact={handleReact}
+              onReplyAdded={handleReplyAdded}
             />
           )}
         </div>

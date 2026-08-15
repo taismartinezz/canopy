@@ -2,18 +2,27 @@
 
 import { useState, useEffect, useRef } from "react";
 import type { ReactNode } from "react";
-import { SmilePlus, MessageCircle, Pin, Pencil, Trash2 } from "lucide-react";
+import { SmilePlus, MessageCircle, Pin, Pencil, Trash2, FileText } from "lucide-react";
 import Avatar from "@/components/ui/Avatar";
+import type { User } from "@/types";
 import type { ChatMessage } from "./types";
 import { GROUP_GAP_MS } from "./types";
 import { buildUser, formatTime, formatHM, renderMd, EmojiPicker, TBtn } from "./chatUtils";
 
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 export function MessageRow({
-  msg, prevMsg, currentUserId, onEdit, onDelete, onReact, onOpenThread,
+  msg, prevMsg, currentUserId, onEdit, onDelete, onReact, onOpenThread, onPin, teamMembers = [],
 }: {
   msg: ChatMessage; prevMsg: ChatMessage | null; currentUserId: string;
   onEdit: (id: string, c: string) => void; onDelete: (id: string) => void;
   onReact: (id: string, em: string) => void; onOpenThread: (m: ChatMessage) => void;
+  onPin: (id: string, pin: boolean) => void;
+  teamMembers?: User[];
 }) {
   const isOwn = msg.senderId === currentUserId;
   const isCont = prevMsg !== null && !prevMsg.deletedAt && prevMsg.threadParentId === null && prevMsg.senderId === msg.senderId &&
@@ -35,6 +44,11 @@ export function MessageRow({
 
   const showBar = (hovered || emojiOpen) && !editing;
 
+  // Thread preview avatar
+  const lastReplier = msg.threadLastReplierId
+    ? (teamMembers.find(m => m.id === msg.threadLastReplierId) ?? buildUser(msg.threadLastReplierId, "?"))
+    : null;
+
   if (msg.deletedAt) {
     return (
       <div style={{ display: "flex", padding: "1px 48px 1px 0" }}>
@@ -50,6 +64,11 @@ export function MessageRow({
       onMouseLeave={() => setHovered(false)}
       style={{ display: "flex", flexDirection: "column", padding: isCont ? "1px 48px 1px 0" : "6px 48px 1px 0", position: "relative", backgroundColor: (hovered || emojiOpen) ? "var(--color-surface-2)" : "transparent", transition: "background-color 0.06s" }}
     >
+      {msg.isPinned && (
+        <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "0 0 2px 52px", fontSize: 10, color: "var(--color-navy)", fontWeight: 600 }}>
+          <Pin size={9} /> Pinned
+        </div>
+      )}
       <div style={{ display: "flex", alignItems: "flex-start" }}>
         <div style={{ width: 52, flexShrink: 0, paddingTop: 2, display: "flex", justifyContent: "center", alignItems: "flex-start" }}>
           {!isCont ? <Avatar user={avUser} size={32} /> : hovered ? <span style={{ fontSize: 10, color: "var(--color-secondary)", lineHeight: "20px", whiteSpace: "nowrap" }}>{formatHM(msg.createdAt)}</span> : null}
@@ -75,6 +94,25 @@ export function MessageRow({
             <div style={{ fontSize: 14, lineHeight: 1.5, color: "var(--color-body)", wordBreak: "break-word", whiteSpace: "pre-wrap" }}>{renderMd(msg.content)}</div>
           )}
 
+          {/* Attachments */}
+          {msg.attachments.length > 0 && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
+              {msg.attachments.map((att, i) =>
+                att.type.startsWith("image/") ? (
+                  <a key={i} href={att.url} target="_blank" rel="noopener noreferrer">
+                    <img src={att.url} alt={att.name} style={{ maxWidth: 300, maxHeight: 200, borderRadius: 8, border: "1px solid var(--color-border)", display: "block", objectFit: "cover" }} />
+                  </a>
+                ) : (
+                  <a key={i} href={att.url} target="_blank" rel="noopener noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "5px 10px", borderRadius: 8, backgroundColor: "var(--color-surface-2)", border: "1px solid var(--color-border)", fontSize: 12, color: "var(--color-body)", textDecoration: "none" }}>
+                    <FileText size={13} color="var(--color-secondary)" />
+                    <span style={{ maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{att.name}</span>
+                    <span style={{ color: "var(--color-secondary)", fontSize: 11, flexShrink: 0 }}>{formatBytes(att.size)}</span>
+                  </a>
+                )
+              )}
+            </div>
+          )}
+
           {msg.reactions.length > 0 && (
             <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 4 }}>
               {msg.reactions.map(r => (
@@ -86,9 +124,11 @@ export function MessageRow({
             </div>
           )}
 
+          {/* Thread preview */}
           {msg.threadCount > 0 && !editing && (
             <button onClick={() => onOpenThread(msg)} style={{ display: "inline-flex", alignItems: "center", gap: 5, marginTop: 4, background: "none", border: "none", cursor: "pointer", padding: "2px 0", color: "var(--color-navy)", fontSize: 12, fontWeight: 600, fontFamily: "var(--font-roboto)" }}>
-              <MessageCircle size={12} />{msg.threadCount} {msg.threadCount === 1 ? "reply" : "replies"}
+              {lastReplier ? <Avatar user={lastReplier} size={16} /> : <MessageCircle size={12} />}
+              {msg.threadCount} {msg.threadCount === 1 ? "reply" : "replies"}
             </button>
           )}
         </div>
@@ -100,7 +140,9 @@ export function MessageRow({
             <div style={{ backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 8, padding: "2px 3px", boxShadow: "0 2px 8px rgba(0,0,0,0.10)", display: "flex", alignItems: "center", gap: 1 }}>
               <TBtn label="Add reaction" onClick={() => setEmojiOpen(v => !v)}><SmilePlus size={14} /></TBtn>
               <TBtn label="Reply in thread" onClick={() => onOpenThread(msg)}><MessageCircle size={14} /></TBtn>
-              <TBtn label="Pin message" onClick={() => {}}><Pin size={14} /></TBtn>
+              <TBtn label={msg.isPinned ? "Unpin message" : "Pin message"} onClick={() => onPin(msg.id, !msg.isPinned)}>
+                <Pin size={14} style={{ color: msg.isPinned ? "var(--color-navy)" : undefined }} />
+              </TBtn>
               {isOwn && <TBtn label="Edit message" onClick={() => setEditing(true)}><Pencil size={14} /></TBtn>}
               {isOwn && <TBtn label="Delete message" onClick={() => onDelete(msg.id)} danger><Trash2 size={14} /></TBtn>}
             </div>

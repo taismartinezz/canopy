@@ -8,9 +8,10 @@ import type { ChatMessage } from "./types";
 import { buildUser, formatTime, renderMd } from "./chatUtils";
 import { MessageRow } from "./MessageRow";
 
-export function ThreadPanel({ parent, currentUserId, currentUserName, projectId, onClose, onReact }: {
+export function ThreadPanel({ parent, currentUserId, currentUserName, projectId, onClose, onReact, onReplyAdded }: {
   parent: ChatMessage; currentUserId: string; currentUserName: string;
   projectId: string; onClose: () => void; onReact: (id: string, em: string) => void;
+  onReplyAdded?: (parentId: string, replierId: string) => void;
 }) {
   const [replies, setReplies] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState("");
@@ -21,7 +22,7 @@ export function ThreadPanel({ parent, currentUserId, currentUserName, projectId,
 
   useEffect(() => {
     if (!isSupabaseConfigured) {
-      setReplies([{ id: "tr-1", channel: parent.channel, senderId: "demo-pi", senderName: "Dr. Sarah Chen", content: "Great point! Let's revisit Thursday.", createdAt: new Date(Date.now() - 60000 * 3).toISOString(), threadParentId: parent.id, deletedAt: null, threadCount: 0, reactions: [] }]);
+      setReplies([{ id: "tr-1", channel: parent.channel, senderId: "demo-pi", senderName: "Dr. Sarah Chen", content: "Great point! Let's revisit Thursday.", createdAt: new Date(Date.now() - 60000 * 3).toISOString(), threadParentId: parent.id, deletedAt: null, threadCount: 0, reactions: [], mentionedUserIds: [], isPinned: false, attachments: [] }]);
       return;
     }
     supabase.from("chat_messages").select("id, channel, sender_id, content, created_at, deleted_at").eq("thread_parent_id", parent.id).order("created_at", { ascending: true })
@@ -33,7 +34,7 @@ export function ThreadPanel({ parent, currentUserId, currentUserName, projectId,
           const { data: ps } = await supabase.from("user_profiles").select("id, name").in("id", ids);
           for (const p of ps ?? []) nameMap[p.id as string] = p.name as string;
         }
-        setReplies(data.map(row => ({ id: row.id as string, channel: row.channel as string, senderId: row.sender_id as string, senderName: nameMap[row.sender_id as string] ?? "Unknown", content: row.content as string, createdAt: row.created_at as string, threadParentId: parent.id, deletedAt: (row.deleted_at as string | null) ?? null, threadCount: 0, reactions: [] })));
+        setReplies(data.map(row => ({ id: row.id as string, channel: row.channel as string, senderId: row.sender_id as string, senderName: nameMap[row.sender_id as string] ?? "Unknown", content: row.content as string, createdAt: row.created_at as string, threadParentId: parent.id, deletedAt: (row.deleted_at as string | null) ?? null, threadCount: 0, reactions: [], mentionedUserIds: [], isPinned: false, attachments: [] })));
       });
   }, [parent.id, parent.channel]);
 
@@ -47,7 +48,7 @@ export function ThreadPanel({ parent, currentUserId, currentUserName, projectId,
         let name = "Unknown";
         const { data: p } = await supabase.from("user_profiles").select("name").eq("id", row.sender_id as string).single();
         if (p?.name) name = p.name as string;
-        const nm: ChatMessage = { id: row.id as string, channel: row.channel as string, senderId: row.sender_id as string, senderName: name, content: row.content as string, createdAt: row.created_at as string, threadParentId: parent.id, deletedAt: null, threadCount: 0, reactions: [] };
+        const nm: ChatMessage = { id: row.id as string, channel: row.channel as string, senderId: row.sender_id as string, senderName: name, content: row.content as string, createdAt: row.created_at as string, threadParentId: parent.id, deletedAt: null, threadCount: 0, reactions: [], mentionedUserIds: [], isPinned: false, attachments: [] };
         setReplies(prev => prev.some(m => m.id === nm.id) ? prev : [...prev, nm]);
       })
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "chat_messages", filter: `thread_parent_id=eq.${parent.id}` }, payload => {
@@ -63,13 +64,15 @@ export function ThreadPanel({ parent, currentUserId, currentUserName, projectId,
     if (!text || sending || !currentUserId || !projectId) return;
     setSending(true);
     if (!isSupabaseConfigured) {
-      setReplies(p => [...p, { id: crypto.randomUUID(), channel: parent.channel, senderId: currentUserId, senderName: currentUserName, content: text, createdAt: new Date().toISOString(), threadParentId: parent.id, deletedAt: null, threadCount: 0, reactions: [] }]);
+      setReplies(p => [...p, { id: crypto.randomUUID(), channel: parent.channel, senderId: currentUserId, senderName: currentUserName, content: text, createdAt: new Date().toISOString(), threadParentId: parent.id, deletedAt: null, threadCount: 0, reactions: [], mentionedUserIds: [], isPinned: false, attachments: [] }]);
       setDraft(""); setSending(false); return;
     }
     const id = crypto.randomUUID();
     const createdAt = new Date().toISOString();
     await supabase.from("chat_messages").insert({ id, channel: parent.channel, sender_id: currentUserId, content: text, created_at: createdAt, thread_parent_id: parent.id });
-    setReplies(p => [...p, { id, channel: parent.channel, senderId: currentUserId, senderName: currentUserName, content: text, createdAt, threadParentId: parent.id, deletedAt: null, threadCount: 0, reactions: [] }]);
+    await supabase.from("chat_messages").update({ thread_last_replier_id: currentUserId }).eq("id", parent.id);
+    setReplies(p => [...p, { id, channel: parent.channel, senderId: currentUserId, senderName: currentUserName, content: text, createdAt, threadParentId: parent.id, deletedAt: null, threadCount: 0, reactions: [], mentionedUserIds: [], isPinned: false, attachments: [] }]);
+    onReplyAdded?.(parent.id, currentUserId);
     setDraft(""); setSending(false);
     inputRef.current?.focus();
   }
