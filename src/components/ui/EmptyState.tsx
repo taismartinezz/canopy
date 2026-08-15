@@ -1,6 +1,6 @@
 "use client";
 
-type Variant = "tasks" | "reminders" | "bookmarks" | "literature" | "scheduling" | "journal" | "generic" | "column";
+type Variant = "tasks" | "reminders" | "bookmarks" | "literature" | "scheduling" | "journal" | "generic" | "column" | "done";
 
 const illustrations: Record<Variant, React.ReactNode> = {
   tasks: (
@@ -59,6 +59,12 @@ const illustrations: Record<Variant, React.ReactNode> = {
     <svg width="56" height="48" viewBox="0 0 56 48" fill="none" aria-hidden="true">
       <rect x="4" y="4" width="48" height="40" rx="5" stroke="var(--color-border)" strokeWidth="1.2" fill="var(--color-canvas)" />
       <path d="M12 16h20M12 23h14M12 30h18" stroke="var(--color-border)" strokeWidth="1" strokeLinecap="round" />
+    </svg>
+  ),
+  done: (
+    <svg width="56" height="48" viewBox="0 0 56 48" fill="none" aria-hidden="true">
+      <circle cx="28" cy="24" r="18" stroke="var(--color-border)" strokeWidth="1.2" fill="var(--color-canvas)" />
+      <path d="M20 24l5.5 5.5L36 18" stroke="var(--color-navy)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" opacity="0.4" />
     </svg>
   ),
   generic: (

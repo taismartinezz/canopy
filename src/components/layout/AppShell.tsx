@@ -20,7 +20,6 @@ import OnboardingModal, { useOnboarding } from "@/components/ui/OnboardingModal"
 import Tooltip from "@/components/ui/Tooltip";
 import GlobalSearch from "@/components/ui/GlobalSearch";
 import { UndoToastProvider } from "@/context/UndoToastContext";
-import ThemeToggle from "@/components/ui/ThemeToggle";
 import KeyboardShortcutsModal from "@/components/ui/KeyboardShortcutsModal";
 
 function contrastTextColor(hex: string): "#000000" | "#ffffff" {
@@ -81,7 +80,6 @@ function SidebarBody({
   onExpand,
   pastDueCount = 0,
   chatUnread = 0,
-  onShowShortcuts,
 }: {
   isActive: (href: string) => boolean;
   onLinkClick?: () => void;
@@ -94,7 +92,6 @@ function SidebarBody({
   onExpand?: () => void;
   pastDueCount?: number;
   chatUnread?: number;
-  onShowShortcuts?: () => void;
 }) {
   // ── Collapsed: icon-only rail ───────────────────────────────────────────────
   if (collapsed) {
@@ -136,20 +133,6 @@ function SidebarBody({
             );
           })}
         </nav>
-        <div style={{ paddingBottom: 8, display: "flex", flexDirection: "column", alignItems: "center", gap: 2, borderTop: "1px solid var(--color-border)", paddingTop: 6 }}>
-          <ThemeToggle compact />
-          {onShowShortcuts && (
-            <button
-              onClick={onShowShortcuts}
-              title="Keyboard shortcuts"
-              aria-label="Keyboard shortcuts"
-              className="flex items-center justify-center rounded-lg transition-colors hover:bg-[var(--color-navy-dim)]"
-              style={{ width: 32, height: 32, border: "none", background: "none", cursor: "pointer", color: "var(--color-secondary)", fontSize: 13, fontWeight: 700 }}
-            >
-              ?
-            </button>
-          )}
-        </div>
       </div>
     );
   }
@@ -226,44 +209,32 @@ function SidebarBody({
         })}
       </nav>
 
-      {/* Theme + shortcuts footer */}
-      <div style={{ padding: "8px 10px", borderTop: "1px solid var(--color-border)", display: "flex", flexDirection: "column", gap: 4 }}>
-        <ThemeToggle />
-        {onShowShortcuts && (
-          <button
-            onClick={onShowShortcuts}
-            aria-label="Keyboard shortcuts"
-            className="flex items-center gap-2 transition-colors hover:bg-[var(--color-navy-dim)]"
-            style={{ width: "100%", padding: "5px 8px", borderRadius: 7, border: "none", background: "none", cursor: "pointer", textAlign: "left", fontFamily: "var(--font-roboto)" }}
-          >
-            <kbd style={{ fontSize: 11, fontWeight: 700, padding: "1px 5px", borderRadius: 4, border: "1px solid var(--color-border)", backgroundColor: "var(--color-canvas)", color: "var(--color-secondary)", lineHeight: 1.4 }}>?</kbd>
-            <span style={{ fontSize: 12, color: "var(--color-secondary)" }}>Keyboard shortcuts</span>
-          </button>
-        )}
-      </div>
-
       {/* Team member list */}
       <div className="px-3 py-3 shrink-0">
         <div className="max-h-48 overflow-y-auto space-y-0.5">
           {team.length === 0 && (
             <p style={{ fontSize: 12, color: "var(--color-secondary)", padding: "2px 4px" }}>No teammates yet.</p>
           )}
-          {team.map((user) => (
-            <div key={user.id} className="flex items-center gap-2 px-1 py-1" style={{ minHeight: 32 }}>
-              <Avatar user={user} size={22} />
-              <span style={{
-                fontSize: 13,
-                color: user.id === currentUserId ? "var(--color-navy)" : "var(--color-body)",
-                fontWeight: user.id === currentUserId ? 600 : 400,
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-              }}>
-                {user.role === "pi" ? user.name : user.name.split(" ")[0]}
-                {user.role === "pi" && <span style={{ fontSize: 10, marginLeft: 4, color: "var(--color-secondary)", fontWeight: 400 }}>PI</span>}
-              </span>
-            </div>
-          ))}
+          {team.map((user) => {
+            const parts = user.name.trim().split(/\s+/);
+            const shortName = parts.length > 1 ? `${parts[0]} ${parts[parts.length - 1][0]}.` : parts[0] ?? user.name;
+            return (
+              <div key={user.id} className="flex items-center gap-2 px-1 py-1" style={{ minHeight: 32 }}>
+                <Avatar user={user} size={22} />
+                <span style={{
+                  fontSize: 13,
+                  color: user.id === currentUserId ? "var(--color-navy)" : "var(--color-body)",
+                  fontWeight: user.id === currentUserId ? 600 : 400,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}>
+                  {shortName}
+                  {user.role === "pi" && <span style={{ fontSize: 10, marginLeft: 4, color: "var(--color-secondary)", fontWeight: 400 }}>PI</span>}
+                </span>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
@@ -333,12 +304,11 @@ function NotifPanel({ onClose, notifications, onNavigate }: {
 
 // ── Profile menu ──────────────────────────────────────────────────────────────
 
-function ProfileMenu({ user, onClose, onSignOut, onNavigateProfile, onNavigateSettings }: {
+function ProfileMenu({ user, onClose, onSignOut, onNavigateProfile }: {
   user: Pick<User, "name" | "email">;
   onClose: () => void;
   onSignOut: () => void;
   onNavigateProfile: () => void;
-  onNavigateSettings: () => void;
 }) {
   return (
     <div
@@ -356,13 +326,6 @@ function ProfileMenu({ user, onClose, onSignOut, onNavigateProfile, onNavigateSe
           style={{ fontSize: 13, color: "var(--color-body)", minHeight: 44 }}
         >
           <UserIcon size={14} /> Profile
-        </button>
-        <button
-          onClick={() => { onNavigateSettings(); onClose(); }}
-          className="w-full flex items-center gap-2.5 px-4 text-left transition-colors hover:bg-[var(--color-navy-dim)]"
-          style={{ fontSize: 13, color: "var(--color-body)", minHeight: 44 }}
-        >
-          <Settings size={14} /> Settings
         </button>
         <div style={{ borderTop: "1px solid var(--color-border)", marginTop: 4, paddingTop: 4 }}>
           <button onClick={onSignOut} className="w-full flex items-center gap-2.5 px-4 text-left transition-colors hover:bg-[var(--color-navy-dim)]" style={{ fontSize: 13, color: "var(--color-error)", minHeight: 44 }}>
@@ -652,8 +615,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         if (dest) { e.preventDefault(); router.push(dest); }
       }
     }
+    function onShowShortcutsEvent() { setShowShortcuts(true); }
     document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
+    window.addEventListener("canopy:show-shortcuts", onShowShortcutsEvent);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      window.removeEventListener("canopy:show-shortcuts", onShowShortcutsEvent);
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -847,6 +815,21 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
         <div style={{ width: 28, height: 1, backgroundColor: "var(--color-border)", margin: "4px 0" }} />
 
+        {/* Settings */}
+        <div className="flex flex-col items-center pb-1">
+          <Tooltip label="Settings" placement="right">
+            <button
+              onClick={() => router.push("/settings")}
+              title="Settings"
+              aria-label="Settings"
+              className="w-9 h-9 rounded-[10px] flex items-center justify-center transition-colors hover:bg-[var(--color-navy-dim)]"
+              style={{ border: "none", background: "none", cursor: "pointer", color: "var(--color-secondary)" }}
+            >
+              <Settings size={16} />
+            </button>
+          </Tooltip>
+        </div>
+
         {/* Personal */}
         <div className="pb-3 pt-1 flex flex-col items-center">
           <Tooltip label={profile?.name ? `${profile.name} (personal)` : "Personal workspace"} placement="right">
@@ -891,7 +874,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           onExpand={() => { setNavCollapsed(false); localStorage.setItem("canopy_nav_collapsed", "false"); }}
           pastDueCount={pastDueCount}
           chatUnread={chatUnread}
-          onShowShortcuts={() => setShowShortcuts(true)}
         />
         {/* Drag-to-resize handle */}
         {!navCollapsed && (
@@ -983,7 +965,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           currentUserId={profile?.id ?? ""}
           pastDueCount={pastDueCount}
           chatUnread={chatUnread}
-          onShowShortcuts={() => setShowShortcuts(true)}
         />
       </div>
 
@@ -1137,7 +1118,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                   onClose={() => setProfileOpen(false)}
                   onSignOut={handleSignOut}
                   onNavigateProfile={() => router.push("/profile")}
-                  onNavigateSettings={() => router.push("/settings")}
                 />
               )}
             </div>
@@ -1146,7 +1126,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
         {/* Page content */}
         <main className="flex-1 overflow-y-auto overflow-x-hidden min-h-0">
-          <UndoToastProvider>{children}</UndoToastProvider>
+          <UndoToastProvider>
+            <div key={pathname} style={{ animation: "page-in 150ms ease both", minHeight: "100%" }}>
+              {children}
+            </div>
+          </UndoToastProvider>
         </main>
       </div>
     </div>

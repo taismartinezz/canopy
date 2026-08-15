@@ -4285,6 +4285,12 @@ export default function LiteraturePage() {
             </div>
           </>
         ) : (<>
+          {/* Page header */}
+          <div style={{ padding: "14px 20px 10px", backgroundColor: "var(--color-surface)", flexShrink: 0 }}>
+            <h1 style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 22, color: "var(--color-navy)", margin: 0 }}>
+              Literature
+            </h1>
+          </div>
           {/* Normal list toolbar */}
           {selectMode ? (
             <div className="flex items-center gap-2 px-3 md:px-4 py-2.5 flex-wrap" style={{ backgroundColor: "var(--color-surface)", borderBottom: "1px solid var(--color-border)", minHeight: 52 }}>
