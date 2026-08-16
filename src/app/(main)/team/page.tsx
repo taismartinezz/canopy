@@ -376,16 +376,27 @@ export default function TeamPage() {
 
   // Initialize UI state and resolve userId from auth session.
   useEffect(() => {
-    const su = getStoredUser();
     const sp = getStoredProject();
-    setIsPi(su.role === "pi");
     setStoredProjectName(sp.name);
 
-    if (!isSupabaseConfigured) { setTeam(TEAM_MEMBERS); setLoading(false); return; }
+    if (!isSupabaseConfigured) {
+      const su = getStoredUser();
+      setIsPi(su.role === "pi");
+      setTeam(TEAM_MEMBERS);
+      setLoading(false);
+      return;
+    }
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) setCurrentUserId(session.user.id);
-      else setLoading(false);
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (!session?.user) { setLoading(false); return; }
+      setCurrentUserId(session.user.id);
+      // Fetch real role -- never trust mock data for the PI gate
+      const { data: prof } = await supabase
+        .from("user_profiles")
+        .select("role")
+        .eq("id", session.user.id)
+        .maybeSingle();
+      setIsPi((prof?.role as string | null) === "pi");
     });
   }, []);
 
