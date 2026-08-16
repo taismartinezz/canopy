@@ -488,12 +488,15 @@ function PromptPicker({ usedTexts, onSelect, onClose }: {
 
 function JournalSidebarContent({
   search, setSearch, groupedEntries, selectedEntryId, onSelectEntry, showClose, onClose, onCollapse,
+  onSelectTrends, isTrendsView,
 }: {
   search: string; setSearch: (v: string) => void;
   groupedEntries: { today: JournalEntry[]; earlier: JournalEntry[]; older: JournalEntry[] };
   selectedEntryId: string | "new"; onSelectEntry: (id: string | "new") => void;
   showClose?: boolean; onClose?: () => void;
   onCollapse?: () => void;
+  onSelectTrends?: () => void;
+  isTrendsView?: boolean;
 }) {
   return (
     <div className="flex flex-col h-full" style={{ backgroundColor: "var(--color-surface)" }}>
@@ -517,7 +520,7 @@ function JournalSidebarContent({
           )}
         </div>
       )}
-      <div className="px-3 py-3" style={{ borderBottom: "1px solid var(--color-border)" }}>
+      <div className="px-3 py-3 flex flex-col gap-2" style={{ borderBottom: "1px solid var(--color-border)" }}>
         <button
           onClick={() => onSelectEntry("new")}
           className="w-full flex items-center justify-center gap-2 py-2 rounded-lg transition-opacity hover:opacity-90"
@@ -525,6 +528,21 @@ function JournalSidebarContent({
         >
           <Plus size={13} /> New Entry
         </button>
+        {onSelectTrends && (
+          <button
+            onClick={onSelectTrends}
+            className="w-full flex items-center justify-center gap-2 py-2 rounded-lg transition-colors"
+            style={{
+              backgroundColor: isTrendsView ? "rgba(16,185,129,0.10)" : "transparent",
+              color: isTrendsView ? "#10B981" : "var(--color-secondary)",
+              fontSize: 12, fontWeight: isTrendsView ? 700 : 500,
+              border: `1px solid ${isTrendsView ? "#10B981" : "var(--color-border)"}`,
+              borderRadius: 7, cursor: "pointer", minHeight: 36,
+            }}
+          >
+            <TrendingUp size={12} /> My Trends
+          </button>
+        )}
       </div>
       <div className="px-3 py-2" style={{ borderBottom: "1px solid var(--color-border)" }}>
         <div className="relative">
@@ -1066,6 +1084,8 @@ export default function JournalPage() {
             if (id === "new") { handleNewEntry(); } else { handleSelectEntry(id); }
           }}
           showClose onClose={() => setEntryListOpen(false)}
+          onSelectTrends={() => { setSelectedEntryId("trends"); setListCollapsed(true); setEntryListOpen(false); }}
+          isTrendsView={isTrendsView}
         />
       </div>
 
@@ -1088,6 +1108,8 @@ export default function JournalPage() {
                   if (id === "new") { handleNewEntry(); } else { handleSelectEntry(id); }
                 }}
                 onCollapse={handleToggleJournalSidebar}
+                onSelectTrends={() => { setSelectedEntryId("trends"); setListCollapsed(true); }}
+                isTrendsView={isTrendsView}
               />
             }
           />
