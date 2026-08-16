@@ -471,10 +471,19 @@ function BookmarkCard({ bm, canDelete, onDelete, onEdit }: {
 
 export default function BookmarksPage() {
   const { show: showUndoToast } = useUndoToast();
+  // Only read from ProjectContext -- never write back to it from this page.
+  // All scope selection here is purely local (bmScope) and never calls setActiveScope.
   const { projectId, subProjectId, subProjects, activeScope } = useProject();
-  const [bmScope, setBmScope] = useState<BmScope>("all");
-  const [selectedSubProjectId, setSelectedSubProjectId] = useState<string | null>(null);
   const isLabHome = activeScope === "lab";
+  // Initialize the local scope from the global scope so first render is consistent.
+  // Personal/project scopes from the global context are reflected here, but subsequent
+  // changes via the sidebar only affect local state.
+  const [bmScope, setBmScope] = useState<BmScope>(() => {
+    if (activeScope === "personal") return "personal";
+    if (activeScope === "project") return "project";
+    return "all";
+  });
+  const [selectedSubProjectId, setSelectedSubProjectId] = useState<string | null>(null);
   const effectiveBmScope: BmScope = isLabHome ? bmScope : (activeScope === "project" ? "project" : "personal");
   const effectiveSubProjectId: string | null = isLabHome
     ? (bmScope === "project" ? selectedSubProjectId : null)

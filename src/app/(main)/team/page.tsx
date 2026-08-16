@@ -30,10 +30,11 @@ const ROLLUP_LABELS: Record<string, string> = {
   cq1: "Support", cq2: "Workload", cq3: "Meaningful", cq4: "Boundaries", cq5: "Help",
 };
 
-function WellbeingRollupPanel({ rows, overdueCount, totalMembers, loading }: {
+function WellbeingRollupPanel({ rows, overdueCount, totalMembers, minRespondents, loading }: {
   rows: RollupRow[];
   overdueCount: number | null;
   totalMembers: number | null;
+  minRespondents: number;
   loading: boolean;
 }) {
   if (loading) {
@@ -54,13 +55,13 @@ function WellbeingRollupPanel({ rows, overdueCount, totalMembers, loading }: {
         <span style={{ fontFamily: "var(--font-lora)", fontWeight: 600, fontSize: 14, color: "var(--color-navy)" }}>Team Wellbeing (PI view)</span>
         <div style={{ display: "flex", alignItems: "center", gap: 4, marginLeft: "auto" }}>
           <ShieldCheck size={12} color="var(--color-secondary)" />
-          <span style={{ fontSize: 10, color: "var(--color-secondary)" }}>min 4 respondents required</span>
+          <span style={{ fontSize: 10, color: "var(--color-secondary)" }}>min {minRespondents} respondents required</span>
         </div>
       </div>
       <div style={{ padding: "14px 18px" }}>
         {weeks.length === 0 ? (
           <p style={{ fontSize: 12, color: "var(--color-secondary)", margin: 0 }}>
-            Not enough data yet -- check-ins from at least 4 opted-in members are required to show aggregates.
+            Not enough data yet -- check-ins from at least {minRespondents} opted-in member{minRespondents === 1 ? "" : "s"} are required to show aggregates.
           </p>
         ) : (
           <>
@@ -371,6 +372,7 @@ export default function TeamPage() {
   const [rollupLoading, setRollupLoading] = useState(false);
   const [overdueCount, setOverdueCount] = useState<number | null>(null);
   const [overdueTotalMembers, setOverdueTotalMembers] = useState<number | null>(null);
+  const [minRespondents, setMinRespondents] = useState(4);
   const closeMemberPanel = useCallback(() => setSelectedMember(null), []);
   const closeMeetingModal = useCallback(() => setMeetingModalOpen(false), []);
 
@@ -413,13 +415,14 @@ export default function TeamPage() {
           .eq("project_id", projectId),
         supabase
           .from("projects")
-          .select("name")
+          .select("name, min_wellbeing_respondents")
           .eq("id", projectId)
           .maybeSingle(),
       ]);
 
       // Override the localStorage-cached name with the real value from the DB.
       if (projectData?.name) setStoredProjectName(projectData.name as string);
+      if (projectData?.min_wellbeing_respondents != null) setMinRespondents(projectData.min_wellbeing_respondents as number);
 
       // 2. Task counts — single embedded-join query so PostgREST handles the
       //    task_id → tasks.id match server-side; no client-side Map key lookup needed.
@@ -629,6 +632,7 @@ export default function TeamPage() {
             rows={rollupRows}
             overdueCount={overdueCount}
             totalMembers={overdueTotalMembers}
+            minRespondents={minRespondents}
             loading={rollupLoading}
           />
         )}

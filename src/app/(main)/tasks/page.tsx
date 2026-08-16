@@ -270,23 +270,37 @@ export default function TasksPage() {
   const moveTask = useCallback((taskId: string, status: TaskStatus) => {
     setTasks((prev) => {
       const task = prev.find((t) => t.id === taskId);
-      if (task && task.status !== status && projectId && currentUserId) {
-        supabase.from("activity_feed").insert({
-          project_id: projectId,
-          user_id: currentUserId,
-          action_type: "moved",
-          item_name: task.title,
-          item_type: "task",
-          from_status: task.status,
-          to_status: status,
-          sub_project_id: task.subProjectId ?? null,
-        }).then(({ error }) => { if (error) console.error("[Tasks] activity insert error:", error); });
-      }
+      if (!task || task.status === status) return prev;
+
+      const prevStatus = task.status;
+      const taskTitle = task.title;
+      const taskSubProjectId = task.subProjectId ?? null;
+
+      // Write to DB first; only log activity after the update is confirmed.
+      supabase.from("tasks").update({ status }).eq("id", taskId).then(({ error }) => {
+        if (error) {
+          console.error("[Tasks] moveTask error:", error);
+          // Roll back the optimistic update
+          setTasks((p) => p.map((t) => t.id === taskId ? { ...t, status: prevStatus } : t));
+          return;
+        }
+        if (projectId && currentUserId) {
+          supabase.from("activity_feed").insert({
+            project_id: projectId,
+            user_id: currentUserId,
+            action_type: "moved",
+            item_name: taskTitle,
+            item_type: "task",
+            from_status: prevStatus,
+            to_status: status,
+            sub_project_id: taskSubProjectId,
+          }).then(({ error: e }) => { if (e) console.error("[Tasks] activity insert error:", e); });
+        }
+      });
+
       return prev.map((t) => t.id === taskId ? { ...t, status } : t);
     });
     setSelectedTask((prev) => prev?.id === taskId ? { ...prev, status } : prev);
-    supabase.from("tasks").update({ status }).eq("id", taskId)
-      .then(({ error }) => { if (error) console.error("[Tasks] moveTask error:", error); });
   }, [projectId, currentUserId]);
 
   const updateTask = useCallback((taskId: string, updates: Partial<Task>) => {
