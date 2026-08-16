@@ -51,6 +51,14 @@ export default function TasksPage() {
   const [projectId, setProjectId] = useState<string>("");
   const [subtaskCounts, setSubtaskCounts] = useState<Record<string, { total: number; done: number }>>({});
   const [taskNavStack, setTaskNavStack] = useState<Task[]>([]);
+  const [boardWidth, setBoardWidth] = useState(1440);
+
+  useEffect(() => {
+    function update() { setBoardWidth(window.innerWidth); }
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
 
   useEffect(() => {
     if (!isSupabaseConfigured) {
@@ -564,23 +572,38 @@ export default function TasksPage() {
         )}
         {!loading && view === "board" ? (
           <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-            <div className="overflow-x-auto" style={{ WebkitOverflowScrolling: "touch" }}>
-              <div className="grid gap-4 md:gap-5" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(210px, 1fr))", alignItems: "start" }}>
+            <div style={{
+              overflowX: boardWidth < 1024 ? "auto" : "visible",
+              WebkitOverflowScrolling: "touch",
+              scrollSnapType: boardWidth >= 640 && boardWidth < 1024 ? "x mandatory" : undefined,
+            }}>
+              <div style={{
+                display: boardWidth >= 1024 ? "grid" : "flex",
+                flexDirection: boardWidth < 640 ? "column" : "row",
+                gridTemplateColumns: boardWidth >= 1024 ? "repeat(4, minmax(0, 1fr))" : undefined,
+                gap: boardWidth >= 1024 ? 20 : 16,
+                alignItems: "start",
+              }}>
                 {STATUS_ORDER.map((status) => (
-                  <KanbanColumn
-                    key={status}
-                    status={status}
-                    tasks={tasksByStatus[status]}
-                    onTaskClick={setSelectedTask}
-                    onMoveTask={moveTask}
-                    onEditTask={(t) => setModalState({ mode: "edit", task: t })}
-                    onDeleteTask={deleteTask}
-                    onAddTask={(s) => setModalState({ mode: "add", status: s })}
-                    onArchiveDone={archiveDoneTasks}
-                    teamMembers={teamMembers}
-                    subtaskCounts={subtaskCounts}
-                    showLabBadge={false}
-                  />
+                  <div key={status} style={
+                    boardWidth >= 1024 ? {} :
+                    boardWidth < 640 ? { width: "100%", minWidth: 0 } :
+                    { minWidth: 252, maxWidth: 280, flexShrink: 0, scrollSnapAlign: "start" }
+                  }>
+                    <KanbanColumn
+                      status={status}
+                      tasks={tasksByStatus[status]}
+                      onTaskClick={setSelectedTask}
+                      onMoveTask={moveTask}
+                      onEditTask={(t) => setModalState({ mode: "edit", task: t })}
+                      onDeleteTask={deleteTask}
+                      onAddTask={(s) => setModalState({ mode: "add", status: s })}
+                      onArchiveDone={archiveDoneTasks}
+                      teamMembers={teamMembers}
+                      subtaskCounts={subtaskCounts}
+                      showLabBadge={false}
+                    />
+                  </div>
                 ))}
               </div>
             </div>

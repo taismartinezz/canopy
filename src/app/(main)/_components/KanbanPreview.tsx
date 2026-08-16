@@ -120,11 +120,16 @@ export function KanbanPreview({
 }) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [isMobile, setIsMobile] = useState(false);
+  const [boardWidth, setBoardWidth] = useState(1440);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
   useEffect(() => {
-    function check() { setIsMobile(window.innerWidth < 768); }
+    function check() {
+      const w = window.innerWidth;
+      setIsMobile(w < 768);
+      setBoardWidth(w);
+    }
     check();
     window.addEventListener("resize", check);
     return () => window.removeEventListener("resize", check);
@@ -162,11 +167,26 @@ export function KanbanPreview({
             See all <ChevronRight size={13} />
           </Link>
         } />
-        <div className="p-4 md:p-5 grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))" }}>
+        <div className="p-4 md:p-5" style={{
+          overflowX: boardWidth < 1024 ? "auto" : "visible",
+          WebkitOverflowScrolling: "touch",
+          scrollSnapType: boardWidth >= 640 && boardWidth < 1024 ? "x mandatory" : undefined,
+        }}>
+          <div style={{
+            display: boardWidth >= 1024 ? "grid" : "flex",
+            flexDirection: boardWidth < 640 ? "column" : "row",
+            gridTemplateColumns: boardWidth >= 1024 ? "repeat(4, minmax(0, 1fr))" : undefined,
+            gap: 16,
+            alignItems: "start",
+          }}>
           {STATUS_ORDER.map((status) => {
             const cfg = STATUS_CONFIG[status];
             return (
-              <div key={status}>
+              <div key={status} style={
+                boardWidth >= 1024 ? {} :
+                boardWidth < 640 ? { width: "100%", minWidth: 0 } :
+                { minWidth: 200, maxWidth: 240, flexShrink: 0, scrollSnapAlign: "start" }
+              }>
                 <div className="flex items-center gap-2 mb-3">
                   <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: cfg.dot }} />
                   <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--color-body)" }}>{cfg.label}</span>
@@ -185,6 +205,7 @@ export function KanbanPreview({
               </div>
             );
           })}
+          </div>
         </div>
       </Card>
     );
@@ -202,19 +223,36 @@ export function KanbanPreview({
       />
       <ClientOnly>
         <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-          <div className="p-4 md:p-5 grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))" }}>
+          <div className="p-4 md:p-5" style={{
+            overflowX: boardWidth < 1024 ? "auto" : "visible",
+            WebkitOverflowScrolling: "touch",
+            scrollSnapType: boardWidth >= 640 && boardWidth < 1024 ? "x mandatory" : undefined,
+          }}>
+            <div style={{
+              display: boardWidth >= 1024 ? "grid" : "flex",
+              flexDirection: boardWidth < 640 ? "column" : "row",
+              gridTemplateColumns: boardWidth >= 1024 ? "repeat(4, minmax(0, 1fr))" : undefined,
+              gap: 16,
+              alignItems: "start",
+            }}>
               {STATUS_ORDER.map((status) => (
-                <DroppableColumn
-                  key={status}
-                  status={status}
-                  displayTasks={tasksByStatus[status].slice(0, 3)}
-                  total={tasksByStatus[status].length}
-                  isMobile={isMobile}
-                  onTaskClick={onTaskClick}
-                  onAddTask={onAddTask}
-                  teamMembers={teamMembers}
-                />
+                <div key={status} style={
+                  boardWidth >= 1024 ? {} :
+                  boardWidth < 640 ? { width: "100%", minWidth: 0 } :
+                  { minWidth: 200, maxWidth: 240, flexShrink: 0, scrollSnapAlign: "start" }
+                }>
+                  <DroppableColumn
+                    status={status}
+                    displayTasks={tasksByStatus[status].slice(0, 3)}
+                    total={tasksByStatus[status].length}
+                    isMobile={isMobile}
+                    onTaskClick={onTaskClick}
+                    onAddTask={onAddTask}
+                    teamMembers={teamMembers}
+                  />
+                </div>
               ))}
+            </div>
           </div>
           <DragOverlay>
             {activeTask && (
