@@ -106,6 +106,7 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
         }
 
         if (memberRows) {
+          const seen = new Set<string>();
           const sps: SubProject[] = memberRows
             .map((row) => {
               const raw = row.sub_projects;
@@ -123,7 +124,12 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
                 color:       (sp.color as string | null) ?? undefined,
               } as SubProject;
             })
-            .filter((sp): sp is SubProject => sp !== null && !sp.archived);
+            .filter((sp): sp is SubProject => {
+              if (sp === null || sp.archived) return false;
+              if (seen.has(sp.id)) return false;
+              seen.add(sp.id);
+              return true;
+            });
 
           setSubProjects(sps);
 

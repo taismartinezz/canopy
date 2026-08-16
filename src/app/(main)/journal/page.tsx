@@ -932,8 +932,12 @@ export default function JournalPage() {
 
     if (error) {
       console.error("[Journal] insert error:", error);
-      setSaveMsg({ text: "Failed to save. Please try again.", color: "var(--color-error)" });
-      setTimeout(() => setSaveMsg(null), 3000);
+      const isSchemaError = error.code === "PGRST204" || error.message?.includes("schema cache");
+      const msg = isSchemaError
+        ? "Save failed: database schema is out of date. Please contact your administrator."
+        : "Failed to save. Please try again.";
+      setSaveMsg({ text: msg, color: "var(--color-error)" });
+      setTimeout(() => setSaveMsg(null), 5000);
       return;
     }
 

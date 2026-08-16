@@ -219,6 +219,7 @@ export default function DashboardPage() {
   const greeting = currentUserFirstName ? `Good ${timeOfDay}, ${currentUserFirstName}` : `Good ${timeOfDay}`;
 
   const isLabHome = activeScope === "lab";
+  const isPersonal = activeScope === "personal";
   const activeSubProject = !isLabHome && activeScope === "project"
     ? (subProjects.find((sp) => sp.id === subProjectId) ?? null)
     : null;
@@ -226,32 +227,50 @@ export default function DashboardPage() {
   const visibleTasks = isLabHome
     ? tasks
     : tasks.filter((t) => t.scope === "project" && t.subProjectId === subProjectId);
-  // Filter activity to the selected sub-project. Rows without sub_project_id (historical
-  // or lab-wide) are excluded from project views — they only appear in Lab Home.
+  // Filter activity by scope. Lab-wide rows (sub_project_id null) only appear in Lab Home.
+  // Personal scope shows no team activity (personal work has no shared feed).
   const visibleActivity = isLabHome
     ? dashActivity
+    : isPersonal
+    ? []
     : dashActivity.filter((a) => a.sub_project_id === subProjectId);
 
   const moveTask = useCallback((taskId: string, status: TaskStatus) => {
+    // Capture the task before the optimistic update so we have the original status
+    // for the activity log and for rollback if the DB write fails.
     setTasks((prev) => {
       const task = prev.find((t) => t.id === taskId);
-      if (task && task.status !== status && projectId && userId) {
-        supabase.from("activity_feed").insert({
-          project_id: projectId,
-          user_id: userId,
-          action_type: "moved",
-          item_name: task.title,
-          item_type: "task",
-          from_status: task.status,
-          to_status: status,
-          sub_project_id: task.subProjectId ?? null,
-        }).then(({ error }) => { if (error) console.error("[Dashboard] activity insert error:", error); });
-      }
+      if (!task || task.status === status) return prev;
+
+      const prevStatus = task.status;
+      const taskTitle = task.title;
+      const taskSubProjectId = task.subProjectId ?? null;
+
+      // Write to DB first; only log activity after the update is confirmed.
+      supabase.from("tasks").update({ status }).eq("id", taskId).then(({ error }) => {
+        if (error) {
+          console.error("[Dashboard] moveTask error:", error);
+          // Roll back the optimistic update
+          setTasks((p) => p.map((t) => t.id === taskId ? { ...t, status: prevStatus } : t));
+          return;
+        }
+        if (projectId && userId) {
+          supabase.from("activity_feed").insert({
+            project_id: projectId,
+            user_id: userId,
+            action_type: "moved",
+            item_name: taskTitle,
+            item_type: "task",
+            from_status: prevStatus,
+            to_status: status,
+            sub_project_id: taskSubProjectId,
+          }).then(({ error: e }) => { if (e) console.error("[Dashboard] activity insert error:", e); });
+        }
+      });
+
       return prev.map((t) => (t.id === taskId ? { ...t, status } : t));
     });
     setSelectedTask((prev) => (prev?.id === taskId ? { ...prev, status } : prev));
-    supabase.from("tasks").update({ status }).eq("id", taskId)
-      .then(({ error }) => { if (error) console.error("[Dashboard] moveTask error:", error); });
   }, [projectId, userId]);
 
   const addTask = useCallback((task: Task) => {
@@ -264,7 +283,7 @@ export default function DashboardPage() {
       {/* Header */}
       <div className="mb-5 md:mb-6">
         <h1 style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 22, color: "var(--color-navy)", margin: 0, lineHeight: 1.2 }}>
-          {isLabHome ? greeting : displayTitle}
+          {isLabHome || isPersonal ? greeting : displayTitle}
         </h1>
         <p style={{ fontSize: 13, color: "var(--color-secondary)", marginTop: 4 }}>{today}</p>
       </div>

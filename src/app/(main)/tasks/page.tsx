@@ -51,6 +51,14 @@ export default function TasksPage() {
   const [projectId, setProjectId] = useState<string>("");
   const [subtaskCounts, setSubtaskCounts] = useState<Record<string, { total: number; done: number }>>({});
   const [taskNavStack, setTaskNavStack] = useState<Task[]>([]);
+  const [boardWidth, setBoardWidth] = useState(1440);
+
+  useEffect(() => {
+    function update() { setBoardWidth(window.innerWidth); }
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
 
   useEffect(() => {
     if (!isSupabaseConfigured) {
@@ -262,23 +270,37 @@ export default function TasksPage() {
   const moveTask = useCallback((taskId: string, status: TaskStatus) => {
     setTasks((prev) => {
       const task = prev.find((t) => t.id === taskId);
-      if (task && task.status !== status && projectId && currentUserId) {
-        supabase.from("activity_feed").insert({
-          project_id: projectId,
-          user_id: currentUserId,
-          action_type: "moved",
-          item_name: task.title,
-          item_type: "task",
-          from_status: task.status,
-          to_status: status,
-          sub_project_id: task.subProjectId ?? null,
-        }).then(({ error }) => { if (error) console.error("[Tasks] activity insert error:", error); });
-      }
+      if (!task || task.status === status) return prev;
+
+      const prevStatus = task.status;
+      const taskTitle = task.title;
+      const taskSubProjectId = task.subProjectId ?? null;
+
+      // Write to DB first; only log activity after the update is confirmed.
+      supabase.from("tasks").update({ status }).eq("id", taskId).then(({ error }) => {
+        if (error) {
+          console.error("[Tasks] moveTask error:", error);
+          // Roll back the optimistic update
+          setTasks((p) => p.map((t) => t.id === taskId ? { ...t, status: prevStatus } : t));
+          return;
+        }
+        if (projectId && currentUserId) {
+          supabase.from("activity_feed").insert({
+            project_id: projectId,
+            user_id: currentUserId,
+            action_type: "moved",
+            item_name: taskTitle,
+            item_type: "task",
+            from_status: prevStatus,
+            to_status: status,
+            sub_project_id: taskSubProjectId,
+          }).then(({ error: e }) => { if (e) console.error("[Tasks] activity insert error:", e); });
+        }
+      });
+
       return prev.map((t) => t.id === taskId ? { ...t, status } : t);
     });
     setSelectedTask((prev) => prev?.id === taskId ? { ...prev, status } : prev);
-    supabase.from("tasks").update({ status }).eq("id", taskId)
-      .then(({ error }) => { if (error) console.error("[Tasks] moveTask error:", error); });
   }, [projectId, currentUserId]);
 
   const updateTask = useCallback((taskId: string, updates: Partial<Task>) => {
@@ -564,23 +586,38 @@ export default function TasksPage() {
         )}
         {!loading && view === "board" ? (
           <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-            <div className="overflow-x-auto" style={{ WebkitOverflowScrolling: "touch" }}>
-              <div className="grid gap-4 md:gap-5" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(210px, 1fr))", alignItems: "start" }}>
+            <div style={{
+              overflowX: boardWidth < 1024 ? "auto" : "visible",
+              WebkitOverflowScrolling: "touch",
+              scrollSnapType: boardWidth >= 640 && boardWidth < 1024 ? "x mandatory" : undefined,
+            }}>
+              <div style={{
+                display: boardWidth >= 1024 ? "grid" : "flex",
+                flexDirection: boardWidth < 640 ? "column" : "row",
+                gridTemplateColumns: boardWidth >= 1024 ? "repeat(4, minmax(0, 1fr))" : undefined,
+                gap: boardWidth >= 1024 ? 20 : 16,
+                alignItems: "start",
+              }}>
                 {STATUS_ORDER.map((status) => (
-                  <KanbanColumn
-                    key={status}
-                    status={status}
-                    tasks={tasksByStatus[status]}
-                    onTaskClick={setSelectedTask}
-                    onMoveTask={moveTask}
-                    onEditTask={(t) => setModalState({ mode: "edit", task: t })}
-                    onDeleteTask={deleteTask}
-                    onAddTask={(s) => setModalState({ mode: "add", status: s })}
-                    onArchiveDone={archiveDoneTasks}
-                    teamMembers={teamMembers}
-                    subtaskCounts={subtaskCounts}
-                    showLabBadge={false}
-                  />
+                  <div key={status} style={
+                    boardWidth >= 1024 ? {} :
+                    boardWidth < 640 ? { width: "100%", minWidth: 0 } :
+                    { minWidth: 252, maxWidth: 280, flexShrink: 0, scrollSnapAlign: "start" }
+                  }>
+                    <KanbanColumn
+                      status={status}
+                      tasks={tasksByStatus[status]}
+                      onTaskClick={setSelectedTask}
+                      onMoveTask={moveTask}
+                      onEditTask={(t) => setModalState({ mode: "edit", task: t })}
+                      onDeleteTask={deleteTask}
+                      onAddTask={(s) => setModalState({ mode: "add", status: s })}
+                      onArchiveDone={archiveDoneTasks}
+                      teamMembers={teamMembers}
+                      subtaskCounts={subtaskCounts}
+                      showLabBadge={false}
+                    />
+                  </div>
                 ))}
               </div>
             </div>
