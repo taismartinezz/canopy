@@ -2070,7 +2070,7 @@ function CollectionsSidebar({
                   color={LIT_SCOPE_COLORS.personal}
                   onClick={() => setSelectedSubProjectId("__general__")}
                 />
-                {(subProjects ?? []).map((sp) => (
+                {(subProjects ?? []).filter((sp) => sp.name.toLowerCase() !== "general").map((sp) => (
                   <LitSidebarRow
                     key={sp.id}
                     label={sp.name}
