@@ -3,6 +3,11 @@
 ALTER TABLE projects
   ADD COLUMN IF NOT EXISTS min_wellbeing_respondents integer NOT NULL DEFAULT 4;
 
+-- Add per-user wellbeing opt-in to user_settings.
+-- Defaults to true so all existing members are counted until they explicitly opt out.
+ALTER TABLE user_settings
+  ADD COLUMN IF NOT EXISTS wellbeing_opted_in boolean NOT NULL DEFAULT true;
+
 -- ── get_wellbeing_rollup ──────────────────────────────────────────────────────
 -- Returns weekly avg score per check-in question, only for weeks where at least
 -- min_wellbeing_respondents distinct opted-in members submitted responses.
