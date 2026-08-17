@@ -11,6 +11,7 @@ ALTER TABLE user_settings
 -- ── get_wellbeing_rollup ──────────────────────────────────────────────────────
 -- Returns weekly avg score per check-in question, only for weeks where at least
 -- min_wellbeing_respondents distinct opted-in members submitted responses.
+-- journal_entries.checkin is a JSONB array of {questionId, score} objects.
 CREATE OR REPLACE FUNCTION get_wellbeing_rollup(p_project_id uuid)
 RETURNS TABLE (
   week_start       date,
@@ -33,19 +34,27 @@ AS $$
     JOIN   team_members  tm ON tm.user_id = us.user_id AND tm.project_id = p_project_id
     WHERE  us.wellbeing_opted_in = true
   ),
+  responses AS (
+    SELECT
+      je.user_id,
+      date_trunc('week', je.created_at)::date AS week_start,
+      (elem->>'questionId')                   AS question_id,
+      (elem->>'score')::numeric               AS score
+    FROM journal_entries je
+    JOIN opted_in oi ON oi.user_id = je.user_id
+    CROSS JOIN LATERAL jsonb_array_elements(je.checkin) AS elem
+    WHERE je.project_id = p_project_id
+      AND jsonb_array_length(je.checkin) > 0
+  ),
   weekly AS (
     SELECT
-      date_trunc('week', je.created_at)::date AS week_start,
-      jr.question_id,
-      AVG(jr.score)                           AS avg_score,
-      COUNT(DISTINCT je.user_id)              AS respondent_count
-    FROM journal_entries  je
-    JOIN journal_responses jr ON jr.entry_id = je.id
-    JOIN opted_in          oi ON oi.user_id  = je.user_id
-    WHERE je.project_id = p_project_id
-      AND je.checkin    = true
+      week_start,
+      question_id,
+      AVG(score)             AS avg_score,
+      COUNT(DISTINCT user_id) AS respondent_count
+    FROM responses
     GROUP BY 1, 2
-    HAVING COUNT(DISTINCT je.user_id) >= (SELECT t FROM threshold)
+    HAVING COUNT(DISTINCT user_id) >= (SELECT t FROM threshold)
   )
   SELECT week_start, question_id, ROUND(avg_score, 2), respondent_count
   FROM   weekly
@@ -72,7 +81,7 @@ AS $$
   ),
   overdue_members AS (
     SELECT DISTINCT ta.user_id
-    FROM   tasks         t
+    FROM   tasks          t
     JOIN   task_assignees ta ON ta.task_id = t.id
     JOIN   opted_in       oi ON oi.user_id = ta.user_id
     WHERE  t.project_id = p_project_id
@@ -81,8 +90,8 @@ AS $$
       AND  (t.archived IS NULL OR t.archived = false)
   )
   SELECT
-    (SELECT COUNT(*) FROM overdue_members)     AS overdue_count,
-    (SELECT COUNT(*) FROM opted_in)            AS total_members;
+    (SELECT COUNT(*) FROM overdue_members) AS overdue_count,
+    (SELECT COUNT(*) FROM opted_in)        AS total_members;
 $$;
 
 NOTIFY pgrst, 'reload schema';
