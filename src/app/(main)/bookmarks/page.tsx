@@ -743,6 +743,7 @@ export default function BookmarksPage() {
             })}
             extraContent={typesExtra}
             storageKey="canopy_bookmarks_sidebar"
+            headerLabel="Filters"
           />
         </div>
       )}

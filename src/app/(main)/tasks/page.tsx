@@ -577,6 +577,7 @@ export default function TasksPage() {
                 return next;
               })}
               storageKey="canopy_tasks_sidebar"
+              headerLabel="Filters"
             />
           </div>
         )}
