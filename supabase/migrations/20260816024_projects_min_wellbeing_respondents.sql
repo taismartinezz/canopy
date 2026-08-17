@@ -42,9 +42,9 @@ AS $$
       (elem->>'score')::numeric               AS score
     FROM journal_entries je
     JOIN opted_in oi ON oi.user_id = je.user_id
-    CROSS JOIN LATERAL jsonb_array_elements(je.checkin) AS elem
+    CROSS JOIN LATERAL jsonb_array_elements(je.content->'checkin') AS elem
     WHERE je.project_id = p_project_id
-      AND jsonb_array_length(je.checkin) > 0
+      AND jsonb_array_length(je.content->'checkin') > 0
   ),
   weekly AS (
     SELECT
