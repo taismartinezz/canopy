@@ -187,47 +187,45 @@ export default function ScopeSidebar({
         position: "relative",
       }}
     >
-      {/* Header row — skipped when fullContent supplies its own header */}
-      {!fullContent && (
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: collapsed ? "center" : "space-between",
-            padding: collapsed ? "10px 0" : "10px 12px",
-            borderBottom: "1px solid var(--color-border)",
-            flexShrink: 0,
-          }}
-        >
-          {!collapsed && (
-            <span style={{
-              fontSize: 10, fontWeight: 700, textTransform: "uppercase",
-              letterSpacing: "0.08em", color: "var(--color-secondary)",
-            }}>
-              {headerLabel ?? ""}
-            </span>
-          )}
+      {/* Collapsed expand button — always shown when collapsed, for every page type */}
+      {collapsed && (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "10px 0", borderBottom: "1px solid var(--color-border)", flexShrink: 0 }}>
           <button
             onClick={onToggleCollapse}
             className="flex items-center justify-center rounded-lg"
             style={{ width: 32, height: 32, backgroundColor: "transparent", border: "none", cursor: "pointer", flexShrink: 0 }}
-            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-label="Expand sidebar"
+            title="Expand sidebar"
             onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = "var(--color-navy-dim)"; }}
             onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = "transparent"; }}
           >
-            {collapsed
-              ? <ChevronRight size={15} color="var(--color-secondary)" />
-              : <ChevronLeft size={15} color="var(--color-secondary)" />
-            }
+            <ChevronRight size={15} color="var(--color-secondary)" />
           </button>
         </div>
       )}
 
-      {/* Content area */}
-      {fullContent ? (
-        fullContent
-      ) : collapsed ? (
+      {/* Expanded header row — only when expanded AND no fullContent (fullContent supplies its own header) */}
+      {!collapsed && !fullContent && (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", borderBottom: "1px solid var(--color-border)", flexShrink: 0 }}>
+          <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--color-secondary)" }}>
+            {headerLabel ?? ""}
+          </span>
+          <button
+            onClick={onToggleCollapse}
+            className="flex items-center justify-center rounded-lg"
+            style={{ width: 32, height: 32, backgroundColor: "transparent", border: "none", cursor: "pointer", flexShrink: 0 }}
+            aria-label="Collapse sidebar"
+            title="Collapse sidebar"
+            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = "var(--color-navy-dim)"; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = "transparent"; }}
+          >
+            <ChevronLeft size={15} color="var(--color-secondary)" />
+          </button>
+        </div>
+      )}
+
+      {/* Content area — collapsed always shows icon rail; expanded shows fullContent or sections */}
+      {collapsed ? (
         sections.length > 0 && (
           <div className="flex flex-col items-center px-1.5 py-2 gap-0.5">
             {sections.map(s => (
@@ -235,6 +233,8 @@ export default function ScopeSidebar({
             ))}
           </div>
         )
+      ) : fullContent ? (
+        fullContent
       ) : (
         <div style={{ padding: "4px 8px 20px", overflowY: "auto", flex: 1 }}>
           {sections.map((s, i) => (
@@ -247,7 +247,7 @@ export default function ScopeSidebar({
         </div>
       )}
 
-      {/* Resize handle — only in expanded state */}
+      {/* Resize handle — only in expanded state, not used by fullContent pages */}
       {!fullContent && !collapsed && (
         <div
           ref={handleRef}
