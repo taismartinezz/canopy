@@ -1143,6 +1143,7 @@ export default function RemindersPage() {
                 extraContent={sidebarExtraContent}
                 collapsed={sidebarCollapsed}
                 onToggleCollapse={handleToggleCollapse}
+                headerLabel="Filters"
               />
             </div>
           )}

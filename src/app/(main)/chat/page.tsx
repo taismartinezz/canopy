@@ -690,6 +690,7 @@ export default function ChatPage() {
             extraContent={chatExtra}
             collapsed={chatSidebarCollapsed}
             onToggleCollapse={toggleSidebar}
+            headerLabel="Chats"
           />
 
           <div className="flex flex-col flex-1 overflow-hidden" style={{ position: "relative" }}>

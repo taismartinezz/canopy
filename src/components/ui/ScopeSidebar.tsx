@@ -25,6 +25,7 @@ interface Props {
   extraContent?: ReactNode;
   fullContent?: ReactNode;
   storageKey?: string;
+  headerLabel?: string;
 }
 
 const MIN_WIDTH = 180;
@@ -104,6 +105,7 @@ export default function ScopeSidebar({
   extraContent,
   fullContent,
   storageKey,
+  headerLabel,
 }: Props) {
   const [width, setWidth] = useState(() =>
     storageKey ? readStoredWidth(storageKey) : DEFAULT_WIDTH
@@ -185,82 +187,88 @@ export default function ScopeSidebar({
         position: "relative",
       }}
     >
-      {collapsed ? (
-        <>
-          <div className="flex items-center justify-center" style={{ borderBottom: "1px solid var(--color-border)", padding: "8px 0" }}>
-            <button
-              onClick={onToggleCollapse}
-              className="flex items-center justify-center rounded-lg transition-colors hover:bg-[rgba(27,46,75,0.06)]"
-              style={{ width: 36, height: 36 }}
-              title="Expand sidebar"
-              aria-label="Expand sidebar"
-            >
-              <ChevronRight size={15} color="var(--color-secondary)" />
-            </button>
-          </div>
-          {sections.length > 0 && (
-            <div className="flex flex-col items-center px-1.5 py-2 gap-0.5">
-              {sections.map(s => (
-                <IconRailBtn key={s.id} isActive={s.isActive} color={s.color} icon={s.icon} label={s.label} onClick={s.onClick} />
-              ))}
-            </div>
+      {/* Header row — skipped when fullContent supplies its own header */}
+      {!fullContent && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: collapsed ? "center" : "space-between",
+            padding: collapsed ? "10px 0" : "10px 12px",
+            borderBottom: "1px solid var(--color-border)",
+            flexShrink: 0,
+          }}
+        >
+          {!collapsed && (
+            <span style={{
+              fontSize: 10, fontWeight: 700, textTransform: "uppercase",
+              letterSpacing: "0.08em", color: "var(--color-secondary)",
+            }}>
+              {headerLabel ?? ""}
+            </span>
           )}
-        </>
-      ) : (
-        <>
-          {fullContent ? (
-            fullContent
-          ) : (
-            <div style={{ padding: "4px 8px 20px", overflowY: "auto", flex: 1 }}>
-              {sections.map((s, i) => (
-                <Fragment key={s.id}>
-                  <NavRow color={s.color} label={s.label} count={s.count} selected={s.isActive} onClick={s.onClick} />
-                  {i === 0 && sections.length > 1 && <div style={{ height: 1, backgroundColor: "var(--color-border)", margin: "5px 2px" }} />}
-                </Fragment>
-              ))}
-              {extraContent}
-            </div>
-          )}
-
-          {/* Resize handle on the right edge */}
-          <div
-            ref={handleRef}
-            role="separator"
-            aria-label="Resize sidebar"
-            aria-orientation="vertical"
-            tabIndex={0}
-            title="Drag to resize, or use arrow keys"
-            onMouseDown={onDragMouseDown}
-            onKeyDown={onHandleKeyDown}
-            style={{
-              position: "absolute", top: 0, right: 0, bottom: 0, width: 6,
-              cursor: "col-resize", zIndex: 10,
-              backgroundColor: "transparent",
-              transition: "background-color 0.15s",
-            }}
-            onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.backgroundColor = "var(--color-navy-dim)"; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.backgroundColor = "transparent"; }}
-            onFocus={e => { (e.currentTarget as HTMLDivElement).style.backgroundColor = "var(--color-navy-dim)"; }}
-            onBlur={e => { (e.currentTarget as HTMLDivElement).style.backgroundColor = "transparent"; }}
-          />
-
-          {/* Collapse button — floats at the right edge, visible on sidebar hover */}
           <button
             onClick={onToggleCollapse}
-            className="opacity-0 group-hover/scopesidebar:opacity-100 transition-opacity flex items-center justify-center"
-            style={{
-              position: "absolute", right: 3, top: "50%", transform: "translateY(-50%)",
-              width: 22, height: 22, borderRadius: "50%",
-              backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)",
-              boxShadow: "0 1px 4px rgba(0,0,0,0.10)",
-              zIndex: 20, cursor: "pointer",
-            }}
-            title="Collapse sidebar"
-            aria-label="Collapse sidebar"
+            className="flex items-center justify-center rounded-lg"
+            style={{ width: 32, height: 32, backgroundColor: "transparent", border: "none", cursor: "pointer", flexShrink: 0 }}
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = "var(--color-navy-dim)"; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = "transparent"; }}
           >
-            <ChevronLeft size={11} color="var(--color-secondary)" />
+            {collapsed
+              ? <ChevronRight size={15} color="var(--color-secondary)" />
+              : <ChevronLeft size={15} color="var(--color-secondary)" />
+            }
           </button>
-        </>
+        </div>
+      )}
+
+      {/* Content area */}
+      {fullContent ? (
+        fullContent
+      ) : collapsed ? (
+        sections.length > 0 && (
+          <div className="flex flex-col items-center px-1.5 py-2 gap-0.5">
+            {sections.map(s => (
+              <IconRailBtn key={s.id} isActive={s.isActive} color={s.color} icon={s.icon} label={s.label} onClick={s.onClick} />
+            ))}
+          </div>
+        )
+      ) : (
+        <div style={{ padding: "4px 8px 20px", overflowY: "auto", flex: 1 }}>
+          {sections.map((s, i) => (
+            <Fragment key={s.id}>
+              <NavRow color={s.color} label={s.label} count={s.count} selected={s.isActive} onClick={s.onClick} />
+              {i === 0 && sections.length > 1 && <div style={{ height: 1, backgroundColor: "var(--color-border)", margin: "5px 2px" }} />}
+            </Fragment>
+          ))}
+          {extraContent}
+        </div>
+      )}
+
+      {/* Resize handle — only in expanded state */}
+      {!fullContent && !collapsed && (
+        <div
+          ref={handleRef}
+          role="separator"
+          aria-label="Resize sidebar"
+          aria-orientation="vertical"
+          tabIndex={0}
+          title="Drag to resize, or use arrow keys"
+          onMouseDown={onDragMouseDown}
+          onKeyDown={onHandleKeyDown}
+          style={{
+            position: "absolute", top: 0, right: 0, bottom: 0, width: 6,
+            cursor: "col-resize", zIndex: 10,
+            backgroundColor: "transparent",
+            transition: "background-color 0.15s",
+          }}
+          onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.backgroundColor = "var(--color-navy-dim)"; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.backgroundColor = "transparent"; }}
+          onFocus={e => { (e.currentTarget as HTMLDivElement).style.backgroundColor = "var(--color-navy-dim)"; }}
+          onBlur={e => { (e.currentTarget as HTMLDivElement).style.backgroundColor = "transparent"; }}
+        />
       )}
     </div>
   );

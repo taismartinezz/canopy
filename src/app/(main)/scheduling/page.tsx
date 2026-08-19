@@ -1412,6 +1412,7 @@ export default function SchedulingPage() {
               try { localStorage.setItem("scheduling_sidebar_collapsed", String(next)); } catch {}
               return next;
             })}
+            headerLabel="Views"
           />
           <div className="flex-1 overflow-y-auto">
             <div className="px-6 py-6 max-w-5xl mx-auto">

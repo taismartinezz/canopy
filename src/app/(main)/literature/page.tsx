@@ -442,7 +442,7 @@ function AddItemModal({
                 );
               })}
             </div>
-            {scope === "personal" && (subProjects ?? []).length > 0 && (
+            {(subProjects ?? []).length > 0 && (
               <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 7, paddingLeft: 2 }}>
                 <span style={{ fontSize: 11, color: "var(--color-secondary)", alignSelf: "center", marginRight: 2 }}>Tag to:</span>
                 <button
@@ -1493,7 +1493,7 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
                       </button>
                     ))}
                   </div>
-                  {scope === "personal" && (subProjects ?? []).length > 0 && (
+                  {(subProjects ?? []).length > 0 && (
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 7 }}>
                       <span style={{ fontSize: 11, color: "var(--color-secondary)", alignSelf: "center", marginRight: 2 }}>Tag to:</span>
                       <button onClick={() => setPersonalSubProjectId(null)} style={{ fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 5, border: `1px solid ${personalSubProjectId === null ? "var(--color-navy)" : "var(--color-border)"}`, backgroundColor: personalSubProjectId === null ? "rgba(27,46,75,0.08)" : "transparent", color: personalSubProjectId === null ? "var(--color-navy)" : "var(--color-secondary)", cursor: "pointer", fontFamily: "var(--font-roboto)" }}>General</button>
@@ -1935,7 +1935,7 @@ function DOILookupModal({ onSave, onMerge, onClose, projectId, currentUserId, su
                 </button>
               ))}
             </div>
-            {scope === "personal" && (subProjects ?? []).length > 0 && (
+            {(subProjects ?? []).length > 0 && (
               <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 7 }}>
                 <span style={{ fontSize: 11, color: "var(--color-secondary)", alignSelf: "center", marginRight: 2 }}>Tag to:</span>
                 <button onClick={() => setPersonalSubProjectId(null)} style={{ fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 5, border: `1px solid ${personalSubProjectId === null ? "var(--color-navy)" : "var(--color-border)"}`, backgroundColor: personalSubProjectId === null ? "rgba(27,46,75,0.08)" : "transparent", color: personalSubProjectId === null ? "var(--color-navy)" : "var(--color-secondary)", cursor: "pointer", fontFamily: "var(--font-roboto)" }}>General</button>
@@ -2061,7 +2061,7 @@ function CollectionsSidebar({
         {showScopeFilter && (
           <>
             <LitSidebarRow label="Personal"  count={scopeCounts.personal} active={scope === "personal" && selectedSubProjectId === null} color={LIT_SCOPE_COLORS.personal} onClick={() => { setScope("personal"); setSelectedSubProjectId(null); }} />
-            {scope === "personal" && (subProjects ?? []).length > 0 && (
+            {(subProjects ?? []).length > 0 && (
               <>
                 <LitSidebarRow
                   label="General"
