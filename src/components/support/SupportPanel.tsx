@@ -308,7 +308,7 @@ export default function SupportPanel({ track, onClose, projectId, userId }: Supp
         onClick={e => e.stopPropagation()}
         style={{
           width: "min(520px, 100%)",
-          maxHeight: "min(640px, calc(100vh - 32px))",
+          height: "min(640px, calc(100vh - 32px))",
           backgroundColor: "var(--color-surface)",
           borderRadius: 16,
           display: "flex",
@@ -575,7 +575,10 @@ function SimpleComposeScreen({ recipient, projectId, userId, onBack, onClose, on
 
   function addSlotsToMessage() {
     if (selectedSlots.length === 0) return;
-    const line = "\n\nWould any of these work? " + selectedSlots.map(s => s.shortLabel).join(", ") + ".";
+    const times = selectedSlots.map(s => s.shortLabel).join(", ");
+    const line = selectedSlots.length === 1
+      ? `\n\nWould this work? ${times}.`
+      : `\n\nWould any of these work? ${times}.`;
     setBody(b => b.trimEnd() + line);
     setSelectedSlots([]);
     setShowSlots(false);
