@@ -4,9 +4,11 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import {
   X, ChevronLeft, Lock, Phone, Globe, Mail, MapPin, AlertTriangle,
-  Clock, Send, Check, BookOpen, Library, ChevronRight, Undo2,
+  Clock, Send, Check, BookOpen, Library, ChevronRight, Undo2, Calendar,
 } from "lucide-react";
 import Avatar from "@/components/ui/Avatar";
+import { getCrisisDefault } from "@/lib/support/crisisDefaults";
+import type { CrisisDefault } from "@/lib/support/crisisDefaults";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -379,6 +381,8 @@ export default function SupportPanel({ track, onClose, projectId, userId, todayJ
             recipient={screen.recipient}
             tasks={tasks}
             hasTodayJournal={!!todayJournalText}
+            projectId={projectId}
+            userId={userId}
             onBack={back}
             onClose={onClose}
             onPreview={(body, includeJournal) =>
@@ -696,13 +700,164 @@ function MemberRow({ member, onClick }: { member: Member; onClick: () => void })
   );
 }
 
+// ── Time proposal helpers ─────────────────────────────────────────────────────
+
+const HOUR_START = 9; // grid starts at 9:00 AM
+const SLOT_COUNT = 16; // 16 slots, 30-min each → 9:00 AM – 4:30 PM
+
+interface SuggestedSlot {
+  date: string;       // YYYY-MM-DD
+  startMin: number;   // minutes from midnight
+  shortLabel: string; // e.g. "Thu Aug 28, 2:00 PM"
+  mechanism: "proposed"; // no "immediate" since no office_hours distinction
+}
+
+function minToLabel(mins: number): string {
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  const suffix = h >= 12 ? "PM" : "AM";
+  const h12 = h > 12 ? h - 12 : h === 0 ? 12 : h;
+  return `${h12}:${m.toString().padStart(2, "0")} ${suffix}`;
+}
+
+const MONTH_ABR = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const DAY_ABR   = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+
+function findRecipientSlots(recipientSlotSet: Set<string>): SuggestedSlot[] {
+  const results: SuggestedSlot[] = [];
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  for (let offset = 1; offset <= 14 && results.length < 3; offset++) {
+    const d = new Date(today);
+    d.setDate(today.getDate() + offset);
+    const jsDay = d.getDay(); // 0=Sun, 6=Sat
+    if (jsDay === 0 || jsDay === 6) continue;
+    const gridDay = jsDay - 1; // 0=Mon
+
+    for (let s = 0; s < SLOT_COUNT && results.length < 3; s++) {
+      if (!recipientSlotSet.has(`${gridDay}-${s}`)) continue;
+      const startMin = HOUR_START * 60 + s * 30;
+      const dateStr = d.toISOString().split("T")[0];
+      results.push({
+        date: dateStr,
+        startMin,
+        shortLabel: `${DAY_ABR[jsDay]} ${MONTH_ABR[d.getMonth()]} ${d.getDate()}, ${minToLabel(startMin)}`,
+        mechanism: "proposed",
+      });
+      break; // one slot per day
+    }
+  }
+  return results;
+}
+
+function viewerTimezone(): string {
+  try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { return "local time"; }
+}
+
+function slotAppendLine(slot: SuggestedSlot, recipientName: string): string {
+  return `\n\nI was thinking: ${slot.shortLabel} (proposed -- ${recipientName} to confirm).`;
+}
+
+// ── Requester-picks fallback ──────────────────────────────────────────────────
+
+function RequesterTimePicker({ onSelect }: { onSelect: (line: string) => void }) {
+  const TIMES = ["9:00 AM", "9:30 AM", "10:00 AM", "10:30 AM", "11:00 AM",
+                 "12:00 PM", "1:00 PM", "1:30 PM", "2:00 PM", "2:30 PM",
+                 "3:00 PM", "3:30 PM", "4:00 PM"];
+  const today = new Date();
+  const days = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(today);
+    d.setDate(today.getDate() + i + 1);
+    if (d.getDay() === 0 || d.getDay() === 6) return null;
+    return { date: d, label: `${DAY_ABR[d.getDay()]} ${MONTH_ABR[d.getMonth()]} ${d.getDate()}` };
+  }).filter(Boolean) as { date: Date; label: string }[];
+
+  const [selected, setSelected] = useState<string[]>([]);
+  const [day, setDay] = useState(days[0]?.label ?? "");
+
+  function toggle(key: string) {
+    setSelected((s) => {
+      if (s.includes(key)) return s.filter((x) => x !== key);
+      if (s.length >= 3) return s;
+      return [...s, key];
+    });
+  }
+
+  function confirm() {
+    if (selected.length === 0) return;
+    const line = `\n\nI'm free: ${selected.join(", ")}.`;
+    onSelect(line);
+  }
+
+  return (
+    <div style={{ marginTop: 12 }}>
+      <div className="flex gap-2 mb-2 flex-wrap">
+        {days.map((d) => (
+          <button key={d.label} onClick={() => setDay(d.label)}
+            style={{
+              fontSize: 11, padding: "4px 10px", borderRadius: 20, minHeight: 44,
+              border: `1px solid ${day === d.label ? "var(--color-navy)" : "var(--color-border)"}`,
+              backgroundColor: day === d.label ? "var(--color-navy)" : "transparent",
+              color: day === d.label ? "#fff" : "var(--color-body)",
+              cursor: "pointer", fontFamily: "var(--font-roboto)",
+            }}>
+            {d.label}
+          </button>
+        ))}
+      </div>
+      <div className="flex flex-wrap gap-1.5 mb-3">
+        {TIMES.map((t) => {
+          const key = `${day} ${t}`;
+          const on = selected.includes(key);
+          return (
+            <button key={t} onClick={() => toggle(key)}
+              style={{
+                fontSize: 11, padding: "4px 10px", borderRadius: 6, minHeight: 44,
+                border: `1px solid ${on ? "var(--color-navy)" : "var(--color-border)"}`,
+                backgroundColor: on ? "rgba(27,46,75,0.08)" : "transparent",
+                color: "var(--color-body)", cursor: "pointer", fontFamily: "var(--font-roboto)",
+              }}>
+              {t}
+            </button>
+          );
+        })}
+      </div>
+      {selected.length > 0 && (
+        <div className="flex flex-col gap-1 mb-2">
+          {selected.map((s) => (
+            <div key={s} style={{ fontSize: 12, color: "var(--color-secondary)", display: "flex", alignItems: "center", gap: 4 }}>
+              <Check size={11} color="var(--color-success)" />
+              {s}
+            </div>
+          ))}
+        </div>
+      )}
+      <button
+        onClick={confirm}
+        disabled={selected.length === 0}
+        style={{
+          fontSize: 12, fontWeight: 600, color: selected.length ? "var(--color-navy)" : "var(--color-secondary)",
+          background: "transparent", border: `1px solid ${selected.length ? "var(--color-navy)" : "var(--color-border)"}`,
+          borderRadius: 7, padding: "6px 14px", cursor: selected.length ? "pointer" : "default",
+          fontFamily: "var(--font-roboto)", minHeight: 44,
+        }}
+      >
+        Add to message
+      </button>
+    </div>
+  );
+}
+
 // ── Screen: A3 — Draft ────────────────────────────────────────────────────────
 
-function A3Screen({ helpType, recipient, tasks, hasTodayJournal, onBack, onClose, onPreview }: {
+function A3Screen({ helpType, recipient, tasks, hasTodayJournal, projectId, userId, onBack, onClose, onPreview }: {
   helpType: HelpType;
   recipient: Member;
   tasks: Task[];
   hasTodayJournal: boolean;
+  projectId: string | null;
+  userId: string;
   onBack: () => void;
   onClose: () => void;
   onPreview: (body: string, includeJournal: boolean) => void;
@@ -715,6 +870,33 @@ function A3Screen({ helpType, recipient, tasks, hasTodayJournal, onBack, onClose
   );
   const [includeJournal, setIncludeJournal] = useState(false);
   const [chips, setChips] = useState<string[]>([]);
+
+  // Time proposals — only fetched for the feedback flow
+  const showSlots = helpType === "feedback";
+  const [recipientSlots, setRecipientSlots] = useState<SuggestedSlot[]>([]);
+  const [noAvailData, setNoAvailData] = useState(false);
+  const [showRequesterPicker, setShowRequesterPicker] = useState(false);
+  const [pickedSlot, setPickedSlot] = useState<SuggestedSlot | null>(null);
+  const tz = viewerTimezone();
+
+  useEffect(() => {
+    if (!showSlots || !projectId || !isSupabaseConfigured) return;
+    supabase
+      .from("user_availability")
+      .select("slots")
+      .eq("user_id", recipient.id)
+      .eq("project_id", projectId)
+      .then(({ data }) => {
+        const allSlots = (data ?? []).flatMap((row: Record<string, unknown>) => row["slots"] as string[] ?? []);
+        const slotSet = new Set(allSlots);
+        if (slotSet.size === 0) {
+          setNoAvailData(true);
+        } else {
+          setRecipientSlots(findRecipientSlots(slotSet));
+        }
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showSlots, projectId, recipient.id]);
 
   const availableChips = [
     selectedTask
@@ -832,6 +1014,79 @@ function A3Screen({ helpType, recipient, tasks, hasTodayJournal, onBack, onClose
             Include my journal note from today
           </span>
         </label>
+      )}
+
+      {showSlots && (
+        <div style={{ marginTop: 18, paddingTop: 14, borderTop: "1px solid var(--color-border)" }}>
+          <p style={{ fontSize: 12, fontWeight: 600, color: "var(--color-body)", display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
+            <Calendar size={13} color="var(--color-secondary)" />
+            {noAvailData || recipientSlots.length === 0 ? "When are you free?" : "When would you like to meet?"}
+          </p>
+
+          {!noAvailData && recipientSlots.length > 0 && (
+            <div className="flex flex-col gap-2">
+              {recipientSlots.map((slot) => {
+                const picked = pickedSlot?.date === slot.date && pickedSlot.startMin === slot.startMin;
+                return (
+                  <button
+                    key={`${slot.date}-${slot.startMin}`}
+                    onClick={() => {
+                      if (picked) {
+                        setPickedSlot(null);
+                        setBody((b) => b.replace(slotAppendLine(slot, recipient.name), ""));
+                      } else {
+                        if (pickedSlot) {
+                          setBody((b) => b.replace(slotAppendLine(pickedSlot, recipient.name), ""));
+                        }
+                        setPickedSlot(slot);
+                        setBody((b) => b + slotAppendLine(slot, recipient.name));
+                      }
+                    }}
+                    style={{
+                      width: "100%", textAlign: "left", padding: "10px 12px", borderRadius: 8,
+                      border: `1px solid ${picked ? "var(--color-navy)" : "var(--color-border)"}`,
+                      backgroundColor: picked ? "rgba(27,46,75,0.06)" : "transparent",
+                      cursor: "pointer", minHeight: 44, display: "flex", justifyContent: "space-between", alignItems: "center",
+                      fontFamily: "var(--font-roboto)",
+                    }}
+                  >
+                    <span>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: "var(--color-body)" }}>{slot.shortLabel}</span>
+                      <span style={{ fontSize: 11, color: "var(--color-secondary)", marginLeft: 8 }}>Proposed -- {recipient.name} confirms</span>
+                    </span>
+                    {picked && <Check size={13} color="var(--color-navy)" />}
+                  </button>
+                );
+              })}
+              <button
+                onClick={() => setShowRequesterPicker((v) => !v)}
+                style={{
+                  width: "100%", textAlign: "left", padding: "10px 12px", borderRadius: 8,
+                  border: "1px dashed var(--color-border)", backgroundColor: "transparent",
+                  cursor: "pointer", fontSize: 13, color: "var(--color-secondary)",
+                  fontFamily: "var(--font-roboto)", minHeight: 44,
+                }}
+              >
+                Suggest another time
+              </button>
+            </div>
+          )}
+
+          {(noAvailData || recipientSlots.length === 0 || showRequesterPicker) && (
+            <div style={{ marginTop: noAvailData ? 0 : 8 }}>
+              {noAvailData && (
+                <p style={{ fontSize: 12, color: "var(--color-secondary)", marginBottom: 8 }}>
+                  Pick up to three times and they&rsquo;ll be added to your message.
+                </p>
+              )}
+              <RequesterTimePicker onSelect={(line) => setBody((b) => b + line)} />
+            </div>
+          )}
+
+          <p style={{ fontSize: 11, color: "var(--color-secondary)", marginTop: 8 }}>
+            Times shown in {tz}.
+          </p>
+        </div>
       )}
 
       <button
@@ -1274,8 +1529,14 @@ function BScreen({ resources, loading, pi, members, isCurrentUserPi, projectId, 
   onClose: () => void;
   onMessage: (recipientId: string, recipientName: string) => void;
 }) {
-  const urgent = resources.filter((r) => r.active && (r.category === "urgent" || r.is_pinned));
+  const activeUrgent = resources.filter((r) => r.active && (r.category === "urgent" || r.is_pinned));
   const rest = resources.filter((r) => r.active && r.category !== "urgent" && !r.is_pinned);
+
+  // Always show a crisis path. If the lab has no urgent row, inject the build-time default.
+  // A lab row overrides the default; an empty lab cannot produce a panel with no crisis path.
+  const crisisDefault = getCrisisDefault("US");
+  const urgentToRender: (SupportResource | CrisisDefault)[] =
+    activeUrgent.length > 0 ? activeUrgent : [crisisDefault];
 
   const grouped: Record<string, SupportResource[]> = {};
   for (const r of rest) {
@@ -1305,29 +1566,15 @@ function BScreen({ resources, loading, pi, members, isCurrentUserPi, projectId, 
         <p style={{ fontSize: 13, color: "var(--color-secondary)" }}>Loading...</p>
       )}
 
-      {!loading && resources.filter((r) => r.active).length === 0 && (
-        <div style={{ marginBottom: 24 }}>
-          <p style={{ fontSize: 13, color: "var(--color-secondary)", lineHeight: 1.6, marginBottom: 16 }}>
-            Your lab hasn&rsquo;t added support resources yet.
-          </p>
-          {isCurrentUserPi && (
-            <a href="/team" style={{ fontSize: 13, color: "var(--color-navy)", fontWeight: 600 }}>
-              Add resources
-            </a>
-          )}
+      {/* Crisis block -- always present */}
+      <section className="mb-5">
+        <p style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--color-error)", marginBottom: 8 }}>
+          Urgent / always available
+        </p>
+        <div className="flex flex-col gap-2">
+          {urgentToRender.map((r) => <ResourceRow key={r.id} r={r as SupportResource} isUrgent />)}
         </div>
-      )}
-
-      {urgent.length > 0 && (
-        <section className="mb-5">
-          <p style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--color-error)", marginBottom: 8 }}>
-            Urgent / always available
-          </p>
-          <div className="flex flex-col gap-2">
-            {urgent.map((r) => <ResourceRow key={r.id} r={r} isUrgent />)}
-          </div>
-        </section>
-      )}
+      </section>
 
       {Object.entries(grouped).map(([cat, rows]) => (
         <section key={cat} className="mb-5">
@@ -1339,6 +1586,13 @@ function BScreen({ resources, loading, pi, members, isCurrentUserPi, projectId, 
           </div>
         </section>
       ))}
+
+      {!loading && rest.length === 0 && isCurrentUserPi && (
+        <p style={{ fontSize: 12, color: "var(--color-secondary)", marginBottom: 16 }}>
+          <a href="/team" style={{ color: "var(--color-navy)", fontWeight: 600 }}>Add counseling and support contacts</a>
+          {" "}for your lab.
+        </p>
+      )}
 
       <div style={{ borderTop: "1px solid var(--color-border)", paddingTop: 16, marginTop: 8 }}>
         <p style={{ fontSize: 13, color: "var(--color-secondary)", marginBottom: 10 }}>
