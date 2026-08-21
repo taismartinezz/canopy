@@ -1328,7 +1328,6 @@ export default function JournalPage() {
           onClose={() => setSupportOpen(false)}
           userId={authUserId}
           projectId={projectId}
-          todayJournalText={entries[0]?.prompts?.[0]?.response ?? undefined}
           track={supportTrack}
         />
       )}

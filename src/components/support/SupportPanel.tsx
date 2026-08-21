@@ -4,32 +4,19 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import {
   X, ChevronLeft, Lock, Phone, Globe, Mail, MapPin,
-  Clock, Send, Check, BookOpen, Library, ChevronRight, Undo2, Calendar, Mic, MicOff,
+  Send, Check, ChevronRight, Mic, MicOff,
 } from "lucide-react";
 import Avatar from "@/components/ui/Avatar";
-import { resolveResources, hasNoCounselingResources, getInstitutionName, INSTITUTION_OPTIONS } from "@/lib/support/institutions";
+import { resolveResources, hasNoCounselingResources } from "@/lib/support/institutions";
 import type { LabResource, ResolvedResource } from "@/lib/support/institutions";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
-type HelpType =
-  | "research_question"
-  | "blocked"
-  | "feedback"
-  | "technical"
-  | "not_sure"
-  | "try_self";
-
 type Screen =
-  | { id: "fork" }
-  | { id: "a1" }
-  | { id: "a2"; helpType: HelpType }
-  | { id: "a3"; helpType: HelpType; recipient: Member }
-  | { id: "a4"; helpType: HelpType; recipient: Member; body: string; includeJournal: boolean }
-  | { id: "a_sent"; recipientName: string; msgId: string }
-  | { id: "a_not_sure"; step: 1 | 2; ans1: string }
-  | { id: "a_not_sure_result"; suggestion: Member; reason: string }
-  | { id: "a_try_self" }
+  | { id: "entry" }
+  | { id: "pick" }
+  | { id: "compose"; recipient: Member }
+  | { id: "sent"; recipientName: string; msgId: string }
   | { id: "b" }
   | { id: "b_pick"; filter: "pi" | "all" }
   | { id: "b_message"; recipient: Member };
@@ -46,25 +33,6 @@ interface Member {
 
 type SupportResource = LabResource;
 
-interface Bookmark {
-  id: string;
-  title: string;
-  url: string;
-}
-
-interface LitItem {
-  id: string;
-  title: string;
-  authors: string[];
-  year: number | null;
-}
-
-interface Task {
-  id: string;
-  title: string;
-  updated_at: string;
-}
-
 // ── Props ─────────────────────────────────────────────────────────────────────
 
 interface SupportPanelProps {
@@ -72,48 +40,22 @@ interface SupportPanelProps {
   onClose: () => void;
   projectId: string | null;
   userId: string;
-  todayJournalText?: string;
 }
 
-// ── Copy constants ─────────────────────────────────────────────────────────────
+// ── Timing chips ──────────────────────────────────────────────────────────────
 
-const HELP_OPTIONS: Array<{ type: HelpType; label: string; sub: string }> = [
-  { type: "research_question", label: "I have a research question", sub: "Direction, methods, interpreting results. Best for your PI or a senior collaborator." },
-  { type: "blocked", label: "I'm blocked on a task", sub: "Someone already working on this task can usually unblock you fastest." },
-  { type: "feedback", label: "I'd like feedback", sub: "Share work in progress and request a review or a meeting." },
-  { type: "technical", label: "I need technical help", sub: "Code, equipment, software, or data problems." },
-  { type: "not_sure", label: "I'm not sure who to ask", sub: "Answer two quick questions to find someone." },
-  { type: "try_self", label: "I want to try solving it myself first", sub: "Pull up what's already in the project on this, and check back later." },
+type TimingChoice = "now" | "later_today" | "this_week";
+
+const TIMING_OPTIONS: Array<{ id: TimingChoice; label: string; line: string }> = [
+  { id: "now",         label: "Right now",     line: "I'm free right now if you have a moment." },
+  { id: "later_today", label: "Later today",   line: "I'm free later today." },
+  { id: "this_week",  label: "This week",      line: "Anytime this week works for me." },
 ];
 
 function firstName(fullName: string): string {
   return fullName.split(" ")[0] || fullName;
 }
 
-function draftBody(helpType: HelpType, recipientName: string, taskTitle: string | null): string {
-  const n = firstName(recipientName);
-  const t = taskTitle;
-  switch (helpType) {
-    case "research_question":
-      return t
-        ? `Hi ${n},I've hit a question on ${t} that I'd like your read on.\n\nWhere I am:\nWhat I've tried:\nWhat I'm unsure about:\n\nNo rush,happy to talk in office hours if that's easier.`
-        : `Hi ${n},I've hit a research question I'd like your read on.\n\nWhere I am:\nWhat I've tried:\nWhat I'm unsure about:\n\nNo rush,happy to talk in office hours if that's easier.`;
-    case "blocked":
-      return t
-        ? `Hi ${n},I'm stuck on ${t} and I think you've worked on this part.\n\nWhat's blocking me:\nWhat I've tried:\n\nIf you have 15 minutes this week that would help a lot.`
-        : `Hi ${n},I'm stuck on something and I think you've worked on this part.\n\nWhat's blocking me:\nWhat I've tried:\n\nIf you have 15 minutes this week that would help a lot.`;
-    case "feedback":
-      return t
-        ? `Hi ${n},I have a draft of ${t} ready for a look.\n\nWhat I'd most like feedback on:\nWhere it's still rough:\n\nAny time this week works.`
-        : `Hi ${n},I have a draft I'd like your feedback on.\n\nWhat I'd most like feedback on:\nWhere it's still rough:\n\nAny time this week works.`;
-    case "technical":
-      return t
-        ? `Hi ${n},I'm running into a technical problem with ${t}.\n\nWhat's happening:\nWhat I've tried:\nSetup / error details:`
-        : `Hi ${n},I'm running into a technical problem.\n\nWhat's happening:\nWhat I've tried:\nSetup / error details:`;
-    default:
-      return "";
-  }
-}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -183,20 +125,17 @@ function PanelShell({ title, onBack, onClose, children }: {
 
 // ── SupportPanel ──────────────────────────────────────────────────────────────
 
-export default function SupportPanel({ track, onClose, projectId, userId, todayJournalText }: SupportPanelProps) {
+export default function SupportPanel({ track, onClose, projectId, userId }: SupportPanelProps) {
   // ── Data ────────────────────────────────────────────────────────────────────
   const [members, setMembers] = useState<Member[]>([]);
   const [resources, setResources] = useState<SupportResource[]>([]);
   const [institutionKey, setInstitutionKey] = useState<string | null>(null);
   const [isCurrentUserPi, setIsCurrentUserPi] = useState(false);
-  const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
-  const [literature, setLiterature] = useState<LitItem[]>([]);
-  const [tasks, setTasks] = useState<Task[]>([]);
   const [piInvitation, setPiInvitation] = useState<{ text: string; piName: string } | null>(null);
   const [loadingData, setLoadingData] = useState(true);
 
   // ── Screen ───────────────────────────────────────────────────────────────────
-  const initialScreen: Screen = track === "wellbeing" ? { id: "b" } : track === "work" ? { id: "a1" } : { id: "fork" };
+  const initialScreen: Screen = track === "wellbeing" ? { id: "b" } : { id: "entry" };
   const [screen, setScreen] = useState<Screen>(initialScreen);
   const [history, setHistory] = useState<Screen[]>([]);
 
@@ -248,7 +187,7 @@ export default function SupportPanel({ track, onClose, projectId, userId, todayJ
     async function load() {
       if (!projectId) return;
       try {
-        const [membQ, resQ, bmQ, litQ, taskQ, projQ] = await Promise.all([
+        const [membQ, resQ, projQ] = await Promise.all([
           supabase
             .from("team_members")
             .select("user_id, role, user_profiles(name, avatar_initials, avatar_color, avatar_url)")
@@ -258,23 +197,6 @@ export default function SupportPanel({ track, onClose, projectId, userId, todayJ
             .select("id, label, description, confidentiality, category, contact_type, contact_value, availability, is_pinned, sort_order, active")
             .eq("project_id", projectId)
             .order("sort_order"),
-          supabase
-            .from("bookmarks")
-            .select("id, title, url")
-            .eq("project_id", projectId)
-            .limit(20),
-          supabase
-            .from("literature_items")
-            .select("id, title, authors, year")
-            .eq("project_id", projectId)
-            .limit(20),
-          supabase
-            .from("tasks")
-            .select("id, title, updated_at")
-            .eq("project_id", projectId)
-            .neq("status", "done")
-            .order("updated_at", { ascending: false })
-            .limit(20),
           supabase
             .from("projects")
             .select("support_invitation, owner_id, institution_key")
@@ -297,9 +219,6 @@ export default function SupportPanel({ track, onClose, projectId, userId, todayJ
         setMembers(rawMembers);
 
         setResources((resQ.data ?? []) as SupportResource[]);
-        setBookmarks((bmQ.data ?? []) as Bookmark[]);
-        setLiterature((litQ.data ?? []) as LitItem[]);
-        setTasks((taskQ.data ?? []) as Task[]);
 
         if (!projQ.error && projQ.data) {
           const pd = projQ.data as Record<string, unknown>;
@@ -350,119 +269,47 @@ export default function SupportPanel({ track, onClose, projectId, userId, todayJ
           boxShadow: "0 8px 40px rgba(27,46,75,0.22)",
         }}
       >
-        {screen.id === "fork" && (
-          <ForkScreen
+        {screen.id === "entry" && (
+          <EntryScreen
             piInvitation={piInvitation}
-            onWork={() => push({ id: "a1" })}
-            onWellbeing={() => push({ id: "b" })}
+            onHelp={() => push({ id: "pick" })}
+            onResources={() => push({ id: "b" })}
             onClose={onClose}
           />
         )}
 
-        {screen.id === "a1" && (
-          <A1Screen
-            onBack={canGoBack ? back : undefined}
-            onClose={onClose}
-            onSelect={(helpType) => {
-              if (helpType === "try_self") { push({ id: "a_try_self" }); return; }
-              if (helpType === "not_sure") { push({ id: "a_not_sure", step: 1, ans1: "" }); return; }
-              push({ id: "a2", helpType });
-            }}
-          />
-        )}
-
-        {screen.id === "a2" && (
-          <A2Screen
-            helpType={screen.helpType}
+        {screen.id === "pick" && (
+          <SimplePickScreen
             members={members}
             onBack={back}
             onClose={onClose}
-            onSelect={(recipient) => push({ id: "a3", helpType: screen.helpType, recipient })}
+            onSelect={(recipient) => push({ id: "compose", recipient })}
           />
         )}
 
-        {screen.id === "a3" && (
-          <A3Screen
-            helpType={screen.helpType}
+        {screen.id === "compose" && (
+          <SimpleComposeScreen
             recipient={screen.recipient}
-            tasks={tasks}
-            hasTodayJournal={!!todayJournalText}
-            projectId={projectId}
-            userId={userId}
-            onBack={back}
-            onClose={onClose}
-            onPreview={(body, includeJournal) =>
-              push({ id: "a4", helpType: screen.helpType, recipient: screen.recipient, body, includeJournal })
-            }
-          />
-        )}
-
-        {screen.id === "a4" && (
-          <A4Screen
-            helpType={screen.helpType}
-            recipient={screen.recipient}
-            body={screen.body}
-            includeJournal={screen.includeJournal}
-            todayJournalText={todayJournalText}
             projectId={projectId}
             userId={userId}
             onBack={back}
             onClose={onClose}
             onSent={(msgId) => {
               setHistory([]);
-              setScreen({ id: "a_sent", recipientName: screen.recipient.name, msgId });
+              setScreen({ id: "sent", recipientName: screen.recipient.name, msgId });
             }}
           />
         )}
 
-        {screen.id === "a_sent" && (
+        {screen.id === "sent" && (
           <ASentScreen
             recipientName={screen.recipientName}
             msgId={screen.msgId}
             onClose={onClose}
             onDone={() => {
               setHistory([]);
-              setScreen({ id: "fork" });
+              setScreen({ id: "entry" });
             }}
-          />
-        )}
-
-        {screen.id === "a_not_sure" && (
-          <ANotSureScreen
-            step={screen.step}
-            ans1={screen.ans1}
-            members={members}
-            onBack={back}
-            onClose={onClose}
-            onResult={(suggestion, reason) =>
-              push({ id: "a_not_sure_result", suggestion, reason })
-            }
-            onAdvance={(ans1) =>
-              push({ id: "a_not_sure", step: 2, ans1 })
-            }
-          />
-        )}
-
-        {screen.id === "a_not_sure_result" && (
-          <ANotSureResultScreen
-            suggestion={screen.suggestion}
-            reason={screen.reason}
-            onBack={back}
-            onClose={onClose}
-            onMessage={() =>
-              push({ id: "a3", helpType: "research_question", recipient: screen.suggestion })
-            }
-          />
-        )}
-
-        {screen.id === "a_try_self" && (
-          <ATrySelfScreen
-            bookmarks={bookmarks}
-            literature={literature}
-            userId={userId}
-            projectId={projectId}
-            onBack={back}
-            onClose={onClose}
           />
         )}
 
@@ -501,7 +348,7 @@ export default function SupportPanel({ track, onClose, projectId, userId, todayJ
             onClose={onClose}
             onSent={(msgId) => {
               setHistory([]);
-              setScreen({ id: "a_sent", recipientName: screen.recipient.name, msgId });
+              setScreen({ id: "sent", recipientName: screen.recipient.name, msgId });
             }}
           />
         )}
@@ -510,152 +357,74 @@ export default function SupportPanel({ track, onClose, projectId, userId, todayJ
   );
 }
 
-// ── Screen: Fork ──────────────────────────────────────────────────────────────
+// ── Screen: Entry ────────────────────────────────────────────────────────────
 
-function ForkScreen({ piInvitation, onWork, onWellbeing, onClose }: {
+function EntryScreen({ piInvitation, onHelp, onResources, onClose }: {
   piInvitation: { text: string; piName: string } | null;
-  onWork: () => void;
-  onWellbeing: () => void;
+  onHelp: () => void;
+  onResources: () => void;
   onClose: () => void;
 }) {
   return (
-    <PanelShell title="What would help right now?" onClose={onClose}>
-      <p style={{ fontSize: 14, color: "var(--color-secondary)", margin: "0 0 16px", lineHeight: 1.6 }}>
-        Getting stuck is part of research.
-      </p>
+    <PanelShell title="Get support" onClose={onClose}>
+      {/* Privacy statement — upfront, not buried */}
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "10px 12px", backgroundColor: "var(--color-canvas)", borderRadius: 8, marginBottom: 20, border: "1px solid var(--color-border)" }}>
+        <Lock size={13} color="var(--color-secondary)" style={{ flexShrink: 0, marginTop: 2 }} />
+        <p style={{ fontSize: 12, color: "var(--color-secondary)", margin: 0, lineHeight: 1.6 }}>
+          What you write here is only seen by the person you message. Nothing in this flow is recorded or shared with your lab or advisor.
+        </p>
+      </div>
+
       {piInvitation && (
-        <blockquote style={{
-          margin: "0 0 20px",
-          padding: "10px 14px",
-          borderLeft: "3px solid var(--color-border)",
-          color: "var(--color-secondary)",
-          fontSize: 13,
-          lineHeight: 1.6,
-        }}>
+        <blockquote style={{ margin: "0 0 20px", padding: "10px 14px", borderLeft: "3px solid var(--color-border)", color: "var(--color-secondary)", fontSize: 13, lineHeight: 1.6 }}>
           <span style={{ fontWeight: 600 }}>{piInvitation.piName}:</span>{" "}
           &ldquo;{piInvitation.text}&rdquo;
         </blockquote>
       )}
-      <div className="flex flex-col gap-3">
-        <ForkCard
-          label="I need help with my work"
-          sub="Research questions, blocked tasks, feedback, technical problems."
-          onClick={onWork}
-        />
-        <ForkCard
-          label="I need support with how I'm doing"
-          sub="Workload, stress, or anything outside the work itself."
-          onClick={onWellbeing}
-        />
-      </div>
+
+      <button
+        onClick={onHelp}
+        style={{
+          width: "100%", height: 52, fontSize: 15, fontWeight: 700,
+          backgroundColor: "var(--color-navy)", color: "#fff",
+          border: "none", borderRadius: 10, cursor: "pointer",
+          fontFamily: "var(--font-roboto)", marginBottom: 12,
+        }}
+      >
+        I&rsquo;d like some help
+      </button>
+
+      <button
+        onClick={onResources}
+        style={{
+          width: "100%", height: 44, fontSize: 13, fontWeight: 500,
+          backgroundColor: "transparent", color: "var(--color-secondary)",
+          border: "1px solid var(--color-border)", borderRadius: 8,
+          cursor: "pointer", fontFamily: "var(--font-roboto)",
+        }}
+      >
+        See wellbeing resources
+      </button>
     </PanelShell>
   );
 }
 
-function ForkCard({ label, sub, onClick }: { label: string; sub: string; onClick: () => void }) {
-  const [hov, setHov] = useState(false);
-  return (
-    <button
-      onClick={onClick}
-      onMouseEnter={() => setHov(true)}
-      onMouseLeave={() => setHov(false)}
-      style={{
-        width: "100%",
-        textAlign: "left",
-        padding: "16px 18px",
-        borderRadius: 10,
-        border: `1px solid ${hov ? "var(--color-navy)" : "var(--color-border)"}`,
-        backgroundColor: hov ? "var(--color-dimmed-bg)" : "var(--color-canvas)",
-        cursor: "pointer",
-        minHeight: 44,
-        transition: "border-color 120ms, background-color 120ms",
-      }}
-    >
-      <p style={{ fontSize: 15, fontWeight: 600, color: "var(--color-body)", margin: "0 0 5px", fontFamily: "var(--font-roboto)" }}>
-        {label}
-      </p>
-      <p style={{ fontSize: 13, color: "var(--color-secondary)", margin: 0, lineHeight: 1.5 }}>
-        {sub}
-      </p>
-    </button>
-  );
-}
+// ── Screen: Pick recipient ────────────────────────────────────────────────────
 
-// ── Screen: A1,What kind of help ───────────────────────────────────────────
-
-function A1Screen({ onBack, onClose, onSelect }: {
-  onBack?: () => void;
-  onClose: () => void;
-  onSelect: (h: HelpType) => void;
-}) {
-  return (
-    <PanelShell title="What kind of help?" onBack={onBack} onClose={onClose}>
-      <div className="flex flex-col gap-2">
-        {HELP_OPTIONS.map((opt) => (
-          <OptionRow key={opt.type} label={opt.label} sub={opt.sub} onClick={() => onSelect(opt.type)} />
-        ))}
-      </div>
-    </PanelShell>
-  );
-}
-
-function OptionRow({ label, sub, onClick }: { label: string; sub: string; onClick: () => void }) {
-  const [hov, setHov] = useState(false);
-  return (
-    <button
-      onClick={onClick}
-      onMouseEnter={() => setHov(true)}
-      onMouseLeave={() => setHov(false)}
-      style={{
-        width: "100%",
-        textAlign: "left",
-        padding: "12px 14px",
-        borderRadius: 8,
-        border: "1px solid var(--color-border)",
-        backgroundColor: hov ? "var(--color-dimmed-bg)" : "transparent",
-        cursor: "pointer",
-        minHeight: 44,
-        transition: "background-color 100ms",
-        display: "flex",
-        flexDirection: "column",
-        gap: 4,
-      }}
-    >
-      <span style={{ fontSize: 13, fontWeight: 600, color: "var(--color-body)", fontFamily: "var(--font-roboto)" }}>
-        {label}
-      </span>
-      <span style={{ fontSize: 12, color: "var(--color-secondary)", lineHeight: 1.5 }}>
-        {sub}
-      </span>
-    </button>
-  );
-}
-
-// ── Screen: A2,Recipient ────────────────────────────────────────────────────
-
-function sortedForHelp(members: Member[], helpType: HelpType): Member[] {
-  return [...members].sort((a, b) => {
-    if (helpType === "research_question") {
-      if (a.role === "pi" && b.role !== "pi") return -1;
-      if (b.role === "pi" && a.role !== "pi") return 1;
-    }
-    return a.name.localeCompare(b.name);
-  }).map((m) => ({
-    ...m,
-    contextNote: m.role === "pi" ? "PI" : "Researcher",
-  }));
-}
-
-function A2Screen({ helpType, members, onBack, onClose, onSelect }: {
-  helpType: HelpType;
+function SimplePickScreen({ members, onBack, onClose, onSelect }: {
   members: Member[];
   onBack: () => void;
   onClose: () => void;
   onSelect: (m: Member) => void;
 }) {
-  const sorted = sortedForHelp(members, helpType);
+  const sorted = [...members].sort((a, b) => {
+    if (a.role === "pi" && b.role !== "pi") return -1;
+    if (b.role === "pi" && a.role !== "pi") return 1;
+    return a.name.localeCompare(b.name);
+  }).map((m) => ({ ...m, contextNote: m.role === "pi" ? "PI" : "Researcher" }));
+
   return (
-    <PanelShell title="Who can help?" onBack={onBack} onClose={onClose}>
+    <PanelShell title="Who would you like to reach?" onBack={onBack} onClose={onClose}>
       {sorted.length === 0 && (
         <p style={{ fontSize: 13, color: "var(--color-secondary)" }}>No team members found.</p>
       )}
@@ -706,154 +475,140 @@ function MemberRow({ member, onClick }: { member: Member; onClick: () => void })
   );
 }
 
-// ── Time proposal helpers ─────────────────────────────────────────────────────
+// ── Screen: Compose ──────────────────────────────────────────────────────────
 
-const HOUR_START = 9; // grid starts at 9:00 AM
-const SLOT_COUNT = 16; // 16 slots, 30-min each → 9:00 AM – 4:30 PM
+function SimpleComposeScreen({ recipient, projectId, userId, onBack, onClose, onSent }: {
+  recipient: Member;
+  projectId: string | null;
+  userId: string;
+  onBack: () => void;
+  onClose: () => void;
+  onSent: (msgId: string) => void;
+}) {
+  const greeting = `Hi ${firstName(recipient.name)},`;
+  const [body, setBody] = useState(greeting + "\n");
+  const [timing, setTiming] = useState<TimingChoice | null>(null);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState("");
 
-interface SuggestedSlot {
-  date: string;       // YYYY-MM-DD
-  startMin: number;   // minutes from midnight
-  shortLabel: string; // e.g. "Thu Aug 28, 2:00 PM"
-  mechanism: "proposed"; // no "immediate" since no office_hours distinction
-}
+  function toggleTiming(choice: TimingChoice) {
+    setTiming(prev => prev === choice ? null : choice);
+  }
 
-function minToLabel(mins: number): string {
-  const h = Math.floor(mins / 60);
-  const m = mins % 60;
-  const suffix = h >= 12 ? "PM" : "AM";
-  const h12 = h > 12 ? h - 12 : h === 0 ? 12 : h;
-  return `${h12}:${m.toString().padStart(2, "0")} ${suffix}`;
-}
-
-const MONTH_ABR = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-const DAY_ABR   = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
-
-function findRecipientSlots(recipientSlotSet: Set<string>): SuggestedSlot[] {
-  const results: SuggestedSlot[] = [];
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  for (let offset = 1; offset <= 14 && results.length < 3; offset++) {
-    const d = new Date(today);
-    d.setDate(today.getDate() + offset);
-    const jsDay = d.getDay(); // 0=Sun, 6=Sat
-    if (jsDay === 0 || jsDay === 6) continue;
-    const gridDay = jsDay - 1; // 0=Mon
-
-    for (let s = 0; s < SLOT_COUNT && results.length < 3; s++) {
-      if (!recipientSlotSet.has(`${gridDay}-${s}`)) continue;
-      const startMin = HOUR_START * 60 + s * 30;
-      const dateStr = d.toISOString().split("T")[0];
-      results.push({
-        date: dateStr,
-        startMin,
-        shortLabel: `${DAY_ABR[jsDay]} ${MONTH_ABR[d.getMonth()]} ${d.getDate()}, ${minToLabel(startMin)}`,
-        mechanism: "proposed",
-      });
-      break; // one slot per day
+  async function send() {
+    const timingLine = timing ? TIMING_OPTIONS.find(t => t.id === timing)?.line : null;
+    const fullBody = body.trim() + (timingLine ? `\n\n${timingLine}` : "");
+    if (!fullBody.trim()) return;
+    setSending(true);
+    setError("");
+    const msgId = crypto.randomUUID();
+    try {
+      if (isSupabaseConfigured && projectId) {
+        const { error: err } = await supabase.from("chat_messages").insert({
+          id: msgId,
+          channel: dmChannelKey(userId, recipient.id),
+          sender_id: userId,
+          content: fullBody,
+          thread_parent_id: null,
+          mentioned_user_ids: [],
+          attachments: [],
+        });
+        if (err) throw err;
+      }
+      onSent(msgId);
+    } catch {
+      setError("Something went wrong. Try again, or copy and send the message manually.");
+      setSending(false);
     }
   }
-  return results;
-}
 
-function viewerTimezone(): string {
-  try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { return "local time"; }
-}
-
-function slotAppendLine(slot: SuggestedSlot, recipientName: string): string {
-  return `\n\nI was thinking: ${slot.shortLabel} (proposed -- ${recipientName} to confirm).`;
-}
-
-// ── Requester-picks fallback ──────────────────────────────────────────────────
-
-function RequesterTimePicker({ onSelect }: { onSelect: (line: string) => void }) {
-  const TIMES = ["9:00 AM", "9:30 AM", "10:00 AM", "10:30 AM", "11:00 AM",
-                 "12:00 PM", "1:00 PM", "1:30 PM", "2:00 PM", "2:30 PM",
-                 "3:00 PM", "3:30 PM", "4:00 PM"];
-  const today = new Date();
-  const days = Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(today);
-    d.setDate(today.getDate() + i + 1);
-    if (d.getDay() === 0 || d.getDay() === 6) return null;
-    return { date: d, label: `${DAY_ABR[d.getDay()]} ${MONTH_ABR[d.getMonth()]} ${d.getDate()}` };
-  }).filter(Boolean) as { date: Date; label: string }[];
-
-  const [selected, setSelected] = useState<string[]>([]);
-  const [day, setDay] = useState(days[0]?.label ?? "");
-
-  function toggle(key: string) {
-    setSelected((s) => {
-      if (s.includes(key)) return s.filter((x) => x !== key);
-      if (s.length >= 3) return s;
-      return [...s, key];
-    });
-  }
-
-  function confirm() {
-    if (selected.length === 0) return;
-    const line = `\n\nI'm free: ${selected.join(", ")}.`;
-    onSelect(line);
-  }
+  const hasContent = body.trim().length > greeting.length;
 
   return (
-    <div style={{ marginTop: 12 }}>
-      <div className="flex gap-2 mb-2 flex-wrap">
-        {days.map((d) => (
-          <button key={d.label} onClick={() => setDay(d.label)}
-            style={{
-              fontSize: 11, padding: "4px 10px", borderRadius: 20, minHeight: 44,
-              border: `1px solid ${day === d.label ? "var(--color-navy)" : "var(--color-border)"}`,
-              backgroundColor: day === d.label ? "var(--color-navy)" : "transparent",
-              color: day === d.label ? "#fff" : "var(--color-body)",
-              cursor: "pointer", fontFamily: "var(--font-roboto)",
-            }}>
-            {d.label}
-          </button>
-        ))}
-      </div>
-      <div className="flex flex-wrap gap-1.5 mb-3">
-        {TIMES.map((t) => {
-          const key = `${day} ${t}`;
-          const on = selected.includes(key);
-          return (
-            <button key={t} onClick={() => toggle(key)}
-              style={{
-                fontSize: 11, padding: "4px 10px", borderRadius: 6, minHeight: 44,
-                border: `1px solid ${on ? "var(--color-navy)" : "var(--color-border)"}`,
-                backgroundColor: on ? "rgba(27,46,75,0.08)" : "transparent",
-                color: "var(--color-body)", cursor: "pointer", fontFamily: "var(--font-roboto)",
-              }}>
-              {t}
+    <PanelShell title={`Message ${firstName(recipient.name)}`} onBack={onBack} onClose={onClose}>
+      {/* Recipient header */}
+      <div className="flex items-center gap-3 mb-4">
+        <Avatar user={recipient} size={36} />
+        <div style={{ flex: 1 }}>
+          <p style={{ fontSize: 14, fontWeight: 600, color: "var(--color-body)", margin: 0, fontFamily: "var(--font-roboto)" }}>
+            {recipient.name}
+          </p>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            {recipient.contextNote && (
+              <p style={{ fontSize: 11, color: "var(--color-secondary)", margin: 0 }}>{recipient.contextNote}</p>
+            )}
+            <button onClick={onBack} style={{ fontSize: 11, color: "var(--color-secondary)", background: "none", border: "none", cursor: "pointer", padding: 0, textDecoration: "underline", fontFamily: "var(--font-roboto)" }}>
+              Change
             </button>
-          );
-        })}
-      </div>
-      {selected.length > 0 && (
-        <div className="flex flex-col gap-1 mb-2">
-          {selected.map((s) => (
-            <div key={s} style={{ fontSize: 12, color: "var(--color-secondary)", display: "flex", alignItems: "center", gap: 4 }}>
-              <Check size={11} color="var(--color-success)" />
-              {s}
-            </div>
-          ))}
+          </div>
         </div>
+      </div>
+
+      {/* Privacy reminder */}
+      <p style={{ fontSize: 11, color: "var(--color-secondary)", display: "flex", alignItems: "center", gap: 5, marginBottom: 10 }}>
+        <Lock size={11} /> Only {firstName(recipient.name)} will see this.
+      </p>
+
+      {/* Blank message textarea — "Hi Name," pre-seeded, no template */}
+      <VoiceDraftTextarea
+        value={body}
+        onChange={setBody}
+        rows={7}
+        placeholder={`${greeting}\n`}
+      />
+
+      {/* Timing chips — lightweight, optional */}
+      <div style={{ marginTop: 14 }}>
+        <p style={{ fontSize: 11, color: "var(--color-secondary)", marginBottom: 8 }}>
+          When are you free to talk? (optional)
+        </p>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {TIMING_OPTIONS.map((opt) => {
+            const on = timing === opt.id;
+            return (
+              <button
+                key={opt.id}
+                onClick={() => toggleTiming(opt.id)}
+                style={{
+                  fontSize: 12, padding: "6px 14px", borderRadius: 20, minHeight: 36,
+                  border: `1px solid ${on ? "var(--color-navy)" : "var(--color-border)"}`,
+                  backgroundColor: on ? "var(--color-navy)" : "transparent",
+                  color: on ? "#fff" : "var(--color-body)",
+                  cursor: "pointer", fontFamily: "var(--font-roboto)",
+                  transition: "background-color 120ms, border-color 120ms",
+                }}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {error && (
+        <p style={{ fontSize: 12, color: "var(--color-error)", marginTop: 10 }}>{error}</p>
       )}
+
       <button
-        onClick={confirm}
-        disabled={selected.length === 0}
+        onClick={send}
+        disabled={sending || !hasContent}
         style={{
-          fontSize: 12, fontWeight: 600, color: selected.length ? "var(--color-navy)" : "var(--color-secondary)",
-          background: "transparent", border: `1px solid ${selected.length ? "var(--color-navy)" : "var(--color-border)"}`,
-          borderRadius: 7, padding: "6px 14px", cursor: selected.length ? "pointer" : "default",
-          fontFamily: "var(--font-roboto)", minHeight: 44,
+          marginTop: 16, width: "100%", height: 48,
+          backgroundColor: hasContent ? "var(--color-navy)" : "var(--color-dimmed-bg)",
+          color: hasContent ? "#fff" : "var(--color-secondary)",
+          border: "none", borderRadius: 8,
+          fontSize: 14, fontWeight: 700, cursor: hasContent ? "pointer" : "default",
+          display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+          fontFamily: "var(--font-roboto)", opacity: sending ? 0.7 : 1,
         }}
       >
-        Add to message
+        <Send size={14} />
+        {sending ? "Sending…" : "Send"}
       </button>
-    </div>
+    </PanelShell>
   );
 }
+
 
 // ── Voice-enabled textarea ────────────────────────────────────────────────────
 
@@ -983,688 +738,6 @@ function VoiceDraftTextarea({ value, onChange, rows = 8, placeholder }: {
   );
 }
 
-// ── Screen: A3,Draft ────────────────────────────────────────────────────────
-
-function A3Screen({ helpType, recipient, tasks, hasTodayJournal, projectId, userId, onBack, onClose, onPreview }: {
-  helpType: HelpType;
-  recipient: Member;
-  tasks: Task[];
-  hasTodayJournal: boolean;
-  projectId: string | null;
-  userId: string;
-  onBack: () => void;
-  onClose: () => void;
-  onPreview: (body: string, includeJournal: boolean) => void;
-}) {
-  const [selectedTask, setSelectedTask] = useState<Task | null>(tasks[0] ?? null);
-  const [body, setBody] = useState(() =>
-    helpType === "not_sure" || helpType === "try_self"
-      ? ""
-      : draftBody(helpType, recipient.name, tasks[0]?.title ?? null)
-  );
-  const [includeJournal, setIncludeJournal] = useState(false);
-  const [chips, setChips] = useState<string[]>([]);
-
-  // Time proposals — all flows
-  const [showMeetingPicker, setShowMeetingPicker] = useState(false);
-  const [recipientSlots, setRecipientSlots] = useState<SuggestedSlot[]>([]);
-  const [noAvailData, setNoAvailData] = useState(false);
-  const [showRequesterPicker, setShowRequesterPicker] = useState(false);
-  const [pickedSlots, setPickedSlots] = useState<SuggestedSlot[]>([]);
-  const tz = viewerTimezone();
-
-  useEffect(() => {
-    if (!showMeetingPicker || !projectId || !isSupabaseConfigured) return;
-    supabase
-      .from("user_availability")
-      .select("slots")
-      .eq("user_id", recipient.id)
-      .eq("project_id", projectId)
-      .then(({ data }) => {
-        const allSlots = (data ?? []).flatMap((row: Record<string, unknown>) => row["slots"] as string[] ?? []);
-        const slotSet = new Set(allSlots);
-        if (slotSet.size === 0) {
-          setNoAvailData(true);
-        } else {
-          setRecipientSlots(findRecipientSlots(slotSet));
-        }
-      });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showMeetingPicker, projectId, recipient.id]);
-
-  const availableChips = [
-    selectedTask
-      ? `This task has been open ${Math.round((Date.now() - new Date(selectedTask.updated_at).getTime()) / 86400000)} days.`
-      : null,
-    selectedTask ? `Last updated ${new Date(selectedTask.updated_at).toLocaleDateString("en-US", { day: "numeric", month: "long" })}.` : null,
-  ].filter(Boolean) as string[];
-
-  function addChip(chip: string) {
-    if (chips.includes(chip)) return;
-    setChips((c) => [...c, chip]);
-    setBody((b) => b + (b.trim() ? "\n\n" : "") + chip);
-  }
-
-  function updateTaskInBody(task: Task | null) {
-    setSelectedTask(task);
-    if (helpType !== "not_sure" && helpType !== "try_self") {
-      setBody(draftBody(helpType, recipient.name, task?.title ?? null));
-    }
-  }
-
-  return (
-    <PanelShell title={`Message ${recipient.name}`} onBack={onBack} onClose={onClose}>
-      <div className="flex items-center gap-3 mb-4">
-        <Avatar user={recipient} size={36} />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <p style={{ fontSize: 14, fontWeight: 600, color: "var(--color-body)", margin: 0, fontFamily: "var(--font-roboto)" }}>
-            {recipient.name}
-          </p>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            {recipient.contextNote && (
-              <p style={{ fontSize: 11, color: "var(--color-secondary)", margin: 0 }}>{recipient.contextNote}</p>
-            )}
-            <button onClick={onBack} style={{ fontSize: 11, color: "var(--color-secondary)", background: "none", border: "none", cursor: "pointer", padding: 0, textDecoration: "underline", fontFamily: "var(--font-roboto)" }}>
-              Change
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {helpType !== "not_sure" && helpType !== "try_self" && tasks.length > 0 && (
-        <div className="mb-3">
-          <label style={{ fontSize: 11, fontWeight: 600, color: "var(--color-secondary)", textTransform: "uppercase", letterSpacing: "0.06em", display: "block", marginBottom: 4 }}>
-            Regarding task
-          </label>
-          <select
-            value={selectedTask?.id ?? ""}
-            onChange={(e) => updateTaskInBody(tasks.find((t) => t.id === e.target.value) ?? null)}
-            style={{
-              width: "100%", height: 36, padding: "0 8px", fontSize: 13,
-              backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)",
-              borderRadius: 6, color: "var(--color-body)", fontFamily: "var(--font-roboto)", cursor: "pointer",
-            }}
-          >
-            {tasks.map((t) => <option key={t.id} value={t.id}>{t.title}</option>)}
-          </select>
-        </div>
-      )}
-
-      <p style={{ fontSize: 12, color: "var(--color-secondary)", marginBottom: 6 }}>
-        Here&rsquo;s a draft. Change anything before you send it.
-      </p>
-
-      <VoiceDraftTextarea
-        value={body}
-        onChange={setBody}
-        rows={helpType === "not_sure" || helpType === "try_self" ? 6 : 10}
-        placeholder={helpType === "not_sure" || helpType === "try_self" ? "Say as much or as little as you want." : undefined}
-      />
-
-      {availableChips.length > 0 && (
-        <div className="mt-3">
-          <p style={{ fontSize: 11, color: "var(--color-secondary)", marginBottom: 6 }}>Add context (optional):</p>
-          <div className="flex flex-wrap gap-2">
-            {availableChips.map((chip) => (
-              <button
-                key={chip}
-                onClick={() => addChip(chip)}
-                disabled={chips.includes(chip)}
-                style={{
-                  fontSize: 11,
-                  padding: "4px 10px",
-                  borderRadius: 20,
-                  border: "1px solid var(--color-border)",
-                  backgroundColor: chips.includes(chip) ? "var(--color-dimmed-bg)" : "transparent",
-                  color: chips.includes(chip) ? "var(--color-secondary)" : "var(--color-body)",
-                  cursor: chips.includes(chip) ? "default" : "pointer",
-                  fontFamily: "var(--font-roboto)",
-                  minHeight: 44,
-                }}
-              >
-                {chip}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {hasTodayJournal && (
-        <label className="flex items-start gap-2 mt-3" style={{ cursor: "pointer", minHeight: 44, alignItems: "center" }}>
-          <input
-            type="checkbox"
-            checked={includeJournal}
-            onChange={(e) => setIncludeJournal(e.target.checked)}
-            style={{ marginTop: 2, flexShrink: 0, width: 16, height: 16 }}
-          />
-          <span style={{ fontSize: 13, color: "var(--color-body)", lineHeight: 1.5 }}>
-            Include my journal note from today
-          </span>
-        </label>
-      )}
-
-      {/* Meeting time suggestion — available in all flows */}
-      <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 8 }}>
-        <button
-          onClick={() => setShowMeetingPicker((v) => !v)}
-          style={{
-            fontSize: 12, color: "var(--color-secondary)",
-            background: "transparent", border: "1px solid var(--color-border)",
-            borderRadius: 6, padding: "5px 10px", cursor: "pointer",
-            fontFamily: "var(--font-roboto)", display: "flex", alignItems: "center", gap: 5,
-          }}
-        >
-          <Calendar size={12} />
-          {showMeetingPicker ? "Hide time picker" : "Suggest a time to meet"}
-        </button>
-      </div>
-
-      {showMeetingPicker && (
-        <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--color-border)" }}>
-          {!noAvailData && recipientSlots.length > 0 && (
-            <>
-              <p style={{ fontSize: 12, color: "var(--color-secondary)", marginBottom: 8 }}>
-                {firstName(recipient.name)}&rsquo;s available times (select up to 3):
-              </p>
-              <div className="flex flex-col gap-2 mb-3">
-                {recipientSlots.map((slot) => {
-                  const picked = pickedSlots.some(s => s.date === slot.date && s.startMin === slot.startMin);
-                  return (
-                    <button
-                      key={`${slot.date}-${slot.startMin}`}
-                      onClick={() => {
-                        setPickedSlots(prev => {
-                          if (picked) return prev.filter(s => !(s.date === slot.date && s.startMin === slot.startMin));
-                          if (prev.length >= 3) return prev;
-                          return [...prev, slot];
-                        });
-                      }}
-                      style={{
-                        width: "100%", textAlign: "left", padding: "10px 12px", borderRadius: 8,
-                        border: `1px solid ${picked ? "var(--color-navy)" : "var(--color-border)"}`,
-                        backgroundColor: picked ? "rgba(27,46,75,0.06)" : "transparent",
-                        cursor: "pointer", minHeight: 44, display: "flex", justifyContent: "space-between", alignItems: "center",
-                        fontFamily: "var(--font-roboto)",
-                      }}
-                    >
-                      <span>
-                        <span style={{ fontSize: 13, fontWeight: 600, color: "var(--color-body)" }}>{slot.shortLabel}</span>
-                        <span style={{ fontSize: 11, color: "var(--color-secondary)", marginLeft: 8 }}>Proposed, {firstName(recipient.name)} confirms</span>
-                      </span>
-                      {picked && <Check size={13} color="var(--color-navy)" />}
-                    </button>
-                  );
-                })}
-              </div>
-              {pickedSlots.length > 0 && (
-                <button
-                  onClick={() => {
-                    const line = `\n\nWould any of these work? ${pickedSlots.map(s => s.shortLabel).join(", ")}.`;
-                    setBody(b => b + line);
-                    setPickedSlots([]);
-                    setShowMeetingPicker(false);
-                  }}
-                  style={{
-                    fontSize: 12, fontWeight: 600, color: "var(--color-navy)",
-                    background: "transparent", border: "1px solid var(--color-navy)",
-                    borderRadius: 7, padding: "6px 14px", cursor: "pointer",
-                    fontFamily: "var(--font-roboto)", minHeight: 44, marginBottom: 8,
-                  }}
-                >
-                  Add {pickedSlots.length} time{pickedSlots.length > 1 ? "s" : ""} to message
-                </button>
-              )}
-              <button
-                onClick={() => setShowRequesterPicker(v => !v)}
-                style={{ fontSize: 12, color: "var(--color-secondary)", background: "none", border: "none", cursor: "pointer", padding: 0, textDecoration: "underline", fontFamily: "var(--font-roboto)" }}
-              >
-                {showRequesterPicker ? "Hide manual picker" : "Choose different times"}
-              </button>
-            </>
-          )}
-
-          {(noAvailData || recipientSlots.length === 0 || showRequesterPicker) && (
-            <div style={{ marginTop: noAvailData ? 0 : 8 }}>
-              {noAvailData && (
-                <p style={{ fontSize: 12, color: "var(--color-secondary)", marginBottom: 8 }}>
-                  Pick up to three times and they&rsquo;ll be added to your message.
-                </p>
-              )}
-              <RequesterTimePicker onSelect={(line) => { setBody(b => b + line); setShowMeetingPicker(false); }} />
-            </div>
-          )}
-
-          <p style={{ fontSize: 11, color: "var(--color-secondary)", marginTop: 8 }}>
-            Times shown in {tz}.
-          </p>
-        </div>
-      )}
-
-      <button
-        onClick={() => onPreview(body, includeJournal)}
-        disabled={!body.trim()}
-        style={{
-          marginTop: 16,
-          width: "100%",
-          height: 44,
-          backgroundColor: body.trim() ? "var(--color-navy)" : "var(--color-dimmed-bg)",
-          color: body.trim() ? "#fff" : "var(--color-secondary)",
-          border: "none",
-          borderRadius: 8,
-          fontSize: 14,
-          fontWeight: 600,
-          cursor: body.trim() ? "pointer" : "default",
-          fontFamily: "var(--font-roboto)",
-        }}
-      >
-        Preview message
-      </button>
-    </PanelShell>
-  );
-}
-
-// ── Screen: A4,Preview + Send ───────────────────────────────────────────────
-
-function A4Screen({ helpType, recipient, body, includeJournal, todayJournalText, projectId, userId, onBack, onClose, onSent }: {
-  helpType: HelpType;
-  recipient: Member;
-  body: string;
-  includeJournal: boolean;
-  todayJournalText?: string;
-  projectId: string | null;
-  userId: string;
-  onBack: () => void;
-  onClose: () => void;
-  onSent: (msgId: string) => void;
-}) {
-  const [sending, setSending] = useState(false);
-  const [error, setError] = useState("");
-
-  const fullBody = includeJournal && todayJournalText
-    ? `${body}\n\n--- Journal note from today ---\n${todayJournalText}`
-    : body;
-
-  async function send() {
-    setSending(true);
-    setError("");
-    const msgId = crypto.randomUUID();
-    const channel = dmChannelKey(userId, recipient.id);
-    try {
-      if (isSupabaseConfigured && projectId) {
-        const { error: err } = await supabase.from("chat_messages").insert({
-          id: msgId,
-          channel,
-          sender_id: userId,
-          content: fullBody,
-          thread_parent_id: null,
-          mentioned_user_ids: [],
-          attachments: [],
-        });
-        if (err) throw err;
-      }
-      onSent(msgId);
-    } catch {
-      setError("Something went wrong. One option is to copy the message and send it manually.");
-      setSending(false);
-    }
-  }
-
-  const isScheduleOption = helpType === "feedback";
-
-  function openCalendar() {
-    const title = encodeURIComponent(`Feedback session with ${recipient.name}`);
-    const details = encodeURIComponent(body);
-    window.open(`https://calendar.google.com/calendar/r/eventedit?text=${title}&details=${details}`, "_blank", "noopener");
-  }
-
-  return (
-    <PanelShell title="Preview" onBack={onBack} onClose={onClose}>
-      <div className="flex items-center gap-3 mb-4">
-        <Avatar user={recipient} size={36} />
-        <div>
-          <p style={{ fontSize: 12, color: "var(--color-secondary)", margin: 0 }}>To</p>
-          <p style={{ fontSize: 14, fontWeight: 600, color: "var(--color-body)", margin: 0, fontFamily: "var(--font-roboto)" }}>
-            {recipient.name}
-          </p>
-        </div>
-      </div>
-
-      <div style={{
-        padding: "14px 16px",
-        backgroundColor: "var(--color-canvas)",
-        border: "1px solid var(--color-border)",
-        borderRadius: 8,
-        fontSize: 13,
-        color: "var(--color-body)",
-        lineHeight: 1.7,
-        whiteSpace: "pre-wrap",
-        marginBottom: 12,
-        fontFamily: "var(--font-roboto)",
-      }}>
-        {fullBody || <span style={{ color: "var(--color-secondary)" }}>(empty message)</span>}
-      </div>
-
-      {error && (
-        <p style={{ fontSize: 12, color: "var(--color-error)", marginBottom: 10 }}>{error}</p>
-      )}
-
-      <div className="flex gap-2">
-        <button
-          onClick={send}
-          disabled={sending || !fullBody.trim()}
-          style={{
-            flex: 1, height: 44,
-            backgroundColor: "var(--color-navy)", color: "#fff",
-            border: "none", borderRadius: 8,
-            fontSize: 14, fontWeight: 600, cursor: "pointer",
-            display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
-            opacity: sending ? 0.7 : 1,
-            fontFamily: "var(--font-roboto)",
-          }}
-        >
-          <Send size={14} />
-          {sending ? "Sending..." : "Send"}
-        </button>
-        {isScheduleOption && (
-          <button
-            onClick={openCalendar}
-            style={{
-              height: 44, padding: "0 16px",
-              backgroundColor: "transparent", color: "var(--color-navy)",
-              border: "1px solid var(--color-border)", borderRadius: 8,
-              fontSize: 13, fontWeight: 600, cursor: "pointer",
-              fontFamily: "var(--font-roboto)",
-            }}
-          >
-            Book a meeting
-          </button>
-        )}
-      </div>
-    </PanelShell>
-  );
-}
-
-// ── Screen: A Sent ────────────────────────────────────────────────────────────
-
-function ASentScreen({ recipientName, msgId, onClose, onDone }: {
-  recipientName: string;
-  msgId: string;
-  onClose: () => void;
-  onDone: () => void;
-}) {
-  const [undone, setUndone] = useState(false);
-  const [countdown, setCountdown] = useState(10);
-
-  useEffect(() => {
-    if (countdown <= 0 || undone) return;
-    const t = setTimeout(() => setCountdown((c) => c - 1), 1000);
-    return () => clearTimeout(t);
-  }, [countdown, undone]);
-
-  async function undo() {
-    setUndone(true);
-    if (isSupabaseConfigured) {
-      await supabase.from("chat_messages").delete().eq("id", msgId);
-    }
-    onDone();
-  }
-
-  return (
-    <PanelShell title="Sent" onClose={onClose}>
-      <div className="flex flex-col items-center" style={{ paddingTop: 40, textAlign: "center", gap: 16 }}>
-        <div style={{
-          width: 56, height: 56,
-          backgroundColor: "var(--color-success-bg)",
-          borderRadius: "50%",
-          display: "flex", alignItems: "center", justifyContent: "center",
-        }}>
-          <Check size={24} color="var(--color-success)" />
-        </div>
-        <p style={{ fontSize: 16, fontWeight: 600, color: "var(--color-body)", margin: 0, fontFamily: "var(--font-roboto)" }}>
-          Sent to {recipientName}.
-        </p>
-        {!undone && countdown > 0 && (
-          <button
-            onClick={undo}
-            style={{
-              fontSize: 13, color: "var(--color-secondary)", background: "transparent",
-              border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 6,
-              minHeight: 44, padding: "0 12px",
-            }}
-          >
-            <Undo2 size={13} />
-            Undo ({countdown}s)
-          </button>
-        )}
-        <button
-          onClick={onDone}
-          style={{
-            marginTop: 8, fontSize: 13, color: "var(--color-navy)",
-            background: "transparent", border: "none", cursor: "pointer",
-            minHeight: 44, fontFamily: "var(--font-roboto)",
-          }}
-        >
-          Back to support options
-        </button>
-      </div>
-    </PanelShell>
-  );
-}
-
-// ── Screen: A Not Sure,2 questions ─────────────────────────────────────────
-
-const NOT_SURE_Q1_OPTIONS = ["Research direction", "A task I'm working on", "Technical problem", "Something else"];
-const NOT_SURE_Q2_OPTIONS = ["As soon as possible", "This week", "No particular rush"];
-
-function ANotSureScreen({ step, ans1, members, onBack, onClose, onResult, onAdvance }: {
-  step: 1 | 2;
-  ans1: string;
-  members: Member[];
-  onBack: () => void;
-  onClose: () => void;
-  onResult: (m: Member, reason: string) => void;
-  onAdvance: (ans1: string) => void;
-}) {
-  function pick(answer: string) {
-    if (step === 1) { onAdvance(answer); return; }
-    const isUrgent = answer === "As soon as possible";
-    const pi = members.find((m) => m.role.toLowerCase() === "pi");
-    const researcher = members.find((m) => m.role === "researcher");
-    const suggestion = isUrgent && pi ? pi : (pi ?? researcher ?? members[0]);
-    if (!suggestion) return;
-    const reason = suggestion.role === "pi"
-      ? `${suggestion.name} -- ${isUrgent ? "as PI they can help most quickly" : "best placed to help with the direction"}`
-      : `${suggestion.name} -- ${isUrgent ? "a quick question to a collaborator is a good first step" : "someone who knows the project context"}`;
-    onResult(suggestion, reason);
-  }
-
-  const question = step === 1 ? "What area is this related to?" : "How quickly do you need help?";
-  const options = step === 1 ? NOT_SURE_Q1_OPTIONS : NOT_SURE_Q2_OPTIONS;
-
-  return (
-    <PanelShell title="Find someone to ask" onBack={onBack} onClose={onClose}>
-      <p style={{ fontSize: 12, color: "var(--color-secondary)", marginBottom: 16 }}>
-        Question {step} of 2
-      </p>
-      <h2 style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 18, color: "var(--color-navy)", margin: "0 0 16px" }}>
-        {question}
-      </h2>
-      <div className="flex flex-col gap-2">
-        {options.map((opt) => (
-          <button
-            key={opt}
-            onClick={() => pick(opt)}
-            style={{
-              width: "100%",
-              textAlign: "left",
-              padding: "12px 14px",
-              borderRadius: 8,
-              border: "1px solid var(--color-border)",
-              backgroundColor: "transparent",
-              cursor: "pointer",
-              fontSize: 14,
-              color: "var(--color-body)",
-              minHeight: 44,
-              fontFamily: "var(--font-roboto)",
-            }}
-            onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = "var(--color-dimmed-bg)"; }}
-            onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = "transparent"; }}
-          >
-            {opt}
-          </button>
-        ))}
-      </div>
-    </PanelShell>
-  );
-}
-
-function ANotSureResultScreen({ suggestion, reason, onBack, onClose, onMessage }: {
-  suggestion: Member;
-  reason: string;
-  onBack: () => void;
-  onClose: () => void;
-  onMessage: () => void;
-}) {
-  return (
-    <PanelShell title="A suggestion" onBack={onBack} onClose={onClose}>
-      <div className="flex items-center gap-3 mb-4">
-        <Avatar user={suggestion} size={48} />
-        <div>
-          <p style={{ fontSize: 16, fontWeight: 600, color: "var(--color-body)", margin: 0, fontFamily: "var(--font-roboto)" }}>
-            {suggestion.name}
-          </p>
-          <p style={{ fontSize: 13, color: "var(--color-secondary)", margin: "3px 0 0", lineHeight: 1.5 }}>{reason}</p>
-        </div>
-      </div>
-      <button
-        onClick={onMessage}
-        style={{
-          width: "100%", height: 44,
-          backgroundColor: "var(--color-navy)", color: "#fff",
-          border: "none", borderRadius: 8,
-          fontSize: 14, fontWeight: 600, cursor: "pointer",
-          fontFamily: "var(--font-roboto)",
-        }}
-      >
-        Draft a message to {suggestion.name}
-      </button>
-    </PanelShell>
-  );
-}
-
-// ── Screen: A Try Self ────────────────────────────────────────────────────────
-
-const REMINDER_OPTIONS = [
-  { label: "Check back in 2 hours", hours: 2 },
-  { label: "Tomorrow morning", hours: 20 },
-  { label: "No reminder", hours: 0 },
-];
-
-function ATrySelfScreen({ bookmarks, literature, userId, projectId, onBack, onClose }: {
-  bookmarks: Bookmark[];
-  literature: LitItem[];
-  userId: string;
-  projectId: string | null;
-  onBack: () => void;
-  onClose: () => void;
-}) {
-  const [reminderSet, setReminderSet] = useState(false);
-
-  async function setReminder(hours: number) {
-    if (hours === 0 || reminderSet) { onClose(); return; }
-    const due = new Date(Date.now() + hours * 3600 * 1000).toISOString();
-    if (isSupabaseConfigured && projectId) {
-      await supabase.from("reminders").insert({
-        user_id: userId,
-        project_id: projectId,
-        scope: "personal",
-        title: "Check back on your question",
-        due_at: due,
-      });
-    }
-    setReminderSet(true);
-  }
-
-  return (
-    <PanelShell title="Working it out" onBack={onBack} onClose={onClose}>
-      {bookmarks.length > 0 && (
-        <section className="mb-5">
-          <p style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--color-secondary)", marginBottom: 8 }}>
-            Bookmarks in this project
-          </p>
-          <div className="flex flex-col gap-1.5">
-            {bookmarks.map((bm) => (
-              <a key={bm.id} href={bm.url} target="_blank" rel="noopener noreferrer"
-                style={{ fontSize: 13, color: "var(--color-navy)", display: "flex", alignItems: "center", gap: 8, padding: "6px 0", minHeight: 44, textDecoration: "none" }}>
-                <BookOpen size={13} color="var(--color-secondary)" style={{ flexShrink: 0 }} />
-                <span style={{ textDecoration: "underline" }}>{bm.title}</span>
-              </a>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {literature.length > 0 && (
-        <section className="mb-5">
-          <p style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--color-secondary)", marginBottom: 8 }}>
-            Literature in this project
-          </p>
-          <div className="flex flex-col gap-1.5">
-            {literature.map((li) => (
-              <div key={li.id} style={{ fontSize: 13, color: "var(--color-body)", padding: "6px 0", display: "flex", alignItems: "start", gap: 8, minHeight: 44 }}>
-                <Library size={13} color="var(--color-secondary)" style={{ flexShrink: 0, marginTop: 3 }} />
-                <span>
-                  <span style={{ fontWeight: 600 }}>{li.title}</span>
-                  {li.authors.length > 0 && (
-                    <span style={{ color: "var(--color-secondary)" }}> &mdash; {li.authors[0]}{li.year ? `, ${li.year}` : ""}</span>
-                  )}
-                </span>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {bookmarks.length === 0 && literature.length === 0 && (
-        <p style={{ fontSize: 13, color: "var(--color-secondary)", marginBottom: 20 }}>
-          No bookmarks or literature in this project yet.
-        </p>
-      )}
-
-      <div style={{ borderTop: "1px solid var(--color-border)", paddingTop: 16, marginTop: 4 }}>
-        {reminderSet ? (
-          <p style={{ fontSize: 13, color: "var(--color-success)", display: "flex", alignItems: "center", gap: 6 }}>
-            <Check size={14} /> Reminder set.
-          </p>
-        ) : (
-          <>
-            <p style={{ fontSize: 13, color: "var(--color-secondary)", marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}>
-              <Clock size={13} /> Want a reminder to check back?
-            </p>
-            <div className="flex flex-col gap-2">
-              {REMINDER_OPTIONS.map((opt) => (
-                <button
-                  key={opt.label}
-                  onClick={() => setReminder(opt.hours)}
-                  style={{
-                    width: "100%", textAlign: "left", padding: "10px 14px", borderRadius: 7,
-                    border: "1px solid var(--color-border)", backgroundColor: "transparent",
-                    cursor: "pointer", fontSize: 13, color: "var(--color-body)", minHeight: 44,
-                    fontFamily: "var(--font-roboto)",
-                  }}
-                  onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = "var(--color-dimmed-bg)"; }}
-                  onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = "transparent"; }}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-          </>
-        )}
-      </div>
-    </PanelShell>
-  );
-}
 
 // ── Screen: B Pick — recipient selection from Track B ────────────────────────
 
