@@ -15,6 +15,7 @@ import {
 import { isSupabaseConfigured } from "@/lib/supabase";
 import ScopeSidebar, { type ScopeSection } from "@/components/ui/ScopeSidebar";
 import PageHeader from "@/components/ui/PageHeader";
+import SupportPanel from "@/components/support/SupportPanel";
 
 // SpeechRecognition types (not yet in all TypeScript DOM lib versions)
 interface SpeechRecognitionEvent extends Event {
@@ -488,7 +489,7 @@ function PromptPicker({ usedTexts, onSelect, onClose }: {
 
 function JournalSidebarContent({
   search, setSearch, groupedEntries, selectedEntryId, onSelectEntry, showClose, onClose, onCollapse,
-  onSelectTrends, isTrendsView,
+  onSelectTrends, isTrendsView, onSupportClick,
 }: {
   search: string; setSearch: (v: string) => void;
   groupedEntries: { today: JournalEntry[]; earlier: JournalEntry[]; older: JournalEntry[] };
@@ -497,6 +498,7 @@ function JournalSidebarContent({
   onCollapse?: () => void;
   onSelectTrends?: () => void;
   isTrendsView?: boolean;
+  onSupportClick?: () => void;
 }) {
   return (
     <div className="flex flex-col h-full" style={{ backgroundColor: "var(--color-surface)" }}>
@@ -581,6 +583,16 @@ function JournalSidebarContent({
           ));
         })()}
       </div>
+      {onSupportClick && (
+        <div style={{ borderTop: "1px solid var(--color-border)", padding: "8px 16px", backgroundColor: "var(--color-canvas)" }}>
+          <button
+            onClick={onSupportClick}
+            style={{ fontSize: 12, color: "var(--color-navy)", background: "none", border: "none", cursor: "pointer", padding: 0, fontFamily: "var(--font-roboto)", fontWeight: 600, minHeight: 44, display: "flex", alignItems: "center" }}
+          >
+            Support resources
+          </button>
+        </div>
+      )}
       <div className="flex items-center gap-2 px-4 py-3" style={{ borderTop: "1px solid var(--color-border)", backgroundColor: "var(--color-canvas)" }}>
         <Lock size={12} color="var(--color-secondary)" />
         <span style={{ fontSize: 11, color: "var(--color-secondary)" }}>Only you can see this</span>
@@ -1113,6 +1125,7 @@ export default function JournalPage() {
                 onCollapse={handleToggleJournalSidebar}
                 onSelectTrends={() => { setSelectedEntryId("trends"); setListCollapsed(true); }}
                 isTrendsView={isTrendsView}
+                onSupportClick={() => setSupportOpen(true)}
               />
             }
           />
@@ -1329,7 +1342,14 @@ export default function JournalPage() {
 
       </div>
 
-      {supportOpen      && <SupportModal onClose={() => setSupportOpen(false)} userId={authUserId} projectId={projectId} />}
+      {supportOpen && authUserId && (
+        <SupportPanel
+          onClose={() => setSupportOpen(false)}
+          userId={authUserId}
+          projectId={projectId}
+          todayJournalText={entries[0]?.prompts?.[0]?.response ?? undefined}
+        />
+      )}
       {discardModalOpen && <DiscardDraftModal onKeep={() => setDiscardModalOpen(false)} onDiscard={resetToNew} />}
     </div>
   );
