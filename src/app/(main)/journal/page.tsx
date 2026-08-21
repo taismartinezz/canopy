@@ -1103,8 +1103,7 @@ export default function JournalPage() {
             collapsed={listCollapsed}
             onToggleCollapse={handleToggleJournalSidebar}
             storageKey="journal_sidebar"
-            fullContent={
-              <JournalSidebarContent
+            fullContent={listCollapsed ? undefined : <JournalSidebarContent
                 search={search} setSearch={setSearch}
                 groupedEntries={groupedEntries}
                 selectedEntryId={selectedEntryId}
