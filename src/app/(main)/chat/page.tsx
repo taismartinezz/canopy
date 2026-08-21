@@ -108,8 +108,24 @@ export default function ChatPage() {
     load();
   }, [projectId, currentUserId, isProjectView, subProjectId]);
 
-  // Reset channel
-  useEffect(() => { setActiveChannel(defaultChannel); setThreadMsg(null); }, [activeScope, subProjectId]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Persist active channel per project so navigating away and back restores position
+  const channelRestoredRef = useRef(false);
+  useEffect(() => {
+    if (!projectId || channelRestoredRef.current) return;
+    channelRestoredRef.current = true;
+    try {
+      const saved = localStorage.getItem(`chat_channel:${projectId}`) as ActiveChannel | null;
+      if (saved) setActiveChannel(saved);
+    } catch { /* ignore */ }
+  }, [projectId]);
+
+  useEffect(() => {
+    if (!projectId) return;
+    try { localStorage.setItem(`chat_channel:${projectId}`, String(activeChannel)); } catch { /* ignore */ }
+  }, [activeChannel, projectId]);
+
+  // Reset channel when scope changes (intentional navigation)
+  useEffect(() => { setActiveChannel(defaultChannel); setThreadMsg(null); channelRestoredRef.current = false; }, [activeScope, subProjectId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // F1: Presence
   useEffect(() => {
@@ -226,41 +242,36 @@ export default function ChatPage() {
     if (error) { console.error("[Chat] fetch:", error); setLoading(false); return; }
     const rows = data ?? [];
     const sids = [...new Set(rows.map(r => r.sender_id as string))];
-    const nameMap: Record<string, string> = {};
-    if (sids.length) {
-      const { data: ps } = await supabase.from("user_profiles").select("id, name").in("id", sids);
-      for (const p of ps ?? []) nameMap[p.id as string] = p.name as string;
-    }
-
     const mids = rows.map(r => r.id as string);
-    let tcMap: Record<string, number> = {};
-    let rxMap: Record<string, MessageReaction[]> = {};
-    let lastReplierMap: Record<string, string> = {};
 
-    if (mids.length) {
-      const [tc, rx] = await Promise.all([
-        supabase.from("chat_messages")
-          .select("thread_parent_id, sender_id")
-          .in("thread_parent_id", mids)
-          .is("deleted_at", null)
-          .order("created_at", { ascending: false })
-          .then(r => r.data ?? []),
-        supabase.from("message_reactions")
-          .select("message_id, emoji, user_id")
-          .in("message_id", mids)
-          .then(r => r.data ?? []),
-      ]);
-      for (const t of tc) {
-        const pid = t.thread_parent_id as string;
-        tcMap[pid] = (tcMap[pid] ?? 0) + 1;
-        if (!lastReplierMap[pid]) lastReplierMap[pid] = t.sender_id as string;
-      }
-      for (const r of rx) {
-        if (!rxMap[r.message_id]) rxMap[r.message_id] = [];
-        const ex = rxMap[r.message_id].find(x => x.emoji === r.emoji);
-        if (ex) { ex.count++; if (r.user_id === currentUserId) ex.hasReacted = true; }
-        else rxMap[r.message_id].push({ emoji: r.emoji, count: 1, hasReacted: r.user_id === currentUserId });
-      }
+    const [ps, tc, rx] = await Promise.all([
+      sids.length
+        ? supabase.from("user_profiles").select("id, name").in("id", sids).then(r => r.data ?? [])
+        : Promise.resolve([]),
+      mids.length
+        ? supabase.from("chat_messages").select("thread_parent_id, sender_id").in("thread_parent_id", mids).is("deleted_at", null).order("created_at", { ascending: false }).then(r => r.data ?? [])
+        : Promise.resolve([]),
+      mids.length
+        ? supabase.from("message_reactions").select("message_id, emoji, user_id").in("message_id", mids).then(r => r.data ?? [])
+        : Promise.resolve([]),
+    ]);
+
+    const nameMap: Record<string, string> = {};
+    for (const p of ps) nameMap[p.id as string] = p.name as string;
+
+    const tcMap: Record<string, number> = {};
+    const rxMap: Record<string, MessageReaction[]> = {};
+    const lastReplierMap: Record<string, string> = {};
+    for (const t of tc) {
+      const pid = t.thread_parent_id as string;
+      tcMap[pid] = (tcMap[pid] ?? 0) + 1;
+      if (!lastReplierMap[pid]) lastReplierMap[pid] = t.sender_id as string;
+    }
+    for (const r of rx) {
+      if (!rxMap[r.message_id]) rxMap[r.message_id] = [];
+      const ex = rxMap[r.message_id].find(x => x.emoji === r.emoji);
+      if (ex) { ex.count++; if (r.user_id === currentUserId) ex.hasReacted = true; }
+      else rxMap[r.message_id].push({ emoji: r.emoji, count: 1, hasReacted: r.user_id === currentUserId });
     }
 
     setMessages(rows.map(row => ({
@@ -490,18 +501,21 @@ export default function ChatPage() {
   }
 
   async function handleReact(msgId: string, emoji: string) {
-    if (!isSupabaseConfigured) {
-      setMessages(p => p.map(m => {
-        if (m.id !== msgId) return m;
-        const ex = m.reactions.find(r => r.emoji === emoji);
-        if (ex?.hasReacted) return { ...m, reactions: m.reactions.map(r => r.emoji === emoji ? { ...r, count: r.count - 1, hasReacted: false } : r).filter(r => r.count > 0) };
-        if (ex) return { ...m, reactions: m.reactions.map(r => r.emoji === emoji ? { ...r, count: r.count + 1, hasReacted: true } : r) };
-        return { ...m, reactions: [...m.reactions, { emoji, count: 1, hasReacted: true }] };
-      }));
-      return;
-    }
     const msg = messages.find(m => m.id === msgId);
     const alreadyReacted = msg?.reactions.find(r => r.emoji === emoji)?.hasReacted;
+
+    // Optimistic update — applies immediately regardless of Supabase status
+    setMessages(p => p.map(m => {
+      if (m.id !== msgId) return m;
+      const ex = m.reactions.find(r => r.emoji === emoji);
+      if (alreadyReacted) {
+        return { ...m, reactions: m.reactions.map(r => r.emoji === emoji ? { ...r, count: r.count - 1, hasReacted: false } : r).filter(r => r.count > 0) };
+      }
+      if (ex) return { ...m, reactions: m.reactions.map(r => r.emoji === emoji ? { ...r, count: r.count + 1, hasReacted: true } : r) };
+      return { ...m, reactions: [...m.reactions, { emoji, count: 1, hasReacted: true }] };
+    }));
+
+    if (!isSupabaseConfigured) return;
     if (alreadyReacted) {
       await supabase.from("message_reactions").delete().eq("message_id", msgId).eq("user_id", currentUserId).eq("emoji", emoji);
     } else {
