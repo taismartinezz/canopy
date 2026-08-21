@@ -610,6 +610,42 @@ function SimpleComposeScreen({ recipient, projectId, userId, onBack, onClose, on
 }
 
 
+// ── Screen: Sent confirmation ─────────────────────────────────────────────────
+
+function ASentScreen({ recipientName, msgId: _msgId, onClose, onDone }: {
+  recipientName: string;
+  msgId: string;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  return (
+    <PanelShell title="Message sent" onClose={onClose}>
+      <div style={{ textAlign: "center", padding: "32px 0" }}>
+        <div style={{ width: 48, height: 48, borderRadius: "50%", backgroundColor: "var(--color-success-bg, #e6f4ea)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
+          <Check size={24} color="var(--color-success, #2d7a3a)" />
+        </div>
+        <p style={{ fontSize: 16, fontWeight: 700, color: "var(--color-body)", margin: "0 0 8px", fontFamily: "var(--font-roboto)" }}>
+          Message sent to {recipientName}
+        </p>
+        <p style={{ fontSize: 13, color: "var(--color-secondary)", margin: "0 0 28px", lineHeight: 1.6 }}>
+          Only {recipientName.split(" ")[0]} will see it.
+        </p>
+        <button
+          onClick={onDone}
+          style={{
+            width: "100%", height: 48, fontSize: 14, fontWeight: 600,
+            backgroundColor: "var(--color-navy)", color: "#fff",
+            border: "none", borderRadius: 10, cursor: "pointer",
+            fontFamily: "var(--font-roboto)",
+          }}
+        >
+          Done
+        </button>
+      </div>
+    </PanelShell>
+  );
+}
+
 // ── Voice-enabled textarea ────────────────────────────────────────────────────
 
 interface ISpeechRecognitionResult { isFinal: boolean; 0: { transcript: string } }
