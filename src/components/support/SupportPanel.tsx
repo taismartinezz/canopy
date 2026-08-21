@@ -31,7 +31,8 @@ type Screen =
   | { id: "a_not_sure_result"; suggestion: Member; reason: string }
   | { id: "a_try_self" }
   | { id: "b" }
-  | { id: "b_message"; recipientId: string; recipientName: string };
+  | { id: "b_pick"; filter: "pi" | "all" }
+  | { id: "b_message"; recipient: Member };
 
 interface Member {
   id: string;
@@ -107,20 +108,20 @@ function draftBody(helpType: HelpType, recipientName: string, taskTitle: string 
   switch (helpType) {
     case "research_question":
       return t
-        ? `Hi ${n} — I've hit a question on ${t} that I'd like your read on.\n\nWhere I am:\nWhat I've tried:\nWhat I'm unsure about:\n\nNo rush — happy to talk in office hours if that's easier.`
-        : `Hi ${n} — I've hit a research question I'd like your read on.\n\nWhere I am:\nWhat I've tried:\nWhat I'm unsure about:\n\nNo rush — happy to talk in office hours if that's easier.`;
+        ? `Hi ${n},I've hit a question on ${t} that I'd like your read on.\n\nWhere I am:\nWhat I've tried:\nWhat I'm unsure about:\n\nNo rush,happy to talk in office hours if that's easier.`
+        : `Hi ${n},I've hit a research question I'd like your read on.\n\nWhere I am:\nWhat I've tried:\nWhat I'm unsure about:\n\nNo rush,happy to talk in office hours if that's easier.`;
     case "blocked":
       return t
-        ? `Hi ${n} — I'm stuck on ${t} and I think you've worked on this part.\n\nWhat's blocking me:\nWhat I've tried:\n\nIf you have 15 minutes this week that would help a lot.`
-        : `Hi ${n} — I'm stuck on something and I think you've worked on this part.\n\nWhat's blocking me:\nWhat I've tried:\n\nIf you have 15 minutes this week that would help a lot.`;
+        ? `Hi ${n},I'm stuck on ${t} and I think you've worked on this part.\n\nWhat's blocking me:\nWhat I've tried:\n\nIf you have 15 minutes this week that would help a lot.`
+        : `Hi ${n},I'm stuck on something and I think you've worked on this part.\n\nWhat's blocking me:\nWhat I've tried:\n\nIf you have 15 minutes this week that would help a lot.`;
     case "feedback":
       return t
-        ? `Hi ${n} — I have a draft of ${t} ready for a look.\n\nWhat I'd most like feedback on:\nWhere it's still rough:\n\nAny time this week works.`
-        : `Hi ${n} — I have a draft I'd like your feedback on.\n\nWhat I'd most like feedback on:\nWhere it's still rough:\n\nAny time this week works.`;
+        ? `Hi ${n},I have a draft of ${t} ready for a look.\n\nWhat I'd most like feedback on:\nWhere it's still rough:\n\nAny time this week works.`
+        : `Hi ${n},I have a draft I'd like your feedback on.\n\nWhat I'd most like feedback on:\nWhere it's still rough:\n\nAny time this week works.`;
     case "technical":
       return t
-        ? `Hi ${n} — I'm running into a technical problem with ${t}.\n\nWhat's happening:\nWhat I've tried:\nSetup / error details:`
-        : `Hi ${n} — I'm running into a technical problem.\n\nWhat's happening:\nWhat I've tried:\nSetup / error details:`;
+        ? `Hi ${n},I'm running into a technical problem with ${t}.\n\nWhat's happening:\nWhat I've tried:\nSetup / error details:`
+        : `Hi ${n},I'm running into a technical problem.\n\nWhat's happening:\nWhat I've tried:\nSetup / error details:`;
     default:
       return "";
   }
@@ -173,7 +174,7 @@ function PanelShell({ title, onBack, onClose, children }: {
             <ChevronLeft size={18} color="var(--color-secondary)" />
           </button>
         )}
-        <span style={{ flex: 1, fontSize: 14, fontWeight: 600, color: "var(--color-navy)", fontFamily: "var(--font-roboto)" }}>
+        <span style={{ flex: 1, fontSize: 14, fontWeight: 600, color: "var(--color-body)", fontFamily: "var(--font-roboto)" }}>
           {title}
         </span>
         <button onClick={onClose} aria-label="Close panel"
@@ -331,29 +332,27 @@ export default function SupportPanel({ track, onClose, projectId, userId, todayJ
   const canGoBack = history.length > 0;
 
   return (
-    <div className="fixed inset-0 z-50" style={{ display: "flex" }}>
-      {/* Backdrop */}
-      <div
-        className="flex-1"
-        style={{ backgroundColor: "rgba(27,46,75,0.4)" }}
-        onClick={onClose}
-        aria-hidden="true"
-      />
-
-      {/* Panel */}
+    <div
+      className="fixed inset-0 z-50"
+      style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: 16, backgroundColor: "rgba(27,46,75,0.45)" }}
+      onClick={onClose}
+      aria-hidden="false"
+    >
       <div
         ref={panelRef}
         role="dialog"
         aria-modal="true"
-        aria-label="Support panel"
+        aria-label="Support"
+        onClick={e => e.stopPropagation()}
         style={{
-          width: "min(640px, 100vw)",
+          width: "min(520px, 100%)",
+          maxHeight: "min(640px, calc(100vh - 32px))",
           backgroundColor: "var(--color-surface)",
-          borderLeft: "1px solid var(--color-border)",
+          borderRadius: 16,
           display: "flex",
           flexDirection: "column",
-          height: "100%",
-          boxShadow: "-4px 0 32px rgba(27,46,75,0.12)",
+          overflow: "hidden",
+          boxShadow: "0 8px 40px rgba(27,46,75,0.22)",
         }}
       >
         {screen.id === "fork" && (
@@ -482,23 +481,31 @@ export default function SupportPanel({ track, onClose, projectId, userId, todayJ
             projectId={projectId}
             onBack={canGoBack ? back : undefined}
             onClose={onClose}
-            onMessage={(recipientId, recipientName) =>
-              push({ id: "b_message", recipientId, recipientName })
-            }
+            onPickRecipient={(filter) => push({ id: "b_pick", filter })}
+          />
+        )}
+
+        {screen.id === "b_pick" && (
+          <BPickScreen
+            filter={screen.filter}
+            members={members}
+            pi={pi}
+            onBack={back}
+            onClose={onClose}
+            onSelect={(recipient) => push({ id: "b_message", recipient })}
           />
         )}
 
         {screen.id === "b_message" && (
           <BMessageScreen
-            recipientId={screen.recipientId}
-            recipientName={screen.recipientName}
+            recipient={screen.recipient}
             projectId={projectId}
             userId={userId}
             onBack={back}
             onClose={onClose}
             onSent={(msgId) => {
               setHistory([]);
-              setScreen({ id: "a_sent", recipientName: screen.recipientName, msgId });
+              setScreen({ id: "a_sent", recipientName: screen.recipient.name, msgId });
             }}
           />
         )}
@@ -516,10 +523,7 @@ function ForkScreen({ piInvitation, onWork, onWellbeing, onClose }: {
   onClose: () => void;
 }) {
   return (
-    <PanelShell title="Get support" onClose={onClose}>
-      <h2 style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 22, color: "var(--color-navy)", margin: "0 0 8px" }}>
-        What would help right now?
-      </h2>
+    <PanelShell title="What would help right now?" onClose={onClose}>
       <p style={{ fontSize: 14, color: "var(--color-secondary)", margin: "0 0 16px", lineHeight: 1.6 }}>
         Getting stuck is part of research.
       </p>
@@ -571,7 +575,7 @@ function ForkCard({ label, sub, onClick }: { label: string; sub: string; onClick
         transition: "border-color 120ms, background-color 120ms",
       }}
     >
-      <p style={{ fontSize: 15, fontWeight: 600, color: "var(--color-navy)", margin: "0 0 5px", fontFamily: "var(--font-roboto)" }}>
+      <p style={{ fontSize: 15, fontWeight: 600, color: "var(--color-body)", margin: "0 0 5px", fontFamily: "var(--font-roboto)" }}>
         {label}
       </p>
       <p style={{ fontSize: 13, color: "var(--color-secondary)", margin: 0, lineHeight: 1.5 }}>
@@ -581,7 +585,7 @@ function ForkCard({ label, sub, onClick }: { label: string; sub: string; onClick
   );
 }
 
-// ── Screen: A1 — What kind of help ───────────────────────────────────────────
+// ── Screen: A1,What kind of help ───────────────────────────────────────────
 
 function A1Screen({ onBack, onClose, onSelect }: {
   onBack?: () => void;
@@ -589,10 +593,7 @@ function A1Screen({ onBack, onClose, onSelect }: {
   onSelect: (h: HelpType) => void;
 }) {
   return (
-    <PanelShell title="Help with your work" onBack={onBack} onClose={onClose}>
-      <h2 style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 20, color: "var(--color-navy)", margin: "0 0 16px" }}>
-        What kind of help?
-      </h2>
+    <PanelShell title="What kind of help?" onBack={onBack} onClose={onClose}>
       <div className="flex flex-col gap-2">
         {HELP_OPTIONS.map((opt) => (
           <OptionRow key={opt.type} label={opt.label} sub={opt.sub} onClick={() => onSelect(opt.type)} />
@@ -634,7 +635,7 @@ function OptionRow({ label, sub, onClick }: { label: string; sub: string; onClic
   );
 }
 
-// ── Screen: A2 — Recipient ────────────────────────────────────────────────────
+// ── Screen: A2,Recipient ────────────────────────────────────────────────────
 
 function sortedForHelp(members: Member[], helpType: HelpType): Member[] {
   return [...members].sort((a, b) => {
@@ -658,10 +659,7 @@ function A2Screen({ helpType, members, onBack, onClose, onSelect }: {
 }) {
   const sorted = sortedForHelp(members, helpType);
   return (
-    <PanelShell title="Choose someone to reach out to" onBack={onBack} onClose={onClose}>
-      <h2 style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 20, color: "var(--color-navy)", margin: "0 0 16px" }}>
-        Who can help?
-      </h2>
+    <PanelShell title="Who can help?" onBack={onBack} onClose={onClose}>
       {sorted.length === 0 && (
         <p style={{ fontSize: 13, color: "var(--color-secondary)" }}>No team members found.</p>
       )}
@@ -989,7 +987,7 @@ function VoiceDraftTextarea({ value, onChange, rows = 8, placeholder }: {
   );
 }
 
-// ── Screen: A3 — Draft ────────────────────────────────────────────────────────
+// ── Screen: A3,Draft ────────────────────────────────────────────────────────
 
 function A3Screen({ helpType, recipient, tasks, hasTodayJournal, projectId, userId, onBack, onClose, onPreview }: {
   helpType: HelpType;
@@ -1011,16 +1009,16 @@ function A3Screen({ helpType, recipient, tasks, hasTodayJournal, projectId, user
   const [includeJournal, setIncludeJournal] = useState(false);
   const [chips, setChips] = useState<string[]>([]);
 
-  // Time proposals — only fetched for the feedback flow
-  const showSlots = helpType === "feedback";
+  // Time proposals — all flows
+  const [showMeetingPicker, setShowMeetingPicker] = useState(false);
   const [recipientSlots, setRecipientSlots] = useState<SuggestedSlot[]>([]);
   const [noAvailData, setNoAvailData] = useState(false);
   const [showRequesterPicker, setShowRequesterPicker] = useState(false);
-  const [pickedSlot, setPickedSlot] = useState<SuggestedSlot | null>(null);
+  const [pickedSlots, setPickedSlots] = useState<SuggestedSlot[]>([]);
   const tz = viewerTimezone();
 
   useEffect(() => {
-    if (!showSlots || !projectId || !isSupabaseConfigured) return;
+    if (!showMeetingPicker || !projectId || !isSupabaseConfigured) return;
     supabase
       .from("user_availability")
       .select("slots")
@@ -1036,7 +1034,7 @@ function A3Screen({ helpType, recipient, tasks, hasTodayJournal, projectId, user
         }
       });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showSlots, projectId, recipient.id]);
+  }, [showMeetingPicker, projectId, recipient.id]);
 
   const availableChips = [
     selectedTask
@@ -1062,11 +1060,18 @@ function A3Screen({ helpType, recipient, tasks, hasTodayJournal, projectId, user
     <PanelShell title={`Message ${recipient.name}`} onBack={onBack} onClose={onClose}>
       <div className="flex items-center gap-3 mb-4">
         <Avatar user={recipient} size={36} />
-        <div>
+        <div style={{ flex: 1, minWidth: 0 }}>
           <p style={{ fontSize: 14, fontWeight: 600, color: "var(--color-body)", margin: 0, fontFamily: "var(--font-roboto)" }}>
             {recipient.name}
           </p>
-          <p style={{ fontSize: 11, color: "var(--color-secondary)", margin: 0 }}>{recipient.contextNote}</p>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            {recipient.contextNote && (
+              <p style={{ fontSize: 11, color: "var(--color-secondary)", margin: 0 }}>{recipient.contextNote}</p>
+            )}
+            <button onClick={onBack} style={{ fontSize: 11, color: "var(--color-secondary)", background: "none", border: "none", cursor: "pointer", padding: 0, textDecoration: "underline", fontFamily: "var(--font-roboto)" }}>
+              Change
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1142,60 +1147,84 @@ function A3Screen({ helpType, recipient, tasks, hasTodayJournal, projectId, user
         </label>
       )}
 
-      {showSlots && (
-        <div style={{ marginTop: 18, paddingTop: 14, borderTop: "1px solid var(--color-border)" }}>
-          <p style={{ fontSize: 12, fontWeight: 600, color: "var(--color-body)", display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
-            <Calendar size={13} color="var(--color-secondary)" />
-            {noAvailData || recipientSlots.length === 0 ? "When are you free?" : "When would you like to meet?"}
-          </p>
+      {/* Meeting time suggestion — available in all flows */}
+      <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 8 }}>
+        <button
+          onClick={() => setShowMeetingPicker((v) => !v)}
+          style={{
+            fontSize: 12, color: "var(--color-secondary)",
+            background: "transparent", border: "1px solid var(--color-border)",
+            borderRadius: 6, padding: "5px 10px", cursor: "pointer",
+            fontFamily: "var(--font-roboto)", display: "flex", alignItems: "center", gap: 5,
+          }}
+        >
+          <Calendar size={12} />
+          {showMeetingPicker ? "Hide time picker" : "Suggest a time to meet"}
+        </button>
+      </div>
 
+      {showMeetingPicker && (
+        <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--color-border)" }}>
           {!noAvailData && recipientSlots.length > 0 && (
-            <div className="flex flex-col gap-2">
-              {recipientSlots.map((slot) => {
-                const picked = pickedSlot?.date === slot.date && pickedSlot.startMin === slot.startMin;
-                return (
-                  <button
-                    key={`${slot.date}-${slot.startMin}`}
-                    onClick={() => {
-                      if (picked) {
-                        setPickedSlot(null);
-                        setBody((b) => b.replace(slotAppendLine(slot, recipient.name), ""));
-                      } else {
-                        if (pickedSlot) {
-                          setBody((b) => b.replace(slotAppendLine(pickedSlot, recipient.name), ""));
-                        }
-                        setPickedSlot(slot);
-                        setBody((b) => b + slotAppendLine(slot, recipient.name));
-                      }
-                    }}
-                    style={{
-                      width: "100%", textAlign: "left", padding: "10px 12px", borderRadius: 8,
-                      border: `1px solid ${picked ? "var(--color-navy)" : "var(--color-border)"}`,
-                      backgroundColor: picked ? "rgba(27,46,75,0.06)" : "transparent",
-                      cursor: "pointer", minHeight: 44, display: "flex", justifyContent: "space-between", alignItems: "center",
-                      fontFamily: "var(--font-roboto)",
-                    }}
-                  >
-                    <span>
-                      <span style={{ fontSize: 13, fontWeight: 600, color: "var(--color-body)" }}>{slot.shortLabel}</span>
-                      <span style={{ fontSize: 11, color: "var(--color-secondary)", marginLeft: 8 }}>Proposed -- {recipient.name} confirms</span>
-                    </span>
-                    {picked && <Check size={13} color="var(--color-navy)" />}
-                  </button>
-                );
-              })}
+            <>
+              <p style={{ fontSize: 12, color: "var(--color-secondary)", marginBottom: 8 }}>
+                {firstName(recipient.name)}&rsquo;s available times (select up to 3):
+              </p>
+              <div className="flex flex-col gap-2 mb-3">
+                {recipientSlots.map((slot) => {
+                  const picked = pickedSlots.some(s => s.date === slot.date && s.startMin === slot.startMin);
+                  return (
+                    <button
+                      key={`${slot.date}-${slot.startMin}`}
+                      onClick={() => {
+                        setPickedSlots(prev => {
+                          if (picked) return prev.filter(s => !(s.date === slot.date && s.startMin === slot.startMin));
+                          if (prev.length >= 3) return prev;
+                          return [...prev, slot];
+                        });
+                      }}
+                      style={{
+                        width: "100%", textAlign: "left", padding: "10px 12px", borderRadius: 8,
+                        border: `1px solid ${picked ? "var(--color-navy)" : "var(--color-border)"}`,
+                        backgroundColor: picked ? "rgba(27,46,75,0.06)" : "transparent",
+                        cursor: "pointer", minHeight: 44, display: "flex", justifyContent: "space-between", alignItems: "center",
+                        fontFamily: "var(--font-roboto)",
+                      }}
+                    >
+                      <span>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: "var(--color-body)" }}>{slot.shortLabel}</span>
+                        <span style={{ fontSize: 11, color: "var(--color-secondary)", marginLeft: 8 }}>Proposed, {firstName(recipient.name)} confirms</span>
+                      </span>
+                      {picked && <Check size={13} color="var(--color-navy)" />}
+                    </button>
+                  );
+                })}
+              </div>
+              {pickedSlots.length > 0 && (
+                <button
+                  onClick={() => {
+                    const line = `\n\nWould any of these work? ${pickedSlots.map(s => s.shortLabel).join(", ")}.`;
+                    setBody(b => b + line);
+                    setPickedSlots([]);
+                    setShowMeetingPicker(false);
+                  }}
+                  style={{
+                    fontSize: 12, fontWeight: 600, color: "var(--color-navy)",
+                    background: "transparent", border: "1px solid var(--color-navy)",
+                    borderRadius: 7, padding: "6px 14px", cursor: "pointer",
+                    fontFamily: "var(--font-roboto)", minHeight: 44, marginBottom: 8,
+                  }}
+                >
+                  Add {pickedSlots.length} time{pickedSlots.length > 1 ? "s" : ""} to message
+                </button>
+              )}
               <button
-                onClick={() => setShowRequesterPicker((v) => !v)}
-                style={{
-                  width: "100%", textAlign: "left", padding: "10px 12px", borderRadius: 8,
-                  border: "1px dashed var(--color-border)", backgroundColor: "transparent",
-                  cursor: "pointer", fontSize: 13, color: "var(--color-secondary)",
-                  fontFamily: "var(--font-roboto)", minHeight: 44,
-                }}
+                onClick={() => setShowRequesterPicker(v => !v)}
+                style={{ fontSize: 12, color: "var(--color-secondary)", background: "none", border: "none", cursor: "pointer", padding: 0, textDecoration: "underline", fontFamily: "var(--font-roboto)" }}
               >
-                Suggest another time
+                {showRequesterPicker ? "Hide manual picker" : "Choose different times"}
               </button>
-            </div>
+            </>
           )}
 
           {(noAvailData || recipientSlots.length === 0 || showRequesterPicker) && (
@@ -1205,7 +1234,7 @@ function A3Screen({ helpType, recipient, tasks, hasTodayJournal, projectId, user
                   Pick up to three times and they&rsquo;ll be added to your message.
                 </p>
               )}
-              <RequesterTimePicker onSelect={(line) => setBody((b) => b + line)} />
+              <RequesterTimePicker onSelect={(line) => { setBody(b => b + line); setShowMeetingPicker(false); }} />
             </div>
           )}
 
@@ -1238,7 +1267,7 @@ function A3Screen({ helpType, recipient, tasks, hasTodayJournal, projectId, user
   );
 }
 
-// ── Screen: A4 — Preview + Send ───────────────────────────────────────────────
+// ── Screen: A4,Preview + Send ───────────────────────────────────────────────
 
 function A4Screen({ helpType, recipient, body, includeJournal, todayJournalText, projectId, userId, onBack, onClose, onSent }: {
   helpType: HelpType;
@@ -1426,7 +1455,7 @@ function ASentScreen({ recipientName, msgId, onClose, onDone }: {
   );
 }
 
-// ── Screen: A Not Sure — 2 questions ─────────────────────────────────────────
+// ── Screen: A Not Sure,2 questions ─────────────────────────────────────────
 
 const NOT_SURE_Q1_OPTIONS = ["Research direction", "A task I'm working on", "Technical problem", "Something else"];
 const NOT_SURE_Q2_OPTIONS = ["As soon as possible", "This week", "No particular rush"];
@@ -1641,10 +1670,40 @@ function ATrySelfScreen({ bookmarks, literature, userId, projectId, onBack, onCl
   );
 }
 
-// ── Screen: B — Support resources ─────────────────────────────────────────────
+// ── Screen: B Pick — recipient selection from Track B ────────────────────────
+
+function BPickScreen({ filter, members, pi, onBack, onClose, onSelect }: {
+  filter: "pi" | "all";
+  members: Member[];
+  pi: Member | undefined;
+  onBack: () => void;
+  onClose: () => void;
+  onSelect: (m: Member) => void;
+}) {
+  const candidates = filter === "pi"
+    ? (pi ? [pi] : members.filter(m => m.role.toLowerCase() === "pi"))
+    : members;
+
+  return (
+    <PanelShell title="Who can help?" onBack={onBack} onClose={onClose}>
+      {candidates.length === 0 && (
+        <p style={{ fontSize: 13, color: "var(--color-secondary)" }}>
+          {filter === "pi" ? "No PI found in this lab." : "No team members found."}
+        </p>
+      )}
+      <div className="flex flex-col gap-2">
+        {candidates.map((m) => (
+          <MemberRow key={m.id} member={m} onClick={() => onSelect(m)} />
+        ))}
+      </div>
+    </PanelShell>
+  );
+}
+
+// ── Screen: B,Support resources ─────────────────────────────────────────────
 // Track B: no analytics, no logging, no INSERT/UPDATE triggered by viewing this screen.
 
-function BScreen({ resources, loading, pi, members, isCurrentUserPi, projectId, onBack, onClose, onMessage }: {
+function BScreen({ resources, loading, pi, members, isCurrentUserPi, projectId, onBack, onClose, onPickRecipient }: {
   resources: SupportResource[];
   loading: boolean;
   pi: Member | undefined;
@@ -1653,7 +1712,7 @@ function BScreen({ resources, loading, pi, members, isCurrentUserPi, projectId, 
   projectId: string | null;
   onBack?: () => void;
   onClose: () => void;
-  onMessage: (recipientId: string, recipientName: string) => void;
+  onPickRecipient: (filter: "pi" | "all") => void;
 }) {
   const activeUrgent = resources.filter((r) => r.active && (r.category === "urgent" || r.is_pinned));
   const rest = resources.filter((r) => r.active && r.category !== "urgent" && !r.is_pinned);
@@ -1699,7 +1758,7 @@ function BScreen({ resources, loading, pi, members, isCurrentUserPi, projectId, 
       {/* Crisis block -- always present */}
       <section className="mb-5">
         <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.04em", color: "var(--color-error)", marginBottom: 8 }}>
-          Urgent — always available
+          Urgent,always available
         </p>
         <div className="flex flex-col gap-2">
           {urgentToRender.map((r) => <ResourceRow key={r.id} r={r as SupportResource} isUrgent />)}
@@ -1728,32 +1787,30 @@ function BScreen({ resources, loading, pi, members, isCurrentUserPi, projectId, 
         <p style={{ fontSize: 13, color: "var(--color-secondary)", marginBottom: 10 }}>
           If you&rsquo;d rather talk to someone on the project
         </p>
-        <div className="flex flex-wrap gap-2">
-          {pi && pi.name && (
+        <div className="flex flex-col gap-2">
+          <button
+            onClick={() => onPickRecipient("pi")}
+            style={{
+              height: 44, padding: "0 16px",
+              backgroundColor: "transparent",
+              color: "var(--color-body)",
+              border: "1px solid var(--color-border)", borderRadius: 8,
+              fontSize: 13, fontWeight: 600, cursor: "pointer",
+              fontFamily: "var(--font-roboto)", textAlign: "left",
+            }}
+          >
+            Message my PI
+          </button>
+          {members.length > 0 && (
             <button
-              onClick={() => onMessage(pi.id, pi.name)}
+              onClick={() => onPickRecipient("all")}
               style={{
                 height: 44, padding: "0 16px",
                 backgroundColor: "transparent",
-                color: "var(--color-navy)",
+                color: "var(--color-body)",
                 border: "1px solid var(--color-border)", borderRadius: 8,
                 fontSize: 13, fontWeight: 600, cursor: "pointer",
-                fontFamily: "var(--font-roboto)",
-              }}
-            >
-              Message {firstName(pi.name)}
-            </button>
-          )}
-          {teammates.length > 0 && (
-            <button
-              onClick={() => onMessage(teammates[0].id, teammates[0].name)}
-              style={{
-                height: 44, padding: "0 16px",
-                backgroundColor: "transparent",
-                color: "var(--color-navy)",
-                border: "1px solid var(--color-border)", borderRadius: 8,
-                fontSize: 13, fontWeight: 600, cursor: "pointer",
-                fontFamily: "var(--font-roboto)",
+                fontFamily: "var(--font-roboto)", textAlign: "left",
               }}
             >
               Message a teammate
@@ -1815,11 +1872,10 @@ function ResourceRow({ r, isUrgent }: { r: SupportResource; isUrgent?: boolean }
   );
 }
 
-// ── Screen: B Message — no pre-fill ───────────────────────────────────────────
+// ── Screen: B Message,no pre-fill ───────────────────────────────────────────
 
-function BMessageScreen({ recipientId, recipientName, projectId, userId, onBack, onClose, onSent }: {
-  recipientId: string;
-  recipientName: string;
+function BMessageScreen({ recipient, projectId, userId, onBack, onClose, onSent }: {
+  recipient: Member;
   projectId: string | null;
   userId: string;
   onBack: () => void;
@@ -1830,20 +1886,12 @@ function BMessageScreen({ recipientId, recipientName, projectId, userId, onBack,
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
 
-  const recipient: Member = {
-    id: recipientId,
-    name: recipientName,
-    role: "researcher",
-    avatarColor: "#B4D4E3",
-    avatarInitials: initials(recipientName),
-  };
-
   async function send() {
     if (!body.trim()) return;
     setSending(true);
     setError("");
     const msgId = crypto.randomUUID();
-    const channel = dmChannelKey(userId, recipientId);
+    const channel = dmChannelKey(userId, recipient.id);
     try {
       if (isSupabaseConfigured && projectId) {
         const { error: err } = await supabase.from("chat_messages").insert({
@@ -1865,12 +1913,17 @@ function BMessageScreen({ recipientId, recipientName, projectId, userId, onBack,
   }
 
   return (
-    <PanelShell title={`Message ${recipientName}`} onBack={onBack} onClose={onClose}>
+    <PanelShell title={`Message ${firstName(recipient.name)}`} onBack={onBack} onClose={onClose}>
       <div className="flex items-center gap-3 mb-4">
         <Avatar user={recipient} size={36} />
-        <p style={{ fontSize: 14, fontWeight: 600, color: "var(--color-body)", margin: 0, fontFamily: "var(--font-roboto)" }}>
-          {recipientName}
-        </p>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ fontSize: 14, fontWeight: 600, color: "var(--color-body)", margin: 0, fontFamily: "var(--font-roboto)" }}>
+            {recipient.name}
+          </p>
+          <button onClick={onBack} style={{ fontSize: 11, color: "var(--color-secondary)", background: "none", border: "none", cursor: "pointer", padding: 0, textDecoration: "underline", fontFamily: "var(--font-roboto)" }}>
+            Change
+          </button>
+        </div>
       </div>
       <VoiceDraftTextarea
         value={body}
@@ -1881,13 +1934,13 @@ function BMessageScreen({ recipientId, recipientName, projectId, userId, onBack,
       {error && <p style={{ fontSize: 12, color: "var(--color-error)", marginTop: 8 }}>{error}</p>}
       <button
         onClick={send}
-        disabled={sending || !body.trim()}
+        disabled={sending}
         style={{
           marginTop: 12, width: "100%", height: 44,
-          backgroundColor: body.trim() ? "var(--color-navy)" : "var(--color-dimmed-bg)",
-          color: body.trim() ? "#fff" : "var(--color-secondary)",
+          backgroundColor: "var(--color-navy)",
+          color: "#fff",
           border: "none", borderRadius: 8, fontSize: 14, fontWeight: 600,
-          cursor: body.trim() ? "pointer" : "default",
+          cursor: sending ? "default" : "pointer",
           display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
           fontFamily: "var(--font-roboto)",
           opacity: sending ? 0.7 : 1,
@@ -1896,6 +1949,11 @@ function BMessageScreen({ recipientId, recipientName, projectId, userId, onBack,
         <Send size={14} />
         {sending ? "Sending..." : "Send"}
       </button>
+      {!body.trim() && !sending && (
+        <p style={{ fontSize: 11, color: "var(--color-secondary)", marginTop: 6, textAlign: "center" }}>
+          Write something above before sending.
+        </p>
+      )}
     </PanelShell>
   );
 }
