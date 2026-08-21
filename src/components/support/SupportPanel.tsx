@@ -7,8 +7,8 @@ import {
   Clock, Send, Check, BookOpen, Library, ChevronRight, Undo2, Calendar, Mic, MicOff,
 } from "lucide-react";
 import Avatar from "@/components/ui/Avatar";
-import { getCrisisDefault } from "@/lib/support/crisisDefaults";
-import type { CrisisDefault } from "@/lib/support/crisisDefaults";
+import { resolveResources, hasNoCounselingResources, getInstitutionName, INSTITUTION_OPTIONS } from "@/lib/support/institutions";
+import type { LabResource, ResolvedResource } from "@/lib/support/institutions";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -44,19 +44,7 @@ interface Member {
   contextNote?: string; // e.g. "PI", "on this task with you"
 }
 
-interface SupportResource {
-  id: string;
-  label: string;
-  description: string | null;
-  confidentiality: string | null;
-  category: string;
-  contact_type: "phone" | "url" | "email" | "in_person";
-  contact_value: string;
-  availability: string | null;
-  is_pinned: boolean;
-  sort_order: number;
-  active: boolean;
-}
+type SupportResource = LabResource;
 
 interface Bookmark {
   id: string;
@@ -199,6 +187,8 @@ export default function SupportPanel({ track, onClose, projectId, userId, todayJ
   // ── Data ────────────────────────────────────────────────────────────────────
   const [members, setMembers] = useState<Member[]>([]);
   const [resources, setResources] = useState<SupportResource[]>([]);
+  const [institutionKey, setInstitutionKey] = useState<string | null>(null);
+  const [isCurrentUserPi, setIsCurrentUserPi] = useState(false);
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
   const [literature, setLiterature] = useState<LitItem[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -287,7 +277,7 @@ export default function SupportPanel({ track, onClose, projectId, userId, todayJ
             .limit(20),
           supabase
             .from("projects")
-            .select("support_invitation, owner_id")
+            .select("support_invitation, owner_id, institution_key")
             .eq("id", projectId)
             .single(),
         ]);
@@ -311,9 +301,14 @@ export default function SupportPanel({ track, onClose, projectId, userId, todayJ
         setLiterature((litQ.data ?? []) as LitItem[]);
         setTasks((taskQ.data ?? []) as Task[]);
 
-        if (!projQ.error && projQ.data?.["support_invitation"]) {
-          const piMember = rawMembers.find((m) => m.role === "pi");
-          setPiInvitation({ text: projQ.data["support_invitation"] as string, piName: piMember?.name ?? "PI" });
+        if (!projQ.error && projQ.data) {
+          const pd = projQ.data as Record<string, unknown>;
+          if (pd["support_invitation"]) {
+            const piMember = rawMembers.find((m) => m.role === "pi");
+            setPiInvitation({ text: pd["support_invitation"] as string, piName: piMember?.name ?? "PI" });
+          }
+          if (pd["institution_key"]) setInstitutionKey(pd["institution_key"] as string);
+          if (pd["owner_id"]) setIsCurrentUserPi((pd["owner_id"] as string) === userId);
         }
       } catch { /* non-fatal */ } finally {
         setLoadingData(false);
@@ -474,10 +469,11 @@ export default function SupportPanel({ track, onClose, projectId, userId, todayJ
         {screen.id === "b" && (
           <BScreen
             resources={resources}
+            institutionKey={institutionKey}
             loading={loadingData}
             pi={pi}
             members={members}
-            isCurrentUserPi={false}
+            isCurrentUserPi={isCurrentUserPi}
             projectId={projectId}
             onBack={canGoBack ? back : undefined}
             onClose={onClose}
@@ -1703,8 +1699,9 @@ function BPickScreen({ filter, members, pi, onBack, onClose, onSelect }: {
 // ── Screen: B,Support resources ─────────────────────────────────────────────
 // Track B: no analytics, no logging, no INSERT/UPDATE triggered by viewing this screen.
 
-function BScreen({ resources, loading, pi, members, isCurrentUserPi, projectId, onBack, onClose, onPickRecipient }: {
+function BScreen({ resources, institutionKey, loading, pi, members, isCurrentUserPi, projectId, onBack, onClose, onPickRecipient }: {
   resources: SupportResource[];
+  institutionKey: string | null;
   loading: boolean;
   pi: Member | undefined;
   members: Member[];
@@ -1714,19 +1711,7 @@ function BScreen({ resources, loading, pi, members, isCurrentUserPi, projectId, 
   onClose: () => void;
   onPickRecipient: (filter: "pi" | "all") => void;
 }) {
-  const activeUrgent = resources.filter((r) => r.active && (r.category === "urgent" || r.is_pinned));
-  const rest = resources.filter((r) => r.active && r.category !== "urgent" && !r.is_pinned);
-
-  // Always show a crisis path. If the lab has no urgent row, inject the build-time default.
-  // A lab row overrides the default; an empty lab cannot produce a panel with no crisis path.
-  const crisisDefault = getCrisisDefault("US");
-  const urgentToRender: (SupportResource | CrisisDefault)[] =
-    activeUrgent.length > 0 ? activeUrgent : [crisisDefault];
-
-  const grouped: Record<string, SupportResource[]> = {};
-  for (const r of rest) {
-    (grouped[r.category] ??= []).push(r);
-  }
+  const resolved = resolveResources(resources, institutionKey, "US");
 
   const CATEGORY_LABELS: Record<string, string> = {
     counseling: "Counseling",
@@ -1736,7 +1721,13 @@ function BScreen({ resources, loading, pi, members, isCurrentUserPi, projectId, 
     other: "Other resources",
   };
 
-  const teammates = members.filter((m) => m.role.toLowerCase() !== "pi");
+  const urgentEntries = resolved.filter((r) => r.category === "urgent" || r.is_pinned);
+  const nonUrgent = resolved.filter((r) => r.category !== "urgent" && !r.is_pinned);
+
+  const grouped: Record<string, ResolvedResource[]> = {};
+  for (const r of nonUrgent) {
+    (grouped[r.category] ??= []).push(r);
+  }
 
   if (process.env.NODE_ENV === "development" && !pi && members.length > 0) {
     console.warn("[SupportPanel] No PI found in lab members. Roles present:", members.map(m => m.role));
@@ -1755,13 +1746,13 @@ function BScreen({ resources, loading, pi, members, isCurrentUserPi, projectId, 
         <p style={{ fontSize: 13, color: "var(--color-secondary)" }}>Loading...</p>
       )}
 
-      {/* Crisis block -- always present */}
+      {/* Urgent block — always has at least one entry (crisis default) */}
       <section className="mb-5">
         <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.04em", color: "var(--color-error)", marginBottom: 8 }}>
-          Urgent,always available
+          Urgent, always available
         </p>
         <div className="flex flex-col gap-2">
-          {urgentToRender.map((r) => <ResourceRow key={r.id} r={r as SupportResource} isUrgent />)}
+          {urgentEntries.map((r) => <ResourceRow key={r.id} r={r} isUrgent />)}
         </div>
       </section>
 
@@ -1776,10 +1767,11 @@ function BScreen({ resources, loading, pi, members, isCurrentUserPi, projectId, 
         </section>
       ))}
 
-      {!loading && rest.length === 0 && isCurrentUserPi && (
+      {!loading && hasNoCounselingResources(resources, institutionKey) && isCurrentUserPi && (
         <p style={{ fontSize: 12, color: "var(--color-secondary)", marginBottom: 16 }}>
-          <a href="/team" style={{ color: "var(--color-navy)", fontWeight: 600 }}>Add counseling and support contacts</a>
-          {" "}for your lab.
+          Canopy doesn&rsquo;t have support resources for your institution yet.{" "}
+          <a href="/team" style={{ color: "var(--color-navy)", fontWeight: 600 }}>Add them</a>
+          {" "}so your team can find them.
         </p>
       )}
 
@@ -1822,7 +1814,7 @@ function BScreen({ resources, loading, pi, members, isCurrentUserPi, projectId, 
   );
 }
 
-function ResourceRow({ r, isUrgent }: { r: SupportResource; isUrgent?: boolean }) {
+function ResourceRow({ r, isUrgent }: { r: ResolvedResource | SupportResource; isUrgent?: boolean }) {
   const href = contactHref(r.contact_type, r.contact_value);
   const isLink = r.contact_type === "url";
   const isInPerson = r.contact_type === "in_person";

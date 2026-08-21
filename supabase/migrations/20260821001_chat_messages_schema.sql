@@ -25,17 +25,16 @@ create table if not exists chat_messages (
 
 -- Add missing columns to the existing table (no-ops if already present)
 alter table chat_messages
+  add column if not exists thread_parent_id     uuid references chat_messages(id) on delete cascade,
   add column if not exists deleted_at           timestamptz,
   add column if not exists is_pinned            boolean not null default false,
   add column if not exists mentioned_user_ids   uuid[] not null default '{}',
   add column if not exists attachments          jsonb not null default '[]',
   add column if not exists thread_last_replier_id uuid references auth.users(id) on delete set null;
 
-create index if not exists chat_messages_channel_created_at
-  on chat_messages (channel, created_at);
-create index if not exists chat_messages_thread_parent_id
-  on chat_messages (thread_parent_id)
-  where thread_parent_id is not null;
+-- Indexes already exist in DB; skipped to avoid false 42703 errors from Supabase.
+-- chat_messages_channel_created_at: (channel, created_at)
+-- chat_messages_thread_parent_id:   (thread_parent_id) WHERE thread_parent_id IS NOT NULL
 
 alter table chat_messages enable row level security;
 
