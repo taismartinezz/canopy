@@ -3,8 +3,8 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import {
-  X, ChevronLeft, Lock, Phone, Globe, Mail, MapPin, AlertTriangle,
-  Clock, Send, Check, BookOpen, Library, ChevronRight, Undo2, Calendar,
+  X, ChevronLeft, Lock, Phone, Globe, Mail, MapPin,
+  Clock, Send, Check, BookOpen, Library, ChevronRight, Undo2, Calendar, Mic, MicOff,
 } from "lucide-react";
 import Avatar from "@/components/ui/Avatar";
 import { getCrisisDefault } from "@/lib/support/crisisDefaults";
@@ -97,18 +97,30 @@ const HELP_OPTIONS: Array<{ type: HelpType; label: string; sub: string }> = [
   { type: "try_self", label: "I want to try solving it myself first", sub: "Pull up what's already in the project on this, and check back later." },
 ];
 
-function draftBody(helpType: HelpType, recipientName: string, taskTitle: string): string {
-  const n = recipientName;
-  const t = taskTitle || "[task]";
+function firstName(fullName: string): string {
+  return fullName.split(" ")[0] || fullName;
+}
+
+function draftBody(helpType: HelpType, recipientName: string, taskTitle: string | null): string {
+  const n = firstName(recipientName);
+  const t = taskTitle;
   switch (helpType) {
     case "research_question":
-      return `Hi ${n} -- I've hit a question on ${t} that I'd like your read on.\n\nWhere I am:\nWhat I've tried:\nWhat I'm unsure about:\n\nNo rush -- happy to talk in office hours if that's easier.`;
+      return t
+        ? `Hi ${n} — I've hit a question on ${t} that I'd like your read on.\n\nWhere I am:\nWhat I've tried:\nWhat I'm unsure about:\n\nNo rush — happy to talk in office hours if that's easier.`
+        : `Hi ${n} — I've hit a research question I'd like your read on.\n\nWhere I am:\nWhat I've tried:\nWhat I'm unsure about:\n\nNo rush — happy to talk in office hours if that's easier.`;
     case "blocked":
-      return `Hi ${n} -- I'm stuck on ${t} and I think you've worked on this part.\n\nWhat's blocking me:\nWhat I've tried:\n\nIf you have 15 minutes this week that would help a lot.`;
+      return t
+        ? `Hi ${n} — I'm stuck on ${t} and I think you've worked on this part.\n\nWhat's blocking me:\nWhat I've tried:\n\nIf you have 15 minutes this week that would help a lot.`
+        : `Hi ${n} — I'm stuck on something and I think you've worked on this part.\n\nWhat's blocking me:\nWhat I've tried:\n\nIf you have 15 minutes this week that would help a lot.`;
     case "feedback":
-      return `Hi ${n} -- I have a draft of ${t} ready for a look.\n\nWhat I'd most like feedback on:\nWhere it's still rough:\n\nAny time this week works.`;
+      return t
+        ? `Hi ${n} — I have a draft of ${t} ready for a look.\n\nWhat I'd most like feedback on:\nWhere it's still rough:\n\nAny time this week works.`
+        : `Hi ${n} — I have a draft I'd like your feedback on.\n\nWhat I'd most like feedback on:\nWhere it's still rough:\n\nAny time this week works.`;
     case "technical":
-      return `Hi ${n} -- I'm running into a technical problem with ${t}.\n\nWhat's happening:\nWhat I've tried:\nSetup / error details:`;
+      return t
+        ? `Hi ${n} — I'm running into a technical problem with ${t}.\n\nWhat's happening:\nWhat I've tried:\nSetup / error details:`
+        : `Hi ${n} — I'm running into a technical problem.\n\nWhat's happening:\nWhat I've tried:\nSetup / error details:`;
     default:
       return "";
   }
@@ -315,7 +327,7 @@ export default function SupportPanel({ track, onClose, projectId, userId, todayJ
   }, [projectId, userId]);
 
   // ── Render ───────────────────────────────────────────────────────────────────
-  const pi = members.find((m) => m.role === "pi");
+  const pi = members.find((m) => m.role.toLowerCase() === "pi");
   const canGoBack = history.length > 0;
 
   return (
@@ -849,6 +861,134 @@ function RequesterTimePicker({ onSelect }: { onSelect: (line: string) => void })
   );
 }
 
+// ── Voice-enabled textarea ────────────────────────────────────────────────────
+
+interface ISpeechRecognitionResult { isFinal: boolean; 0: { transcript: string } }
+interface ISpeechRecognitionResultList { length: number; [i: number]: ISpeechRecognitionResult }
+interface ISpeechRecognitionEvent { resultIndex: number; results: ISpeechRecognitionResultList }
+interface ISpeechRecognitionErrorEvent { error: string }
+interface ISpeechRecognition {
+  continuous: boolean; interimResults: boolean; lang: string;
+  start(): void; stop(): void;
+  onresult: ((e: ISpeechRecognitionEvent) => void) | null;
+  onend: (() => void) | null;
+  onerror: ((e: ISpeechRecognitionErrorEvent) => void) | null;
+}
+interface ISpeechRecognitionWindow {
+  SpeechRecognition?: new () => ISpeechRecognition;
+  webkitSpeechRecognition?: new () => ISpeechRecognition;
+}
+
+function VoiceDraftTextarea({ value, onChange, rows = 8, placeholder }: {
+  value: string;
+  onChange: (v: string) => void;
+  rows?: number;
+  placeholder?: string;
+}) {
+  const [hasMic, setHasMic] = useState<boolean | null>(null);
+  const [micDenied, setMicDenied] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const recognitionRef = useRef<ISpeechRecognition | null>(null);
+  const baseRef = useRef("");
+  const sessionRef = useRef("");
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    const w = window as unknown as ISpeechRecognitionWindow;
+    setHasMic(!!(w.SpeechRecognition || w.webkitSpeechRecognition));
+    return () => { recognitionRef.current?.stop(); };
+  }, []);
+
+  function start() {
+    const w = window as unknown as ISpeechRecognitionWindow;
+    const SR = w.SpeechRecognition ?? w.webkitSpeechRecognition;
+    if (!SR) return;
+    const r = new SR();
+    r.continuous = true;
+    r.interimResults = false;
+    r.lang = "en-US";
+    baseRef.current = value;
+    sessionRef.current = "";
+
+    r.onresult = (e: ISpeechRecognitionEvent) => {
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        if (e.results[i].isFinal) sessionRef.current += e.results[i][0].transcript + " ";
+      }
+      const base = baseRef.current;
+      const t = sessionRef.current.trimEnd();
+      onChange((base + (base && t ? " " : "") + t).trimStart());
+    };
+
+    r.onend = () => setRecording(false);
+    r.onerror = (e: ISpeechRecognitionErrorEvent) => {
+      if (e.error === "not-allowed") setMicDenied(true);
+      setRecording(false);
+    };
+
+    recognitionRef.current = r;
+    try { r.start(); setRecording(true); } catch { /* ignore */ }
+  }
+
+  function stop() {
+    recognitionRef.current?.stop();
+    recognitionRef.current = null;
+    setRecording(false);
+  }
+
+  const showMic = hasMic === true && !micDenied;
+
+  return (
+    <div style={{ position: "relative" }}>
+      <textarea
+        ref={textareaRef}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        rows={rows}
+        placeholder={placeholder}
+        style={{
+          width: "100%",
+          padding: `10px ${showMic ? 40 : 12}px 10px 12px`,
+          fontSize: 13,
+          fontFamily: "var(--font-roboto)",
+          lineHeight: 1.6,
+          backgroundColor: "var(--color-canvas)",
+          border: "1px solid var(--color-border)",
+          borderRadius: 8,
+          color: "var(--color-body)",
+          resize: "vertical",
+          outline: "none",
+          boxSizing: "border-box",
+        }}
+      />
+      {showMic && (
+        <button
+          onClick={recording ? stop : start}
+          aria-label={recording ? "Stop recording" : "Voice input"}
+          style={{
+            position: "absolute", bottom: 8, right: 8,
+            width: 28, height: 28,
+            backgroundColor: recording ? "var(--color-error)" : "transparent",
+            border: `1px solid ${recording ? "var(--color-error)" : "var(--color-border)"}`,
+            borderRadius: 6, cursor: "pointer",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            color: recording ? "#fff" : "var(--color-secondary)",
+          }}
+        >
+          {recording ? <MicOff size={13} /> : <Mic size={13} />}
+        </button>
+      )}
+      {recording && (
+        <p style={{ fontSize: 11, color: "var(--color-error)", marginTop: 4 }}>Recording</p>
+      )}
+      {micDenied && (
+        <p style={{ fontSize: 11, color: "var(--color-secondary)", marginTop: 4 }}>
+          Microphone access is off in your browser settings.
+        </p>
+      )}
+    </div>
+  );
+}
+
 // ── Screen: A3 — Draft ────────────────────────────────────────────────────────
 
 function A3Screen({ helpType, recipient, tasks, hasTodayJournal, projectId, userId, onBack, onClose, onPreview }: {
@@ -866,7 +1006,7 @@ function A3Screen({ helpType, recipient, tasks, hasTodayJournal, projectId, user
   const [body, setBody] = useState(() =>
     helpType === "not_sure" || helpType === "try_self"
       ? ""
-      : draftBody(helpType, recipient.name, tasks[0]?.title ?? "[task]")
+      : draftBody(helpType, recipient.name, tasks[0]?.title ?? null)
   );
   const [includeJournal, setIncludeJournal] = useState(false);
   const [chips, setChips] = useState<string[]>([]);
@@ -914,7 +1054,7 @@ function A3Screen({ helpType, recipient, tasks, hasTodayJournal, projectId, user
   function updateTaskInBody(task: Task | null) {
     setSelectedTask(task);
     if (helpType !== "not_sure" && helpType !== "try_self") {
-      setBody(draftBody(helpType, recipient.name, task?.title ?? "[task]"));
+      setBody(draftBody(helpType, recipient.name, task?.title ?? null));
     }
   }
 
@@ -953,25 +1093,11 @@ function A3Screen({ helpType, recipient, tasks, hasTodayJournal, projectId, user
         Here&rsquo;s a draft. Change anything before you send it.
       </p>
 
-      <textarea
+      <VoiceDraftTextarea
         value={body}
-        onChange={(e) => setBody(e.target.value)}
+        onChange={setBody}
         rows={helpType === "not_sure" || helpType === "try_self" ? 6 : 10}
         placeholder={helpType === "not_sure" || helpType === "try_self" ? "Say as much or as little as you want." : undefined}
-        style={{
-          width: "100%",
-          padding: "10px 12px",
-          fontSize: 13,
-          fontFamily: "var(--font-roboto)",
-          lineHeight: 1.6,
-          backgroundColor: "var(--color-canvas)",
-          border: "1px solid var(--color-border)",
-          borderRadius: 8,
-          color: "var(--color-body)",
-          resize: "vertical",
-          outline: "none",
-          boxSizing: "border-box",
-        }}
       />
 
       {availableChips.length > 0 && (
@@ -1317,7 +1443,7 @@ function ANotSureScreen({ step, ans1, members, onBack, onClose, onResult, onAdva
   function pick(answer: string) {
     if (step === 1) { onAdvance(answer); return; }
     const isUrgent = answer === "As soon as possible";
-    const pi = members.find((m) => m.role === "pi");
+    const pi = members.find((m) => m.role.toLowerCase() === "pi");
     const researcher = members.find((m) => m.role === "researcher");
     const suggestion = isUrgent && pi ? pi : (pi ?? researcher ?? members[0]);
     if (!suggestion) return;
@@ -1551,7 +1677,11 @@ function BScreen({ resources, loading, pi, members, isCurrentUserPi, projectId, 
     other: "Other resources",
   };
 
-  const teammates = members.filter((m) => m.role !== "pi");
+  const teammates = members.filter((m) => m.role.toLowerCase() !== "pi");
+
+  if (process.env.NODE_ENV === "development" && !pi && members.length > 0) {
+    console.warn("[SupportPanel] No PI found in lab members. Roles present:", members.map(m => m.role));
+  }
 
   return (
     <PanelShell title="Support resources" onBack={onBack} onClose={onClose}>
@@ -1568,8 +1698,8 @@ function BScreen({ resources, loading, pi, members, isCurrentUserPi, projectId, 
 
       {/* Crisis block -- always present */}
       <section className="mb-5">
-        <p style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--color-error)", marginBottom: 8 }}>
-          Urgent / always available
+        <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.04em", color: "var(--color-error)", marginBottom: 8 }}>
+          Urgent — always available
         </p>
         <div className="flex flex-col gap-2">
           {urgentToRender.map((r) => <ResourceRow key={r.id} r={r as SupportResource} isUrgent />)}
@@ -1599,7 +1729,7 @@ function BScreen({ resources, loading, pi, members, isCurrentUserPi, projectId, 
           If you&rsquo;d rather talk to someone on the project
         </p>
         <div className="flex flex-wrap gap-2">
-          {pi && (
+          {pi && pi.name && (
             <button
               onClick={() => onMessage(pi.id, pi.name)}
               style={{
@@ -1611,7 +1741,7 @@ function BScreen({ resources, loading, pi, members, isCurrentUserPi, projectId, 
                 fontFamily: "var(--font-roboto)",
               }}
             >
-              Message {pi.name}
+              Message {firstName(pi.name)}
             </button>
           )}
           {teammates.length > 0 && (
@@ -1649,7 +1779,7 @@ function ResourceRow({ r, isUrgent }: { r: SupportResource; isUrgent?: boolean }
     }}>
       <div className="flex items-start gap-3">
         <span style={{ marginTop: 2, flexShrink: 0 }}>
-          {isUrgent ? <AlertTriangle size={15} color="var(--color-error)" /> : <ContactIcon type={r.contact_type} />}
+          <ContactIcon type={r.contact_type} />
         </span>
         <div style={{ flex: 1, minWidth: 0 }}>
           <p style={{ fontSize: 13, fontWeight: 600, color: "var(--color-body)", margin: 0, fontFamily: "var(--font-roboto)" }}>
@@ -1742,19 +1872,11 @@ function BMessageScreen({ recipientId, recipientName, projectId, userId, onBack,
           {recipientName}
         </p>
       </div>
-      <textarea
+      <VoiceDraftTextarea
         value={body}
-        onChange={(e) => setBody(e.target.value)}
+        onChange={setBody}
         rows={8}
         placeholder="Say as much or as little as you want."
-        autoFocus
-        style={{
-          width: "100%", padding: "10px 12px", fontSize: 13,
-          fontFamily: "var(--font-roboto)", lineHeight: 1.6,
-          backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)",
-          borderRadius: 8, color: "var(--color-body)", resize: "vertical", outline: "none",
-          boxSizing: "border-box",
-        }}
       />
       {error && <p style={{ fontSize: 12, color: "var(--color-error)", marginTop: 8 }}>{error}</p>}
       <button
