@@ -26,6 +26,7 @@ interface Props {
   fullContent?: ReactNode;
   storageKey?: string;
   headerLabel?: string;
+  collapsedRailItems?: ScopeSection[];
 }
 
 const MIN_WIDTH = 180;
@@ -106,6 +107,7 @@ export default function ScopeSidebar({
   fullContent,
   storageKey,
   headerLabel,
+  collapsedRailItems,
 }: Props) {
   const [width, setWidth] = useState(() =>
     storageKey ? readStoredWidth(storageKey) : DEFAULT_WIDTH
@@ -226,13 +228,16 @@ export default function ScopeSidebar({
 
       {/* Content area — collapsed always shows icon rail; expanded shows fullContent or sections */}
       {collapsed ? (
-        sections.length > 0 && (
-          <div className="flex flex-col items-center px-1.5 py-2 gap-0.5">
-            {sections.map(s => (
-              <IconRailBtn key={s.id} isActive={s.isActive} color={s.color} icon={s.icon} label={s.label} onClick={s.onClick} />
-            ))}
-          </div>
-        )
+        (() => {
+          const rail = collapsedRailItems ?? sections;
+          return rail.length > 0 ? (
+            <div className="flex flex-col items-center px-1.5 py-2 gap-0.5">
+              {rail.map(s => (
+                <IconRailBtn key={s.id} isActive={s.isActive} color={s.color} icon={s.icon} label={s.label} onClick={s.onClick} />
+              ))}
+            </div>
+          ) : null;
+        })()
       ) : fullContent ? (
         fullContent
       ) : (
