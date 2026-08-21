@@ -39,6 +39,7 @@ create trigger trg_support_resources_updated_at
 alter table support_resources enable row level security;
 
 -- Lab members see active resources for their lab
+drop policy if exists "support_resources_member_select" on support_resources;
 create policy "support_resources_member_select"
   on support_resources for select to authenticated
   using (
@@ -51,6 +52,7 @@ create policy "support_resources_member_select"
   );
 
 -- PI/admin also see inactive rows (for the admin table)
+drop policy if exists "support_resources_pi_select_all" on support_resources;
 create policy "support_resources_pi_select_all"
   on support_resources for select to authenticated
   using (
@@ -62,6 +64,7 @@ create policy "support_resources_pi_select_all"
     )
   );
 
+drop policy if exists "support_resources_pi_insert" on support_resources;
 create policy "support_resources_pi_insert"
   on support_resources for insert to authenticated
   with check (
@@ -73,6 +76,7 @@ create policy "support_resources_pi_insert"
     )
   );
 
+drop policy if exists "support_resources_pi_update" on support_resources;
 create policy "support_resources_pi_update"
   on support_resources for update to authenticated
   using (
@@ -84,6 +88,7 @@ create policy "support_resources_pi_update"
     )
   );
 
+drop policy if exists "support_resources_pi_delete" on support_resources;
 create policy "support_resources_pi_delete"
   on support_resources for delete to authenticated
   using (
