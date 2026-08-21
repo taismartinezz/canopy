@@ -489,16 +489,14 @@ function PromptPicker({ usedTexts, onSelect, onClose }: {
 
 function JournalSidebarContent({
   search, setSearch, groupedEntries, selectedEntryId, onSelectEntry, showClose, onClose, onCollapse,
-  onSelectTrends, isTrendsView, onSupportClick,
+  onSupportClick,
 }: {
   search: string; setSearch: (v: string) => void;
   groupedEntries: { today: JournalEntry[]; earlier: JournalEntry[]; older: JournalEntry[] };
   selectedEntryId: string | "new"; onSelectEntry: (id: string | "new") => void;
   showClose?: boolean; onClose?: () => void;
   onCollapse?: () => void;
-  onSelectTrends?: () => void;
-  isTrendsView?: boolean;
-  onSupportClick?: () => void;
+  onSupportClick?: (track?: "wellbeing") => void;
 }) {
   return (
     <div className="flex flex-col h-full" style={{ backgroundColor: "var(--color-surface)" }}>
@@ -530,21 +528,6 @@ function JournalSidebarContent({
         >
           <Plus size={13} /> New Entry
         </button>
-        {onSelectTrends && (
-          <button
-            onClick={onSelectTrends}
-            className="w-full flex items-center justify-center gap-2 py-2 rounded-lg transition-colors"
-            style={{
-              backgroundColor: isTrendsView ? "rgba(16,185,129,0.10)" : "transparent",
-              color: isTrendsView ? "#10B981" : "var(--color-secondary)",
-              fontSize: 12, fontWeight: isTrendsView ? 700 : 500,
-              border: `1px solid ${isTrendsView ? "#10B981" : "var(--color-border)"}`,
-              borderRadius: 7, cursor: "pointer", minHeight: 36,
-            }}
-          >
-            <TrendingUp size={12} /> My Trends
-          </button>
-        )}
       </div>
       <div className="px-3 py-2" style={{ borderBottom: "1px solid var(--color-border)" }}>
         <div className="relative">
@@ -584,14 +567,12 @@ function JournalSidebarContent({
         })()}
       </div>
       {onSupportClick && (
-        <div style={{ borderTop: "1px solid var(--color-border)", padding: "8px 16px", backgroundColor: "var(--color-canvas)" }}>
-          <button
-            onClick={onSupportClick}
-            style={{ fontSize: 12, color: "var(--color-navy)", background: "none", border: "none", cursor: "pointer", padding: 0, fontFamily: "var(--font-roboto)", fontWeight: 600, minHeight: 44, display: "flex", alignItems: "center" }}
-          >
-            Support resources
-          </button>
-        </div>
+        <button
+          onClick={() => onSupportClick("wellbeing")}
+          style={{ fontSize: 12, color: "var(--color-secondary)", background: "none", border: "none", cursor: "pointer", padding: "6px 16px", fontFamily: "var(--font-roboto)", fontWeight: 400, minHeight: 44, display: "flex", alignItems: "center", width: "100%", textAlign: "left" }}
+        >
+          Support resources
+        </button>
       )}
       <div className="flex items-center gap-2 px-4 py-3" style={{ borderTop: "1px solid var(--color-border)", backgroundColor: "var(--color-canvas)" }}>
         <Lock size={12} color="var(--color-secondary)" />
@@ -777,7 +758,7 @@ function NudgeBanner({ overdueCount, onSupportClick, onDismiss }: {
         <p style={{ fontSize: 12, color: "var(--color-secondary)", margin: 0 }}>
           Heavy workloads can affect wellbeing.{" "}
           <button onClick={onSupportClick} style={{ color: "var(--color-navy)", fontWeight: 600, background: "none", border: "none", cursor: "pointer", padding: 0, fontSize: 12, fontFamily: "var(--font-roboto)" }}>
-            Need support?
+            Get support
           </button>
         </p>
       </div>
@@ -813,6 +794,8 @@ export default function JournalPage() {
     return next;
   });
   const [supportOpen, setSupportOpen]       = useState(false);
+  const [supportKey, setSupportKey]         = useState(0);
+  const [supportTrack, setSupportTrack]     = useState<"wellbeing" | undefined>(undefined);
   const [search, setSearch]                 = useState("");
   const [entryListOpen, setEntryListOpen]   = useState(false);
   const [saveMsg, setSaveMsg]               = useState<{ text: string; color: string } | null>(null);
@@ -1100,8 +1083,7 @@ export default function JournalPage() {
             if (id === "new") { handleNewEntry(); } else { handleSelectEntry(id); }
           }}
           showClose onClose={() => setEntryListOpen(false)}
-          onSelectTrends={() => { setSelectedEntryId("trends"); setListCollapsed(true); setEntryListOpen(false); }}
-          isTrendsView={isTrendsView}
+          onSupportClick={(track) => { setSupportTrack(track); setSupportKey(k => k + 1); setSupportOpen(true); setEntryListOpen(false); }}
         />
       </div>
 
@@ -1123,9 +1105,7 @@ export default function JournalPage() {
                   if (id === "new") { handleNewEntry(); } else { handleSelectEntry(id); }
                 }}
                 onCollapse={handleToggleJournalSidebar}
-                onSelectTrends={() => { setSelectedEntryId("trends"); setListCollapsed(true); }}
-                isTrendsView={isTrendsView}
-                onSupportClick={() => setSupportOpen(true)}
+                onSupportClick={(track) => { setSupportTrack(track); setSupportKey(k => k + 1); setSupportOpen(true); }}
               />
             }
           />
@@ -1148,7 +1128,7 @@ export default function JournalPage() {
           {!isTrendsView && !isViewingEntry && !nudgeDismissed && overdueCount >= 5 && (
             <NudgeBanner
               overdueCount={overdueCount}
-              onSupportClick={() => setSupportOpen(true)}
+              onSupportClick={() => { setSupportTrack(undefined); setSupportKey(k => k + 1); setSupportOpen(true); }}
               onDismiss={() => setNudgeDismissed(true)}
             />
           )}
@@ -1164,9 +1144,9 @@ export default function JournalPage() {
               </p>
             </div>
             {!isViewingEntry && (
-              <button onClick={() => setSupportOpen(true)} className="flex items-center gap-2 px-3 md:px-4 py-2 rounded-lg shrink-0" style={{ backgroundColor: "var(--color-surface)", border: "1px solid var(--color-navy)", color: "var(--color-navy)", fontSize: 12, fontWeight: 600, borderRadius: 7, cursor: "pointer", minHeight: 44 }}>
+              <button onClick={() => { setSupportTrack(undefined); setSupportKey(k => k + 1); setSupportOpen(true); }} className="flex items-center gap-2 px-3 md:px-4 py-2 rounded-lg shrink-0" style={{ backgroundColor: "var(--color-surface)", border: "1px solid var(--color-navy)", color: "var(--color-navy)", fontSize: 12, fontWeight: 600, borderRadius: 7, cursor: "pointer", minHeight: 44 }}>
                 <HelpingHand size={14} />
-                <span className="hidden sm:inline">Need support?</span>
+                <span className="hidden sm:inline">Get support</span>
                 <span className="sm:hidden">Support</span>
               </button>
             )}
@@ -1344,10 +1324,12 @@ export default function JournalPage() {
 
       {supportOpen && authUserId && (
         <SupportPanel
+          key={supportKey}
           onClose={() => setSupportOpen(false)}
           userId={authUserId}
           projectId={projectId}
           todayJournalText={entries[0]?.prompts?.[0]?.response ?? undefined}
+          track={supportTrack}
         />
       )}
       {discardModalOpen && <DiscardDraftModal onKeep={() => setDiscardModalOpen(false)} onDiscard={resetToNew} />}
