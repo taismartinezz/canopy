@@ -4193,8 +4193,7 @@ export default function LiteraturePage() {
             return next;
           })}
           storageKey="literature_sidebar"
-          fullContent={
-            <CollectionsSidebar
+          fullContent={panelCollapsed ? undefined : <CollectionsSidebar
               scope={scope} setScope={(s) => { setScope(s); setShowTrash(false); setSelectMode(false); setSelectedIds(new Set()); }}
               selectedSubProjectId={selectedSubProjectId} setSelectedSubProjectId={(id) => { setSelectedSubProjectId(id); setShowTrash(false); }}
               activeCollection={activeCollection} setActiveCollection={(id) => { setActiveCollection(id); setShowTrash(false); }}

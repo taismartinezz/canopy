@@ -21,6 +21,7 @@ import Tooltip from "@/components/ui/Tooltip";
 import GlobalSearch from "@/components/ui/GlobalSearch";
 import { UndoToastProvider } from "@/context/UndoToastContext";
 import KeyboardShortcutsModal from "@/components/ui/KeyboardShortcutsModal";
+import ChatDock from "@/components/chat/ChatDock";
 
 function contrastTextColor(hex: string): "#000000" | "#ffffff" {
   if (!/^#[0-9A-Fa-f]{6}$/.test(hex)) return "#ffffff";
@@ -1289,6 +1290,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     {showCreate && <CreateProjectModal onClose={() => setShowCreate(false)} />}
     {showOnboarding && authed && <OnboardingModal onClose={closeOnboarding} />}
     <KeyboardShortcutsModal open={showShortcuts} onClose={() => setShowShortcuts(false)} />
+    {authed && <ChatDock />}
 </>
   );
 }

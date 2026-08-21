@@ -6,7 +6,7 @@ import { useProject } from "@/context/ProjectContext";
 import { useUndoToast } from "@/context/UndoToastContext";
 import Avatar from "@/components/ui/Avatar";
 import type { User } from "@/types";
-import { MessageSquare, Send, Hash, ChevronDown, Plus, Search, Pin, X, FileText } from "lucide-react";
+import { MessageSquare, Send, Hash, ChevronDown, Plus, Search, Pin, X, FileText, HelpCircle } from "lucide-react";
 import ScopeSidebar, { type ScopeSection } from "@/components/ui/ScopeSidebar";
 import PageHeader from "@/components/ui/PageHeader";
 import { computeInitials } from "@/lib/utils";
@@ -42,12 +42,16 @@ export default function ChatPage() {
   const [typingUsers, setTypingUsers] = useState<{ userId: string; name: string }[]>([]);
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [hasNewMessages, setHasNewMessages] = useState(false);
+  const [showFormattingHint, setShowFormattingHint] = useState(false);
 
   // F1: Presence
   const [onlineUserIds, setOnlineUserIds] = useState<Set<string>>(new Set());
 
   // F2: Unread
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
+
+  // Read receipts: map of userId -> last_read_at for the active channel
+  const [peerReadStates, setPeerReadStates] = useState<Record<string, string>>({});
 
   // F3: @Mentions autocomplete
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
@@ -111,7 +115,7 @@ export default function ChatPage() {
   // Reset channel
   useEffect(() => { setActiveChannel(defaultChannel); setThreadMsg(null); }, [activeScope, subProjectId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // F1: Presence — subscribe when auth is ready
+  // F1: Presence
   useEffect(() => {
     if (!isSupabaseConfigured || !currentUserId || !projectId) return;
     const presenceCh = supabase.channel(`presence:${projectId}`, {
@@ -135,7 +139,7 @@ export default function ChatPage() {
     return () => { supabase.removeChannel(presenceCh); };
   }, [projectId, currentUserId]);
 
-  // F2: Unread — load counts on mount for all known channels
+  // F2: Unread counts -- filtered to current user only
   useEffect(() => {
     if (!isSupabaseConfigured || !currentUserId || !projectId) return;
     async function loadUnread() {
@@ -160,13 +164,46 @@ export default function ChatPage() {
     loadUnread();
   }, [currentUserId, projectId]);
 
-  // F2: Unread — mark current channel read on switch
+  // F2: Mark current channel read on switch
   useEffect(() => {
     if (!isSupabaseConfigured || !currentUserId || !projectId) return;
     const key = resolveChannelKey(projectId, currentUserId, activeChannel);
     supabase.from("chat_read_state").upsert({ user_id: currentUserId, channel: key, last_read_at: new Date().toISOString() });
     setUnreadCounts(prev => { const n = { ...prev }; delete n[key]; return n; });
   }, [activeChannel, currentUserId, projectId]);
+
+  // Read receipts: load peer read states for active channel, subscribe to realtime
+  useEffect(() => {
+    if (!isSupabaseConfigured || !currentUserId || !projectId) return;
+    const key = resolveChannelKey(projectId, currentUserId, activeChannel);
+
+    async function loadReadStates() {
+      const { data } = await supabase
+        .from("chat_read_state")
+        .select("user_id, last_read_at")
+        .eq("channel", key)
+        .neq("user_id", currentUserId);
+      if (!data) return;
+      const states: Record<string, string> = {};
+      for (const row of data) {
+        states[row.user_id as string] = row.last_read_at as string;
+      }
+      setPeerReadStates(states);
+    }
+
+    loadReadStates();
+
+    const ch = supabase.channel(`read_state:${key}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "chat_read_state", filter: `channel=eq.${key}` }, payload => {
+        if (payload.eventType === "DELETE") return;
+        const row = payload.new as Record<string, unknown>;
+        if (row.user_id === currentUserId) return;
+        setPeerReadStates(prev => ({ ...prev, [row.user_id as string]: row.last_read_at as string }));
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(ch); };
+  }, [projectId, currentUserId, activeChannel]);
 
   // Fetch messages
   const fetchMessages = useCallback(async () => {
@@ -179,7 +216,7 @@ export default function ChatPage() {
         { id: "d1", channel: key, senderId: "demo-pi", senderName: "Dr. Sarah Chen", content: "Good morning! Lab meeting moved to Thursday.", createdAt: new Date(Date.now() - 7200000).toISOString(), threadParentId: null, deletedAt: null, threadCount: 2, reactions: [{ emoji: "👍", count: 3, hasReacted: true }], mentionedUserIds: [], isPinned: false, threadLastReplierId: "demo-ra", attachments: [] },
         { id: "d2", channel: key, senderId: "demo-ra", senderName: "Marcus Johnson", content: "Thanks for the heads up! I'll update my calendar.", createdAt: new Date(Date.now() - 3300000).toISOString(), threadParentId: null, deletedAt: null, threadCount: 0, reactions: [], mentionedUserIds: [], isPinned: false, attachments: [] },
         { id: "d3", channel: key, senderId: "demo-grad", senderName: "Priya Patel", content: "Will the agenda be the same? I was going to present my prelim results.", createdAt: new Date(Date.now() - 2400000).toISOString(), threadParentId: null, deletedAt: null, threadCount: 0, reactions: [{ emoji: "🎉", count: 2, hasReacted: false }], mentionedUserIds: [], isPinned: true, attachments: [] },
-        { id: "d4", channel: key, senderId: "demo-pi", senderName: "Dr. Sarah Chen", content: "Yes! Priya you're still presenting first — looking forward to it.", createdAt: new Date(Date.now() - 1800000).toISOString(), threadParentId: null, deletedAt: null, threadCount: 0, reactions: [], mentionedUserIds: ["demo-grad"], isPinned: false, attachments: [] },
+        { id: "d4", channel: key, senderId: "demo-pi", senderName: "Dr. Sarah Chen", content: "Yes! Priya you're still presenting first - looking forward to it.", createdAt: new Date(Date.now() - 1800000).toISOString(), threadParentId: null, deletedAt: null, threadCount: 0, reactions: [], mentionedUserIds: ["demo-grad"], isPinned: false, attachments: [] },
         { id: "d5", channel: key, senderId: "demo-user", senderName: "You", content: "See everyone Thursday!", createdAt: new Date(Date.now() - 300000).toISOString(), threadParentId: null, deletedAt: null, threadCount: 0, reactions: [], mentionedUserIds: [], isPinned: false, attachments: [] },
       ]);
       setLoading(false); return;
@@ -278,9 +315,7 @@ export default function ChatPage() {
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_messages", filter: `channel=eq.${key}` }, async payload => {
         const row = payload.new as Record<string, unknown>;
         if (row.thread_parent_id) {
-          // Update thread count + last replier on parent
           setMessages(prev => prev.map(m => m.id === row.thread_parent_id ? { ...m, threadCount: m.threadCount + 1, threadLastReplierId: row.sender_id as string } : m));
-          // F2: increment unread for non-active channel (thread replies don't affect channel unread)
           return;
         }
         let name = "Unknown";
@@ -296,7 +331,6 @@ export default function ChatPage() {
           attachments: (row.attachments as MessageAttachment[]) ?? [],
         };
         setMessages(prev => prev.some(m => m.id === nm.id) ? prev : [...prev, nm]);
-        // F2: if message is for a channel other than the currently active one, increment unread
         if (projectId && row.channel !== resolveChannelKey(projectId, currentUserId, activeChannelRef.current)) {
           setUnreadCounts(prev => ({ ...prev, [row.channel as string]: (prev[row.channel as string] ?? 0) + 1 }));
         }
@@ -405,7 +439,6 @@ export default function ChatPage() {
     setSending(true);
     const key = resolveChannelKey(projectId, currentUserId, activeChannel);
 
-    // F3: extract mentioned user IDs
     const mentionedUserIds = teamMembers.filter(m => text.includes(`@${m.name}`)).map(m => m.id);
 
     if (!isSupabaseConfigured) {
@@ -422,7 +455,6 @@ export default function ChatPage() {
       setMessages(p => [...p, { id, channel: key, senderId: currentUserId, senderName: currentUserName, content: text, createdAt, threadParentId: null, deletedAt: null, threadCount: 0, reactions: [], mentionedUserIds, isPinned: false, attachments }]);
       setDraft(""); setPendingAttachments([]);
 
-      // F3: create notifications for mentioned users
       const toNotify = mentionedUserIds.filter(uid => uid !== currentUserId);
       if (toNotify.length) {
         const notifs = toNotify.map(uid => ({
@@ -481,7 +513,6 @@ export default function ChatPage() {
     }
   }
 
-  // F6: Thread preview update when reply is added via ThreadPanel
   function handleReplyAdded(parentId: string, replierId: string) {
     setMessages(prev => prev.map(m => m.id === parentId ? { ...m, threadCount: m.threadCount + 1, threadLastReplierId: replierId } : m));
   }
@@ -538,6 +569,10 @@ export default function ChatPage() {
 
   const visibleSubProjects = isProjectView ? subProjects.filter(sp => sp.id === subProjectId) : subProjects;
 
+  const isDm = activeChannel.startsWith("dm:");
+  const dmPeer = isDm ? teamMembers.find(m => m.id === activeChannel.slice(3)) ?? null : null;
+  const dmPeerOnline = dmPeer ? onlineUserIds.has(dmPeer.id) : false;
+
   const chatSections: ScopeSection[] = !isProjectView
     ? [{
         id: "lab", label: "Lab", color: "#0ea5e9", icon: <Hash size={17} />, isActive: activeChannel === "lab",
@@ -550,6 +585,25 @@ export default function ChatPage() {
         onClick: () => { setActiveChannel(sp.id); setMessages([]); setThreadMsg(null); },
         count: unreadCounts[resolveChannelKey(projectId ?? "", currentUserId, sp.id)] || undefined,
       }));
+
+  // Full collapsed rail: all channels + DMs as icon items
+  const collapsedRailItems: ScopeSection[] = [
+    ...chatSections,
+    ...teamMembers.map(peer => ({
+      id: `dm:${peer.id}`,
+      label: peer.name,
+      color: "var(--color-navy)",
+      icon: (
+        <span style={{ position: "relative", display: "inline-flex" }}>
+          <Avatar user={peer} size={22} />
+          <span style={{ position: "absolute", bottom: 0, right: 0, width: 7, height: 7, borderRadius: "50%", backgroundColor: onlineUserIds.has(peer.id) ? "#22c55e" : "var(--color-secondary)", border: "1.5px solid var(--color-canvas)", opacity: onlineUserIds.has(peer.id) ? 1 : 0.45 }} />
+        </span>
+      ),
+      isActive: activeChannel === `dm:${peer.id}`,
+      onClick: () => { setActiveChannel(`dm:${peer.id}`); setMessages([]); setThreadMsg(null); },
+      count: unreadCounts[resolveChannelKey(projectId ?? "", currentUserId, `dm:${peer.id}`)] || undefined,
+    })),
+  ];
 
   const chatExtra = (
     <>
@@ -593,7 +647,6 @@ export default function ChatPage() {
                 onMouseEnter={e => { if (!act) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "rgba(0,0,0,0.04)"; }}
                 onMouseLeave={e => { if (!act) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "transparent"; }}
               >
-                {/* F1: Online dot */}
                 <span style={{ flexShrink: 0, position: "relative", display: "inline-flex" }}>
                   <span style={{ borderRadius: "50%", boxShadow: "0 0 0 2px var(--color-canvas)", display: "flex" }}><Avatar user={peer} size={22} /></span>
                   <span style={{ position: "absolute", bottom: 0, right: 0, width: 7, height: 7, borderRadius: "50%", backgroundColor: isOnline ? "#22c55e" : "var(--color-secondary)", border: "1.5px solid var(--color-canvas)", opacity: isOnline ? 1 : 0.45 }} aria-hidden="true" />
@@ -611,22 +664,40 @@ export default function ChatPage() {
   if (projectLoading) return <div className="flex h-full items-center justify-center" style={{ color: "var(--color-secondary)", fontSize: 13 }}>Loading...</div>;
 
   const memberCount = teamMembers.length + 1;
-  const isDm = activeChannel.startsWith("dm:");
   const pinnedCount = messages.filter(m => m.isPinned && !m.deletedAt).length;
+
+  // Read receipt: which peers have seen the last visible message
+  const lastMsg = messages.filter(m => !m.deletedAt).at(-1);
+  const seenPeerIds = lastMsg
+    ? Object.entries(peerReadStates)
+        .filter(([, ts]) => ts >= lastMsg.createdAt)
+        .map(([uid]) => uid)
+    : [];
+  // For demo mode, simulate "seen" after 5 minutes
+  const demoSeen = !isSupabaseConfigured && lastMsg && Date.now() - new Date(lastMsg.createdAt).getTime() > 300000;
 
   return (
     <>
       <style>{`@keyframes typBounce{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-4px)}}`}</style>
-      {/* Hidden file input */}
       <input ref={fileInputRef} type="file" multiple accept="image/*,.pdf,.doc,.docx,.txt,.csv,.xlsx" style={{ display: "none" }} onChange={handleFileSelect} />
       <div className="flex flex-col h-full" style={{ fontFamily: "var(--font-roboto)", overflow: "hidden" }}>
-        <PageHeader title="Chat">
+        <PageHeader title={channelLabel()} eyebrow="Chat">
           <div className="flex items-center gap-2 flex-1">
-            {!isDm && <Hash size={14} style={{ color: "var(--color-secondary)", flexShrink: 0 }} />}
-            <span style={{ fontSize: 13, fontWeight: 600, color: "var(--color-secondary)" }}>{channelLabel()}</span>
-            {!isDm && <span style={{ fontSize: 12, color: "var(--color-secondary)" }}>{memberCount} members</span>}
+            {isDm && dmPeer ? (
+              <>
+                <span style={{ position: "relative", display: "inline-flex", flexShrink: 0 }}>
+                  <Avatar user={dmPeer} size={22} />
+                  <span style={{ position: "absolute", bottom: 0, right: 0, width: 8, height: 8, borderRadius: "50%", backgroundColor: dmPeerOnline ? "#22c55e" : "var(--color-secondary)", border: "1.5px solid var(--color-surface)", opacity: dmPeerOnline ? 1 : 0.45 }} aria-label={dmPeerOnline ? "Online" : "Offline"} />
+                </span>
+                <span style={{ fontSize: 13, color: "var(--color-secondary)" }}>{dmPeerOnline ? "Online" : "Offline"}</span>
+              </>
+            ) : (
+              <>
+                {!isDm && <Hash size={14} style={{ color: "var(--color-secondary)", flexShrink: 0 }} />}
+                <span style={{ fontSize: 12, color: "var(--color-secondary)" }}>{memberCount} members</span>
+              </>
+            )}
             <div className="flex items-center gap-1 ml-auto">
-              {/* F4: Pinned panel toggle */}
               <button
                 onClick={() => setShowPinned(v => !v)}
                 title="Pinned messages"
@@ -635,7 +706,6 @@ export default function ChatPage() {
                 <Pin size={13} />
                 {pinnedCount > 0 && <span style={{ fontWeight: 600 }}>{pinnedCount}</span>}
               </button>
-              {/* F5: Search toggle */}
               <button
                 onClick={() => { setSearchOpen(v => !v); if (searchOpen) { setSearchQuery(""); setSearchResults([]); } }}
                 title="Search messages"
@@ -647,7 +717,6 @@ export default function ChatPage() {
           </div>
         </PageHeader>
 
-        {/* F5: Search bar */}
         {searchOpen && (
           <div style={{ padding: "8px 16px", borderBottom: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", flexShrink: 0, display: "flex", gap: 8, alignItems: "center" }}>
             <Search size={14} color="var(--color-secondary)" style={{ flexShrink: 0 }} />
@@ -655,15 +724,14 @@ export default function ChatPage() {
               autoFocus
               value={searchQuery}
               onChange={e => { setSearchQuery(e.target.value); runSearch(e.target.value); }}
-              placeholder={`Search in ${channelLabel()}…`}
+              placeholder={`Search in ${channelLabel()}...`}
               style={{ flex: 1, border: "none", outline: "none", background: "transparent", fontSize: 13, color: "var(--color-body)", fontFamily: "var(--font-roboto)" }}
             />
-            {searching && <span style={{ fontSize: 11, color: "var(--color-secondary)" }}>Searching…</span>}
+            {searching && <span style={{ fontSize: 11, color: "var(--color-secondary)" }}>Searching...</span>}
             <button onClick={() => { setSearchOpen(false); setSearchQuery(""); setSearchResults([]); }} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-secondary)", display: "flex", padding: 2 }}><X size={14} /></button>
           </div>
         )}
 
-        {/* F5: Search results */}
         {searchOpen && searchResults.length > 0 && (
           <div style={{ borderBottom: "1px solid var(--color-border)", backgroundColor: "var(--color-canvas)", flexShrink: 0, maxHeight: 260, overflowY: "auto" }}>
             {searchResults.map(r => (
@@ -691,29 +759,44 @@ export default function ChatPage() {
             collapsed={chatSidebarCollapsed}
             onToggleCollapse={toggleSidebar}
             headerLabel="Chats"
+            collapsedRailItems={collapsedRailItems}
           />
 
           <div className="flex flex-col flex-1 overflow-hidden" style={{ position: "relative" }}>
-            {/* Messages */}
             <div
               className="flex-1 overflow-y-auto"
               style={{ backgroundColor: "var(--color-canvas)", position: "relative" }}
               onScroll={handleScroll}
             >
-              {loading && <div className="flex items-center justify-center py-10" style={{ color: "var(--color-secondary)", fontSize: 13 }}>Loading messages…</div>}
+              {loading && <div className="flex items-center justify-center py-10" style={{ color: "var(--color-secondary)", fontSize: 13 }}>Loading messages...</div>}
               {!loading && messages.length === 0 && (
-                <div className="flex flex-col items-center justify-center flex-1 px-6 py-12 text-center gap-3">
-                  <MessageSquare size={40} style={{ color: "var(--color-border)" }} />
-                  <p style={{ fontSize: 14, fontWeight: 600, color: "var(--color-body)", margin: 0 }}>No messages yet</p>
-                  <p style={{ fontSize: 13, color: "var(--color-secondary)", margin: 0 }}>Be the first to send a message.</p>
-                  <button onClick={() => inputRef.current?.focus()} style={{ marginTop: 6, fontSize: 13, fontWeight: 600, padding: "8px 18px", borderRadius: 7, backgroundColor: "var(--color-btn-primary)", color: "#fff", border: "none", cursor: "pointer" }}>Send a message</button>
-                </div>
+                isDm && dmPeer ? (
+                  <div className="flex flex-col items-center justify-center flex-1 px-6 py-16 text-center gap-4">
+                    <span style={{ position: "relative", display: "inline-flex" }}>
+                      <Avatar user={dmPeer} size={64} />
+                      <span style={{ position: "absolute", bottom: 2, right: 2, width: 14, height: 14, borderRadius: "50%", backgroundColor: dmPeerOnline ? "#22c55e" : "var(--color-secondary)", border: "2px solid var(--color-canvas)", opacity: dmPeerOnline ? 1 : 0.45 }} />
+                    </span>
+                    <div>
+                      <p style={{ fontSize: 16, fontWeight: 700, color: "var(--color-body)", margin: 0 }}>{dmPeer.name}</p>
+                      <p style={{ fontSize: 13, color: "var(--color-secondary)", margin: "6px 0 0" }}>This is the start of your conversation with {dmPeer.name}.</p>
+                    </div>
+                    <button onClick={() => inputRef.current?.focus()} style={{ marginTop: 4, fontSize: 13, fontWeight: 600, padding: "8px 18px", borderRadius: 7, backgroundColor: "var(--color-btn-primary)", color: "#fff", border: "none", cursor: "pointer" }}>Say hello</button>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center flex-1 px-6 py-12 text-center gap-3">
+                    <Hash size={40} style={{ color: "var(--color-border)" }} />
+                    <p style={{ fontSize: 14, fontWeight: 600, color: "var(--color-body)", margin: 0 }}>Welcome to #{channelLabel()}</p>
+                    <p style={{ fontSize: 13, color: "var(--color-secondary)", margin: 0 }}>This is the beginning of the #{channelLabel()} channel. Be the first to post something.</p>
+                    <button onClick={() => inputRef.current?.focus()} style={{ marginTop: 6, fontSize: 13, fontWeight: 600, padding: "8px 18px", borderRadius: 7, backgroundColor: "var(--color-btn-primary)", color: "#fff", border: "none", cursor: "pointer" }}>Send a message</button>
+                  </div>
+                )
               )}
               {!loading && messages.length > 0 && (
                 <div style={{ paddingTop: 12, paddingBottom: 4 }}>
                   {messages.map((msg, i) => {
                     const prev = i > 0 ? messages[i - 1] : null;
                     const showDiv = !prev || !sameDay(prev.createdAt, msg.createdAt);
+                    const isLastVisible = i === messages.length - 1;
                     return (
                       <div
                         key={msg.id}
@@ -722,6 +805,23 @@ export default function ChatPage() {
                       >
                         {showDiv && <DateDivider iso={msg.createdAt} />}
                         <MessageRow msg={msg} prevMsg={prev} currentUserId={currentUserId} onEdit={handleEdit} onDelete={handleDelete} onReact={handleReact} onOpenThread={setThreadMsg} onPin={handlePin} teamMembers={teamMembers} />
+                        {/* Read receipts under last message */}
+                        {isLastVisible && (seenPeerIds.length > 0 || demoSeen) && (
+                          <div style={{ display: "flex", alignItems: "center", gap: 5, padding: "2px 8px 4px 52px" }}>
+                            {isDm ? (
+                              <span style={{ fontSize: 11, color: "var(--color-secondary)" }}>Seen</span>
+                            ) : (
+                              <>
+                                {(demoSeen ? teamMembers.slice(0, 2) : seenPeerIds.slice(0, 5).map(uid => teamMembers.find(m => m.id === uid)).filter(Boolean) as User[]).map((peer, idx) => (
+                                  <span key={peer.id} title={`Seen by ${peer.name}`} style={{ display: "inline-flex", borderRadius: "50%", border: "1.5px solid var(--color-canvas)", marginLeft: idx > 0 ? -6 : 0 }}>
+                                    <Avatar user={peer} size={14} />
+                                  </span>
+                                ))}
+                                <span style={{ fontSize: 11, color: "var(--color-secondary)", marginLeft: 4 }}>Seen</span>
+                              </>
+                            )}
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -737,9 +837,7 @@ export default function ChatPage() {
 
             <TypingIndicator names={typingUsers.map(u => u.name)} />
 
-            {/* Input bar */}
             <div style={{ padding: "10px 16px 12px", borderTop: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", flexShrink: 0 }}>
-              {/* F7: Pending attachment previews */}
               {pendingAttachments.length > 0 && (
                 <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
                   {pendingAttachments.map((a, i) => (
@@ -754,14 +852,13 @@ export default function ChatPage() {
                       )}
                       <button onClick={() => setPendingAttachments(p => p.filter((_, j) => j !== i))}
                         style={{ position: "absolute", top: -5, right: -5, width: 16, height: 16, borderRadius: "50%", backgroundColor: "var(--color-error)", color: "#fff", border: "none", cursor: "pointer", fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1 }}>
-                        ×
+                        x
                       </button>
                     </div>
                   ))}
                 </div>
               )}
               <div style={{ position: "relative" }}>
-                {/* F3: Mention autocomplete */}
                 {mentionQuery !== null && mentionCandidates.length > 0 && (
                   <div style={{ position: "absolute", bottom: "calc(100% + 4px)", left: 0, right: 0, zIndex: 100, backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 8, boxShadow: "0 4px 16px rgba(0,0,0,0.12)", overflow: "hidden" }}>
                     {mentionCandidates.map((m, i) => (
@@ -801,23 +898,44 @@ export default function ChatPage() {
                       }
                       if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
                     }}
-                    placeholder={`Message ${channelLabel()}…`}
+                    placeholder={`Message ${channelLabel()}...`}
                     rows={1}
                     style={{ flex: 1, resize: "none", border: "none", outline: "none", background: "transparent", color: "var(--color-body)", fontSize: 14, lineHeight: 1.5, fontFamily: "var(--font-roboto)", maxHeight: 120, overflowY: "auto" }}
                   />
+                  {/* Formatting hint toggle */}
+                  <div style={{ position: "relative", flexShrink: 0 }}>
+                    <button
+                      title="Formatting help"
+                      aria-label="Formatting help"
+                      onMouseEnter={() => setShowFormattingHint(true)}
+                      onMouseLeave={() => setShowFormattingHint(false)}
+                      onFocus={() => setShowFormattingHint(true)}
+                      onBlur={() => setShowFormattingHint(false)}
+                      style={{ width: 28, height: 28, borderRadius: 7, border: "none", backgroundColor: "transparent", color: "var(--color-secondary)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
+                    >
+                      <HelpCircle size={14} />
+                    </button>
+                    {showFormattingHint && (
+                      <div style={{ position: "absolute", bottom: "calc(100% + 6px)", right: 0, backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 8, padding: "8px 12px", boxShadow: "0 4px 16px rgba(0,0,0,0.12)", whiteSpace: "nowrap", zIndex: 200, fontSize: 12, color: "var(--color-secondary)" }}>
+                        <strong style={{ color: "var(--color-body)" }}>**bold**</strong>
+                        {" "}&bull;{" "}
+                        <em>_italic_</em>
+                        {" "}&bull;{" "}
+                        <code style={{ fontFamily: "monospace", fontSize: 11 }}>`code`</code>
+                        {" "}&bull;{" "}
+                        @Name{" "}&bull;{" "}Shift+Enter for newline
+                      </div>
+                    )}
+                  </div>
                   <button onClick={sendMessage} disabled={(!draft.trim() && !pendingAttachments.length) || sending} aria-label="Send message"
                     style={{ width: 32, height: 32, borderRadius: 7, border: "none", backgroundColor: (draft.trim() || pendingAttachments.length) ? "var(--color-btn-primary)" : "transparent", color: (draft.trim() || pendingAttachments.length) ? "#fff" : "var(--color-secondary)", cursor: (draft.trim() || pendingAttachments.length) ? "pointer" : "default", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "background-color 0.15s" }}>
                     <Send size={15} />
                   </button>
                 </div>
               </div>
-              <p style={{ fontSize: 11, color: "var(--color-secondary)", margin: "4px 0 0 10px" }}>
-                <strong>**bold**</strong>, <em>_italic_</em>, <code style={{ fontFamily: "monospace", fontSize: 10 }}>`code`</code>, @Name — Shift+Enter for newline
-              </p>
             </div>
           </div>
 
-          {/* F4: Pinned messages panel */}
           {showPinned && (
             <div style={{ width: 300, flexShrink: 0, display: "flex", flexDirection: "column", height: "100%", borderLeft: "1px solid var(--color-border)", backgroundColor: "var(--color-canvas)", overflow: "hidden" }}>
               <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
