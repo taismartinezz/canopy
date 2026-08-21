@@ -67,7 +67,7 @@ create policy "support_resources_pi_insert"
   with check (
     exists (
       select 1 from team_members tm
-      where tm.project_id = new.project_id
+      where tm.project_id = project_id
         and tm.user_id = auth.uid()
         and tm.role = 'pi'
     )
