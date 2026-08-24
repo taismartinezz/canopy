@@ -1381,9 +1381,18 @@ export default function SchedulingPage() {
 
   if (loading) {
     return (
-      <div className="flex h-full items-center justify-center" style={{ backgroundColor: "var(--color-canvas)" }}>
-        <div style={{ width: 32, height: 32, border: "3px solid var(--color-border)", borderTopColor: "var(--color-navy)", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
-        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      <div style={{ padding: "24px 28px", backgroundColor: "var(--color-canvas)", minHeight: "100%" }}>
+        {[0, 1, 2].map((i) => (
+          <div
+            key={i}
+            style={{ marginBottom: 16, borderRadius: 10, border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", padding: "18px 20px", overflow: "hidden" }}
+          >
+            <div style={{ width: "35%", height: 14, borderRadius: 6, backgroundColor: "var(--color-border)", marginBottom: 12, animation: "skeleton-pulse 1.4s ease-in-out infinite", animationDelay: `${i * 0.15}s` }} />
+            <div style={{ width: "60%", height: 11, borderRadius: 6, backgroundColor: "var(--color-border)", marginBottom: 8, animation: "skeleton-pulse 1.4s ease-in-out infinite", animationDelay: `${i * 0.15 + 0.1}s` }} />
+            <div style={{ width: "45%", height: 11, borderRadius: 6, backgroundColor: "var(--color-border)", animation: "skeleton-pulse 1.4s ease-in-out infinite", animationDelay: `${i * 0.15 + 0.2}s` }} />
+          </div>
+        ))}
+        <style>{`@keyframes skeleton-pulse { 0%,100%{opacity:1} 50%{opacity:0.45} }`}</style>
       </div>
     );
   }
