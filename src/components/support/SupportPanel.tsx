@@ -137,7 +137,7 @@ function PanelShell({ title, onBack, onClose, children }: {
   title: string; onBack?: () => void; onClose: () => void; children: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col">
       <div className="flex items-center gap-2 px-4 shrink-0" style={{
         height: 52, borderBottom: "1px solid var(--color-border)",
         backgroundColor: "var(--color-surface)",
@@ -164,7 +164,9 @@ function PanelShell({ title, onBack, onClose, children }: {
           <X size={16} color="var(--color-secondary)" />
         </button>
       </div>
-      <div className="flex-1 overflow-y-auto min-h-0" style={{ padding: "20px 20px 32px" }}>
+      {/* maxHeight = dialog cap (640px or viewport) minus header (52px). The dialog itself is
+          height:auto so it shrinks on short screens; this div scrolls on tall content. */}
+      <div style={{ overflowY: "auto", maxHeight: "calc(min(640px, 100vh - 32px) - 52px)", padding: "20px 20px 32px" }}>
         {children}
       </div>
     </div>
@@ -308,7 +310,7 @@ export default function SupportPanel({ track, onClose, projectId, userId }: Supp
         onClick={e => e.stopPropagation()}
         style={{
           width: "min(520px, 100%)",
-          height: "min(640px, calc(100vh - 32px))",
+          maxHeight: "min(640px, calc(100vh - 32px))",
           backgroundColor: "var(--color-surface)",
           borderRadius: 16,
           display: "flex",

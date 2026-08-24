@@ -229,7 +229,17 @@ export default function SettingsPage() {
     else { showToast("Focus settings saved."); }
   }, [dndEnabled, quietHoursStart, quietHoursEnd]);
 
-  if (loading) return null;
+  if (loading) return (
+    <div style={{ maxWidth: 640, margin: "0 auto", padding: "32px 20px" }} className="space-y-6">
+      {[1, 2, 3, 4].map((i) => (
+        <div key={i} style={{ borderRadius: 10, backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", padding: "20px 24px" }}>
+          <div style={{ height: 14, width: "30%", backgroundColor: "var(--color-border)", borderRadius: 4, marginBottom: 16 }} className="animate-pulse" />
+          <div style={{ height: 11, width: "75%", backgroundColor: "var(--color-border)", borderRadius: 4, marginBottom: 10 }} className="animate-pulse" />
+          <div style={{ height: 36, width: "55%", backgroundColor: "var(--color-border)", borderRadius: 6 }} className="animate-pulse" />
+        </div>
+      ))}
+    </div>
+  );
 
   return (
     <div style={{ maxWidth: 640, margin: "0 auto", padding: isMobile ? "16px" : "32px 20px", fontFamily: "var(--font-roboto)" }}>

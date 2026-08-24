@@ -16,6 +16,10 @@ import { TeamActivityWidget } from "./_components/TeamActivityWidget";
 import type { ActivityRow } from "./_components/TeamActivityWidget";
 import { KanbanPreview } from "./_components/KanbanPreview";
 import { PostsCard } from "./_components/PostsCard";
+import { NeedsAttentionWidget } from "./_components/NeedsAttentionWidget";
+import type { OverdueReminder } from "./_components/NeedsAttentionWidget";
+import { LiteratureWidget } from "./_components/LiteratureWidget";
+import type { AssignedPaper } from "./_components/LiteratureWidget";
 
 // ── Dashboard page ────────────────────────────────────────────────────────────
 
@@ -32,6 +36,8 @@ export default function DashboardPage() {
   const [dashEvents, setDashEvents]   = useState<CalendarEvent[]>([]);
   const [dashActivity, setDashActivity] = useState<ActivityRow[]>([]);
   const [dashPosts, setDashPosts]     = useState<DashboardPost[]>([]);
+  const [overdueReminders, setOverdueReminders] = useState<OverdueReminder[]>([]);
+  const [assignedPapers, setAssignedPapers]     = useState<AssignedPaper[]>([]);
   const [loading, setLoading]         = useState(isSupabaseConfigured);
 
   useEffect(() => {
@@ -176,6 +182,44 @@ export default function DashboardPage() {
         if (!actError && actData) {
           setDashActivity(actData as ActivityRow[]);
         }
+
+        // Fetch overdue reminders for the current user
+        const now = new Date().toISOString();
+        const { data: remData } = await supabase
+          .from("reminders")
+          .select("id, title, due_at, scope, assignee_id")
+          .or(`user_id.eq.${user.id},assignee_id.eq.${user.id}`)
+          .eq("completed", false)
+          .lt("due_at", now);
+        if (remData) {
+          setOverdueReminders(remData.map((r) => ({
+            id: r.id as string,
+            title: r.title as string,
+            dueAt: r.due_at as string,
+            scope: (r.scope as "personal" | "lab") ?? "personal",
+            assigneeId: (r.assignee_id as string) ?? undefined,
+          })));
+        }
+
+        // Fetch papers assigned to the current user for the reading widget
+        const { data: litData } = await supabase
+          .from("lit_assigned_readings")
+          .select("id, item_id, reading_status, literature_items(title)")
+          .eq("project_id", pid)
+          .eq("assignee_id", user.id);
+        if (litData) {
+          setAssignedPapers(litData.map((r) => {
+            const li = Array.isArray(r.literature_items) ? r.literature_items[0] : r.literature_items;
+            const item = li as Record<string, string> | null;
+            return {
+              id: r.id as string,
+              itemId: r.item_id as string,
+              title: item?.title ?? "Untitled",
+              readingStatus: (r.reading_status as AssignedPaper["readingStatus"]) ?? "not_started",
+            };
+          }));
+        }
+
         setLoading(false);
       });
       return;
@@ -288,22 +332,32 @@ export default function DashboardPage() {
         <p style={{ fontSize: 13, color: "var(--color-secondary)", marginTop: 4 }}>{today}</p>
       </div>
 
-      {/* Row 1 */}
+      {/* Needs attention — full width, shown regardless of scope */}
+      <div className="mb-4 md:mb-5">
+        <NeedsAttentionWidget
+          tasks={visibleTasks}
+          reminders={overdueReminders}
+          teamMembers={teamMembers}
+          userId={userId}
+          loading={loading}
+        />
+      </div>
+
+      {/* Row 1: My tasks + Team activity */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5 mb-4 md:mb-5">
-        <UpcomingWidget events={dashEvents} projectId={projectId} />
+        <KanbanPreview
+          tasks={visibleTasks}
+          teamMembers={teamMembers}
+          userId={userId}
+          loading={loading}
+        />
         <TeamActivityWidget rows={visibleActivity} teamMembers={teamMembers} loading={loading} />
       </div>
 
-      {/* Row 2: Kanban preview */}
-      <div className="mb-4 md:mb-5">
-        <KanbanPreview
-          tasks={visibleTasks}
-          onTaskClick={setSelectedTask}
-          onMoveTask={moveTask}
-          onAddTask={(status) => setModalStatus(status)}
-          teamMembers={teamMembers}
-          loading={loading}
-        />
+      {/* Row 2: Reading progress + Upcoming events */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5 mb-4 md:mb-5">
+        <LiteratureWidget papers={assignedPapers} loading={loading} />
+        <UpcomingWidget events={dashEvents} projectId={projectId} />
       </div>
 
       {/* Row 3: Opportunities + Lab Wins — Lab Home only.
