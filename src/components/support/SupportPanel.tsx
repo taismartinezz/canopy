@@ -122,9 +122,9 @@ function contactHref(type: SupportResource["contact_type"], value: string): stri
   return "";
 }
 
-function ContactIcon({ type }: { type: SupportResource["contact_type"] }) {
+function ContactIcon({ type, isUrgent }: { type: SupportResource["contact_type"]; isUrgent?: boolean }) {
   const sz = 15;
-  const col = "var(--color-navy)";
+  const col = isUrgent ? "var(--color-error)" : "var(--color-navy)";
   if (type === "phone") return <Phone size={sz} color={col} />;
   if (type === "url") return <Globe size={sz} color={col} />;
   if (type === "email") return <Mail size={sz} color={col} />;
@@ -164,7 +164,7 @@ function PanelShell({ title, onBack, onClose, children }: {
           <X size={16} color="var(--color-secondary)" />
         </button>
       </div>
-      <div className="flex-1 overflow-y-auto" style={{ padding: "20px 20px 32px" }}>
+      <div className="flex-1 overflow-y-auto min-h-0" style={{ padding: "20px 20px 32px" }}>
         {children}
       </div>
     </div>
@@ -434,7 +434,7 @@ function EntryScreen({ piInvitation, onHelp, onResources, onClose }: {
         onClick={onHelp}
         style={{
           width: "100%", height: 52, fontSize: 15, fontWeight: 700,
-          backgroundColor: "var(--color-navy)", color: "#fff",
+          backgroundColor: "transparent", color: "var(--color-navy)",
           border: "2px solid var(--color-navy)", borderRadius: 10, cursor: "pointer",
           fontFamily: "var(--font-roboto)", marginBottom: 10,
         }}
@@ -1097,19 +1097,22 @@ function ResourceRow({ r, isUrgent }: { r: ResolvedResource | SupportResource; i
     <div style={{
       padding: "12px 14px",
       borderRadius: 8,
-      border: `1px solid ${isUrgent ? "var(--color-error)" : "var(--color-border)"}`,
-      backgroundColor: isUrgent ? "var(--color-error-bg)" : "var(--color-canvas)",
+      // Urgent rows use a canvas background with a red left border so text remains
+      // legible in both light and dark mode (red backgrounds fail WCAG AA for secondary text).
+      border: isUrgent ? "1px solid var(--color-border)" : "1px solid var(--color-border)",
+      borderLeft: isUrgent ? "3px solid var(--color-error)" : "1px solid var(--color-border)",
+      backgroundColor: "var(--color-canvas)",
     }}>
       <div className="flex items-start gap-3">
         <span style={{ marginTop: 2, flexShrink: 0 }}>
-          <ContactIcon type={r.contact_type} />
+          <ContactIcon type={r.contact_type} isUrgent={isUrgent} />
         </span>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <p style={{ fontSize: 13, fontWeight: 600, color: "var(--color-body)", margin: 0, fontFamily: "var(--font-roboto)" }}>
+          <p style={{ fontSize: 13, fontWeight: 600, color: isUrgent ? "var(--color-error)" : "var(--color-body)", margin: 0, fontFamily: "var(--font-roboto)" }}>
             {r.label}
           </p>
           {r.description && (
-            <p style={{ fontSize: 12, color: "var(--color-secondary)", margin: "3px 0 0", lineHeight: 1.4 }}>
+            <p style={{ fontSize: 12, color: "var(--color-body)", margin: "3px 0 0", lineHeight: 1.4 }}>
               {r.description}
             </p>
           )}
