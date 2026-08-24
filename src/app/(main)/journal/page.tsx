@@ -1035,8 +1035,8 @@ export default function JournalPage() {
       await supabase.from("notifications").insert({
         user_id: uid,
         type: "checkin_reminder",
-        title: "Time for your weekly check-in",
-        body: `It has been over ${Math.floor(daysSinceLastCheckin)} days since your last check-in. How are you doing?`,
+        title: "Your journal is here when you're ready",
+        body: "Whenever you have a moment, a quick check-in can help you reflect on how things are going.",
         read: false,
       });
       await supabase.from("user_settings").upsert(

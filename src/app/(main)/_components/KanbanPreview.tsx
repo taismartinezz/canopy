@@ -6,19 +6,16 @@ import type { Task, User } from "@/types";
 import Avatar from "@/components/ui/Avatar";
 import { Card, CardHeader } from "./DashboardCard";
 import { SkeletonLine } from "./TeamActivityWidget";
-import { overdueLabel } from "./NeedsAttentionWidget";
-
 const PRIORITY_COLORS = { high: "#C0392B", medium: "#A0622A", low: "#2E7D52" };
 const PRIORITY_BG    = { high: "#FDDCDC", medium: "#FDEFD4", low: "#D4EDE0" };
 
-function TaskRow({ task, teamMembers, isOverdue }: { task: Task; teamMembers: User[]; isOverdue: boolean }) {
+function TaskRow({ task, teamMembers }: { task: Task; teamMembers: User[] }) {
   const assignees = task.assigneeIds
     .map((id) => teamMembers.find((u) => u.id === id))
     .filter(Boolean) as User[];
 
   const dueDateDisplay = (() => {
     if (!task.dueDate) return null;
-    if (isOverdue) return overdueLabel(task.dueDate);
     const d = new Date(task.dueDate + "T00:00:00");
     return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
   })();
@@ -36,8 +33,8 @@ function TaskRow({ task, teamMembers, isOverdue }: { task: Task; teamMembers: Us
       {dueDateDisplay && (
         <span style={{
           fontSize: 11, flexShrink: 0,
-          color: isOverdue ? "var(--color-error)" : "var(--color-secondary)",
-          fontWeight: isOverdue ? 600 : 400,
+          color: "var(--color-secondary)",
+          fontWeight: 400,
         }}>
           {dueDateDisplay}
         </span>
@@ -77,9 +74,6 @@ export function KanbanPreview({
   onMoveTask?: (taskId: string, status: string) => void;
   onAddTask?: (status: string) => void;
 }) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
   // My tasks: assigned to me, not done, sorted by due date ascending (nulls last)
   const myTasks = tasks
     .filter((t) => t.status !== "done" && t.assigneeIds.includes(userId))
@@ -131,10 +125,9 @@ export function KanbanPreview({
         </div>
       ) : (
         <div>
-          {myTasks.map((task) => {
-            const isOverdue = !!task.dueDate && new Date(task.dueDate) < today;
-            return <TaskRow key={task.id} task={task} teamMembers={teamMembers} isOverdue={isOverdue} />;
-          })}
+          {myTasks.map((task) => (
+            <TaskRow key={task.id} task={task} teamMembers={teamMembers} />
+          ))}
         </div>
       )}
     </Card>

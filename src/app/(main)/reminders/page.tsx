@@ -237,7 +237,7 @@ function ReminderRow({ reminder, currentUserId, teamMembers, isDraggable, showSc
             <span style={{ fontSize: 15, color: "var(--color-body)", fontWeight: 400, fontFamily: "var(--font-roboto)", lineHeight: 1.3 }}>{reminder.title}</span>
           </div>
           {reminder.dueAt && (
-            <div style={{ fontSize: 12, marginTop: 2, color: isPastDue ? "var(--color-error)" : "var(--color-secondary)", fontWeight: isPastDue ? 600 : 400 }}>
+            <div style={{ fontSize: 12, marginTop: 2, color: "var(--color-secondary)", fontWeight: 400 }}>
               {formatDueDate(reminder.dueAt)}
             </div>
           )}
