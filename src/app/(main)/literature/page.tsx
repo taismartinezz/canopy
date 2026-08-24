@@ -2822,7 +2822,7 @@ function DetailPanelContent({
   }
 
   async function fetchRecs() {
-    if (!item.doi) return;
+    if (!item.doi && !item.title) return;
     setRecsLoading(true); setRecsError(""); setRecsFetched(true);
     try {
       const { data: { session: recsSession } } = await supabase.auth.getSession();
@@ -3478,7 +3478,7 @@ function DetailPanelContent({
             <div className="mt-5">
               <div className="flex items-center justify-between mb-3">
                 <p style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-secondary)" }}>AI Suggestions</p>
-                {!recsFetched && item.doi && (
+                {!recsFetched && (
                   <button onClick={fetchRecs} disabled={recsLoading}
                     className="flex items-center gap-1.5"
                     style={{ fontSize: 11, fontWeight: 700, color: "var(--color-navy)", backgroundColor: "rgba(27,46,75,0.06)", border: "1px solid var(--color-border)", borderRadius: 6, padding: "4px 10px", cursor: "pointer", minHeight: 30 }}>
@@ -3491,16 +3491,10 @@ function DetailPanelContent({
                   </button>
                 )}
               </div>
-              {!item.doi && (
-                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                  <p style={{ fontSize: 12, color: "var(--color-secondary)" }}>
-                    A DOI is required for similarity search (uses OpenAlex). External or preprint papers without a DOI can be added manually via the Info tab.
-                  </p>
-                  <button onClick={() => setTab("Info")}
-                    style={{ alignSelf: "flex-start", fontSize: 12, fontWeight: 600, padding: "5px 12px", borderRadius: 6, backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)", color: "var(--color-navy)", cursor: "pointer" }}>
-                    Add DOI in Info →
-                  </button>
-                </div>
+              {!item.doi && !recsFetched && (
+                <p style={{ fontSize: 12, color: "var(--color-secondary)" }}>
+                  Works best with a DOI — results come from OpenAlex related-works when available, then title search.
+                </p>
               )}
               {recsLoading && <p style={{ fontSize: 12, color: "var(--color-secondary)" }}>Fetching suggestions from OpenAlex…</p>}
               {recsError && <p style={{ fontSize: 12, color: "var(--color-error)" }}>{recsError}</p>}
@@ -3957,6 +3951,29 @@ export default function LiteraturePage() {
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Keep myAssignedItemIds in sync in real-time so newly assigned documents appear
+  // in the assignee's personal library without requiring a page reload.
+  useEffect(() => {
+    if (!currentUserId || !projectId || !isSupabaseConfigured) return;
+    const channel = supabase
+      .channel(`lit_assigned_readings:${projectId}:${currentUserId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "lit_assigned_readings", filter: `assignee_id=eq.${currentUserId}` },
+        (payload) => {
+          if (payload.eventType === "INSERT") {
+            const itemId = (payload.new as { item_id: string }).item_id;
+            setMyAssignedItemIds((prev) => new Set([...prev, itemId]));
+          } else if (payload.eventType === "DELETE") {
+            const itemId = (payload.old as { item_id: string }).item_id;
+            setMyAssignedItemIds((prev) => { const next = new Set(prev); next.delete(itemId); return next; });
+          }
+        }
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [currentUserId, projectId]);
 
   useEffect(() => {
     if (collectionsOpen) { document.body.style.overflow = "hidden"; }
