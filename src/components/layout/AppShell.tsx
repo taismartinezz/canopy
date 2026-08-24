@@ -526,11 +526,12 @@ function notifHref(n: SupabaseNotif): string {
   return "/dashboard";
 }
 
-function NotifPanel({ onClose, notifications, onNavigate, onMarkAllRead }: {
+function NotifPanel({ onClose, notifications, onNavigate, onMarkAllRead, onDismiss }: {
   onClose: () => void;
   notifications: SupabaseNotif[];
   onNavigate: (n: SupabaseNotif) => void;
   onMarkAllRead?: () => void;
+  onDismiss?: (id: string) => void;
 }) {
   const hasUnread = notifications.some((n) => !n.read);
   return (
@@ -561,18 +562,33 @@ function NotifPanel({ onClose, notifications, onNavigate, onMarkAllRead }: {
           <p className="px-4 py-6 text-center" style={{ color: "var(--color-secondary)", fontSize: 13 }}>No notifications</p>
         ) : (
           notifications.map((n) => (
-            <button
+            <div
               key={n.id}
-              onClick={() => { onNavigate(n); onClose(); }}
-              className="w-full text-left px-4 py-3 transition-colors hover:bg-[var(--color-navy-dim)]"
-              style={{ backgroundColor: n.read ? undefined : "var(--color-navy-dim)", borderBottom: "1px solid var(--color-border)", display: "block", border: "none", cursor: "pointer", fontFamily: "inherit" }}
+              className="flex items-start group"
+              style={{ backgroundColor: n.read ? undefined : "var(--color-navy-dim)", borderBottom: "1px solid var(--color-border)" }}
             >
-              <p style={{ fontSize: 13, color: "var(--color-body)", margin: 0 }}>
-                {!n.read && <span className="inline-block w-2 h-2 rounded-full mr-2" style={{ backgroundColor: "var(--color-navy)", verticalAlign: "middle" }} />}
-                {n.title}{n.body ? `: ${n.body}` : ""}
-              </p>
-              <p style={{ fontSize: 11, color: "var(--color-secondary)", marginTop: 2, margin: "2px 0 0" }}>{relTime(n.created_at)}</p>
-            </button>
+              <button
+                onClick={() => { onNavigate(n); onClose(); }}
+                className="flex-1 text-left px-4 py-3 transition-colors hover:bg-[var(--color-navy-dim)]"
+                style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", minWidth: 0 }}
+              >
+                <p style={{ fontSize: 13, color: "var(--color-body)", margin: 0 }}>
+                  {!n.read && <span className="inline-block w-2 h-2 rounded-full mr-2" style={{ backgroundColor: "var(--color-navy)", verticalAlign: "middle" }} />}
+                  {n.title}{n.body ? `: ${n.body}` : ""}
+                </p>
+                <p style={{ fontSize: 11, color: "var(--color-secondary)", margin: "2px 0 0" }}>{relTime(n.created_at)}</p>
+              </button>
+              {onDismiss && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); onDismiss(n.id); }}
+                  aria-label="Dismiss notification"
+                  className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+                  style={{ width: 36, height: "100%", minHeight: 44, background: "none", border: "none", cursor: "pointer", flexShrink: 0, padding: "0 8px", color: "var(--color-secondary)" }}
+                >
+                  <X size={13} />
+                </button>
+              )}
+            </div>
           ))
         )}
       </div>
@@ -1226,6 +1242,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                     }
                     router.push(notifHref(n));
                     setNotifOpen(false);
+                  }}
+                  onDismiss={(id) => {
+                    const n = notifications.find((x) => x.id === id);
+                    supabase.from("notifications").update({ read: true }).eq("id", id)
+                      .then(() => {
+                        setNotifications((prev) => prev.map((x) => x.id === id ? { ...x, read: true } : x));
+                        if (n && !n.read) setUnreadCount((c) => Math.max(0, c - 1));
+                      });
                   }}
                   onMarkAllRead={() => {
                     if (!profile?.id) return;
