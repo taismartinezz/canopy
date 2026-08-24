@@ -122,9 +122,15 @@ export async function POST(request: Request) {
   const pdfAttachments: Record<string, { attachmentKey: string; filename: string }> = {};
   const attachmentParentMap: Record<string, string> = {};
   const linkedUrlItems: Record<string, true> = {};
+  // Child items (attachments, notes) are never direct collection members — the collection-scoped
+  // endpoint always returns 0 for itemType=attachment/note. Always query the library root
+  // (${base}/items) so child items are found regardless of whether a collection filter is active.
+  // The resulting maps are naturally filtered downstream because only items whose parentItem
+  // matches a key from the first-pass CSL response will ever be looked up.
+  const childItemsBase = `${base}/items`;
   let attStart = 0;
   while (true) {
-    const attUrl = `${itemsPath}?itemType=attachment&format=json&limit=100&start=${attStart}${recursiveSuffix}`;
+    const attUrl = `${childItemsBase}?itemType=attachment&format=json&limit=100&start=${attStart}`;
     const attRes = await fetch(attUrl, {
       headers: { "Zotero-API-Key": apiKey, "Zotero-API-Version": "3" },
     });
@@ -174,7 +180,7 @@ export async function POST(request: Request) {
   const notesMap: Record<string, string[]> = {};
   let noteStart = 0;
   while (true) {
-    const noteUrl = `${itemsPath}?itemType=note&format=json&limit=100&start=${noteStart}${recursiveSuffix}`;
+    const noteUrl = `${childItemsBase}?itemType=note&format=json&limit=100&start=${noteStart}`;
     const noteRes = await fetch(noteUrl, {
       headers: { "Zotero-API-Key": apiKey, "Zotero-API-Version": "3" },
     });
