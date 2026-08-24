@@ -11,15 +11,12 @@ import { useProject } from "@/context/ProjectContext";
 import TaskDetailPanel from "@/components/tasks/TaskDetailPanel";
 import TaskModal from "@/components/tasks/TaskModal";
 import Toast from "@/components/ui/Toast";
-import { UpcomingWidget } from "./_components/UpcomingWidget";
-import { TeamActivityWidget } from "./_components/TeamActivityWidget";
 import type { ActivityRow } from "./_components/TeamActivityWidget";
-import { KanbanPreview } from "./_components/KanbanPreview";
-import { PostsCard } from "./_components/PostsCard";
-import { NeedsAttentionWidget } from "./_components/NeedsAttentionWidget";
 import type { OverdueReminder } from "./_components/NeedsAttentionWidget";
-import { LiteratureWidget } from "./_components/LiteratureWidget";
 import type { AssignedPaper } from "./_components/LiteratureWidget";
+import { TodayWidget } from "./_components/TodayWidget";
+import { LabPulseWidget } from "./_components/LabPulseWidget";
+import { RailWidget } from "./_components/RailWidget";
 
 // ── Dashboard page ────────────────────────────────────────────────────────────
 
@@ -258,9 +255,8 @@ export default function DashboardPage() {
     return () => { supabase.removeChannel(channel); };
   }, [projectId]);
 
-  const today = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+  const todayStr = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
   const timeOfDay = (() => { const h = new Date().getHours(); return h < 12 ? "morning" : h < 17 ? "afternoon" : "evening"; })();
-  const greeting = currentUserFirstName ? `Good ${timeOfDay}, ${currentUserFirstName}` : `Good ${timeOfDay}`;
 
   const isLabHome = activeScope === "lab";
   const isPersonal = activeScope === "personal";
@@ -322,67 +318,65 @@ export default function DashboardPage() {
     setModalStatus(null);
   }, []);
 
+  // Design tokens for the dark dashboard wrapper
+  const accent = "oklch(0.78 0.13 75)";
+  const textMuted = "oklch(0.61 0.008 70)";
+
   return (
-    <div className="p-4 md:p-6" style={{ maxWidth: 1400 }}>
-      {/* Header */}
-      <div className="mb-5 md:mb-6">
-        <h1 style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 22, color: "var(--color-navy)", margin: 0, lineHeight: 1.2 }}>
-          {isLabHome || isPersonal ? greeting : displayTitle}
+    <div style={{ padding: "24px 28px", maxWidth: 1400, minHeight: "100%" }}>
+      {/* Greeting — plain text, no card */}
+      <div style={{ marginBottom: 24 }}>
+        <h1 style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 22, margin: 0, lineHeight: 1.2, color: "var(--color-navy)" }}>
+          {isLabHome || isPersonal ? (
+            <>
+              Good {timeOfDay},{" "}
+              {currentUserFirstName
+                ? <span style={{ color: accent }}>{currentUserFirstName}</span>
+                : null
+              }
+            </>
+          ) : displayTitle}
         </h1>
-        <p style={{ fontSize: 13, color: "var(--color-secondary)", marginTop: 4 }}>{today}</p>
+        <p style={{ fontSize: 13, color: textMuted, marginTop: 4, fontStyle: "italic" }}>
+          {todayStr} — a few things whenever you&rsquo;re ready. Nothing urgent.
+        </p>
       </div>
 
-      {/* Needs attention — full width, shown regardless of scope */}
-      <div className="mb-4 md:mb-5">
-        <NeedsAttentionWidget
-          tasks={visibleTasks}
-          reminders={overdueReminders}
-          teamMembers={teamMembers}
-          userId={userId}
-          loading={loading}
-        />
-      </div>
-
-      {/* Row 1: My tasks + Team activity */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5 mb-4 md:mb-5">
-        <KanbanPreview
-          tasks={visibleTasks}
-          teamMembers={teamMembers}
-          userId={userId}
-          loading={loading}
-        />
-        <TeamActivityWidget rows={visibleActivity} teamMembers={teamMembers} loading={loading} />
-      </div>
-
-      {/* Row 2: Reading progress + Upcoming events */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5 mb-4 md:mb-5">
-        <LiteratureWidget papers={assignedPapers} loading={loading} />
-        <UpcomingWidget events={dashEvents} projectId={projectId} />
-      </div>
-
-      {/* Row 3: Opportunities + Lab Wins — Lab Home only.
-          These are lab-wide announcements with no sub-project granularity.
-          Hidden in project views so the project Dashboard stays focused. */}
-      {isLabHome && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
-          <PostsCard
-            title="Opportunities"
-            posts={dashPosts}
-            type="opportunity"
-            projectId={projectId}
-            userId={userId}
+      {/* Two-column layout: left (~62%) / right rail (~300px) */}
+      <div style={{ display: "flex", gap: 20, alignItems: "flex-start" }}>
+        {/* Left column */}
+        <div style={{ flex: "1 1 0", minWidth: 0, display: "flex", flexDirection: "column", gap: 16 }}>
+          {/* Today — open tasks + reminders */}
+          <TodayWidget
+            tasks={visibleTasks}
+            reminders={overdueReminders}
             teamMembers={teamMembers}
+            userId={userId}
+            loading={loading}
           />
-          <PostsCard
-            title="Lab Wins"
-            posts={dashPosts}
-            type="lab_win"
-            projectId={projectId}
-            userId={userId}
+
+          {/* Lab pulse — Opportunities + Lab Wins (Lab Home only) */}
+          {isLabHome && (
+            <LabPulseWidget
+              posts={dashPosts}
+              projectId={projectId}
+              userId={userId}
+              teamMembers={teamMembers}
+              loading={loading}
+            />
+          )}
+        </div>
+
+        {/* Right rail */}
+        <div style={{ width: 300, flexShrink: 0 }}>
+          <RailWidget
+            papers={assignedPapers}
+            activityRows={visibleActivity}
             teamMembers={teamMembers}
+            loading={loading}
           />
         </div>
-      )}
+      </div>
 
       {/* Task detail panel */}
       {selectedTask && (
