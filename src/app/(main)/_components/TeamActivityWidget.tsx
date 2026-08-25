@@ -1,10 +1,8 @@
 "use client";
 
-import { useState } from "react";
 import { formatRelativeTime } from "@/lib/mock-data";
 import type { User } from "@/types";
 import Avatar from "@/components/ui/Avatar";
-import { Card, CardHeader } from "./DashboardCard";
 
 export type ActivityRow = {
   id: string;
@@ -16,6 +14,22 @@ export type ActivityRow = {
   to_status?: string;
   created_at: string;
   sub_project_id?: string | null;
+};
+
+export function SkeletonLine({ width = "100%", height = 13 }: { width?: string | number; height?: number }) {
+  return (
+    <div style={{ width, height, borderRadius: 4, backgroundColor: "var(--color-border)", opacity: 0.6 }}
+      className="animate-pulse" />
+  );
+}
+
+const T = {
+  card:        "#1C1C1E",
+  border:      "rgba(84,84,88,0.65)",
+  textPrimary: "#F5F5F7",
+  textMuted:   "#8E8E93",
+  accent:      "#0A84FF",
+  radius:      11,
 };
 
 function activityVerb(row: ActivityRow): string {
@@ -30,77 +44,90 @@ function activitySuffix(row: ActivityRow): string | null {
     const labels: Record<string, string> = {
       todo: "To Do", in_progress: "In Progress", in_review: "In Review", done: "Done",
     };
-    return `to ${labels[row.to_status] ?? row.to_status}`;
+    return `→ ${labels[row.to_status] ?? row.to_status}`;
   }
   return null;
 }
 
-export function SkeletonLine({ width = "100%", height = 13 }: { width?: string | number; height?: number }) {
-  return (
-    <div style={{ width, height, borderRadius: 4, backgroundColor: "var(--color-border)", opacity: 0.6 }}
-      className="animate-pulse" />
-  );
-}
-
-export function TeamActivityWidget({ rows, teamMembers, loading }: { rows: ActivityRow[]; teamMembers: User[]; loading?: boolean }) {
-  const [showAll, setShowAll] = useState(false);
-  const displayed = showAll ? rows : rows.slice(0, 5);
-  const hasMore = rows.length > 5;
+export function TeamActivityWidget({
+  rows,
+  teamMembers,
+  loading,
+}: {
+  rows: ActivityRow[];
+  teamMembers: User[];
+  loading?: boolean;
+}) {
+  const cardStyle: React.CSSProperties = {
+    backgroundColor: T.card,
+    border: `1px solid ${T.border}`,
+    borderRadius: T.radius,
+    overflow: "hidden",
+  };
 
   if (loading) {
     return (
-      <Card>
-        <CardHeader title="Team Activity" />
-        <div className="px-5 py-3 space-y-4">
+      <div style={cardStyle}>
+        <div style={{ padding: "16px 20px 12px", borderBottom: `1px solid ${T.border}` }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: T.textPrimary }}>Team Activity</span>
+        </div>
+        <div style={{ padding: "8px 0" }}>
           {[1, 2, 3].map((i) => (
-            <div key={i} className="flex items-start gap-3">
-              <div style={{ width: 26, height: 26, borderRadius: "50%", backgroundColor: "var(--color-border)", flexShrink: 0 }} className="animate-pulse" />
-              <div className="flex-1 space-y-1.5">
-                <SkeletonLine width="70%" />
-                <SkeletonLine width="35%" height={11} />
+            <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 20px" }}>
+              <div style={{ width: 24, height: 24, borderRadius: "50%", backgroundColor: T.border, flexShrink: 0 }} className="animate-pulse" />
+              <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 5 }}>
+                <div style={{ height: 12, borderRadius: 4, backgroundColor: T.border, opacity: 0.5, width: "70%" }} />
+                <div style={{ height: 10, borderRadius: 4, backgroundColor: T.border, opacity: 0.35, width: "35%" }} />
               </div>
             </div>
           ))}
         </div>
-      </Card>
-    );
-  }
-
-  if (rows.length === 0) {
-    return (
-      <Card>
-        <CardHeader title="Team Activity" />
-        <div className="px-5 py-4">
-          <p style={{ fontSize: 13, color: "var(--color-secondary)" }}>No activity yet.</p>
-        </div>
-      </Card>
+      </div>
     );
   }
 
   return (
-    <Card>
-      <CardHeader title="Team Activity" onTitleClick={hasMore ? () => setShowAll(v => !v) : undefined} />
-      <div style={{ minHeight: 160, maxHeight: 300, overflowY: "auto" }}>
-        {displayed.map((row, i) => {
-          const actor = teamMembers.find((u) => u.id === row.user_id);
-          const name = actor?.name.split(" ")[0] ?? "Someone";
-          const suffix = activitySuffix(row);
-          return (
-            <div key={row.id} className="flex items-start gap-3 px-5 py-3" style={{ borderBottom: i < displayed.length - 1 ? "1px solid var(--color-border)" : undefined }}>
-              {actor && <Avatar user={actor} size={26} className="mt-0.5 shrink-0" />}
-              <div className="flex-1 min-w-0">
-                <p style={{ fontSize: 13, color: "var(--color-body)", lineHeight: 1.4 }}>
-                  <span style={{ fontWeight: 600 }}>{name}</span>{" "}
-                  {activityVerb(row)}{" "}
-                  <span style={{ fontWeight: 500 }}>{row.item_name}</span>
-                  {suffix && <> <span style={{ color: "var(--color-navy)", fontWeight: 600 }}>{suffix}</span></>}
-                </p>
-                <p style={{ fontSize: 11, color: "var(--color-secondary)", marginTop: 2 }}>{formatRelativeTime(row.created_at)}</p>
-              </div>
-            </div>
-          );
-        })}
+    <div style={cardStyle}>
+      <div style={{ padding: "16px 20px 12px", borderBottom: `1px solid ${T.border}` }}>
+        <span style={{ fontSize: 13, fontWeight: 600, color: T.textPrimary, letterSpacing: "0.01em" }}>Team Activity</span>
       </div>
-    </Card>
+
+      {rows.length === 0 ? (
+        <div style={{ padding: "14px 20px" }}>
+          <p style={{ fontSize: 13, color: T.textMuted, margin: 0 }}>No recent activity.</p>
+        </div>
+      ) : (
+        <div style={{ maxHeight: 260, overflowY: "auto" }}>
+          {rows.slice(0, 8).map((row, i) => {
+            const actor = teamMembers.find((u) => u.id === row.user_id);
+            const name = actor?.name.split(" ")[0] ?? "Someone";
+            const suffix = activitySuffix(row);
+            return (
+              <div
+                key={row.id}
+                style={{
+                  display: "flex", alignItems: "flex-start", gap: 10,
+                  padding: "10px 20px",
+                  borderBottom: i < Math.min(rows.length, 8) - 1 ? `1px solid ${T.border}` : undefined,
+                }}
+              >
+                {actor && <Avatar user={actor} size={24} />}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ fontSize: 12, color: T.textPrimary, margin: 0, lineHeight: 1.45 }}>
+                    <strong style={{ fontWeight: 600 }}>{name}</strong>{" "}
+                    {activityVerb(row)}{" "}
+                    <span style={{ fontWeight: 500 }}>{row.item_name}</span>
+                    {suffix && <span style={{ color: T.textMuted }}> {suffix}</span>}
+                  </p>
+                  <p style={{ fontSize: 11, color: T.textMuted, margin: "2px 0 0" }}>
+                    {formatRelativeTime(row.created_at)}
+                  </p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }

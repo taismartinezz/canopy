@@ -12,6 +12,7 @@ import TaskDetailPanel from "@/components/tasks/TaskDetailPanel";
 import TaskModal from "@/components/tasks/TaskModal";
 import Toast from "@/components/ui/Toast";
 import type { ActivityRow } from "./_components/TeamActivityWidget";
+import { TeamActivityWidget } from "./_components/TeamActivityWidget";
 import type { OverdueReminder } from "./_components/NeedsAttentionWidget";
 import type { AssignedPaper } from "./_components/LiteratureWidget";
 import { TodayWidget } from "./_components/TodayWidget";
@@ -282,13 +283,8 @@ export default function DashboardPage() {
     : isPersonal
     ? overdueReminders.filter((r) => r.scope === "personal")
     : [];
-  // Filter activity by scope. Lab-wide rows (sub_project_id null) only appear in Lab Home.
-  // Personal scope shows no team activity (personal work has no shared feed).
-  const visibleActivity = isLabHome
-    ? dashActivity
-    : isPersonal
-    ? []
-    : dashActivity.filter((a) => a.sub_project_id === subProjectId);
+  // Always show all lab activity regardless of scope — user wants Team Activity visible everywhere.
+  const visibleActivity = dashActivity;
 
   const moveTask = useCallback((taskId: string, status: TaskStatus) => {
     // Capture the task before the optimistic update so we have the original status
@@ -370,6 +366,13 @@ export default function DashboardPage() {
             loading={loading}
           />
 
+          {/* Team Activity */}
+          <TeamActivityWidget
+            rows={visibleActivity}
+            teamMembers={teamMembers}
+            loading={loading}
+          />
+
           {/* Opportunities + Wins */}
           <LabPulseWidget
             posts={dashPosts}
@@ -380,12 +383,10 @@ export default function DashboardPage() {
           />
         </div>
 
-        {/* Right rail */}
-        <div style={{ width: 300, flexShrink: 0 }}>
+        {/* Right rail — Reading only */}
+        <div style={{ width: 260, flexShrink: 0 }}>
           <RailWidget
             papers={assignedPapers}
-            activityRows={visibleActivity}
-            teamMembers={teamMembers}
             loading={loading}
           />
         </div>
