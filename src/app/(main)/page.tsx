@@ -35,8 +35,6 @@ export default function DashboardPage() {
   const [dashPosts, setDashPosts]     = useState<DashboardPost[]>([]);
   const [overdueReminders, setOverdueReminders] = useState<OverdueReminder[]>([]);
   const [assignedPapers, setAssignedPapers]     = useState<AssignedPaper[]>([]);
-  const [lastJournalAt, setLastJournalAt]       = useState<string | null>(null);
-  const [journalNudgeDismissed, setJournalNudgeDismissed] = useState(false);
   const [loading, setLoading]         = useState(isSupabaseConfigured);
 
   useEffect(() => {
@@ -201,16 +199,6 @@ export default function DashboardPage() {
           }));
         }
 
-        // Fetch last journal entry date for gentle nudge
-        const { data: jData } = await supabase
-          .from("journal_entries")
-          .select("created_at")
-          .eq("user_id", user.id)
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        if (jData?.created_at) setLastJournalAt(jData.created_at as string);
-
         setLoading(false);
       });
       return;
@@ -364,34 +352,10 @@ export default function DashboardPage() {
             </>
           ) : displayTitle}
         </h1>
-        <p style={{ fontSize: 13, color: textMuted, marginTop: 4, fontStyle: "italic" }}>
-          {todayStr} - a few things whenever you&rsquo;re ready. Nothing urgent.
+        <p style={{ fontSize: 13, color: textMuted, marginTop: 4 }}>
+          {todayStr}
         </p>
       </div>
-
-      {/* Journal nudge - soft invitation if no entry in 7+ days */}
-      {!loading && !journalNudgeDismissed && (() => {
-        if (!lastJournalAt) return null;
-        const daysSince = (Date.now() - new Date(lastJournalAt).getTime()) / 86_400_000;
-        if (daysSince < 7) return null;
-        return (
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20, padding: "10px 16px", borderRadius: 8, border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)" }}>
-            <span style={{ fontSize: 13, color: "var(--color-secondary)", flex: 1 }}>
-              Whenever you have a moment, your journal is here if you want to check in with yourself.
-            </span>
-            <a href="/journal" style={{ fontSize: 12, fontWeight: 600, color: "var(--color-navy)", textDecoration: "none", flexShrink: 0 }}>
-              Open journal
-            </a>
-            <button
-              onClick={() => setJournalNudgeDismissed(true)}
-              style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-secondary)", padding: 0, flexShrink: 0, fontSize: 16, lineHeight: 1 }}
-              aria-label="Dismiss"
-            >
-              ×
-            </button>
-          </div>
-        );
-      })()}
 
       {/* Two-column layout: left (~62%) / right rail (~300px) */}
       <div style={{ display: "flex", gap: 20, alignItems: "flex-start" }}>
