@@ -603,6 +603,10 @@ export default function TasksPage() {
         )}
         {!loading && view === "board" ? (
           <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+            <div style={{ position: "relative" }}>
+            {boardWidth >= 640 && boardWidth < 1024 && (
+              <div style={{ position: "absolute", top: 0, right: 0, bottom: 0, width: 48, pointerEvents: "none", background: "linear-gradient(to right, transparent, var(--color-canvas))", zIndex: 2 }} />
+            )}
             <div style={{
               overflowX: boardWidth < 1024 ? "auto" : "visible",
               WebkitOverflowScrolling: "touch",
@@ -637,6 +641,7 @@ export default function TasksPage() {
                   </div>
                 ))}
               </div>
+            </div>
             </div>
             <DragOverlay>
               {activeTask && (

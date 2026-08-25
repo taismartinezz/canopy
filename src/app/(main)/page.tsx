@@ -332,8 +332,8 @@ export default function DashboardPage() {
   }, []);
 
   // Design tokens for the dark dashboard wrapper
-  const accent = "oklch(0.78 0.13 75)";
-  const textMuted = "oklch(0.61 0.008 70)";
+  const accent = "#0A84FF";
+  const textMuted = "#8E8E93";
 
   return (
     <div style={{ padding: "24px 28px", maxWidth: 1400, minHeight: "100%" }}>

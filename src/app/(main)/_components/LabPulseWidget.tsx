@@ -10,11 +10,11 @@ import Avatar from "@/components/ui/Avatar";
 // ── Design tokens ─────────────────────────────────────────────────────────────
 
 const T = {
-  card:        "oklch(0.19 0.006 60)",
-  border:      "oklch(0.28 0.006 60)",
-  textPrimary: "oklch(0.93 0.006 70)",
-  textMuted:   "oklch(0.61 0.008 70)",
-  accent:      "oklch(0.78 0.13 75)",
+  card:        "#1C1C1E",
+  border:      "rgba(84,84,88,0.65)",
+  textPrimary: "#F5F5F7",
+  textMuted:   "#8E8E93",
+  accent:      "#0A84FF",
   radius:      11,
 };
 
@@ -136,7 +136,7 @@ function PostColumn({
                 style={{
                   flex: 1, fontSize: 12, color: T.textPrimary,
                   border: `1px solid ${T.border}`, borderRadius: 6, padding: "6px 8px",
-                  resize: "vertical", backgroundColor: "oklch(0.15 0.006 60)",
+                  resize: "vertical", backgroundColor: "#111111",
                   fontFamily: "inherit", outline: "none",
                 }}
               />
@@ -150,7 +150,7 @@ function PostColumn({
               </button>
               <button
                 onClick={handlePost}
-                style={{ fontSize: 11, fontWeight: 700, color: "oklch(0.15 0.006 60)", backgroundColor: T.accent, border: "none", borderRadius: 5, padding: "4px 10px", cursor: "pointer" }}
+                style={{ fontSize: 11, fontWeight: 700, color: "#fff", backgroundColor: T.accent, border: "none", borderRadius: 5, padding: "4px 10px", cursor: "pointer" }}
               >
                 Post
               </button>

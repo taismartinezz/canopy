@@ -147,7 +147,7 @@ export function NeedsAttentionWidget({
     return (
       <div className="group" style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 0", borderBottom: "1px solid var(--color-border)" }}>
         {/* Soft amber dot */}
-        <span style={{ width: 7, height: 7, borderRadius: "50%", backgroundColor: "#E8A44A", flexShrink: 0, marginTop: 1 }} />
+        <span style={{ width: 7, height: 7, borderRadius: "50%", backgroundColor: "#8E8E93", flexShrink: 0, marginTop: 1 }} />
 
         <Link
           href={item.href}

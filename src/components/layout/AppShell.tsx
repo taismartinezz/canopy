@@ -227,9 +227,9 @@ function SidebarBody({
         <nav className="flex-1 flex flex-col items-center overflow-y-auto" style={{ gap: 2, scrollbarWidth: "none" }} aria-label="Main navigation">
           {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
             const active = isActive(href);
-            const badgeCount = href === "/reminders" ? pastDueCount : href === "/chat" ? chatUnread : 0;
+            const badgeCount = href === "/chat" ? chatUnread : 0;
             const showBadge = badgeCount > 0;
-            const badgeLabel = href === "/chat" ? `${badgeCount} unread` : `${badgeCount} past due`;
+            const badgeLabel = `${badgeCount} unread`;
             return (
               <Tooltip key={href} label={showBadge ? `${label} (${badgeLabel})` : label} placement="right">
                 <Link
@@ -408,9 +408,9 @@ function SidebarBody({
       <nav className="flex-1 px-2 space-y-0.5 overflow-y-auto" aria-label="Main navigation">
         {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
           const active = isActive(href);
-          const badgeCount = href === "/reminders" ? pastDueCount : href === "/chat" ? chatUnread : 0;
+          const badgeCount = href === "/chat" ? chatUnread : 0;
           const showBadge = badgeCount > 0;
-          const badgeLabel = href === "/chat" ? `${badgeCount} unread` : `${badgeCount} past due`;
+          const badgeLabel = `${badgeCount} unread`;
           return (
             <Link
               key={href}

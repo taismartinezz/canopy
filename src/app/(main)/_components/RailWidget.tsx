@@ -10,11 +10,11 @@ import type { ActivityRow } from "./TeamActivityWidget";
 // ── Design tokens ─────────────────────────────────────────────────────────────
 
 const T = {
-  card:        "oklch(0.19 0.006 60)",
-  border:      "oklch(0.28 0.006 60)",
-  textPrimary: "oklch(0.93 0.006 70)",
-  textMuted:   "oklch(0.61 0.008 70)",
-  accent:      "oklch(0.78 0.13 75)",
+  card:        "#1C1C1E",
+  border:      "rgba(84,84,88,0.65)",
+  textPrimary: "#F5F5F7",
+  textMuted:   "#8E8E93",
+  accent:      "#0A84FF",
   sage:        "oklch(0.68 0.09 145)",
   radius:      11,
 };
