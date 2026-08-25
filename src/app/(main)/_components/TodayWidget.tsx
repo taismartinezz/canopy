@@ -161,40 +161,31 @@ export function TodayWidget({
               <div
                 key={item.id}
                 className="today-row"
-                style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 20px", borderBottom: `1px solid ${T.border}`, position: "relative" }}
+                style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", borderBottom: `1px solid ${T.border}`, position: "relative" }}
               >
-                <span style={{ width: 6, height: 6, borderRadius: "50%", backgroundColor: T.textMuted, flexShrink: 0 }} />
+                <span style={{ width: 6, height: 6, borderRadius: "50%", backgroundColor: T.textMuted, flexShrink: 0, marginTop: 2 }} />
 
-                {/* Title */}
-                <Link
-                  href={item.href}
-                  style={{ flex: 1, minWidth: 0, textDecoration: "none" }}
-                >
-                  <span style={{ fontSize: 13, color: T.textPrimary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block" }}>
-                    {item.title}
-                  </span>
-                </Link>
-
-                {/* Soft date label */}
-                <span style={{ fontSize: 11, color: T.textMuted, flexShrink: 0 }}>
-                  {softLabel(item.dueIso)}
-                </span>
-
-                {/* Type tag */}
-                <span style={{
-                  fontSize: 10, fontWeight: 700, padding: "1px 6px", borderRadius: 4, flexShrink: 0,
-                  border: `1px solid ${T.border}`, color: T.textMuted,
-                  textTransform: "uppercase", letterSpacing: "0.05em",
-                }}>
-                  {item.kind === "task" ? "Task" : "Reminder"}
-                </span>
+                {/* Two-line main content */}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <Link href={item.href} style={{ textDecoration: "none" }}>
+                    <span style={{ fontSize: 13, color: T.textPrimary, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {item.title}
+                    </span>
+                  </Link>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 3 }}>
+                    <span style={{ fontSize: 11, color: T.textMuted }}>{softLabel(item.dueIso)}</span>
+                    <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 5px", borderRadius: 3, border: `1px solid ${T.border}`, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                      {item.kind === "task" ? "Task" : "Reminder"}
+                    </span>
+                  </div>
+                </div>
 
                 {/* Assignee avatars */}
                 {assignees.length > 0 && (
                   <div style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
                     {assignees.slice(0, 2).map((u, i) => (
                       <div key={u.id} style={{ marginLeft: i > 0 ? -4 : 0 }}>
-                        <Avatar user={u} size={18} />
+                        <Avatar user={u} size={20} />
                       </div>
                     ))}
                   </div>

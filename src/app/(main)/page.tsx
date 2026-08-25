@@ -370,16 +370,14 @@ export default function DashboardPage() {
             loading={loading}
           />
 
-          {/* Lab pulse - Opportunities + Lab Wins (Lab Home only) */}
-          {isLabHome && (
-            <LabPulseWidget
-              posts={dashPosts}
-              projectId={projectId}
-              userId={userId}
-              teamMembers={teamMembers}
-              loading={loading}
-            />
-          )}
+          {/* Opportunities + Wins */}
+          <LabPulseWidget
+            posts={dashPosts}
+            projectId={projectId}
+            userId={userId}
+            teamMembers={teamMembers}
+            loading={loading}
+          />
         </div>
 
         {/* Right rail */}
