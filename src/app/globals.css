@@ -290,20 +290,20 @@ body {
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --color-canvas:       oklch(0.15 0.006 60);
-    --color-sidebar:      oklch(0.19 0.006 60);
-    --color-strip:        oklch(0.22 0.005 60);
-    --color-surface:      oklch(0.19 0.006 60);
-    --color-navy:         oklch(0.78 0.13 75);
-    --color-navy-hover:   oklch(0.83 0.11 75);
-    --color-navy-dim:     rgba(232,164,74,0.12);
+    --color-canvas:       #000000;
+    --color-sidebar:      #1C1C1E;
+    --color-strip:        #2C2C2E;
+    --color-surface:      #1C1C1E;
+    --color-navy:         #0A84FF;
+    --color-navy-hover:   #409CFF;
+    --color-navy-dim:     rgba(255,255,255,0.08);
     --color-navy-scrim:   rgba(0,0,0,0.65);
-    --color-body:         oklch(0.93 0.006 70);
-    --color-secondary:    oklch(0.61 0.008 70);
-    --color-border:       oklch(0.28 0.005 60);
-    --color-dimmed-bg:    rgba(255,255,255,0.06);
-    --color-surface-2:    oklch(0.22 0.005 60);
-    --color-segment-active: rgba(255,255,255,0.14);
+    --color-body:         #F5F5F7;
+    --color-secondary:    #8E8E93;
+    --color-border:       rgba(84,84,88,0.65);
+    --color-dimmed-bg:    rgba(255,255,255,0.08);
+    --color-surface-2:    #2C2C2E;
+    --color-segment-active: rgba(255,255,255,0.16);
     --color-btn-primary:       #006ADB;
     --color-btn-primary-hover: #1A80EF;
     --color-success:      #30D158;
@@ -343,20 +343,20 @@ body {
 }
 
 :root[data-theme="dark"] {
-  --color-canvas:       oklch(0.15 0.006 60);
-  --color-sidebar:      oklch(0.19 0.006 60);
-  --color-strip:        oklch(0.22 0.005 60);
-  --color-surface:      oklch(0.19 0.006 60);
-  --color-navy:         oklch(0.78 0.13 75);
-  --color-navy-hover:   oklch(0.83 0.11 75);
-  --color-navy-dim:     rgba(232,164,74,0.12);
+  --color-canvas:       #000000;
+  --color-sidebar:      #1C1C1E;
+  --color-strip:        #2C2C2E;
+  --color-surface:      #1C1C1E;
+  --color-navy:         #0A84FF;
+  --color-navy-hover:   #409CFF;
+  --color-navy-dim:     rgba(255,255,255,0.08);
   --color-navy-scrim:   rgba(0,0,0,0.65);
-  --color-body:         oklch(0.93 0.006 70);
-  --color-secondary:    oklch(0.61 0.008 70);
-  --color-border:       oklch(0.28 0.005 60);
-  --color-dimmed-bg:    rgba(255,255,255,0.06);
-  --color-surface-2:    oklch(0.22 0.005 60);
-  --color-segment-active: rgba(255,255,255,0.14);
+  --color-body:         #F5F5F7;
+  --color-secondary:    #8E8E93;
+  --color-border:       rgba(84,84,88,0.65);
+  --color-dimmed-bg:    rgba(255,255,255,0.08);
+  --color-surface-2:    #2C2C2E;
+  --color-segment-active: rgba(255,255,255,0.16);
   --color-btn-primary:       #006ADB;
   --color-btn-primary-hover: #1A80EF;
   --color-success:      #30D158;
