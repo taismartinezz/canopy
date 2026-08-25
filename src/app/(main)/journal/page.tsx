@@ -1297,7 +1297,7 @@ export default function JournalPage() {
 
         {/* Save bar */}
         {!isTrendsView && !isViewingEntry && (
-          <div className="sticky bottom-0 flex items-center justify-between px-4 md:px-6 py-3 gap-3" style={{ backgroundColor: "var(--color-surface)", borderTop: "1px solid var(--color-border)" }}>
+          <div className="sticky bottom-0 flex items-center justify-between px-4 md:px-6 py-3 gap-3" style={{ backgroundColor: "var(--color-surface)", borderTop: "1px solid var(--color-border)", paddingRight: "max(24px, 88px)" }}>
             <span style={{ fontSize: 12, color: "var(--color-secondary)" }} className="hidden sm:block">Your entry is private and encrypted.</span>
             <div className="flex items-center gap-2 ml-auto">
               {saveMsg && (
