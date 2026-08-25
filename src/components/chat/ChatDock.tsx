@@ -265,7 +265,7 @@ export default function ChatDock() {
   if (hidden) return null;
 
   return (
-    <div style={{ position: "fixed", bottom: 0, right: 20, zIndex: 1000, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 0 }}>
+    <div style={{ position: "fixed", bottom: 24, right: 24, zIndex: 1000, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 0 }}>
       {/* Expanded dock panel */}
       {dockOpen && (
         <div style={{ width: 340, height: activeConv ? 460 : 320, backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "12px 12px 0 0", boxShadow: "0 -4px 24px rgba(0,0,0,0.18)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
@@ -394,17 +394,13 @@ export default function ChatDock() {
           <ChevronDown size={13} style={{ marginLeft: "auto" }} />
         </button>
       ) : (
-        // Closed: 48px circular FAB, expands to labeled pill on hover/focus
+        // Closed: 48px circular FAB, icon only
         <button
           onClick={() => setDockOpen(true)}
-          className="chatdock-fab"
-          style={{ display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "var(--color-navy)", color: "#fff", border: "none", borderRadius: 24, cursor: "pointer", position: "relative", fontFamily: "var(--font-roboto)", width: 48, height: 48, overflow: "hidden", transition: "width 0.18s ease, border-radius 0.18s ease" }}
+          style={{ display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "var(--color-navy)", color: "#fff", border: "none", borderRadius: 24, cursor: "pointer", position: "relative", width: 48, height: 48 }}
           aria-label="Open messaging"
         >
-          <MessageSquare size={18} style={{ flexShrink: 0 }} />
-          <span className="chatdock-label" style={{ fontSize: 13, fontWeight: 600, whiteSpace: "nowrap", maxWidth: 0, opacity: 0, overflow: "hidden", transition: "max-width 0.18s ease, opacity 0.15s ease, margin-left 0.15s ease" }}>
-            Messaging
-          </span>
+          <MessageSquare size={18} />
           {totalUnread > 0 && (
             <span style={{ position: "absolute", top: 4, right: 4, minWidth: 16, height: 16, backgroundColor: "#ef4444", borderRadius: 8, fontSize: 10, fontWeight: 700, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", padding: "0 3px", border: "2px solid var(--color-canvas)" }}>
               {totalUnread > 9 ? "9+" : totalUnread}
@@ -412,22 +408,6 @@ export default function ChatDock() {
           )}
         </button>
       )}
-      <style>{`
-        .chatdock-fab:hover,
-        .chatdock-fab:focus-visible {
-          width: auto !important;
-          min-width: 140px;
-          border-radius: 8px 8px 0 0 !important;
-          justify-content: flex-start !important;
-          padding: 0 16px !important;
-        }
-        .chatdock-fab:hover .chatdock-label,
-        .chatdock-fab:focus-visible .chatdock-label {
-          max-width: 120px !important;
-          opacity: 1 !important;
-          margin-left: 8px !important;
-        }
-      `}</style>
     </div>
   );
 }
