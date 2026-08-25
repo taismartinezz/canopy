@@ -287,6 +287,13 @@ export default function DashboardPage() {
   const visibleTasks = isLabHome
     ? tasks
     : tasks.filter((t) => t.scope === "project" && t.subProjectId === subProjectId);
+  // Match /reminders page: lab reminders only in lab scope, personal only in personal scope,
+  // sub-project scope shows no cross-project reminders (scope is "project" in the DB, not fetched here).
+  const visibleReminders = isLabHome
+    ? overdueReminders.filter((r) => r.scope === "lab")
+    : isPersonal
+    ? overdueReminders.filter((r) => r.scope === "personal")
+    : [];
   // Filter activity by scope. Lab-wide rows (sub_project_id null) only appear in Lab Home.
   // Personal scope shows no team activity (personal work has no shared feed).
   const visibleActivity = isLabHome
@@ -393,7 +400,7 @@ export default function DashboardPage() {
           {/* Today - open tasks + reminders */}
           <TodayWidget
             tasks={visibleTasks}
-            reminders={overdueReminders}
+            reminders={visibleReminders}
             teamMembers={teamMembers}
             userId={userId}
             loading={loading}
