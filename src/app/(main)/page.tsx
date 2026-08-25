@@ -21,7 +21,7 @@ import { RailWidget } from "./_components/RailWidget";
 // ── Dashboard page ────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
-  const { activeScope, subProjectId, subProjects } = useProject();
+  const { activeScope, subProjectId, subProjects, projectId: activeProjectId } = useProject();
   const [tasks, setTasks]             = useState<Task[]>([]);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [modalStatus, setModalStatus] = useState<TaskStatus | null>(null);
@@ -182,25 +182,6 @@ export default function DashboardPage() {
           setDashActivity(actData as ActivityRow[]);
         }
 
-        // Fetch overdue reminders for the current user, scoped to the active project
-        const now = new Date().toISOString();
-        const remProjectFilter = pid ? `,and(scope.eq.lab,project_id.eq.${pid})` : "";
-        const { data: remData } = await supabase
-          .from("reminders")
-          .select("id, title, due_at, scope, assignee_id")
-          .or(`user_id.eq.${user.id},assignee_id.eq.${user.id}${remProjectFilter}`)
-          .eq("completed", false)
-          .lt("due_at", now);
-        if (remData) {
-          setOverdueReminders(remData.map((r) => ({
-            id: r.id as string,
-            title: r.title as string,
-            dueAt: r.due_at as string,
-            scope: (r.scope as "personal" | "lab") ?? "personal",
-            assigneeId: (r.assignee_id as string) ?? undefined,
-          })));
-        }
-
         // Fetch papers assigned to the current user for the reading widget
         const { data: litData } = await supabase
           .from("lit_assigned_readings")
@@ -267,6 +248,32 @@ export default function DashboardPage() {
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [projectId]);
+
+  // Reminders fetch: scoped to the active project from context (re-runs on project switch)
+  useEffect(() => {
+    if (!isSupabaseConfigured || !activeProjectId || !userId) return;
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      const uid = session?.user?.id;
+      if (!uid) return;
+      const now = new Date().toISOString();
+      const remProjectFilter = `,and(scope.eq.lab,project_id.eq.${activeProjectId})`;
+      const { data: remData } = await supabase
+        .from("reminders")
+        .select("id, title, due_at, scope, assignee_id")
+        .or(`user_id.eq.${uid},assignee_id.eq.${uid}${remProjectFilter}`)
+        .eq("completed", false)
+        .lt("due_at", now);
+      if (remData) {
+        setOverdueReminders(remData.map((r) => ({
+          id: r.id as string,
+          title: r.title as string,
+          dueAt: r.due_at as string,
+          scope: (r.scope as "personal" | "lab") ?? "personal",
+          assigneeId: (r.assignee_id as string) ?? undefined,
+        })));
+      }
+    });
+  }, [activeProjectId, userId]);
 
   const todayStr = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
   const timeOfDay = (() => { const h = new Date().getHours(); return h < 12 ? "morning" : h < 17 ? "afternoon" : "evening"; })();
