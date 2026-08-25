@@ -14,10 +14,8 @@ import Toast from "@/components/ui/Toast";
 import type { ActivityRow } from "./_components/TeamActivityWidget";
 import { TeamActivityWidget } from "./_components/TeamActivityWidget";
 import type { OverdueReminder } from "./_components/NeedsAttentionWidget";
-import type { AssignedPaper } from "./_components/LiteratureWidget";
 import { TodayWidget } from "./_components/TodayWidget";
 import { LabPulseWidget } from "./_components/LabPulseWidget";
-import { RailWidget } from "./_components/RailWidget";
 
 // ── Dashboard page ────────────────────────────────────────────────────────────
 
@@ -35,7 +33,6 @@ export default function DashboardPage() {
   const [dashActivity, setDashActivity] = useState<ActivityRow[]>([]);
   const [dashPosts, setDashPosts]     = useState<DashboardPost[]>([]);
   const [overdueReminders, setOverdueReminders] = useState<OverdueReminder[]>([]);
-  const [assignedPapers, setAssignedPapers]     = useState<AssignedPaper[]>([]);
   const [loading, setLoading]         = useState(isSupabaseConfigured);
 
   useEffect(() => {
@@ -179,25 +176,6 @@ export default function DashboardPage() {
         if (actError) console.error("[Dashboard] activity_feed error:", actError);
         if (!actError && actData) {
           setDashActivity(actData as ActivityRow[]);
-        }
-
-        // Fetch papers assigned to the current user for the reading widget
-        const { data: litData } = await supabase
-          .from("lit_assigned_readings")
-          .select("id, item_id, reading_status, literature_items(title)")
-          .eq("project_id", pid)
-          .eq("assignee_id", user.id);
-        if (litData) {
-          setAssignedPapers(litData.map((r) => {
-            const li = Array.isArray(r.literature_items) ? r.literature_items[0] : r.literature_items;
-            const item = li as Record<string, string> | null;
-            return {
-              id: r.id as string,
-              itemId: r.item_id as string,
-              title: item?.title ?? "Untitled",
-              readingStatus: (r.reading_status as AssignedPaper["readingStatus"]) ?? "not_started",
-            };
-          }));
         }
 
         setLoading(false);
@@ -353,43 +331,35 @@ export default function DashboardPage() {
         </p>
       </div>
 
-      {/* Two-column layout: left (~62%) / right rail (~300px) */}
-      <div style={{ display: "flex", gap: 20, alignItems: "flex-start" }}>
-        {/* Left column */}
-        <div style={{ flex: "1 1 0", minWidth: 0, display: "flex", flexDirection: "column", gap: 16 }}>
-          {/* Today - open tasks + reminders */}
-          <TodayWidget
-            tasks={visibleTasks}
-            reminders={visibleReminders}
-            teamMembers={teamMembers}
-            userId={userId}
-            loading={loading}
-          />
-
-          {/* Team Activity */}
-          <TeamActivityWidget
-            rows={visibleActivity}
-            teamMembers={teamMembers}
-            loading={loading}
-          />
-
-          {/* Opportunities + Wins */}
-          <LabPulseWidget
-            posts={dashPosts}
-            projectId={projectId}
-            userId={userId}
-            teamMembers={teamMembers}
-            loading={loading}
-          />
+      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        {/* Row 1: Today + Team Activity side by side */}
+        <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <TodayWidget
+              tasks={visibleTasks}
+              reminders={visibleReminders}
+              teamMembers={teamMembers}
+              userId={userId}
+              loading={loading}
+            />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <TeamActivityWidget
+              rows={visibleActivity}
+              teamMembers={teamMembers}
+              loading={loading}
+            />
+          </div>
         </div>
 
-        {/* Right rail — Reading only */}
-        <div style={{ width: 260, flexShrink: 0 }}>
-          <RailWidget
-            papers={assignedPapers}
-            loading={loading}
-          />
-        </div>
+        {/* Row 2: Opportunities + Wins */}
+        <LabPulseWidget
+          posts={dashPosts}
+          projectId={projectId}
+          userId={userId}
+          teamMembers={teamMembers}
+          loading={loading}
+        />
       </div>
 
       {/* Task detail panel */}

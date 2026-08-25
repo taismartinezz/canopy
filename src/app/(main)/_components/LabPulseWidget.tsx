@@ -104,7 +104,9 @@ function PostColumn({
       {/* Posts */}
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         {filtered.length === 0 && !showForm && (
-          <p style={{ fontSize: 12, color: T.textMuted, margin: 0 }}>Nothing posted yet.</p>
+          <p style={{ fontSize: 12, color: T.textMuted, margin: 0, lineHeight: 1.5 }}>
+            {type === "opportunity" ? "Spot something worth pursuing? Share it." : "Got a win? Big or small, add it here."}
+          </p>
         )}
         {filtered.map((post) => {
           const author = teamMembers.find((u) => u.id === post.authorId) ?? getUser(post.authorId);
@@ -187,9 +189,6 @@ export function LabPulseWidget({
   if (loading) {
     return (
       <div style={cardStyle}>
-        <div style={{ padding: "14px 20px 12px", borderBottom: `1px solid ${T.border}` }}>
-          <span style={{ fontSize: 13, fontWeight: 600, color: T.textPrimary }}>Lab pulse</span>
-        </div>
         <div style={{ display: "flex" }}>
           {[0, 1].map((i) => (
             <div key={i} style={{ flex: 1, padding: "12px 16px", borderRight: i === 0 ? `1px solid ${T.border}` : undefined }}>
@@ -205,11 +204,6 @@ export function LabPulseWidget({
 
   return (
     <div style={cardStyle}>
-      {/* Header */}
-      <div style={{ padding: "14px 20px 12px", borderBottom: `1px solid ${T.border}` }}>
-        <span style={{ fontSize: 13, fontWeight: 600, color: T.textPrimary, letterSpacing: "0.01em" }}>Lab pulse</span>
-      </div>
-
       {/* Two columns */}
       <div style={{ display: "flex" }}>
         <PostColumn
