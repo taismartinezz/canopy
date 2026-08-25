@@ -775,7 +775,14 @@ export default function BookmarksPage() {
 
           {/* Loading */}
           {loading && (
-            <p style={{ fontSize: 13, color: "var(--color-secondary)" }}>Loading bookmarks…</p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {[1, 2, 3, 4].map((i) => (
+                <div key={i} style={{ backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 10, padding: "14px 18px" }}>
+                  <div style={{ width: `${40 + i * 10}%`, height: 13, borderRadius: 4, backgroundColor: "var(--color-border)", marginBottom: 8 }} className="animate-pulse" />
+                  <div style={{ width: "60%", height: 10, borderRadius: 4, backgroundColor: "var(--color-border)", opacity: 0.6 }} className="animate-pulse" />
+                </div>
+              ))}
+            </div>
           )}
 
           {/* Empty state */}

@@ -583,7 +583,23 @@ export default function TasksPage() {
         )}
         <div className="flex-1 overflow-auto p-6">
         {loading && (
-          <p style={{ fontSize: 13, color: "var(--color-secondary)", padding: 8 }}>Loading tasks…</p>
+          <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
+            {[1, 2, 3, 4].map((col) => (
+              <div key={col} style={{ flex: "1 1 0", minWidth: 0, backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 10, overflow: "hidden" }}>
+                <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--color-border)" }}>
+                  <div style={{ width: "50%", height: 13, borderRadius: 4, backgroundColor: "var(--color-border)" }} className="animate-pulse" />
+                </div>
+                <div style={{ padding: "10px 14px", display: "flex", flexDirection: "column", gap: 10 }}>
+                  {[1, 2, 3].map((row) => (
+                    <div key={row} style={{ backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)", borderRadius: 8, padding: "10px 12px" }}>
+                      <div style={{ width: `${55 + row * 12}%`, height: 12, borderRadius: 4, backgroundColor: "var(--color-border)", marginBottom: 8 }} className="animate-pulse" />
+                      <div style={{ width: "40%", height: 10, borderRadius: 4, backgroundColor: "var(--color-border)", opacity: 0.6 }} className="animate-pulse" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
         )}
         {!loading && view === "board" ? (
           <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>

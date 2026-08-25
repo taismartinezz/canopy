@@ -2256,8 +2256,13 @@ function ReadingProgressDashboard({
   }
 
   if (loading) return (
-    <div className="flex-1 flex items-center justify-center" style={{ color: "var(--color-secondary)", fontSize: 13 }}>
-      Loading reading progress…
+    <div className="flex-1" style={{ padding: "20px 24px" }}>
+      {[1, 2, 3].map((i) => (
+        <div key={i} style={{ backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 10, padding: "14px 18px", marginBottom: 12 }}>
+          <div style={{ width: "45%", height: 13, borderRadius: 4, backgroundColor: "var(--color-border)", marginBottom: 10 }} className="animate-pulse" />
+          <div style={{ width: "70%", height: 10, borderRadius: 4, backgroundColor: "var(--color-border)", opacity: 0.6 }} className="animate-pulse" />
+        </div>
+      ))}
     </div>
   );
 
