@@ -417,7 +417,7 @@ function EntryScreen({ piInvitation, onHelp, onResources, onClose }: {
 }) {
   return (
     <PanelShell title="Get support" onClose={onClose}>
-      {/* Privacy statement — upfront, not buried */}
+      {/* Privacy statement - upfront, not buried */}
       <div style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "10px 12px", backgroundColor: "var(--color-canvas)", borderRadius: 8, marginBottom: 20, border: "1px solid var(--color-border)" }}>
         <Lock size={13} color="var(--color-secondary)" style={{ flexShrink: 0, marginTop: 2 }} />
         <p style={{ fontSize: 12, color: "var(--color-secondary)", margin: 0, lineHeight: 1.6 }}>
@@ -644,7 +644,7 @@ function SimpleComposeScreen({ recipient, projectId, userId, onBack, onClose, on
         <Lock size={11} /> Only {firstName(recipient.name)} will see this.
       </p>
 
-      {/* Blank message textarea — "Hi Name," pre-seeded, no template */}
+      {/* Blank message textarea - "Hi Name," pre-seeded, no template */}
       <VoiceDraftTextarea
         value={body}
         onChange={setBody}
@@ -652,7 +652,7 @@ function SimpleComposeScreen({ recipient, projectId, userId, onBack, onClose, on
         placeholder={`${greeting}\n`}
       />
 
-      {/* Timing chips — lightweight, optional */}
+      {/* Timing chips - lightweight, optional */}
       <div style={{ marginTop: 14 }}>
         <p style={{ fontSize: 11, color: "var(--color-secondary)", marginBottom: 8 }}>
           When are you free to talk? (optional)
@@ -680,7 +680,7 @@ function SimpleComposeScreen({ recipient, projectId, userId, onBack, onClose, on
         </div>
       </div>
 
-      {/* Slot proposals — optional */}
+      {/* Slot proposals - optional */}
       <div style={{ marginTop: 10 }}>
         <button
           onClick={openSlots}
@@ -701,7 +701,7 @@ function SimpleComposeScreen({ recipient, projectId, userId, onBack, onClose, on
             )}
             {!slotsLoading && slots.length === 0 && (
               <p style={{ fontSize: 12, color: "var(--color-secondary)" }}>
-                No availability set — {firstName(recipient.name)} hasn&rsquo;t filled in their schedule yet.
+                No availability set - {firstName(recipient.name)} hasn&rsquo;t filled in their schedule yet.
               </p>
             )}
             {!slotsLoading && slots.length > 0 && (
@@ -942,7 +942,7 @@ function VoiceDraftTextarea({ value, onChange, rows = 8, placeholder }: {
 }
 
 
-// ── Screen: B Pick — recipient selection from Track B ────────────────────────
+// ── Screen: B Pick - recipient selection from Track B ────────────────────────
 
 function BPickScreen({ filter, members, pi, onBack, onClose, onSelect }: {
   filter: "pi" | "all";
@@ -1022,7 +1022,7 @@ function BScreen({ resources, institutionKey, loading, pi, members, isCurrentUse
         <p style={{ fontSize: 13, color: "var(--color-secondary)" }}>Loading...</p>
       )}
 
-      {/* Urgent block — always has at least one entry (crisis default) */}
+      {/* Urgent block - always has at least one entry (crisis default) */}
       <section className="mb-5">
         <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.04em", color: "var(--color-error)", marginBottom: 8 }}>
           Urgent, always available

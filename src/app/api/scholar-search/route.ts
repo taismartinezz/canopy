@@ -27,14 +27,14 @@ export async function POST(request: Request) {
   if (!url?.trim()) return Response.json({ error: "url required" }, { status: 400 });
 
   const key = process.env.SERPAPI_KEY;
-  if (!key) return Response.json({}, { status: 200 }); // unconfigured — caller falls through
+  if (!key) return Response.json({}, { status: 200 }); // unconfigured - caller falls through
 
   // Extract search query from Scholar URL params (title=, q=, query=)
   let query = "";
   try {
     const u = new URL(url);
     query = u.searchParams.get("title") ?? u.searchParams.get("q") ?? u.searchParams.get("query") ?? "";
-  } catch { /* not a valid URL — use the raw string as query */ query = url; }
+  } catch { /* not a valid URL - use the raw string as query */ query = url; }
 
   if (!query) return Response.json({}, { status: 200 });
 

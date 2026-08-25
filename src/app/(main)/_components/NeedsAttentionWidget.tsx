@@ -181,7 +181,7 @@ export function NeedsAttentionWidget({
           </div>
         )}
 
-        {/* Inline actions — visible on hover */}
+        {/* Inline actions - visible on hover */}
         <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1" style={{ flexShrink: 0 }}>
           <button
             onClick={(e) => handleComplete(item, e)}

@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 // ── Email delivery via Resend ─────────────────────────────────────────────────
 //
 // To activate: set RESEND_API_KEY in your environment (.env.local / Vercel vars).
-// Without the key, all calls succeed silently — no emails are sent.
+// Without the key, all calls succeed silently - no emails are sent.
 // Resend free tier: 3 000 emails/month, 100/day.
 //
 // Payload schema:
@@ -24,8 +24,8 @@ export interface EmailPayload {
 
 async function sendEmail(payload: EmailPayload): Promise<{ ok: boolean; error?: string }> {
   if (!RESEND_KEY) {
-    // Key not configured — skip silently so the rest of the request still succeeds
-    console.info("[Email] RESEND_API_KEY not set — email skipped:", payload.subject);
+    // Key not configured - skip silently so the rest of the request still succeeds
+    console.info("[Email] RESEND_API_KEY not set - email skipped:", payload.subject);
     return { ok: true };
   }
   const res = await fetch("https://api.resend.com/emails", {

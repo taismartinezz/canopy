@@ -381,21 +381,53 @@ export default function ChatDock() {
         </div>
       )}
 
-      {/* Dock tab button */}
-      <button
-        onClick={() => setDockOpen(v => !v)}
-        style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 16px", backgroundColor: "var(--color-navy)", color: "#fff", border: "none", borderRadius: dockOpen ? "0 0 8px 8px" : "8px 8px 0 0", cursor: "pointer", fontSize: 13, fontWeight: 600, position: "relative", minWidth: 140, fontFamily: "var(--font-roboto)" }}
-        aria-label={dockOpen ? "Close messaging" : "Open messaging"}
-      >
-        <MessageSquare size={15} />
-        <span>Messaging</span>
-        {totalUnread > 0 && !dockOpen && (
-          <span style={{ position: "absolute", top: -6, right: -6, minWidth: 18, height: 18, backgroundColor: "#ef4444", borderRadius: 9, fontSize: 10, fontWeight: 700, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px", border: "2px solid var(--color-canvas)" }}>
-            {totalUnread > 9 ? "9+" : totalUnread}
+      {/* Dock tab button — icon-only FAB when closed, expands on hover/focus */}
+      {dockOpen ? (
+        // Open: full pill connecting to panel above
+        <button
+          onClick={() => setDockOpen(false)}
+          style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 16px", backgroundColor: "var(--color-navy)", color: "#fff", border: "none", borderRadius: "0 0 8px 8px", cursor: "pointer", fontSize: 13, fontWeight: 600, position: "relative", minWidth: 140, fontFamily: "var(--font-roboto)" }}
+          aria-label="Close messaging"
+        >
+          <MessageSquare size={15} />
+          <span>Messaging</span>
+          <ChevronDown size={13} style={{ marginLeft: "auto" }} />
+        </button>
+      ) : (
+        // Closed: 48px circular FAB, expands to labeled pill on hover/focus
+        <button
+          onClick={() => setDockOpen(true)}
+          className="chatdock-fab"
+          style={{ display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "var(--color-navy)", color: "#fff", border: "none", borderRadius: 24, cursor: "pointer", position: "relative", fontFamily: "var(--font-roboto)", width: 48, height: 48, overflow: "hidden", transition: "width 0.18s ease, border-radius 0.18s ease" }}
+          aria-label="Open messaging"
+        >
+          <MessageSquare size={18} style={{ flexShrink: 0 }} />
+          <span className="chatdock-label" style={{ fontSize: 13, fontWeight: 600, whiteSpace: "nowrap", maxWidth: 0, opacity: 0, overflow: "hidden", transition: "max-width 0.18s ease, opacity 0.15s ease, margin-left 0.15s ease" }}>
+            Messaging
           </span>
-        )}
-        <ChevronDown size={13} style={{ marginLeft: "auto", transform: dockOpen ? "rotate(0deg)" : "rotate(180deg)", transition: "transform 0.2s" }} />
-      </button>
+          {totalUnread > 0 && (
+            <span style={{ position: "absolute", top: 4, right: 4, minWidth: 16, height: 16, backgroundColor: "#ef4444", borderRadius: 8, fontSize: 10, fontWeight: 700, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", padding: "0 3px", border: "2px solid var(--color-canvas)" }}>
+              {totalUnread > 9 ? "9+" : totalUnread}
+            </span>
+          )}
+        </button>
+      )}
+      <style>{`
+        .chatdock-fab:hover,
+        .chatdock-fab:focus-visible {
+          width: auto !important;
+          min-width: 140px;
+          border-radius: 8px 8px 0 0 !important;
+          justify-content: flex-start !important;
+          padding: 0 16px !important;
+        }
+        .chatdock-fab:hover .chatdock-label,
+        .chatdock-fab:focus-visible .chatdock-label {
+          max-width: 120px !important;
+          opacity: 1 !important;
+          margin-left: 8px !important;
+        }
+      `}</style>
     </div>
   );
 }

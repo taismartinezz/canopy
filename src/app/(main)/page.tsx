@@ -35,6 +35,8 @@ export default function DashboardPage() {
   const [dashPosts, setDashPosts]     = useState<DashboardPost[]>([]);
   const [overdueReminders, setOverdueReminders] = useState<OverdueReminder[]>([]);
   const [assignedPapers, setAssignedPapers]     = useState<AssignedPaper[]>([]);
+  const [lastJournalAt, setLastJournalAt]       = useState<string | null>(null);
+  const [journalNudgeDismissed, setJournalNudgeDismissed] = useState(false);
   const [loading, setLoading]         = useState(isSupabaseConfigured);
 
   useEffect(() => {
@@ -217,6 +219,16 @@ export default function DashboardPage() {
           }));
         }
 
+        // Fetch last journal entry date for gentle nudge
+        const { data: jData } = await supabase
+          .from("journal_entries")
+          .select("created_at")
+          .eq("user_id", user.id)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (jData?.created_at) setLastJournalAt(jData.created_at as string);
+
         setLoading(false);
       });
       return;
@@ -324,7 +336,7 @@ export default function DashboardPage() {
 
   return (
     <div style={{ padding: "24px 28px", maxWidth: 1400, minHeight: "100%" }}>
-      {/* Greeting — plain text, no card */}
+      {/* Greeting - plain text, no card */}
       <div style={{ marginBottom: 24 }}>
         <h1 style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 22, margin: 0, lineHeight: 1.2, color: "var(--color-navy)" }}>
           {isLabHome || isPersonal ? (
@@ -338,15 +350,39 @@ export default function DashboardPage() {
           ) : displayTitle}
         </h1>
         <p style={{ fontSize: 13, color: textMuted, marginTop: 4, fontStyle: "italic" }}>
-          {todayStr} — a few things whenever you&rsquo;re ready. Nothing urgent.
+          {todayStr} - a few things whenever you&rsquo;re ready. Nothing urgent.
         </p>
       </div>
+
+      {/* Journal nudge - soft invitation if no entry in 7+ days */}
+      {!loading && !journalNudgeDismissed && (() => {
+        if (!lastJournalAt) return null;
+        const daysSince = (Date.now() - new Date(lastJournalAt).getTime()) / 86_400_000;
+        if (daysSince < 7) return null;
+        return (
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20, padding: "10px 16px", borderRadius: 8, border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)" }}>
+            <span style={{ fontSize: 13, color: "var(--color-secondary)", flex: 1 }}>
+              Whenever you have a moment, your journal is here if you want to check in with yourself.
+            </span>
+            <a href="/journal" style={{ fontSize: 12, fontWeight: 600, color: "var(--color-navy)", textDecoration: "none", flexShrink: 0 }}>
+              Open journal
+            </a>
+            <button
+              onClick={() => setJournalNudgeDismissed(true)}
+              style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-secondary)", padding: 0, flexShrink: 0, fontSize: 16, lineHeight: 1 }}
+              aria-label="Dismiss"
+            >
+              ×
+            </button>
+          </div>
+        );
+      })()}
 
       {/* Two-column layout: left (~62%) / right rail (~300px) */}
       <div style={{ display: "flex", gap: 20, alignItems: "flex-start" }}>
         {/* Left column */}
         <div style={{ flex: "1 1 0", minWidth: 0, display: "flex", flexDirection: "column", gap: 16 }}>
-          {/* Today — open tasks + reminders */}
+          {/* Today - open tasks + reminders */}
           <TodayWidget
             tasks={visibleTasks}
             reminders={overdueReminders}
@@ -355,7 +391,7 @@ export default function DashboardPage() {
             loading={loading}
           />
 
-          {/* Lab pulse — Opportunities + Lab Wins (Lab Home only) */}
+          {/* Lab pulse - Opportunities + Lab Wins (Lab Home only) */}
           {isLabHome && (
             <LabPulseWidget
               posts={dashPosts}
@@ -388,7 +424,7 @@ export default function DashboardPage() {
         />
       )}
 
-      {/* Task add modal (from column + buttons) — scoped to the active project when one is selected */}
+      {/* Task add modal (from column + buttons) - scoped to the active project when one is selected */}
       {modalStatus && (
         <TaskModal
           mode="add"

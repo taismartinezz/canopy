@@ -225,7 +225,7 @@ function SortableSubtaskRow({
         )}
       </div>
 
-      {/* Title — click to open full detail */}
+      {/* Title - click to open full detail */}
       <button
         onClick={(e) => { e.stopPropagation(); onOpenDetail(); }}
         style={{
@@ -410,7 +410,7 @@ export default function TaskDetailPanel({
   const [calPos, setCalPos] = useState<{ top: number; left: number } | null>(null);
   const dueDateBtnRef = useRef<HTMLButtonElement>(null);
 
-  // Local copies — initialized from task, mutated locally & pushed to parent
+  // Local copies - initialized from task, mutated locally & pushed to parent
   const [localComments, setLocalComments] = useState<TaskComment[]>(task.comments);
   const [localFiles, setLocalFiles]       = useState<TaskFile[]>(task.files);
   const [localAssigneeIds, setLocalAssigneeIds] = useState<string[]>(task.assigneeIds);
@@ -421,7 +421,7 @@ export default function TaskDetailPanel({
   const [subtaskInput, setSubtaskInput] = useState("");
   const subtaskInputRef = useRef<HTMLInputElement>(null);
   const [subtasksOpen, setSubtasksOpen] = useState(true);
-  // Per-subtask menu open tracking — null means none open
+  // Per-subtask menu open tracking - null means none open
   const [openSubtaskMenus, setOpenSubtaskMenus] = useState<{
     status: string | null;
     assignee: string | null;
@@ -583,7 +583,7 @@ export default function TaskDetailPanel({
       }
     }
 
-    // Assignees live in the task_assignees join table — replace all rows for this task
+    // Assignees live in the task_assignees join table - replace all rows for this task
     if (updates.assigneeIds !== undefined) {
       const { error: delErr } = await supabase.from("task_assignees").delete().eq("task_id", id);
       if (delErr) { console.error("[Subtask] assignee delete:", delErr); showToast("Failed to update assignees.", "error"); return; }
@@ -1115,7 +1115,7 @@ export default function TaskDetailPanel({
               <span style={{ fontSize: 11, fontWeight: 700, color: "var(--color-secondary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
                 Subtasks
               </span>
-              {/* Count badge — always visible regardless of open/collapsed state */}
+              {/* Count badge - always visible regardless of open/collapsed state */}
               <span style={{
                 fontSize: 11, fontWeight: 600,
                 color: doneCount === totalCount && totalCount > 0 ? "#2E7D52" : "var(--color-secondary)",
@@ -1144,7 +1144,7 @@ export default function TaskDetailPanel({
             )}
           </div>
 
-          {/* Progress bar — always visible when there are subtasks, even when collapsed */}
+          {/* Progress bar - always visible when there are subtasks, even when collapsed */}
           {totalCount > 0 && (
             <div className="px-6 pb-2">
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>

@@ -361,7 +361,7 @@ async function syncOnboardingToSupabase({
           const { error: emailCodeErr } = await supabase.from("invite_codes").insert({
             code, project_id: projectId, created_by: user.id, invited_email: email,
           });
-          // Log only code + message — not the full object, which may echo the inserted row (including email).
+          // Log only code + message - not the full object, which may echo the inserted row (including email).
           if (emailCodeErr) console.error("[Sync] invite_code insert error:", emailCodeErr.message, emailCodeErr.code);
         }
       }
@@ -409,7 +409,7 @@ async function syncOnboardingToSupabase({
       .maybeSingle()
       .then(async (res) => {
         if (res.error?.code === "23505") {
-          // Row exists — update it instead
+          // Row exists - update it instead
           return supabase.from("user_profiles").update(profilePayload).eq("id", user.id);
         }
         return res;
@@ -449,7 +449,7 @@ export default function OnboardingPage() {
   const [resUserName, setResUserName] = useState("");
   const [isJoining, setIsJoining] = useState(false);
 
-  // PI step 3 — invite team
+  // PI step 3 - invite team
   const [emailInput, setEmailInput] = useState("");
   const [emailInputError, setEmailInputError] = useState("");
   const [inviteEmails, setInviteEmails] = useState<string[]>([]);
@@ -459,7 +459,7 @@ export default function OnboardingPage() {
   const [copied, setCopied] = useState(false);
   const [revealLink, setRevealLink] = useState(false);
 
-  // Researcher step 3 — profile
+  // Researcher step 3 - profile
   const [profileName, setProfileName] = useState("");
   const [profileDept, setProfileDept] = useState("");
   const [profileBio, setProfileBio] = useState("");
@@ -469,7 +469,7 @@ export default function OnboardingPage() {
   const [sessionReady, setSessionReady] = useState(false);
   const checked = useRef(false);
 
-  // Guard: session check runs FIRST — nothing renders until this resolves
+  // Guard: session check runs FIRST - nothing renders until this resolves
   useEffect(() => {
     if (checked.current) return;
     checked.current = true;
@@ -659,7 +659,7 @@ export default function OnboardingPage() {
       }
 
       // After account is created, resolve any pending project invite.
-      // External invitees get sub_project_members access only — no team_members row added here.
+      // External invitees get sub_project_members access only - no team_members row added here.
       const pendingToken = localStorage.getItem("pendingProjectInviteToken");
       if (pendingToken) {
         const { data: { session } } = await supabase.auth.getSession();

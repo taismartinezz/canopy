@@ -208,7 +208,7 @@ function PromptCard({
             {promptText}
           </span>
         </div>
-        {/* Mic button — functional, disabled-with-tooltip, or hidden while SSR */}
+        {/* Mic button - functional, disabled-with-tooltip, or hidden while SSR */}
         {!readOnly && hasSpeechSupport === true && (
           <button
             onClick={isRecording ? stopRecording : startRecording}
@@ -265,7 +265,7 @@ function PromptCard({
           </div>
         )}
 
-        {/* Fix grammar button — visible when there's text, not reading, not in preview */}
+        {/* Fix grammar button - visible when there's text, not reading, not in preview */}
         {!readOnly && response.trim() && grammarState !== "preview" && (
           <button
             onClick={handleFixGrammar}
@@ -1240,7 +1240,7 @@ export default function JournalPage() {
                 </>
               ) : null
             ) : (
-              // New entry — apply 7-day cadence
+              // New entry - apply 7-day cadence
               showFullCheckin ? (
                 <>
                   <div className="flex items-start justify-between gap-3 mb-4">
@@ -1297,7 +1297,7 @@ export default function JournalPage() {
 
         {/* Save bar */}
         {!isTrendsView && !isViewingEntry && (
-          <div className="sticky bottom-0 flex items-center justify-between px-4 md:px-6 py-3 gap-3" style={{ backgroundColor: "var(--color-surface)", borderTop: "1px solid var(--color-border)" }}>
+          <div className="sticky bottom-0 flex items-center justify-between px-4 md:px-6 py-3 gap-3" style={{ backgroundColor: "var(--color-surface)", borderTop: "1px solid var(--color-border)", paddingRight: "max(24px, 88px)" }}>
             <span style={{ fontSize: 12, color: "var(--color-secondary)" }} className="hidden sm:block">Your entry is private and encrypted.</span>
             <div className="flex items-center gap-2 ml-auto">
               {saveMsg && (

@@ -49,7 +49,7 @@ export async function POST(request: Request) {
     title?: string;
   };
 
-  // A title alone is enough — the title-search fallback can run without a DOI.
+  // A title alone is enough - the title-search fallback can run without a DOI.
   if ((!doi && !title) || !sourceItemId || !projectId) {
     return Response.json({ recommendations: [] });
   }
@@ -77,7 +77,7 @@ export async function POST(request: Request) {
 
   const supabase = createClient(supabaseUrl, supabaseKey);
 
-  // Check cache — return if fresh enough
+  // Check cache - return if fresh enough
   const cutoff = new Date(Date.now() - CACHE_TTL_HOURS * 3600 * 1000).toISOString();
   const { data: cached } = await supabase
     .from("lit_recommendation_cache")

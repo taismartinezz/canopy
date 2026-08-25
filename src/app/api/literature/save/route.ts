@@ -1,4 +1,4 @@
-// Browser-extension endpoint — saves a captured page as a literature item.
+// Browser-extension endpoint - saves a captured page as a literature item.
 // Auth: pass Supabase access token as "Authorization: Bearer <token>" header.
 
 import { createClient } from "@supabase/supabase-js";
