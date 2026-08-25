@@ -163,8 +163,7 @@ export function TodayWidget({
                 className="today-row"
                 style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 20px", borderBottom: `1px solid ${T.border}`, position: "relative" }}
               >
-                {/* Amber dot */}
-                <span style={{ width: 6, height: 6, borderRadius: "50%", backgroundColor: T.accent, flexShrink: 0 }} />
+                <span style={{ width: 6, height: 6, borderRadius: "50%", backgroundColor: T.textMuted, flexShrink: 0 }} />
 
                 {/* Title */}
                 <Link

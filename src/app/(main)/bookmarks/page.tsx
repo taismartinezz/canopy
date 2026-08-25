@@ -241,7 +241,7 @@ function AddForm({ onAdd, onCancel }: {
           style={{ display: "flex", alignItems: "center", gap: 6, padding: "0 16px", height: 40, backgroundColor: "var(--color-navy)", color: "#fff", fontSize: 13, fontWeight: 700, border: "none", borderRadius: 7, cursor: saving ? "not-allowed" : "pointer", opacity: saving ? 0.7 : 1 }}
         >
           <Check size={14} />
-          {saving ? "Saving…" : "Add bookmark"}
+          {saving ? "Saving…" : "Add Bookmark"}
         </button>
         <button
           type="button"

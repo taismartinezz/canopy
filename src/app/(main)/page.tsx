@@ -182,12 +182,13 @@ export default function DashboardPage() {
           setDashActivity(actData as ActivityRow[]);
         }
 
-        // Fetch overdue reminders for the current user
+        // Fetch overdue reminders for the current user, scoped to the active project
         const now = new Date().toISOString();
+        const remProjectFilter = pid ? `,and(scope.eq.lab,project_id.eq.${pid})` : "";
         const { data: remData } = await supabase
           .from("reminders")
           .select("id, title, due_at, scope, assignee_id")
-          .or(`user_id.eq.${user.id},assignee_id.eq.${user.id}`)
+          .or(`user_id.eq.${user.id},assignee_id.eq.${user.id}${remProjectFilter}`)
           .eq("completed", false)
           .lt("due_at", now);
         if (remData) {

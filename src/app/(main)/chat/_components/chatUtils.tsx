@@ -11,7 +11,7 @@ export function formatTime(iso: string): string {
   const now = new Date();
   const isToday = d.toDateString() === now.toDateString();
   if (isToday) return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" }) + " " +
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" }) + ", " +
     d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
 }
 

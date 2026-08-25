@@ -384,7 +384,7 @@ function CalendarTab({
               <button
                 onClick={() => openAdd(makeDateStr(days.find(d => makeDateStr(d) === todayStr) ?? days[0]))}
                 style={{ fontSize: 13, fontWeight: 600, padding: "8px 18px", borderRadius: 7, backgroundColor: "var(--color-btn-primary)", color: "#fff", border: "none", cursor: "pointer" }}>
-                + Add event
+                + Add Event
               </button>
             }
           />
@@ -412,7 +412,7 @@ function CalendarTab({
               <button
                 onClick={() => openAdd(makeDateStr(anchor))}
                 style={{ fontSize: 13, fontWeight: 600, padding: "8px 18px", borderRadius: 7, backgroundColor: "var(--color-btn-primary)", color: "#fff", border: "none", cursor: "pointer" }}>
-                + Add event
+                + Add Event
               </button>
             }
           />

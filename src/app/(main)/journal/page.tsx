@@ -58,7 +58,7 @@ type AddedPrompt = { id: string; text: string; response: string };
 
 function formatEntryDate(isoDate: string) {
   const d = new Date(isoDate + "T00:00:00");
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
 function formatFullDate(isoDate: string) {

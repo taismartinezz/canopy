@@ -768,17 +768,18 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           })
           .subscribe();
 
-        // Count past-due reminders for badge
+        // Count past-due reminders for badge, scoped to the active project
         const userId = user.id;
         async function refreshPastDueCount() {
           const ts = new Date().toISOString();
+          const projFilter = projectId ? `,and(scope.eq.lab,project_id.eq.${projectId})` : "";
           const { count } = await supabase
             .from("reminders")
             .select("id", { count: "exact", head: true })
             .eq("completed", false)
             .not("due_at", "is", null)
             .lt("due_at", ts)
-            .or(`user_id.eq.${userId},assignee_id.eq.${userId}`);
+            .or(`user_id.eq.${userId},assignee_id.eq.${userId}${projFilter}`);
           setPastDueCount(count ?? 0);
         }
 
