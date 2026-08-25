@@ -6,7 +6,7 @@ import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { useProject } from "@/context/ProjectContext";
 import type { TeamMember, TaskStatus } from "@/types";
 import Avatar from "@/components/ui/Avatar";
-import { Video, X, Edit3, Check, Users, TrendingUp, ShieldCheck, AlertCircle, Plus, Phone, Globe, Lock } from "lucide-react";
+import { Video, X, Edit3, Check, Users, TrendingUp, ShieldCheck, Plus, Phone, Globe, Lock } from "lucide-react";
 import {
   getRegistryResources, getInstitutionName, hasNoCounselingResources, INSTITUTION_OPTIONS,
 } from "@/lib/support/institutions";
@@ -136,9 +136,8 @@ function WellbeingRollupPanel({ rows, overdueCount, totalMembers, minRespondents
         )}
         {overdueCount !== null && totalMembers !== null && (
           <div style={{ display: "flex", alignItems: "center", gap: 6, paddingTop: 10, borderTop: "1px solid var(--color-border)", marginTop: 4 }}>
-            <AlertCircle size={12} color="#D97706" />
             <span style={{ fontSize: 11, color: "var(--color-secondary)" }}>
-              <strong style={{ color: "var(--color-body)" }}>{overdueCount}</strong> total overdue tasks across {totalMembers} opted-in member{totalMembers === 1 ? "" : "s"}
+              <strong style={{ color: "var(--color-body)" }}>{overdueCount}</strong> open tasks across {totalMembers} opted-in member{totalMembers === 1 ? "" : "s"}
             </span>
           </div>
         )}
@@ -329,7 +328,7 @@ function WeeklyUpdateBar({ current, onSave }: { current?: string; onSave: (v: st
         </p>
         <button onClick={() => setEditing(true)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg hover:bg-[rgba(27,46,75,0.06)]"
           style={{ fontSize: 12, color: "var(--color-navy)", fontWeight: 600, border: "1px solid var(--color-border)", borderRadius: 7, cursor: "pointer", minHeight: 36 }}>
-          <Edit3 size={12} />{current ? "Edit" : "Add update"}
+          <Edit3 size={12} />{current ? "Edit" : "Add Update"}
         </button>
       </div>
     );
@@ -398,7 +397,7 @@ function SupportResourcesAdmin({
           onClick={onToggleAddResource}
           style={{ fontSize: 12, fontWeight: 600, color: "var(--color-navy)", border: "1px solid var(--color-border)", borderRadius: 7, padding: "5px 12px", background: "transparent", cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}
         >
-          <Plus size={12} /> Add resource
+          <Plus size={12} /> Add Resource
         </button>
       </div>
 
