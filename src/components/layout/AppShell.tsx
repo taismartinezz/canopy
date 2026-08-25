@@ -134,7 +134,7 @@ function SidebarBody({
     return (
       <aside className="flex flex-col h-full items-center" aria-label="Site navigation" style={{ backgroundColor: "var(--color-sidebar)", paddingTop: 6, paddingBottom: 6, gap: 2 }}>
 
-        {/* Canopy logo — static branding anchor */}
+        {/* Canopy logo - static branding anchor */}
         <div style={{ ...ICON_BTN, flexShrink: 0, pointerEvents: "none" }} aria-hidden="true">
           <CanopyLogo size={22} />
         </div>
@@ -152,7 +152,7 @@ function SidebarBody({
 
         <Divider />
 
-        {/* Workspace avatar — opens scope/project switcher */}
+        {/* Workspace avatar - opens scope/project switcher */}
         <div style={{ position: "relative" }}>
           <Tooltip label={wsDisplayName || "Workspace"} placement="right">
             <button
@@ -235,7 +235,7 @@ function SidebarBody({
                 <Link
                   href={href}
                   onClick={onLinkClick}
-                  aria-label={showBadge ? `${label} — ${badgeLabel}` : label}
+                  aria-label={showBadge ? `${label} - ${badgeLabel}` : label}
                   style={{
                     ...ICON_BTN,
                     position: "relative",
@@ -301,7 +301,7 @@ function SidebarBody({
   // ── Expanded: full sidebar ──────────────────────────────────────────────────
   return (
     <aside className="flex flex-col h-full" aria-label="Site navigation" style={{ backgroundColor: "var(--color-sidebar)" }}>
-      {/* Wordmark row — collapse button appears on sidebar hover */}
+      {/* Wordmark row - collapse button appears on sidebar hover */}
       <div className="flex items-center justify-between px-4 pt-4 pb-3">
         <span style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 18, color: "var(--color-navy)" }}>
           Canopy
@@ -830,7 +830,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── Project data + team — driven by projectId from context ────────────────
+  // ── Project data + team - driven by projectId from context ────────────────
   useEffect(() => {
     if (!projectId) return;
     let canceled = false;
@@ -1003,7 +1003,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         />
       )}
 
-      {/* ── Nav sidebar — collapses to 52px icon rail, resizable ── */}
+      {/* ── Nav sidebar - collapses to 52px icon rail, resizable ── */}
       <div
         className="hidden md:flex flex-col shrink-0 overflow-hidden group/sidenav"
         style={{
@@ -1102,7 +1102,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         )}
       </div>
 
-      {/* ── Mobile nav drawer — fixed overlay, slide in/out ── */}
+      {/* ── Mobile nav drawer - fixed overlay, slide in/out ── */}
       <div
         className="md:hidden fixed top-0 left-0 h-full z-30"
         style={{
@@ -1146,7 +1146,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           className="flex items-center gap-2 px-3 md:px-6"
           style={{ backgroundColor: "var(--color-surface)", borderBottom: "1px solid var(--color-border)", height: 52, minHeight: 52 }}
         >
-          {/* Hamburger — mobile only */}
+          {/* Hamburger - mobile only */}
           <button
             onClick={() => setMobileNavOpen(true)}
             className="md:hidden flex items-center justify-center rounded-lg transition-colors hover:bg-[var(--color-navy-dim)] shrink-0"
@@ -1165,7 +1165,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             </span>
           </div>
 
-          {/* Desktop: breadcrumb — "Lab" or "Lab / Project" */}
+          {/* Desktop: breadcrumb - "Lab" or "Lab / Project" */}
           <div className="hidden md:flex items-center gap-1.5 min-w-0">
             {project?.name && (
               <Link href="/" style={{ fontSize: 12, color: "var(--color-secondary)", whiteSpace: "nowrap", textDecoration: "none" }}
@@ -1202,7 +1202,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               </button>
             </Tooltip>
 
-            {/* Institution badge — navigates to team page */}
+            {/* Institution badge - navigates to team page */}
             {project?.institution && (
               <Tooltip label="View lab team" placement="bottom">
                 <Link href="/team" aria-label={`View ${project.institution} team`}

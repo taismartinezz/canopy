@@ -208,7 +208,7 @@ function PromptCard({
             {promptText}
           </span>
         </div>
-        {/* Mic button — functional, disabled-with-tooltip, or hidden while SSR */}
+        {/* Mic button - functional, disabled-with-tooltip, or hidden while SSR */}
         {!readOnly && hasSpeechSupport === true && (
           <button
             onClick={isRecording ? stopRecording : startRecording}
@@ -265,7 +265,7 @@ function PromptCard({
           </div>
         )}
 
-        {/* Fix grammar button — visible when there's text, not reading, not in preview */}
+        {/* Fix grammar button - visible when there's text, not reading, not in preview */}
         {!readOnly && response.trim() && grammarState !== "preview" && (
           <button
             onClick={handleFixGrammar}
@@ -1240,7 +1240,7 @@ export default function JournalPage() {
                 </>
               ) : null
             ) : (
-              // New entry — apply 7-day cadence
+              // New entry - apply 7-day cadence
               showFullCheckin ? (
                 <>
                   <div className="flex items-start justify-between gap-3 mb-4">

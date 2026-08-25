@@ -15,9 +15,9 @@ import type { SubProject } from "@/types";
 export type ActiveScope = "lab" | "project" | "personal";
 
 interface ProjectContextValue {
-  /** Lab-level projects.id — null until auth resolves */
+  /** Lab-level projects.id - null until auth resolves */
   projectId: string | null;
-  /** Currently active sub-project filter — null means lab or personal */
+  /** Currently active sub-project filter - null means lab or personal */
   subProjectId: string | null;
   /** All sub-projects the current user belongs to (excludes archived) */
   subProjects: SubProject[];
@@ -69,7 +69,7 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
         const userId = session?.user?.id;
         if (!userId) { setIsLoading(false); return; }
 
-        // ── 1. Lab-level project_id — try team_members first, then user_profiles ─
+        // ── 1. Lab-level project_id - try team_members first, then user_profiles ─
         const { data: membership } = await supabase
           .from("team_members")
           .select("project_id")
@@ -133,7 +133,7 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
 
           setSubProjects(sps);
 
-          // Restore persisted selection — validate it's still a valid sub-project
+          // Restore persisted selection - validate it's still a valid sub-project
           const stored      = localStorage.getItem(STORAGE_KEY);
           const storedScope = (localStorage.getItem(SCOPE_STORAGE_KEY) ?? "lab") as ActiveScope;
 

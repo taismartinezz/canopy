@@ -429,7 +429,7 @@ function SupportResourcesAdmin({
         </p>
       )}
 
-      {/* Registry rows — read-only */}
+      {/* Registry rows - read-only */}
       {registryRows.length > 0 && (
         <div className="mb-4">
           <p style={{ fontSize: 11, fontWeight: 600, color: "var(--color-secondary)", marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.05em" }}>
@@ -607,7 +607,7 @@ export default function TeamPage() {
       if (projectData?.name) setStoredProjectName(projectData.name as string);
       if (projectData?.min_wellbeing_respondents != null) setMinRespondents(projectData.min_wellbeing_respondents as number);
 
-      // 2. Task counts — single embedded-join query so PostgREST handles the
+      // 2. Task counts - single embedded-join query so PostgREST handles the
       //    task_id → tasks.id match server-side; no client-side Map key lookup needed.
       const memberIds = (memberData ?? []).map((r) => r.user_id as string);
       const countMap: Record<string, Record<TaskStatus, number>> = {};

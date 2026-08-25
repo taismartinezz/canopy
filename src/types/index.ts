@@ -7,7 +7,7 @@ export interface User {
   name: string;
   email: string;
   role: UserRole;
-  avatarColor: string;   // CSS hex — pastel
+  avatarColor: string;   // CSS hex - pastel
   avatarInitials: string;
   avatarUrl?: string;    // profile photo URL from Supabase Storage
   institution?: string;
@@ -178,7 +178,7 @@ export interface LiteratureItem {
   url?: string;
   abstract?: string;
   tags: string[];
-  removedTags: string[];    // Tags explicitly removed by user — excluded from future syncs
+  removedTags: string[];    // Tags explicitly removed by user - excluded from future syncs
   status: ReadStatus;
   rating: number;          // 1–5
   notes?: string;
@@ -189,7 +189,7 @@ export interface LiteratureItem {
   collections: string[];   // Collection IDs
   relatedIds: string[];    // Related item IDs
   importSource?: "manual" | "zotero_json" | "zotero_api" | "doi" | "bibtex" | "url";
-  zoteroKey?: string;   // Stable Zotero item key (e.g. "AIXIUGN3") — used as dedup key when DOI absent
+  zoteroKey?: string;   // Stable Zotero item key (e.g. "AIXIUGN3") - used as dedup key when DOI absent
 }
 
 export interface LiteratureCollection {
@@ -238,7 +238,7 @@ export interface LitAssignedReading {
   note?: string;
   readingStatus: AssignmentReadingStatus | null; // null = masked server-side (peer view of hidden row)
   createdAt: string;
-  statusHidden?: boolean; // when true, peers see "—" instead of status; PI always sees real status
+  statusHidden?: boolean; // when true, peers see "-" instead of status; PI always sees real status
   aggDone?: number;       // server-computed total done count (includes hidden entries)
   aggTotal?: number;      // server-computed total assignee count
 }
@@ -402,7 +402,7 @@ export interface Reminder {
   subProjectId?: string;  // required when scope = "project"
   scope?: ReminderScope;  // defaults to "personal"
   title: string;
-  dueAt?: string;         // ISO datetime — optional (untimed reminders allowed)
+  dueAt?: string;         // ISO datetime - optional (untimed reminders allowed)
   linkedTaskId?: string;
   linkedEventId?: string;
   emailEnabled: boolean;

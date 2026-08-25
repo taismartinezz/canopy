@@ -629,7 +629,7 @@ export default function BookmarksPage() {
     }
   }
 
-  // Local scope filter — uses effectiveBmScope so clicking the icon rail drives data immediately
+  // Local scope filter - uses effectiveBmScope so clicking the icon rail drives data immediately
   const scopedBookmarks = bookmarks.filter((bm) => {
     if (effectiveBmScope === "all") return true;
     if (effectiveBmScope === "project") return bm.scope === "project" && (!effectiveSubProjectId || bm.sub_project_id === effectiveSubProjectId);
@@ -726,7 +726,7 @@ export default function BookmarksPage() {
 
       <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
 
-      {/* ── Left sidebar — desktop only, lab-home context only ───────────── */}
+      {/* ── Left sidebar - desktop only, lab-home context only ───────────── */}
       {isLabHome && (
         <div className="hidden md:flex">
           <ScopeSidebar
@@ -751,7 +751,7 @@ export default function BookmarksPage() {
       {/* ── Right content area ───────────────────────────────────────────────── */}
       <div style={{ flex: 1, overflowY: "auto", backgroundColor: "var(--color-canvas)" }}>
 
-        {/* Mobile scope + type chips — lab-home context only */}
+        {/* Mobile scope + type chips - lab-home context only */}
         {isLabHome && (
           <div className="md:hidden flex items-center gap-2 px-4 pt-4 pb-2 overflow-x-auto" style={{ borderBottom: "1px solid var(--color-border)", scrollbarWidth: "none" }}>
             {(["all", "personal", "lab"] as const).map((s) => {

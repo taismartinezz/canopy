@@ -70,7 +70,7 @@ export function PostsCard({
 
   const description = type === "opportunity"
     ? "Grants, conferences, and collaborations worth sharing with the lab"
-    : "Celebrate progress — submissions, acceptances, milestones";
+    : "Celebrate progress - submissions, acceptances, milestones";
 
   return (
     <Card>

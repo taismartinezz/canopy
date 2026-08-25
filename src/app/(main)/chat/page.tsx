@@ -504,7 +504,7 @@ export default function ChatPage() {
     const msg = messages.find(m => m.id === msgId);
     const alreadyReacted = msg?.reactions.find(r => r.emoji === emoji)?.hasReacted;
 
-    // Optimistic update — applies immediately regardless of Supabase status
+    // Optimistic update - applies immediately regardless of Supabase status
     setMessages(p => p.map(m => {
       if (m.id !== msgId) return m;
       const ex = m.reactions.find(r => r.emoji === emoji);

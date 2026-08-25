@@ -347,7 +347,7 @@ export default function ProfilePage() {
   const [project, setProject] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
-  // ── Photo (local only — needs Supabase Storage to persist) ───────────────
+  // ── Photo (local only - needs Supabase Storage to persist) ───────────────
   const [photo, setPhoto] = useState<string | null>(null);
 
   // ── Edit mode ────────────────────────────────────────────────────────────
@@ -1133,7 +1133,7 @@ export default function ProfilePage() {
                   )}
                 </div>
 
-                {/* Institution (researchers only — PIs edit this via the inline header or Lab Settings) */}
+                {/* Institution (researchers only - PIs edit this via the inline header or Lab Settings) */}
                 {!isPi && (
                   <div>
                     <SectionLabel>Institution</SectionLabel>

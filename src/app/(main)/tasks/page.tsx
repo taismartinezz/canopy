@@ -62,7 +62,7 @@ export default function TasksPage() {
 
   useEffect(() => {
     if (!isSupabaseConfigured) {
-      // Demo mode — use mock data, restoring any in-session mutations from sessionStorage
+      // Demo mode - use mock data, restoring any in-session mutations from sessionStorage
       const sp = getStoredProject();
       setProjectId(sp.id);
       setTeamMembers(USERS);
@@ -541,7 +541,7 @@ export default function TasksPage() {
           </FilterSelect>
         </div>
 
-        {/* Mobile scope chips — lab-home only, hidden on md+ where sidebar shows */}
+        {/* Mobile scope chips - lab-home only, hidden on md+ where sidebar shows */}
         {isLabHome && (
           <div className="md:hidden flex items-center gap-2 overflow-x-auto py-2" style={{ scrollbarWidth: "none" }}>
             {sidebarSections.map((s) => (

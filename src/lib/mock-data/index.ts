@@ -445,11 +445,11 @@ export const CHECKIN_LABELS: Record<number, string> = {
 };
 
 export const CHECKIN_COLORS: Record<number, string> = {
-  1: "#C0392B",  // red       — very low
-  2: "#D97706",  // amber     — low
-  3: "#CA8A04",  // yellow    — neutral midpoint
-  4: "#2E7D52",  // green     — good
-  5: "#059669",  // emerald   — excellent
+  1: "#C0392B",  // red       - very low
+  2: "#D97706",  // amber     - low
+  3: "#CA8A04",  // yellow    - neutral midpoint
+  4: "#2E7D52",  // green     - good
+  5: "#059669",  // emerald   - excellent
 };
 
 // ── Journal Entries ───────────────────────────────────────────────────────────
@@ -766,7 +766,7 @@ export const NOTIFICATIONS: Notification[] = [
 ];
 
 // ── Scheduling ────────────────────────────────────────────────────────────────
-// Slot key: "${day}-${slot}" — day 0=Mon..4=Fri, slot 0=9:00..15=4:30pm (30-min steps)
+// Slot key: "${day}-${slot}" - day 0=Mon..4=Fri, slot 0=9:00..15=4:30pm (30-min steps)
 
 function genSlots(days: number[], ...ranges: [number, number][]): string[] {
   const out: string[] = [];

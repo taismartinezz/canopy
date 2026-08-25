@@ -5,7 +5,7 @@ import { X, ChevronRight, ChevronLeft } from "lucide-react";
 
 const LS_KEY = "canopy_onboarding_seen";
 
-// ── Step illustrations — thin-stroke SVG in Canopy logo style ─────────────────
+// ── Step illustrations - thin-stroke SVG in Canopy logo style ─────────────────
 
 function IllustrationCanopy() {
   return (
@@ -75,7 +75,7 @@ function IllustrationJournal() {
       <line x1="18" y1="27" x2="35" y2="27" stroke="var(--color-navy)" strokeWidth="1.2" strokeLinecap="round" opacity="0.45" />
       <line x1="18" y1="34" x2="35" y2="34" stroke="var(--color-navy)" strokeWidth="1.2" strokeLinecap="round" opacity="0.45" />
       <line x1="18" y1="41" x2="30" y2="41" stroke="var(--color-navy)" strokeWidth="1.2" strokeLinecap="round" opacity="0.35" />
-      {/* Lock icon on right page — signals privacy */}
+      {/* Lock icon on right page - signals privacy */}
       <rect x="48" y="32" width="16" height="12" rx="2" stroke="var(--color-navy)" strokeWidth="1.5" opacity="0.7" />
       <path d="M51 32 v-4 a5 5 0 0 1 10 0 v4" stroke="var(--color-navy)" strokeWidth="1.5" strokeLinecap="round" opacity="0.7" />
       <circle cx="56" cy="38" r="1.5" fill="var(--color-navy)" opacity="0.7" />
@@ -157,8 +157,8 @@ const STEPS: { title: string; body: string; hint: string; Icon: () => React.Reac
   },
   {
     Icon: IllustrationJournal,
-    title: "Journal — your private space",
-    body: "Write field notes, research reflections, and meeting prep in your personal journal. Journal entries are only visible to you — no teammate or PI can read them.",
+    title: "Journal - your private space",
+    body: "Write field notes, research reflections, and meeting prep in your personal journal. Journal entries are only visible to you - no teammate or PI can read them.",
     hint: "Journal is the only private space in Canopy. Tasks, literature, and bookmarks are shared with your lab.",
   },
   {

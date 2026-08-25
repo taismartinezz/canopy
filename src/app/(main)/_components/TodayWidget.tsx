@@ -21,7 +21,7 @@ const T = {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-/** "from Aug 15" / "from last month" — never "X days overdue" */
+/** "from Aug 15" / "from last month" - never "X days overdue" */
 function softLabel(iso: string): string {
   const due = new Date(iso);
   const now = new Date();
@@ -201,7 +201,7 @@ export function TodayWidget({
                   </div>
                 )}
 
-                {/* Snooze + Done — fade in on row hover */}
+                {/* Snooze + Done - fade in on row hover */}
                 <div className="today-row-actions" style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0, opacity: 0, transition: "opacity 0.15s" }}>
                   <button
                     onClick={() => snooze(item)}

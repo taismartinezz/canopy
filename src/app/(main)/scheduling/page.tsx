@@ -722,7 +722,7 @@ function AvailabilityTab({
         ))}
       </div>
 
-      {/* Per-person chips — shown in My Team view; deselect to customise */}
+      {/* Per-person chips - shown in My Team view; deselect to customise */}
       {scope === "all" && teamMembers.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {teamMembers.map(m => {
@@ -1040,7 +1040,7 @@ export default function SchedulingPage() {
   const [proposals, setProposals] = useState<MeetingProposal[]>([]);
   const [events, setEvents] = useState<ScheduleEvent[]>([]);
 
-  // Auth effect — resolve currentUserId once
+  // Auth effect - resolve currentUserId once
   useEffect(() => {
     if (!isSupabaseConfigured) {
       try {
@@ -1054,7 +1054,7 @@ export default function SchedulingPage() {
     });
   }, []);
 
-  // Team + availability + proposals — re-run when projectId or currentUserId resolves
+  // Team + availability + proposals - re-run when projectId or currentUserId resolves
   useEffect(() => {
     if (!projectId || !currentUserId) return;
     if (!isSupabaseConfigured) { setLoading(false); return; }
@@ -1194,7 +1194,7 @@ export default function SchedulingPage() {
     return () => { supabase.removeChannel(channel); };
   }, [projectId, currentUserId]);
 
-  // Events effect — fetches all lab/project events + current user's personal events
+  // Events effect - fetches all lab/project events + current user's personal events
   useEffect(() => {
     if (!projectId || !currentUserId || !isSupabaseConfigured) return;
 

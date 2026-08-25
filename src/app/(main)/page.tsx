@@ -324,7 +324,7 @@ export default function DashboardPage() {
 
   return (
     <div style={{ padding: "24px 28px", maxWidth: 1400, minHeight: "100%" }}>
-      {/* Greeting — plain text, no card */}
+      {/* Greeting - plain text, no card */}
       <div style={{ marginBottom: 24 }}>
         <h1 style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 22, margin: 0, lineHeight: 1.2, color: "var(--color-navy)" }}>
           {isLabHome || isPersonal ? (
@@ -338,7 +338,7 @@ export default function DashboardPage() {
           ) : displayTitle}
         </h1>
         <p style={{ fontSize: 13, color: textMuted, marginTop: 4, fontStyle: "italic" }}>
-          {todayStr} — a few things whenever you&rsquo;re ready. Nothing urgent.
+          {todayStr} - a few things whenever you&rsquo;re ready. Nothing urgent.
         </p>
       </div>
 
@@ -346,7 +346,7 @@ export default function DashboardPage() {
       <div style={{ display: "flex", gap: 20, alignItems: "flex-start" }}>
         {/* Left column */}
         <div style={{ flex: "1 1 0", minWidth: 0, display: "flex", flexDirection: "column", gap: 16 }}>
-          {/* Today — open tasks + reminders */}
+          {/* Today - open tasks + reminders */}
           <TodayWidget
             tasks={visibleTasks}
             reminders={overdueReminders}
@@ -355,7 +355,7 @@ export default function DashboardPage() {
             loading={loading}
           />
 
-          {/* Lab pulse — Opportunities + Lab Wins (Lab Home only) */}
+          {/* Lab pulse - Opportunities + Lab Wins (Lab Home only) */}
           {isLabHome && (
             <LabPulseWidget
               posts={dashPosts}
@@ -388,7 +388,7 @@ export default function DashboardPage() {
         />
       )}
 
-      {/* Task add modal (from column + buttons) — scoped to the active project when one is selected */}
+      {/* Task add modal (from column + buttons) - scoped to the active project when one is selected */}
       {modalStatus && (
         <TaskModal
           mode="add"

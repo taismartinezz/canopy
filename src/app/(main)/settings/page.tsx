@@ -200,7 +200,7 @@ export default function SettingsPage() {
   }, [profile]);
 
   const handleSaveSchedule = useCallback(async () => {
-    if (!isSupabaseConfigured) { showToast("Demo mode — settings not persisted."); return; }
+    if (!isSupabaseConfigured) { showToast("Demo mode - settings not persisted."); return; }
     setSavingSchedule(true);
     const { data: { session } } = await supabase.auth.getSession();
     const userId = session?.user?.id;
@@ -305,7 +305,7 @@ export default function SettingsPage() {
         </div>
       </section>
 
-      {/* Lab & Invite — PI only */}
+      {/* Lab & Invite - PI only */}
       {profile?.role === "pi" && (
         <section style={sectionStyle} aria-labelledby="settings-invite-heading">
           <div style={sectionHeaderStyle}>
@@ -506,7 +506,7 @@ export default function SettingsPage() {
             </label>
           ))}
           <p style={{ fontSize: 11, color: "var(--color-secondary)", marginTop: 4 }}>
-            Email delivery is active — emails are sent when the{" "}
+            Email delivery is active - emails are sent when the{" "}
             <code style={{ fontFamily: "monospace", fontSize: 10, backgroundColor: "var(--color-canvas)", padding: "1px 4px", borderRadius: 3 }}>RESEND_API_KEY</code>{" "}
             environment variable is configured.
           </p>

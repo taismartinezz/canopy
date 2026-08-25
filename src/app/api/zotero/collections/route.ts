@@ -1,4 +1,4 @@
-// Zotero Web API v3 proxy — fetches collections and group libraries.
+// Zotero Web API v3 proxy - fetches collections and group libraries.
 // Runs server-side to keep the API key out of browser network requests.
 
 export const runtime = "nodejs";

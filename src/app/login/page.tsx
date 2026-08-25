@@ -89,7 +89,7 @@ function AuthButton({
         padding: 0,
       }}
     >
-      {/* Icon — pinned 24px from left edge */}
+      {/* Icon - pinned 24px from left edge */}
       <span
         style={{
           position: "absolute",
@@ -102,7 +102,7 @@ function AuthButton({
       >
         {icon}
       </span>
-      {/* Label — centered in the full button width */}
+      {/* Label - centered in the full button width */}
       <span style={{ flex: 1, textAlign: "center" }}>{label}</span>
     </button>
   );
@@ -131,7 +131,7 @@ async function resolveProjectInvite(userId: string, userEmail: string) {
     return;
   }
 
-  // Insert sub_project membership (ON CONFLICT DO NOTHING — idempotent)
+  // Insert sub_project membership (ON CONFLICT DO NOTHING - idempotent)
   await supabase.from("sub_project_members").upsert(
     {
       sub_project_id: invite.sub_project_id as string,
@@ -207,11 +207,11 @@ export default function LoginPage() {
           .from("team_members").select("id").eq("user_id", session.user.id).maybeSingle();
         if (memberError) { setChecking(false); return; }
         if (member) {
-          // Normal lab member — resolve any pending project invite then go home
+          // Normal lab member - resolve any pending project invite then go home
           await resolveProjectInvite(session.user.id, session.user.email ?? "");
           router.replace("/");
         } else {
-          // No lab membership — check if they have a profile (external member or returning user)
+          // No lab membership - check if they have a profile (external member or returning user)
           const { data: profile } = await supabase
             .from("user_profiles").select("id").eq("id", session.user.id).maybeSingle();
           if (profile) {
@@ -576,7 +576,7 @@ export default function LoginPage() {
           </p>
         )}
 
-        {/* Forgot password — sign-in only */}
+        {/* Forgot password - sign-in only */}
         {mode === "signin" && !forgotOpen && (
           <div style={{ textAlign: "right", marginTop: 6 }}>
             <button

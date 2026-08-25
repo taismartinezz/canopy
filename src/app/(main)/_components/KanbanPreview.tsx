@@ -69,7 +69,7 @@ export function KanbanPreview({
   teamMembers: User[];
   userId: string;
   loading?: boolean;
-  // Legacy props kept for compatibility — no longer used
+  // Legacy props kept for compatibility - no longer used
   onTaskClick?: (task: Task) => void;
   onMoveTask?: (taskId: string, status: string) => void;
   onAddTask?: (status: string) => void;
