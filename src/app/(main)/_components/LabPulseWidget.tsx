@@ -145,7 +145,7 @@ function PostColumn({
                 style={{
                   flex: 1, fontSize: 12, color: T.textPrimary,
                   border: `1px solid ${T.border}`, borderRadius: 6, padding: "6px 8px",
-                  resize: "vertical", backgroundColor: "#111111",
+                  resize: "vertical", backgroundColor: "var(--color-surface-2)",
                   fontFamily: "inherit", outline: "none",
                 }}
               />

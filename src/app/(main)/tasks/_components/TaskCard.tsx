@@ -77,6 +77,7 @@ export function TaskCard({
           border: "1px solid var(--color-border)",
           borderRadius: 8,
           padding: "10px 12px",
+          overflow: "hidden",
           transition: "border-color 0.15s, box-shadow 0.15s",
         }}
       >
@@ -84,18 +85,18 @@ export function TaskCard({
           {task.title}
         </p>
         <div className="flex items-center justify-between gap-2">
-          <span style={{ fontSize: 12, color: "var(--color-secondary)" }}>
+          <span style={{ fontSize: 12, color: "var(--color-secondary)", flexShrink: 0 }}>
             {task.dueDate ? formatDate(task.dueDate) : "-"}
           </span>
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5" style={{ overflow: "hidden" }}>
             {showLabBadge && task.scope === "lab" && (
               <span style={{ fontSize: 10, fontWeight: 700, backgroundColor: "rgba(27,46,75,0.08)", color: "var(--color-navy)", padding: "1px 6px", borderRadius: 4, whiteSpace: "nowrap" }}>
                 Lab
               </span>
             )}
             <PriorityBadge priority={task.priority} />
+            <AssigneeStack ids={task.assigneeIds} size={20} users={teamMembers} />
           </div>
-          <AssigneeStack ids={task.assigneeIds} size={20} users={teamMembers} />
         </div>
         {subtaskProgress && subtaskProgress.total > 0 && (
           <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid rgba(27,46,75,0.07)" }}>
