@@ -2,6 +2,16 @@
 
 export type UserRole = "pi" | "researcher";
 
+/** A role defined within a single lab. Built-in: PI, Researcher. Custom: anything the PI adds. */
+export interface LabRole {
+  id: string;
+  projectId: string;
+  name: string;
+  permissionLevel: UserRole;
+  isSystem: boolean;
+  createdAt: string;
+}
+
 export interface User {
   id: string;
   name: string;
@@ -273,6 +283,7 @@ export interface TeamMember extends User {
   taskCounts: Record<TaskStatus, number>;
   weeklyUpdate?: string;
   weeklyUpdatedAt?: string;
+  labRoleName?: string;
 }
 
 // ── Activity Feed ─────────────────────────────────────────────────────────────

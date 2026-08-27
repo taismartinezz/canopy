@@ -2,40 +2,12 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Copy, Check, RefreshCw, User, Lock, Bell, Building2, Clock, Monitor, Moon, Sun, MapPin, Keyboard, BellOff } from "lucide-react";
+import { Copy, Check, RefreshCw, User, Lock, Bell, Building2, Clock, Monitor, Moon, Sun, Keyboard, BellOff, Plus, Pencil, Trash2, X, ChevronDown, Compass } from "lucide-react";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { showToast } from "@/components/ui/Toast";
 import { useTheme } from "@/context/ThemeContext";
-import type { WorkingHours } from "@/types";
-
-// ── Working-hours helpers ─────────────────────────────────────────────────────
-
-const DAY_LABELS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
-
-const DEFAULT_WORKING_HOURS: WorkingHours = {
-  "0": { start: "09:00", end: "17:00" },
-  "1": { start: "09:00", end: "17:00" },
-  "2": { start: "09:00", end: "17:00" },
-  "3": { start: "09:00", end: "17:00" },
-  "4": { start: "09:00", end: "17:00" },
-  "5": null,
-  "6": null,
-};
-
-const COMMON_TIMEZONES = [
-  "America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles",
-  "America/Anchorage", "America/Honolulu", "America/Toronto", "America/Vancouver",
-  "America/Mexico_City", "America/Sao_Paulo", "America/Buenos_Aires",
-  "Europe/London", "Europe/Dublin", "Europe/Lisbon",
-  "Europe/Paris", "Europe/Berlin", "Europe/Madrid", "Europe/Rome",
-  "Europe/Amsterdam", "Europe/Stockholm", "Europe/Warsaw", "Europe/Zurich",
-  "Europe/Helsinki", "Europe/Athens", "Europe/Istanbul",
-  "Africa/Cairo", "Africa/Johannesburg", "Africa/Lagos",
-  "Asia/Dubai", "Asia/Kolkata", "Asia/Dhaka", "Asia/Bangkok",
-  "Asia/Singapore", "Asia/Hong_Kong", "Asia/Shanghai", "Asia/Tokyo",
-  "Asia/Seoul", "Australia/Sydney", "Australia/Melbourne", "Pacific/Auckland",
-  "UTC",
-];
+import type { WorkingHours, LabRole } from "@/types";
+import { WorkingHoursEditor, DEFAULT_WORKING_HOURS } from "@/components/ui/WorkingHoursEditor";
 
 const sectionStyle: React.CSSProperties = {
   backgroundColor: "var(--color-surface)",
@@ -83,11 +55,19 @@ export default function SettingsPage() {
   const { theme, setTheme } = useTheme();
   const [profile, setProfile] = useState<any>(null);
   const [project, setProject] = useState<any>(null);
-  const [inviteCodes, setInviteCodes] = useState<{ id: string; code: string; used_by: string | null }[]>([]);
+  const [inviteCodes, setInviteCodes] = useState<{ id: string; code: string; used_by: string | null; lab_role_id: string | null }[]>([]);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [revealedCode, setRevealedCode] = useState<string | null>(null);
   const [generatingCode, setGeneratingCode] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  // Lab roles management
+  const [labRoles, setLabRoles] = useState<LabRole[]>([]);
+  const [newInviteRoleId, setNewInviteRoleId] = useState<string>("");
+  const [addingRole, setAddingRole] = useState(false);
+  const [newRoleName, setNewRoleName] = useState("");
+  const [renamingRoleId, setRenamingRoleId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
 
   // Notification preferences
   const [notifTaskAssigned, setNotifTaskAssigned] = useState(true);
@@ -144,13 +124,34 @@ export default function SettingsPage() {
           }
 
           if (prof?.role === "pi") {
-            const { data: codes } = await supabase
-              .from("invite_codes")
-              .select("id, code, used_by")
-              .eq("created_by", user.id)
-              .order("created_at", { ascending: false })
-              .limit(5);
+            const [{ data: codes }, { data: roles }] = await Promise.all([
+              supabase
+                .from("invite_codes")
+                .select("id, code, used_by, lab_role_id")
+                .eq("created_by", user.id)
+                .order("created_at", { ascending: false })
+                .limit(5),
+              supabase
+                .from("lab_roles")
+                .select("id, name, permission_level, is_system, created_at")
+                .eq("project_id", membership.project_id)
+                .order("is_system", { ascending: false })
+                .order("name"),
+            ]);
             if (codes) setInviteCodes(codes as typeof inviteCodes);
+            if (roles) {
+              setLabRoles(roles.map((r: { id: string; name: string; permission_level: string; is_system: boolean; created_at: string }) => ({
+                id: r.id,
+                projectId: membership.project_id,
+                name: r.name,
+                permissionLevel: r.permission_level as "pi" | "researcher",
+                isSystem: r.is_system,
+                createdAt: r.created_at,
+              })));
+              // Default invite role to first researcher role
+              const defaultRole = roles.find((r: { permission_level: string }) => r.permission_level === "researcher");
+              if (defaultRole) setNewInviteRoleId(defaultRole.id);
+            }
           }
         }
       } catch (err) {
@@ -180,12 +181,12 @@ export default function SettingsPage() {
     const code = "CANOPY-" + Math.random().toString(36).substring(2, 6).toUpperCase();
     const { data } = await supabase
       .from("invite_codes")
-      .insert({ code, project_id: project.id, created_by: user.id })
-      .select("id, code, used_by")
+      .insert({ code, project_id: project.id, created_by: user.id, lab_role_id: newInviteRoleId || null })
+      .select("id, code, used_by, lab_role_id")
       .single();
     if (data) setInviteCodes((prev) => [data as (typeof inviteCodes)[0], ...prev]);
     setGeneratingCode(false);
-  }, [project]);
+  }, [project, newInviteRoleId]);
 
   const handlePasswordReset = useCallback(async () => {
     if (!profile?.email) return;
@@ -315,6 +316,127 @@ export default function SettingsPage() {
             </h2>
           </div>
           <div style={{ padding: "20px" }}>
+
+            {/* Role management */}
+            {labRoles.length > 0 && (
+              <div style={{ marginBottom: 24 }}>
+                <p style={{ ...labelStyle, marginBottom: 10 }}>Lab roles</p>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {labRoles.map((role) => (
+                    <div key={role.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      {renamingRoleId === role.id ? (
+                        <>
+                          <input
+                            autoFocus
+                            value={renameValue}
+                            onChange={(e) => setRenameValue(e.target.value)}
+                            onKeyDown={async (e) => {
+                              if (e.key === "Enter" && renameValue.trim()) {
+                                await supabase.from("lab_roles").update({ name: renameValue.trim() }).eq("id", role.id);
+                                setLabRoles((prev) => prev.map((r) => r.id === role.id ? { ...r, name: renameValue.trim() } : r));
+                                setRenamingRoleId(null);
+                              } else if (e.key === "Escape") {
+                                setRenamingRoleId(null);
+                              }
+                            }}
+                            style={{ flex: 1, height: 34, border: "1px solid var(--color-navy)", borderRadius: 6, padding: "0 10px", fontSize: 13, fontFamily: "var(--font-roboto)", backgroundColor: "var(--color-canvas)", color: "var(--color-body)", outline: "none" }}
+                          />
+                          <button
+                            onClick={async () => {
+                              if (!renameValue.trim()) return;
+                              await supabase.from("lab_roles").update({ name: renameValue.trim() }).eq("id", role.id);
+                              setLabRoles((prev) => prev.map((r) => r.id === role.id ? { ...r, name: renameValue.trim() } : r));
+                              setRenamingRoleId(null);
+                            }}
+                            style={{ height: 34, padding: "0 12px", backgroundColor: "var(--color-btn-primary)", color: "#fff", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer" }}
+                          >Save</button>
+                          <button
+                            onClick={() => setRenamingRoleId(null)}
+                            style={{ height: 34, width: 34, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "transparent", border: "1px solid var(--color-border)", borderRadius: 6, cursor: "pointer" }}
+                          ><X size={13} color="var(--color-secondary)" /></button>
+                        </>
+                      ) : (
+                        <>
+                          <span style={{ flex: 1, fontSize: 13, color: "var(--color-body)" }}>
+                            {role.name}
+                            <span style={{ marginLeft: 8, fontSize: 11, color: "var(--color-secondary)", textTransform: "capitalize" }}>
+                              ({role.permissionLevel})
+                            </span>
+                            {role.isSystem && (
+                              <span style={{ marginLeft: 6, fontSize: 10, color: "var(--color-secondary)", border: "1px solid var(--color-border)", borderRadius: 3, padding: "0 4px" }}>built-in</span>
+                            )}
+                          </span>
+                          {!role.isSystem && (
+                            <>
+                              <button
+                                onClick={() => { setRenamingRoleId(role.id); setRenameValue(role.name); }}
+                                style={{ height: 30, width: 30, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "transparent", border: "1px solid var(--color-border)", borderRadius: 6, cursor: "pointer" }}
+                                aria-label={`Rename role ${role.name}`}
+                              ><Pencil size={12} color="var(--color-secondary)" /></button>
+                              <button
+                                onClick={async () => {
+                                  await supabase.from("lab_roles").delete().eq("id", role.id);
+                                  setLabRoles((prev) => prev.filter((r) => r.id !== role.id));
+                                  if (newInviteRoleId === role.id) setNewInviteRoleId("");
+                                }}
+                                style={{ height: 30, width: 30, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "transparent", border: "1px solid var(--color-border)", borderRadius: 6, cursor: "pointer" }}
+                                aria-label={`Delete role ${role.name}`}
+                              ><Trash2 size={12} color="var(--color-secondary)" /></button>
+                            </>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Add custom role */}
+                {addingRole ? (
+                  <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                    <input
+                      autoFocus
+                      value={newRoleName}
+                      onChange={(e) => setNewRoleName(e.target.value)}
+                      placeholder="Role name (e.g. Lab Manager)"
+                      onKeyDown={async (e) => {
+                        if (e.key === "Escape") { setAddingRole(false); setNewRoleName(""); }
+                      }}
+                      style={{ flex: 1, height: 34, border: "1px solid var(--color-border)", borderRadius: 6, padding: "0 10px", fontSize: 13, fontFamily: "var(--font-roboto)", backgroundColor: "var(--color-canvas)", color: "var(--color-body)", outline: "none" }}
+                    />
+                    <button
+                      onClick={async () => {
+                        if (!newRoleName.trim() || !project?.id) return;
+                        const { data: newRole } = await supabase
+                          .from("lab_roles")
+                          .insert({ project_id: project.id, name: newRoleName.trim(), permission_level: "researcher", is_system: false })
+                          .select("id, name, permission_level, is_system, created_at")
+                          .single();
+                        if (newRole) {
+                          setLabRoles((prev) => [...prev, { id: newRole.id, projectId: project.id, name: newRole.name, permissionLevel: newRole.permission_level as "pi" | "researcher", isSystem: newRole.is_system, createdAt: newRole.created_at }]);
+                        }
+                        setAddingRole(false);
+                        setNewRoleName("");
+                      }}
+                      style={{ height: 34, padding: "0 14px", backgroundColor: "var(--color-btn-primary)", color: "#fff", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer" }}
+                    >Add</button>
+                    <button
+                      onClick={() => { setAddingRole(false); setNewRoleName(""); }}
+                      style={{ height: 34, width: 34, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "transparent", border: "1px solid var(--color-border)", borderRadius: 6, cursor: "pointer" }}
+                    ><X size={13} color="var(--color-secondary)" /></button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setAddingRole(true)}
+                    style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--color-navy)", backgroundColor: "transparent", border: "none", cursor: "pointer", padding: 0, fontFamily: "var(--font-roboto)", fontWeight: 600 }}
+                  >
+                    <Plus size={13} />
+                    Add custom role
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Invite codes */}
             <p style={{ fontSize: 13, color: "var(--color-secondary)", marginBottom: 16 }}>
               Share an invite link so researchers can join your lab.
             </p>
@@ -323,6 +445,7 @@ export default function SettingsPage() {
               {inviteCodes.map((ic) => {
                 const fullLink = `${typeof window !== "undefined" ? window.location.origin : ""}/login?invite=${ic.code}`;
                 const isRevealed = revealedCode === ic.id;
+                const roleName = ic.lab_role_id ? labRoles.find((r) => r.id === ic.lab_role_id)?.name : null;
                 return (
                   <div key={ic.id} style={{ display: "flex", flexDirection: isMobile ? "column" : "row", alignItems: isMobile ? "stretch" : "center", gap: 8 }}>
                     <input
@@ -332,6 +455,11 @@ export default function SettingsPage() {
                       aria-label={`Invite link ${ic.code}`}
                     />
                     <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                      {roleName && (
+                        <span style={{ fontSize: 11, color: "var(--color-secondary)", whiteSpace: "nowrap", border: "1px solid var(--color-border)", borderRadius: 4, padding: "2px 6px" }}>
+                          {roleName}
+                        </span>
+                      )}
                       <button
                         onClick={() => setRevealedCode(isRevealed ? null : ic.id)}
                         style={{ minHeight: 44, height: 40, padding: "0 10px", display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "transparent", border: "1px solid var(--color-border)", borderRadius: 8, cursor: "pointer", fontSize: 11, fontFamily: "var(--font-roboto)", color: "var(--color-secondary)", whiteSpace: "nowrap" }}
@@ -359,14 +487,32 @@ export default function SettingsPage() {
               )}
             </div>
 
-            <button
-              onClick={handleGenerateCode}
-              disabled={generatingCode}
-              style={{ marginTop: 16, minHeight: 44, height: 38, padding: "0 16px", display: "flex", alignItems: "center", gap: 6, backgroundColor: "var(--color-btn-primary)", color: "#fff", border: "none", borderRadius: 8, fontFamily: "var(--font-roboto)", fontWeight: 600, fontSize: 13, cursor: "pointer" }}
-            >
-              <RefreshCw size={13} />
-              {generatingCode ? "Generating…" : "Generate new invite code"}
-            </button>
+            {/* Role picker + generate button */}
+            <div style={{ marginTop: 16, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              {labRoles.filter((r) => r.permissionLevel === "researcher").length > 1 && (
+                <div style={{ position: "relative" }}>
+                  <select
+                    value={newInviteRoleId}
+                    onChange={(e) => setNewInviteRoleId(e.target.value)}
+                    style={{ height: 38, border: "1px solid var(--color-border)", borderRadius: 8, padding: "0 28px 0 12px", fontSize: 13, fontFamily: "var(--font-roboto)", backgroundColor: "var(--color-canvas)", color: "var(--color-body)", outline: "none", cursor: "pointer", appearance: "none" }}
+                    aria-label="Role for new invite"
+                  >
+                    {labRoles.filter((r) => r.permissionLevel === "researcher").map((r) => (
+                      <option key={r.id} value={r.id}>{r.name}</option>
+                    ))}
+                  </select>
+                  <ChevronDown size={13} color="var(--color-secondary)" style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
+                </div>
+              )}
+              <button
+                onClick={handleGenerateCode}
+                disabled={generatingCode}
+                style={{ minHeight: 44, height: 38, padding: "0 16px", display: "flex", alignItems: "center", gap: 6, backgroundColor: "var(--color-btn-primary)", color: "#fff", border: "none", borderRadius: 8, fontFamily: "var(--font-roboto)", fontWeight: 600, fontSize: 13, cursor: "pointer" }}
+              >
+                <RefreshCw size={13} />
+                {generatingCode ? "Generating…" : "Generate new invite code"}
+              </button>
+            </div>
           </div>
         </section>
       )}
@@ -380,57 +526,12 @@ export default function SettingsPage() {
           </h2>
         </div>
         <div style={{ padding: "20px", display: "flex", flexDirection: "column", gap: 20 }}>
-
-          {/* Timezone */}
-          <div>
-            <label htmlFor="tz-select" style={labelStyle}>Time zone</label>
-            <select id="tz-select" value={timezone} onChange={e => setTimezone(e.target.value)}
-              style={{ ...readonlyInputStyle, backgroundColor: "var(--color-surface-2)", color: "var(--color-body)", cursor: "pointer", appearance: "auto" }}>
-              {COMMON_TIMEZONES.map(tz => <option key={tz} value={tz}>{tz.replace(/_/g, " ")}</option>)}
-            </select>
-            <p style={{ fontSize: 11, color: "var(--color-secondary)", marginTop: 4 }}>
-              Used for scheduling suggestions and (when enabled) the weekly digest email.
-            </p>
-          </div>
-
-          {/* Per-day working hours */}
-          <div>
-            <span style={labelStyle}>Working hours</span>
-            <p style={{ fontSize: 12, color: "var(--color-secondary)", marginTop: 0, marginBottom: 12 }}>
-              The &ldquo;Find best times&rdquo; feature in Scheduling will only suggest slots within these hours.
-            </p>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {DAY_LABELS.map((dayName, idx) => {
-                const key = String(idx);
-                const val = workingHours[key];
-                const isOn = val !== null && val !== undefined;
-                return (
-                  <div key={key} style={{ display: "flex", alignItems: "center", gap: 12, minHeight: 40 }}>
-                    <label style={{ display: "flex", alignItems: "center", gap: 8, width: isMobile ? 92 : 110, cursor: "pointer", flexShrink: 0 }}>
-                      <input type="checkbox" checked={isOn}
-                        onChange={e => setWorkingHours(prev => ({ ...prev, [key]: e.target.checked ? { start: "09:00", end: "17:00" } : null }))}
-                        style={{ width: 15, height: 15, accentColor: "var(--color-navy)", cursor: "pointer" }} />
-                      <span style={{ fontSize: 13, color: "var(--color-body)", fontWeight: isOn ? 500 : 400 }}>{dayName}</span>
-                    </label>
-                    {isOn ? (
-                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                        <input type="time" value={val!.start}
-                          onChange={e => setWorkingHours(prev => ({ ...prev, [key]: { ...(prev[key] as { start: string; end: string }), start: e.target.value } }))}
-                          style={{ height: 34, border: "1px solid var(--color-border)", borderRadius: 6, padding: "0 8px", fontSize: 13, fontFamily: "var(--font-roboto)", backgroundColor: "var(--color-surface-2)", color: "var(--color-body)", outline: "none" }} />
-                        <span style={{ fontSize: 12, color: "var(--color-secondary)" }}>to</span>
-                        <input type="time" value={val!.end}
-                          onChange={e => setWorkingHours(prev => ({ ...prev, [key]: { ...(prev[key] as { start: string; end: string }), end: e.target.value } }))}
-                          style={{ height: 34, border: "1px solid var(--color-border)", borderRadius: 6, padding: "0 8px", fontSize: 13, fontFamily: "var(--font-roboto)", backgroundColor: "var(--color-surface-2)", color: "var(--color-body)", outline: "none" }} />
-                      </div>
-                    ) : (
-                      <span style={{ fontSize: 12, color: "var(--color-secondary)", fontStyle: "italic" }}>Off</span>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
+          <WorkingHoursEditor
+            timezone={timezone}
+            onTimezoneChange={setTimezone}
+            workingHours={workingHours}
+            onWorkingHoursChange={setWorkingHours}
+          />
           <button onClick={handleSaveSchedule} disabled={savingSchedule}
             style={{ alignSelf: "flex-start", minHeight: 44, height: 38, padding: "0 20px", backgroundColor: savingSchedule ? "var(--color-border)" : "var(--color-btn-primary)", color: "#fff", border: "none", borderRadius: 8, fontFamily: "var(--font-roboto)", fontWeight: 600, fontSize: 13, cursor: savingSchedule ? "default" : "pointer" }}>
             {savingSchedule ? "Saving…" : "Save schedule settings"}
@@ -582,7 +683,7 @@ export default function SettingsPage() {
       {/* Tour section */}
       <section style={sectionStyle} aria-labelledby="settings-tour-heading">
         <div style={sectionHeaderStyle}>
-          <MapPin size={16} color="var(--color-secondary)" />
+          <Compass size={16} color="var(--color-secondary)" />
           <h2 id="settings-tour-heading" style={{ fontFamily: "var(--font-lora)", fontWeight: 500, fontSize: 15, color: "var(--color-body)", margin: 0 }}>
             Welcome Tour
           </h2>
