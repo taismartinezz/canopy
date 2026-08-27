@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Plus } from "lucide-react";
 import {
   TASKS, DASHBOARD_POSTS, SCHEDULE_EVENTS,
@@ -35,6 +36,8 @@ export default function DashboardPage() {
   const [dashPosts, setDashPosts]     = useState<DashboardPost[]>([]);
   const [overdueReminders, setOverdueReminders] = useState<OverdueReminder[]>([]);
   const [loading, setLoading]         = useState(isSupabaseConfigured);
+  const [newMenuOpen, setNewMenuOpen] = useState(false);
+  const router = useRouter();
 
   useEffect(() => {
     if (isSupabaseConfigured) {
@@ -341,23 +344,61 @@ export default function DashboardPage() {
               {todayStr}
             </p>
           </div>
-          <button
-            onClick={() => setModalStatus("todo")}
-            style={{
-              display: "flex", alignItems: "center", gap: 6,
-              height: 36, padding: "0 14px",
-              backgroundColor: accent, color: "#fff",
-              border: "none", borderRadius: 8,
-              fontFamily: "var(--font-roboto)", fontWeight: 600, fontSize: 13,
-              cursor: "pointer", flexShrink: 0, marginTop: 2,
-              transition: "opacity 0.15s",
-            }}
-            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.opacity = "0.85"; }}
-            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.opacity = "1"; }}
-          >
-            <Plus size={14} />
-            New Task
-          </button>
+          <div style={{ position: "relative", flexShrink: 0, marginTop: 2 }}>
+            <button
+              onClick={() => setNewMenuOpen((o) => !o)}
+              style={{
+                display: "flex", alignItems: "center", gap: 6,
+                height: 36, padding: "0 14px",
+                backgroundColor: accent, color: "#fff",
+                border: "none", borderRadius: 8,
+                fontFamily: "var(--font-roboto)", fontWeight: 600, fontSize: 13,
+                cursor: "pointer",
+                transition: "opacity 0.15s",
+              }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.opacity = "0.85"; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.opacity = "1"; }}
+            >
+              <Plus size={14} />
+              New
+            </button>
+            {newMenuOpen && (
+              <>
+                <div
+                  style={{ position: "fixed", inset: 0, zIndex: 999 }}
+                  onClick={() => setNewMenuOpen(false)}
+                />
+                <div style={{
+                  position: "absolute", top: "calc(100% + 6px)", right: 0,
+                  backgroundColor: "#1C1C1E",
+                  border: "1px solid rgba(84,84,88,0.65)",
+                  borderRadius: 10, padding: "4px 0",
+                  zIndex: 1000, minWidth: 150,
+                  boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
+                }}>
+                  {[
+                    { label: "Task", action: () => { setNewMenuOpen(false); setModalStatus("todo"); } },
+                    { label: "Reminder", action: () => { setNewMenuOpen(false); router.push("/reminders"); } },
+                  ].map(({ label, action }) => (
+                    <button
+                      key={label}
+                      onClick={action}
+                      style={{
+                        display: "block", width: "100%", textAlign: "left",
+                        padding: "9px 14px", fontSize: 13,
+                        color: "#F5F5F7", background: "none", border: "none",
+                        cursor: "pointer", fontFamily: "var(--font-roboto)",
+                      }}
+                      onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.06)"; }}
+                      onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "none"; }}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
         </div>
 
         {/* Summary stats */}
