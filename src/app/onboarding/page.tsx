@@ -22,21 +22,21 @@ const INPUT_STYLE: React.CSSProperties = {
   display: "block",
   width: "100%",
   height: 44,
-  border: "1px solid #DDE1E7",
+  border: "1px solid var(--color-border)",
   borderRadius: 8,
   padding: "0 14px",
   fontFamily: "var(--font-roboto)",
   fontWeight: 400,
   fontSize: 14,
-  color: "#2D2D2D",
+  color: "var(--color-body)",
   outline: "none",
   boxSizing: "border-box",
-  backgroundColor: "#fff",
+  backgroundColor: "var(--color-surface)",
 };
 
 const PAGE_WRAP: React.CSSProperties = {
   minHeight: "100dvh",
-  backgroundColor: "#F6F8FC",
+  backgroundColor: "var(--color-canvas)",
   display: "flex",
   flexDirection: "column",
   alignItems: "center",
@@ -46,8 +46,8 @@ const PAGE_WRAP: React.CSSProperties = {
 };
 
 const CARD_STYLE: React.CSSProperties = {
-  backgroundColor: "#ffffff",
-  border: "1px solid #DDE1E7",
+  backgroundColor: "var(--color-surface)",
+  border: "1px solid var(--color-border)",
   borderRadius: 10,
   maxWidth: 560,
   width: "100%",
@@ -78,15 +78,15 @@ function StepDots({ current, total }: { current: number; total: number }) {
         return (
           <div key={i} style={{ display: "flex", alignItems: "center" }}>
             {i > 0 && (
-              <div style={{ width: 44, height: 1, backgroundColor: "#DDE1E7" }} />
+              <div style={{ width: 44, height: 1, backgroundColor: "var(--color-border)" }} />
             )}
             <div
               style={{
                 width: 10,
                 height: 10,
                 borderRadius: "50%",
-                backgroundColor: done || active ? "#1B2E4B" : "#fff",
-                border: done || active ? "none" : "1px solid #DDE1E7",
+                backgroundColor: done || active ? "var(--color-navy)" : "var(--color-surface)",
+                border: done || active ? "none" : "1px solid var(--color-border)",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
@@ -113,7 +113,7 @@ function BackButton({ onClick }: { onClick: () => void }) {
         fontFamily: "var(--font-roboto)",
         fontWeight: 600,
         fontSize: 13,
-        color: "#1B2E4B",
+        color: "var(--color-navy)",
         background: "none",
         border: "none",
         cursor: "pointer",
@@ -146,7 +146,7 @@ function NavButton({
       style={{
         width: "100%",
         height: 44,
-        backgroundColor: disabled ? "#B8C4D4" : "#1B2E4B",
+        backgroundColor: disabled ? "var(--color-border)" : "var(--color-navy)",
         color: "#fff",
         border: "none",
         borderRadius: 8,
@@ -159,10 +159,10 @@ function NavButton({
         ...extraStyle,
       }}
       onMouseEnter={(e) => {
-        if (!disabled) (e.currentTarget as HTMLElement).style.backgroundColor = "#2E4A6F";
+        if (!disabled) (e.currentTarget as HTMLElement).style.backgroundColor = "var(--color-navy-hover)";
       }}
       onMouseLeave={(e) => {
-        if (!disabled) (e.currentTarget as HTMLElement).style.backgroundColor = disabled ? "#B8C4D4" : "#1B2E4B";
+        if (!disabled) (e.currentTarget as HTMLElement).style.backgroundColor = disabled ? "var(--color-border)" : "var(--color-navy)";
       }}
     >
       {children}
@@ -177,7 +177,7 @@ function FieldLabel({ children }: { children: React.ReactNode }) {
         fontFamily: "var(--font-roboto)",
         fontWeight: 600,
         fontSize: 13,
-        color: "#2D2D2D",
+        color: "var(--color-body)",
         margin: "0 0 6px",
       }}
     >
@@ -216,8 +216,8 @@ function TextInput({
       placeholder={placeholder}
       style={INPUT_STYLE}
       onKeyDown={onKeyDown}
-      onFocus={(e) => { e.currentTarget.style.borderColor = "#1B2E4B"; }}
-      onBlur={(e) => { e.currentTarget.style.borderColor = "#DDE1E7"; }}
+      onFocus={(e) => { e.currentTarget.style.borderColor = "var(--color-navy)"; }}
+      onBlur={(e) => { e.currentTarget.style.borderColor = "var(--color-border)"; }}
     />
   );
 }
@@ -230,7 +230,7 @@ function SectionTitle({ title, subtitle }: { title: string; subtitle?: string })
           fontFamily: "var(--font-lora)",
           fontWeight: 700,
           fontSize: 20,
-          color: "#1B2E4B",
+          color: "var(--color-navy)",
           margin: 0,
           lineHeight: 1.25,
         }}
@@ -243,7 +243,7 @@ function SectionTitle({ title, subtitle }: { title: string; subtitle?: string })
             fontFamily: "var(--font-roboto)",
             fontWeight: 400,
             fontSize: 13,
-            color: "#6B6B6B",
+            color: "var(--color-secondary)",
             marginTop: 6,
             marginBottom: 0,
             lineHeight: 1.5,
@@ -321,20 +321,20 @@ function WellbeingPreview({ role }: { role: "pi" | "researcher" }) {
   return (
     <div>
       {role === "pi" ? (
-        <p style={{ fontFamily: "var(--font-roboto)", fontSize: 13, color: "#6B6B6B", margin: "0 0 20px", lineHeight: 1.6 }}>
+        <p style={{ fontFamily: "var(--font-roboto)", fontSize: 13, color: "var(--color-secondary)", margin: "0 0 20px", lineHeight: 1.6 }}>
           Your team completes a brief weekly check-in. You'll see aggregated scores — never individual responses.
           Canopy only surfaces results when enough team members have responded, so every voice stays protected.
         </p>
       ) : (
-        <p style={{ fontFamily: "var(--font-roboto)", fontSize: 13, color: "#6B6B6B", margin: "0 0 20px", lineHeight: 1.6 }}>
+        <p style={{ fontFamily: "var(--font-roboto)", fontSize: 13, color: "var(--color-secondary)", margin: "0 0 20px", lineHeight: 1.6 }}>
           Each week, Canopy sends a short 3-question check-in. Your responses are private —
           only aggregated team insights are visible to your PI.
         </p>
       )}
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
         {SAMPLE_QUESTIONS.map((q, i) => (
-          <div key={i} style={{ padding: "14px 16px", backgroundColor: "rgba(27,46,75,0.03)", border: "1px solid #DDE1E7", borderRadius: 8 }}>
-            <p style={{ fontFamily: "var(--font-roboto)", fontSize: 13, color: "#2D2D2D", margin: "0 0 10px", lineHeight: 1.4 }}>{q}</p>
+          <div key={i} style={{ padding: "14px 16px", backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)", borderRadius: 8 }}>
+            <p style={{ fontFamily: "var(--font-roboto)", fontSize: 13, color: "var(--color-body)", margin: "0 0 10px", lineHeight: 1.4 }}>{q}</p>
             <div style={{ display: "flex", gap: 8 }}>
               {[1,2,3,4,5].map((v) => (
                 <button
@@ -344,9 +344,9 @@ function WellbeingPreview({ role }: { role: "pi" | "researcher" }) {
                     flex: 1,
                     height: 36,
                     borderRadius: 6,
-                    border: `1.5px solid ${sample[i] === v ? "#1B2E4B" : "#DDE1E7"}`,
-                    backgroundColor: sample[i] === v ? "#1B2E4B" : "#fff",
-                    color: sample[i] === v ? "#fff" : "#6B6B6B",
+                    border: `1.5px solid ${sample[i] === v ? "var(--color-navy)" : "var(--color-border)"}`,
+                    backgroundColor: sample[i] === v ? "var(--color-navy)" : "var(--color-surface)",
+                    color: sample[i] === v ? "#fff" : "var(--color-secondary)",
                     fontFamily: "var(--font-roboto)",
                     fontWeight: 700,
                     fontSize: 13,
@@ -359,13 +359,13 @@ function WellbeingPreview({ role }: { role: "pi" | "researcher" }) {
               ))}
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4 }}>
-              <span style={{ fontSize: 10, color: "#6B6B6B" }}>Not at all</span>
-              <span style={{ fontSize: 10, color: "#6B6B6B" }}>Very much</span>
+              <span style={{ fontSize: 10, color: "var(--color-secondary)" }}>Not at all</span>
+              <span style={{ fontSize: 10, color: "var(--color-secondary)" }}>Very much</span>
             </div>
           </div>
         ))}
       </div>
-      <p style={{ fontFamily: "var(--font-roboto)", fontSize: 11, color: "#6B6B6B", margin: "14px 0 0", textAlign: "center" }}>
+      <p style={{ fontFamily: "var(--font-roboto)", fontSize: 11, color: "var(--color-secondary)", margin: "14px 0 0", textAlign: "center" }}>
         ↑ Try it out — this is just a preview, nothing is recorded.
       </p>
     </div>
@@ -833,7 +833,7 @@ export default function OnboardingPage() {
               fontFamily: "var(--font-lora)",
               fontWeight: 700,
               fontSize: 22,
-              color: "#1B2E4B",
+              color: "var(--color-navy)",
               textAlign: "center",
               margin: "16px 0 8px",
             }}
@@ -845,7 +845,7 @@ export default function OnboardingPage() {
               fontFamily: "var(--font-roboto)",
               fontWeight: 400,
               fontSize: 14,
-              color: "#6B6B6B",
+              color: "var(--color-secondary)",
               textAlign: "center",
               margin: "0 0 32px",
             }}
@@ -865,8 +865,8 @@ export default function OnboardingPage() {
                     flex: "1 1 200px",
                     minHeight: 140,
                     padding: 24,
-                    backgroundColor: selected ? "rgba(27,46,75,0.04)" : "#fff",
-                    border: `${selected ? 2 : 1}px solid ${selected ? "#1B2E4B" : "#DDE1E7"}`,
+                    backgroundColor: selected ? "var(--color-navy-dim)" : "var(--color-surface)",
+                    border: `${selected ? 2 : 1}px solid ${selected ? "var(--color-navy)" : "var(--color-border)"}`,
                     borderRadius: 10,
                     cursor: "pointer",
                     textAlign: "left",
@@ -877,16 +877,16 @@ export default function OnboardingPage() {
                   }}
                 >
                   {r === "pi" ? (
-                    <Users size={28} color="#1B2E4B" />
+                    <Users size={28} color="var(--color-navy)" />
                   ) : (
-                    <BookOpen size={28} color="#1B2E4B" />
+                    <BookOpen size={28} color="var(--color-navy)" />
                   )}
                   <span
                     style={{
                       fontFamily: "var(--font-lora)",
                       fontWeight: 600,
                       fontSize: 15,
-                      color: "#1B2E4B",
+                      color: "var(--color-navy)",
                       display: "block",
                       marginTop: 12,
                     }}
@@ -898,7 +898,7 @@ export default function OnboardingPage() {
                       fontFamily: "var(--font-roboto)",
                       fontWeight: 400,
                       fontSize: 13,
-                      color: "#6B6B6B",
+                      color: "var(--color-secondary)",
                       lineHeight: 1.5,
                       display: "block",
                       marginTop: 6,
@@ -948,7 +948,7 @@ export default function OnboardingPage() {
           <Field label="Institution">
             <div ref={institutionRef} style={{ position: "relative" }}>
               <div style={{ position: "relative" }}>
-                <Search size={14} color="#6B6B6B" style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
+                <Search size={14} color="var(--color-secondary)" style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
                 <input
                   type="text"
                   value={institutionQuery || piInstitution}
@@ -972,7 +972,7 @@ export default function OnboardingPage() {
               {institutionOpen && institutionResults.length > 0 && (
                 <div style={{
                   position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 50,
-                  backgroundColor: "#fff", border: "1px solid #DDE1E7", borderRadius: 8,
+                  backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 8,
                   boxShadow: "0 4px 16px rgba(27,46,75,0.1)", maxHeight: 200, overflowY: "auto",
                 }}>
                   {institutionResults.map((r) => (
@@ -988,13 +988,13 @@ export default function OnboardingPage() {
                       style={{
                         display: "flex", flexDirection: "column", width: "100%", padding: "10px 14px",
                         border: "none", backgroundColor: "transparent", textAlign: "left", cursor: "pointer",
-                        borderBottom: "1px solid #DDE1E7",
+                        borderBottom: "1px solid var(--color-border)",
                       }}
-                      onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "#F6F8FC"; }}
+                      onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "var(--color-canvas)"; }}
                       onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "transparent"; }}
                     >
-                      <span style={{ fontSize: 13, color: "#2D2D2D", fontFamily: "var(--font-roboto)" }}>{r.name}</span>
-                      <span style={{ fontSize: 11, color: "#6B6B6B" }}>{r.country}</span>
+                      <span style={{ fontSize: 13, color: "var(--color-body)", fontFamily: "var(--font-roboto)" }}>{r.name}</span>
+                      <span style={{ fontSize: 11, color: "var(--color-secondary)" }}>{r.country}</span>
                     </button>
                   ))}
                 </div>
@@ -1056,7 +1056,7 @@ export default function OnboardingPage() {
         <div style={PAGE_WRAP}>
           <div style={{ ...CARD_STYLE, textAlign: "center", padding: "56px 40px" }}>
             <CanopyLogo size={28} />
-            <p style={{ fontFamily: "var(--font-lora)", fontWeight: 600, fontSize: 18, color: "#1B2E4B", marginTop: 20, marginBottom: 0 }}>
+            <p style={{ fontFamily: "var(--font-lora)", fontWeight: 600, fontSize: 18, color: "var(--color-navy)", marginTop: 20, marginBottom: 0 }}>
               Joined! Setting up your workspace...
             </p>
           </div>
@@ -1083,7 +1083,7 @@ export default function OnboardingPage() {
           </Field>
 
           {!autoFilled && (
-            <p style={{ fontFamily: "var(--font-roboto)", fontSize: 12, color: "#6B6B6B", margin: "-8px 0 0" }}>
+            <p style={{ fontFamily: "var(--font-roboto)", fontSize: 12, color: "var(--color-secondary)", margin: "-8px 0 0" }}>
               Don&apos;t have a code? Ask your PI to share an invite link from their Lab Settings.
             </p>
           )}
@@ -1119,16 +1119,16 @@ export default function OnboardingPage() {
                 onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddEmail(); } }}
                 placeholder="Add email"
                 aria-label="Add team member email"
-                style={{ ...INPUT_STYLE, flex: 1, borderColor: emailInputError ? "#C0392B" : "#DDE1E7" }}
-                onFocus={(e) => { e.currentTarget.style.borderColor = emailInputError ? "#C0392B" : "#1B2E4B"; }}
-                onBlur={(e) => { e.currentTarget.style.borderColor = emailInputError ? "#C0392B" : "#DDE1E7"; }}
+                style={{ ...INPUT_STYLE, flex: 1, borderColor: emailInputError ? "#C0392B" : "var(--color-border)" }}
+                onFocus={(e) => { e.currentTarget.style.borderColor = emailInputError ? "#C0392B" : "var(--color-navy)"; }}
+                onBlur={(e) => { e.currentTarget.style.borderColor = emailInputError ? "#C0392B" : "var(--color-border)"; }}
               />
               <button
                 onClick={handleAddEmail}
                 style={{
                   height: 44,
                   padding: "0 16px",
-                  backgroundColor: "#1B2E4B",
+                  backgroundColor: "var(--color-navy)",
                   color: "#fff",
                   border: "none",
                   borderRadius: 8,
@@ -1139,8 +1139,8 @@ export default function OnboardingPage() {
                   whiteSpace: "nowrap",
                   flexShrink: 0,
                 }}
-                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "#2E4A6F"; }}
-                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "#1B2E4B"; }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "var(--color-navy-hover)"; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "var(--color-navy)"; }}
               >
                 Add
               </button>
@@ -1163,12 +1163,12 @@ export default function OnboardingPage() {
                     alignItems: "center",
                     gap: 8,
                     padding: "6px 10px",
-                    backgroundColor: "rgba(27,46,75,0.04)",
-                    border: "1px solid #DDE1E7",
+                    backgroundColor: "var(--color-navy-dim)",
+                    border: "1px solid var(--color-border)",
                     borderRadius: 8,
                     fontFamily: "var(--font-roboto)",
                     fontSize: 13,
-                    color: "#2D2D2D",
+                    color: "var(--color-body)",
                   }}
                 >
                   <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
@@ -1178,7 +1178,7 @@ export default function OnboardingPage() {
                   <select
                     value={emailRoles[email] ?? "researcher"}
                     onChange={(e) => setEmailRoles((prev) => ({ ...prev, [email]: e.target.value as "pi" | "researcher" }))}
-                    style={{ fontSize: 11, border: "1px solid #DDE1E7", borderRadius: 5, padding: "2px 4px", backgroundColor: "#fff", fontFamily: "var(--font-roboto)", cursor: "pointer", flexShrink: 0 }}
+                    style={{ fontSize: 11, border: "1px solid var(--color-border)", borderRadius: 5, padding: "2px 4px", backgroundColor: "var(--color-surface)", fontFamily: "var(--font-roboto)", cursor: "pointer", flexShrink: 0 }}
                     aria-label={`Role for ${email}`}
                   >
                     <option value="researcher">Researcher</option>
@@ -1190,14 +1190,14 @@ export default function OnboardingPage() {
                     style={{
                       flexShrink: 0,
                       background: "none",
-                      border: "1px solid #DDE1E7",
+                      border: "1px solid var(--color-border)",
                       borderRadius: 6,
                       cursor: "pointer",
                       padding: "2px 8px",
                       fontFamily: "var(--font-roboto)",
                       fontSize: 11,
                       fontWeight: 600,
-                      color: copiedEmail === email ? "#2E7D52" : "#1B2E4B",
+                      color: copiedEmail === email ? "#2E7D52" : "var(--color-navy)",
                       whiteSpace: "nowrap",
                     }}
                   >
@@ -1217,7 +1217,7 @@ export default function OnboardingPage() {
                       border: "none",
                       cursor: "pointer",
                       padding: 0,
-                      color: "#6B6B6B",
+                      color: "var(--color-secondary)",
                       minWidth: 16,
                       minHeight: 16,
                       flexShrink: 0,
@@ -1243,9 +1243,9 @@ export default function OnboardingPage() {
               fontFamily: "var(--font-roboto)",
               fontWeight: 600,
               fontSize: 13,
-              color: copied ? "#2E7D52" : "#1B2E4B",
+              color: copied ? "#2E7D52" : "var(--color-navy)",
               background: "none",
-              border: "1px solid #DDE1E7",
+              border: "1px solid var(--color-border)",
               borderRadius: 8,
               padding: "10px 16px",
               cursor: "pointer",
@@ -1253,10 +1253,10 @@ export default function OnboardingPage() {
               transition: "color 150ms ease, border-color 150ms ease",
             }}
             onMouseEnter={(e) => {
-              if (!copied) (e.currentTarget as HTMLElement).style.borderColor = "#B8C4D4";
+              if (!copied) (e.currentTarget as HTMLElement).style.borderColor = "var(--color-secondary)";
             }}
             onMouseLeave={(e) => {
-              (e.currentTarget as HTMLElement).style.borderColor = "#DDE1E7";
+              (e.currentTarget as HTMLElement).style.borderColor = "var(--color-border)";
             }}
           >
             {copied ? "✓ Copied!" : "Copy invite link"}
@@ -1266,7 +1266,7 @@ export default function OnboardingPage() {
               style={{
                 fontFamily: "var(--font-roboto)",
                 fontSize: 11,
-                color: "#6B6B6B",
+                color: "var(--color-secondary)",
                 margin: 0,
                 letterSpacing: revealLink ? 0 : "0.05em",
               }}
@@ -1278,7 +1278,7 @@ export default function OnboardingPage() {
             <button
               type="button"
               onClick={() => setRevealLink((v) => !v)}
-              style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "var(--font-roboto)", fontSize: 11, color: "#1B2E4B", textDecoration: "underline", padding: 0 }}
+              style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "var(--font-roboto)", fontSize: 11, color: "var(--color-navy)", textDecoration: "underline", padding: 0 }}
             >
               {revealLink ? "Hide" : "Reveal"}
             </button>
@@ -1297,7 +1297,7 @@ export default function OnboardingPage() {
               fontFamily: "var(--font-roboto)",
               fontWeight: 400,
               fontSize: 13,
-              color: "#6B6B6B",
+              color: "var(--color-secondary)",
               background: "none",
               border: "none",
               cursor: "pointer",
@@ -1375,21 +1375,21 @@ export default function OnboardingPage() {
               style={{
                 display: "block",
                 width: "100%",
-                border: "1px solid #DDE1E7",
+                border: "1px solid var(--color-border)",
                 borderRadius: 8,
                 padding: "10px 14px",
                 fontFamily: "var(--font-roboto)",
                 fontWeight: 400,
                 fontSize: 14,
-                color: "#2D2D2D",
+                color: "var(--color-body)",
                 outline: "none",
                 boxSizing: "border-box",
                 resize: "vertical",
                 minHeight: 88,
                 lineHeight: 1.5,
               }}
-              onFocus={(e) => { e.currentTarget.style.borderColor = "#1B2E4B"; }}
-              onBlur={(e) => { e.currentTarget.style.borderColor = "#DDE1E7"; }}
+              onFocus={(e) => { e.currentTarget.style.borderColor = "var(--color-navy)"; }}
+              onBlur={(e) => { e.currentTarget.style.borderColor = "var(--color-border)"; }}
             />
           </div>
 

@@ -63,7 +63,15 @@ export default function SettingsPage() {
 
   // Lab roles management
   const [labRoles, setLabRoles] = useState<LabRole[]>([]);
+  const [myLabRoleName, setMyLabRoleName] = useState<string | null>(null);
   const [newInviteRoleId, setNewInviteRoleId] = useState<string>("");
+  // Email invite flow
+  const [emailInviteInput, setEmailInviteInput] = useState("");
+  const [emailInviteRoleId, setEmailInviteRoleId] = useState<string>("");
+  const [emailInviteError, setEmailInviteError] = useState("");
+  const [emailInviteResults, setEmailInviteResults] = useState<{ email: string; code: string }[]>([]);
+  const [sendingEmailInvites, setSendingEmailInvites] = useState(false);
+  const [copiedEmailCode, setCopiedEmailCode] = useState<string | null>(null);
   const [addingRole, setAddingRole] = useState(false);
   const [newRoleName, setNewRoleName] = useState("");
   const [renamingRoleId, setRenamingRoleId] = useState<string | null>(null);
@@ -123,6 +131,22 @@ export default function SettingsPage() {
             setQuietHoursEnd((userSettings.quiet_hours_end as string) ?? "08:00");
           }
 
+          // Fetch current user's lab role name for the Profile section
+          const { data: memberRow } = await supabase
+            .from("team_members")
+            .select("lab_role_id")
+            .eq("user_id", user.id)
+            .eq("project_id", membership.project_id)
+            .maybeSingle();
+          if (memberRow?.lab_role_id) {
+            const { data: roleRow } = await supabase
+              .from("lab_roles")
+              .select("name")
+              .eq("id", memberRow.lab_role_id as string)
+              .maybeSingle();
+            if (roleRow?.name) setMyLabRoleName(roleRow.name as string);
+          }
+
           if (prof?.role === "pi") {
             const [{ data: codes }, { data: roles }] = await Promise.all([
               supabase
@@ -150,7 +174,10 @@ export default function SettingsPage() {
               })));
               // Default invite role to first researcher role
               const defaultRole = roles.find((r: { permission_level: string }) => r.permission_level === "researcher");
-              if (defaultRole) setNewInviteRoleId(defaultRole.id);
+              if (defaultRole) {
+                setNewInviteRoleId(defaultRole.id);
+                setEmailInviteRoleId(defaultRole.id);
+              }
             }
           }
         }
@@ -187,6 +214,47 @@ export default function SettingsPage() {
     if (data) setInviteCodes((prev) => [data as (typeof inviteCodes)[0], ...prev]);
     setGeneratingCode(false);
   }, [project, newInviteRoleId]);
+
+  const handleSendEmailInvites = useCallback(async () => {
+    if (!project?.id) return;
+    const rawEmails = emailInviteInput
+      .split(/[\n,]+/)
+      .map((e) => e.trim().toLowerCase())
+      .filter(Boolean);
+    const valid = rawEmails.filter((e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e));
+    const invalid = rawEmails.filter((e) => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e));
+    if (invalid.length > 0) {
+      setEmailInviteError(`Invalid email${invalid.length > 1 ? "s" : ""}: ${invalid.join(", ")}`);
+      return;
+    }
+    if (valid.length === 0) { setEmailInviteError("Enter at least one email address."); return; }
+    setEmailInviteError("");
+    setSendingEmailInvites(true);
+    const { data: { session } } = await supabase.auth.getSession();
+    const user = session?.user ?? null;
+    if (!user) { setSendingEmailInvites(false); return; }
+
+    const results: { email: string; code: string }[] = [];
+    for (const email of valid) {
+      const code = "CANOPY-" + Math.random().toString(36).substring(2, 6).toUpperCase();
+      const { error } = await supabase.from("invite_codes").insert({
+        code, project_id: project.id, created_by: user.id,
+        invited_email: email,
+        lab_role_id: emailInviteRoleId || null,
+      });
+      if (!error) results.push({ email, code });
+    }
+    setEmailInviteResults((prev) => [...prev, ...results]);
+    setEmailInviteInput("");
+    setSendingEmailInvites(false);
+  }, [project, emailInviteInput, emailInviteRoleId]);
+
+  const handleCopyEmailCode = useCallback(async (code: string) => {
+    const link = `${window.location.origin}/login?invite=${code}`;
+    await navigator.clipboard.writeText(link).catch(() => {});
+    setCopiedEmailCode(code);
+    setTimeout(() => setCopiedEmailCode((prev) => (prev === code ? null : prev)), 2000);
+  }, []);
 
   const handlePasswordReset = useCallback(async () => {
     if (!profile?.email) return;
@@ -264,7 +332,7 @@ export default function SettingsPage() {
             </div>
             <div>
               <label style={labelStyle}>Role</label>
-              <input readOnly value={profile?.role === "pi" ? "Principal Investigator" : "Researcher"} style={readonlyInputStyle} aria-label="Role (read-only)" />
+              <input readOnly value={myLabRoleName ?? (profile?.role === "pi" ? "Principal Investigator" : "Researcher")} style={readonlyInputStyle} aria-label="Role (read-only)" />
             </div>
           </div>
           {profile?.bio && (
@@ -436,9 +504,82 @@ export default function SettingsPage() {
               </div>
             )}
 
+            {/* Email invite flow */}
+            <div style={{ marginBottom: 24 }}>
+              <p style={{ ...labelStyle, marginBottom: 10 }}>Invite by email</p>
+              <p style={{ fontSize: 12, color: "var(--color-secondary)", marginBottom: 12, marginTop: 0 }}>
+                Enter one or more email addresses. Each gets a unique invite link.
+              </p>
+              <textarea
+                value={emailInviteInput}
+                onChange={(e) => { setEmailInviteInput(e.target.value); setEmailInviteError(""); }}
+                placeholder={"colleague@university.edu\nanother@lab.org"}
+                rows={3}
+                style={{
+                  display: "block", width: "100%", padding: "10px 12px", boxSizing: "border-box",
+                  fontSize: 13, fontFamily: "var(--font-roboto)", color: "var(--color-body)",
+                  backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)",
+                  borderRadius: 8, resize: "vertical", outline: "none", lineHeight: 1.5,
+                }}
+                onFocus={(e) => { e.currentTarget.style.borderColor = "var(--color-navy)"; }}
+                onBlur={(e) => { e.currentTarget.style.borderColor = "var(--color-border)"; }}
+              />
+              {emailInviteError && (
+                <p style={{ fontSize: 12, color: "var(--color-error, #dc2626)", margin: "4px 0 0" }}>{emailInviteError}</p>
+              )}
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
+                {labRoles.length > 0 && (
+                  <div style={{ position: "relative" }}>
+                    <select
+                      value={emailInviteRoleId}
+                      onChange={(e) => setEmailInviteRoleId(e.target.value)}
+                      style={{ height: 36, border: "1px solid var(--color-border)", borderRadius: 8, padding: "0 28px 0 12px", fontSize: 13, fontFamily: "var(--font-roboto)", backgroundColor: "var(--color-canvas)", color: "var(--color-body)", outline: "none", cursor: "pointer", appearance: "none" }}
+                      aria-label="Role for email invites"
+                    >
+                      {labRoles.map((r) => (
+                        <option key={r.id} value={r.id}>{r.name}</option>
+                      ))}
+                    </select>
+                    <ChevronDown size={13} color="var(--color-secondary)" style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
+                  </div>
+                )}
+                <button
+                  onClick={handleSendEmailInvites}
+                  disabled={sendingEmailInvites || !emailInviteInput.trim()}
+                  style={{ minHeight: 36, height: 36, padding: "0 16px", display: "flex", alignItems: "center", gap: 6, backgroundColor: "var(--color-btn-primary)", color: "#fff", border: "none", borderRadius: 8, fontFamily: "var(--font-roboto)", fontWeight: 600, fontSize: 13, cursor: sendingEmailInvites || !emailInviteInput.trim() ? "default" : "pointer", opacity: sendingEmailInvites || !emailInviteInput.trim() ? 0.6 : 1 }}
+                >
+                  {sendingEmailInvites ? "Generating…" : "Generate invite links"}
+                </button>
+              </div>
+
+              {/* Results */}
+              {emailInviteResults.length > 0 && (
+                <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 6 }}>
+                  {emailInviteResults.map(({ email, code }) => {
+                    const roleName = emailInviteRoleId ? labRoles.find((r) => r.id === emailInviteRoleId)?.name : null;
+                    return (
+                      <div key={code} style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                        <span style={{ fontSize: 13, color: "var(--color-body)", minWidth: 0, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{email}</span>
+                        {roleName && (
+                          <span style={{ fontSize: 11, color: "var(--color-secondary)", border: "1px solid var(--color-border)", borderRadius: 4, padding: "2px 6px", flexShrink: 0 }}>{roleName}</span>
+                        )}
+                        <button
+                          onClick={() => handleCopyEmailCode(code)}
+                          style={{ height: 30, padding: "0 10px", display: "flex", alignItems: "center", gap: 5, backgroundColor: "transparent", border: "1px solid var(--color-border)", borderRadius: 6, cursor: "pointer", fontSize: 11, fontWeight: 600, color: copiedEmailCode === code ? "#2E7D52" : "var(--color-navy)", flexShrink: 0, fontFamily: "var(--font-roboto)", whiteSpace: "nowrap" }}
+                        >
+                          {copiedEmailCode === code ? <Check size={12} color="#2E7D52" /> : <Copy size={12} />}
+                          {copiedEmailCode === code ? "Copied!" : "Copy link"}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
             {/* Invite codes */}
             <p style={{ fontSize: 13, color: "var(--color-secondary)", marginBottom: 16 }}>
-              Share an invite link so researchers can join your lab.
+              Or share a general invite link (any role, anyone with the link can join):
             </p>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -489,7 +630,7 @@ export default function SettingsPage() {
 
             {/* Role picker + generate button */}
             <div style={{ marginTop: 16, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-              {labRoles.filter((r) => r.permissionLevel === "researcher").length > 1 && (
+              {labRoles.length > 0 && (
                 <div style={{ position: "relative" }}>
                   <select
                     value={newInviteRoleId}
@@ -497,7 +638,7 @@ export default function SettingsPage() {
                     style={{ height: 38, border: "1px solid var(--color-border)", borderRadius: 8, padding: "0 28px 0 12px", fontSize: 13, fontFamily: "var(--font-roboto)", backgroundColor: "var(--color-canvas)", color: "var(--color-body)", outline: "none", cursor: "pointer", appearance: "none" }}
                     aria-label="Role for new invite"
                   >
-                    {labRoles.filter((r) => r.permissionLevel === "researcher").map((r) => (
+                    {labRoles.map((r) => (
                       <option key={r.id} value={r.id}>{r.name}</option>
                     ))}
                   </select>

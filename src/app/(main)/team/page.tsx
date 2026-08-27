@@ -4,9 +4,9 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { CURRENT_USER_ID, TEAM_MEMBERS, formatRelativeTime, getStoredUser, getStoredProject } from "@/lib/mock-data";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { useProject } from "@/context/ProjectContext";
-import type { TeamMember, TaskStatus } from "@/types";
+import type { TeamMember, TaskStatus, LabRole } from "@/types";
 import Avatar from "@/components/ui/Avatar";
-import { Video, X, Edit3, Check, Users, TrendingUp, ShieldCheck, Plus, Phone, Globe, Lock } from "lucide-react";
+import { Video, X, Edit3, Check, Users, TrendingUp, ShieldCheck, Plus, Phone, Globe, Lock, ChevronDown } from "lucide-react";
 import {
   getRegistryResources, getInstitutionName, hasNoCounselingResources, INSTITUTION_OPTIONS,
 } from "@/lib/support/institutions";
@@ -65,7 +65,7 @@ function WellbeingRollupPanel({ rows, overdueCount, totalMembers, minRespondents
       <div style={{ padding: "14px 18px" }}>
         {weeks.length === 0 ? (
           <p style={{ fontSize: 12, color: "var(--color-secondary)", margin: 0 }}>
-            Not enough data yet -- check-ins from at least {minRespondents} opted-in member{minRespondents === 1 ? "" : "s"} are required to show aggregates.
+            Not enough data yet — check-ins from at least {minRespondents} member{minRespondents === 1 ? "" : "s"} are required to show aggregates.
           </p>
         ) : (
           <>
@@ -137,12 +137,12 @@ function WellbeingRollupPanel({ rows, overdueCount, totalMembers, minRespondents
         {overdueCount !== null && totalMembers !== null && (
           <div style={{ display: "flex", alignItems: "center", gap: 6, paddingTop: 10, borderTop: "1px solid var(--color-border)", marginTop: 4 }}>
             <span style={{ fontSize: 11, color: "var(--color-secondary)" }}>
-              <strong style={{ color: "var(--color-body)" }}>{overdueCount}</strong> open tasks across {totalMembers} opted-in member{totalMembers === 1 ? "" : "s"}
+              <strong style={{ color: "var(--color-body)" }}>{overdueCount}</strong> open tasks across {totalMembers} member{totalMembers === 1 ? "" : "s"}
             </span>
           </div>
         )}
         <p style={{ fontSize: 10, color: "var(--color-secondary)", marginTop: 8, marginBottom: 0 }}>
-          Aggregated from opted-in members only. Individual responses are never shown.
+          Aggregated anonymously. Individual responses are never shown.
         </p>
       </div>
     </div>
@@ -185,8 +185,17 @@ function MeetingModal({ onClose }: { onClose: () => void }) {
 
 // ── Member profile panel ──────────────────────────────────────────────────────
 
-function MemberPanel({ member, onClose }: { member: TeamMember; onClose: () => void }) {
+function MemberPanel({
+  member, onClose, isPi, labRoles, onRoleChange,
+}: {
+  member: TeamMember;
+  onClose: () => void;
+  isPi: boolean;
+  labRoles: LabRole[];
+  onRoleChange: (memberId: string, roleId: string | null, roleName: string | null) => void;
+}) {
   const [isMobile, setIsMobile] = useState(false);
+  const [savingRole, setSavingRole] = useState(false);
 
   useEffect(() => {
     function check() { setIsMobile(window.innerWidth < 768); }
@@ -219,9 +228,34 @@ function MemberPanel({ member, onClose }: { member: TeamMember; onClose: () => v
               <Avatar user={member} size={48} />
               <div>
                 <h2 style={{ fontFamily: "var(--font-lora)", fontWeight: 600, fontSize: 17, color: "var(--color-body)", margin: 0 }}>{member.name}</h2>
-                <p style={{ fontSize: 12, color: "var(--color-secondary)", marginTop: 3, textTransform: "capitalize" }}>
-                  {member.labRoleName ?? (member.role === "pi" ? "Principal Investigator" : "Researcher")}
-                </p>
+                {isPi && labRoles.length > 0 ? (
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4, position: "relative" }}>
+                    <select
+                      defaultValue={labRoles.find((r) => r.name === member.labRoleName)?.id ?? ""}
+                      disabled={savingRole}
+                      onChange={async (e) => {
+                        const roleId = e.target.value || null;
+                        const roleName = labRoles.find((r) => r.id === roleId)?.name ?? null;
+                        setSavingRole(true);
+                        await supabase.from("team_members").update({ lab_role_id: roleId }).eq("user_id", member.id);
+                        setSavingRole(false);
+                        onRoleChange(member.id, roleId, roleName);
+                      }}
+                      style={{ fontSize: 12, color: "var(--color-secondary)", backgroundColor: "transparent", border: "none", outline: "none", cursor: "pointer", padding: 0, fontFamily: "var(--font-roboto)", appearance: "none", paddingRight: 14 }}
+                      aria-label={`Role for ${member.name}`}
+                    >
+                      {labRoles.map((r) => (
+                        <option key={r.id} value={r.id}>{r.name}</option>
+                      ))}
+                    </select>
+                    <ChevronDown size={11} color="var(--color-secondary)" style={{ position: "absolute", right: 0, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
+                    {savingRole && <span style={{ fontSize: 10, color: "var(--color-secondary)" }}>Saving…</span>}
+                  </div>
+                ) : (
+                  <p style={{ fontSize: 12, color: "var(--color-secondary)", marginTop: 3, textTransform: "capitalize" }}>
+                    {member.labRoleName ?? (member.role === "pi" ? "Principal Investigator" : "Researcher")}
+                  </p>
+                )}
               </div>
             </div>
             <button onClick={onClose} className="flex items-center justify-center rounded-lg hover:bg-[rgba(27,46,75,0.06)]" style={{ width: 44, height: 44 }} aria-label="Close">
@@ -555,6 +589,7 @@ export default function TeamPage() {
   const [showAddResource, setShowAddResource] = useState(false);
   const [newResource, setNewResource] = useState<Partial<LabResource>>({});
   const [savingResource, setSavingResource] = useState(false);
+  const [labRoles, setLabRoles] = useState<LabRole[]>([]);
   const closeMemberPanel = useCallback(() => setSelectedMember(null), []);
   const closeMeetingModal = useCallback(() => setMeetingModalOpen(false), []);
 
@@ -602,13 +637,25 @@ export default function TeamPage() {
           .maybeSingle(),
         supabase
           .from("lab_roles")
-          .select("id, name")
-          .eq("project_id", projectId),
+          .select("id, name, permission_level, is_system, created_at")
+          .eq("project_id", projectId)
+          .order("is_system", { ascending: false })
+          .order("name"),
       ]);
 
       const labRoleMap: Record<string, string> = {};
       for (const r of labRolesData ?? []) {
         labRoleMap[(r as { id: string; name: string }).id] = (r as { id: string; name: string }).name;
+      }
+      if (labRolesData) {
+        setLabRoles(labRolesData.map((r) => ({
+          id: (r as { id: string }).id,
+          projectId,
+          name: (r as { name: string }).name,
+          permissionLevel: (r as { permission_level: string }).permission_level as "pi" | "researcher",
+          isSystem: (r as { is_system: boolean }).is_system,
+          createdAt: (r as { created_at: string }).created_at,
+        })));
       }
 
       // Override the localStorage-cached name with the real value from the DB.
@@ -936,7 +983,18 @@ export default function TeamPage() {
 
       </div>
 
-      {selectedMember && <MemberPanel member={selectedMember} onClose={closeMemberPanel} />}
+      {selectedMember && (
+        <MemberPanel
+          member={selectedMember}
+          onClose={closeMemberPanel}
+          isPi={isPi}
+          labRoles={labRoles}
+          onRoleChange={(memberId, _roleId, roleName) => {
+            setTeam((prev) => prev.map((m) => m.id === memberId ? { ...m, labRoleName: roleName ?? undefined } : m));
+            setSelectedMember((prev) => prev && prev.id === memberId ? { ...prev, labRoleName: roleName ?? undefined } : prev);
+          }}
+        />
+      )}
       {meetingModalOpen && <MeetingModal onClose={closeMeetingModal} />}
       {showMembersModal && activeScope === "project" && subProjectId && projectId && (() => {
         const activeSp = subProjects.find((sp) => sp.id === subProjectId);
