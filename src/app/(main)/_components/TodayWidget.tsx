@@ -12,10 +12,10 @@ import type { OverdueReminder } from "./NeedsAttentionWidget";
 // ── Design tokens (scoped to this widget) ─────────────────────────────────────
 
 const T = {
-  card:        "#1C1C1E",
-  border:      "rgba(84,84,88,0.65)",
-  textPrimary: "#F5F5F7",
-  textMuted:   "#8E8E93",
+  card:        "var(--color-surface)",
+  border:      "var(--color-border)",
+  textPrimary: "var(--color-body)",
+  textMuted:   "var(--color-secondary)",
   accent:      "#0A84FF",
   radius:      11,
 };

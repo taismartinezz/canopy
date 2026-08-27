@@ -65,21 +65,11 @@ export function TaskCard({
   return (
     <div
       ref={setNodeRef}
-      style={style}
+      style={{ ...style, overflow: "hidden", borderRadius: 8 }}
       {...attributes}
       {...listeners}
       className="group relative cursor-pointer"
       onClick={onClick}
-      onMouseEnter={(e) => {
-        const el = e.currentTarget as HTMLElement;
-        el.style.borderColor = "#B8C4D4";
-        el.style.boxShadow = "0 3px 10px rgba(27,46,75,0.09)";
-      }}
-      onMouseLeave={(e) => {
-        const el = e.currentTarget as HTMLElement;
-        el.style.borderColor = "var(--color-border)";
-        el.style.boxShadow = "";
-      }}
     >
       <div
         style={{

@@ -6,7 +6,7 @@ import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { useProject } from "@/context/ProjectContext";
 import type { TeamMember, TaskStatus, LabRole } from "@/types";
 import Avatar from "@/components/ui/Avatar";
-import { Video, X, Edit3, Check, Users, TrendingUp, ShieldCheck, Plus, Phone, Globe, Lock, ChevronDown } from "lucide-react";
+import { Video, X, Edit3, Check, Users, TrendingUp, ShieldCheck, Plus, Phone, Globe, Lock, ChevronDown, ChevronRight } from "lucide-react";
 import {
   getRegistryResources, getInstitutionName, hasNoCounselingResources, INSTITUTION_OPTIONS,
 } from "@/lib/support/institutions";
@@ -65,7 +65,7 @@ function WellbeingRollupPanel({ rows, overdueCount, totalMembers, minRespondents
       <div style={{ padding: "14px 18px" }}>
         {weeks.length === 0 ? (
           <p style={{ fontSize: 12, color: "var(--color-secondary)", margin: 0 }}>
-            Not enough data yet — check-ins from at least {minRespondents} member{minRespondents === 1 ? "" : "s"} are required to show aggregates.
+            Not enough data yet. Check-ins from at least {minRespondents} member{minRespondents === 1 ? "" : "s"} are required to show aggregates.
           </p>
         ) : (
           <>
@@ -229,26 +229,28 @@ function MemberPanel({
               <div>
                 <h2 style={{ fontFamily: "var(--font-lora)", fontWeight: 600, fontSize: 17, color: "var(--color-body)", margin: 0 }}>{member.name}</h2>
                 {isPi && labRoles.length > 0 ? (
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4, position: "relative" }}>
-                    <select
-                      defaultValue={labRoles.find((r) => r.name === member.labRoleName)?.id ?? ""}
-                      disabled={savingRole}
-                      onChange={async (e) => {
-                        const roleId = e.target.value || null;
-                        const roleName = labRoles.find((r) => r.id === roleId)?.name ?? null;
-                        setSavingRole(true);
-                        await supabase.from("team_members").update({ lab_role_id: roleId }).eq("user_id", member.id);
-                        setSavingRole(false);
-                        onRoleChange(member.id, roleId, roleName);
-                      }}
-                      style={{ fontSize: 12, color: "var(--color-secondary)", backgroundColor: "transparent", border: "none", outline: "none", cursor: "pointer", padding: 0, fontFamily: "var(--font-roboto)", appearance: "none", paddingRight: 14 }}
-                      aria-label={`Role for ${member.name}`}
-                    >
-                      {labRoles.map((r) => (
-                        <option key={r.id} value={r.id}>{r.name}</option>
-                      ))}
-                    </select>
-                    <ChevronDown size={11} color="var(--color-secondary)" style={{ position: "absolute", right: 0, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6 }}>
+                    <div style={{ position: "relative" }}>
+                      <select
+                        defaultValue={labRoles.find((r) => r.name === member.labRoleName)?.id ?? ""}
+                        disabled={savingRole}
+                        onChange={async (e) => {
+                          const roleId = e.target.value || null;
+                          const roleName = labRoles.find((r) => r.id === roleId)?.name ?? null;
+                          setSavingRole(true);
+                          await supabase.from("team_members").update({ lab_role_id: roleId }).eq("user_id", member.id);
+                          setSavingRole(false);
+                          onRoleChange(member.id, roleId, roleName);
+                        }}
+                        style={{ height: 30, fontSize: 12, color: "var(--color-body)", backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)", borderRadius: 6, outline: "none", cursor: savingRole ? "default" : "pointer", fontFamily: "var(--font-roboto)", appearance: "none", padding: "0 24px 0 8px" }}
+                        aria-label={`Role for ${member.name}`}
+                      >
+                        {labRoles.map((r) => (
+                          <option key={r.id} value={r.id}>{r.name}</option>
+                        ))}
+                      </select>
+                      <ChevronDown size={11} color="var(--color-secondary)" style={{ position: "absolute", right: 7, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
+                    </div>
                     {savingRole && <span style={{ fontSize: 10, color: "var(--color-secondary)" }}>Saving…</span>}
                   </div>
                 ) : (
@@ -304,14 +306,22 @@ function MemberCard({ member, onClick, isCurrentUser }: { member: TeamMember; on
   const totalTasks = Object.values(member.taskCounts).reduce((a, b) => a + b, 0);
 
   return (
-    <button onClick={onClick} className="text-left w-full transition-shadow"
-      style={{ backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 10, padding: "20px 20px 16px", cursor: "pointer" }}
-      onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.boxShadow = "var(--shadow-card)"; }}
-      onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.boxShadow = ""; }}
+    <button onClick={onClick} className="text-left w-full"
+      style={{ backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 10, padding: "20px 20px 16px", cursor: "pointer", transition: "box-shadow 0.15s, border-color 0.15s" }}
+      onMouseEnter={(e) => {
+        const el = e.currentTarget as HTMLElement;
+        el.style.boxShadow = "var(--shadow-card)";
+        el.style.borderColor = "var(--color-navy)";
+      }}
+      onMouseLeave={(e) => {
+        const el = e.currentTarget as HTMLElement;
+        el.style.boxShadow = "";
+        el.style.borderColor = "var(--color-border)";
+      }}
     >
       <div className="flex items-center gap-3 mb-4">
         <Avatar user={member} size={44} />
-        <div>
+        <div style={{ flex: 1, minWidth: 0 }}>
           <p style={{ fontSize: 14, fontWeight: 600, color: "var(--color-body)", lineHeight: 1.2 }}>
             {member.name}
             {isCurrentUser && <span style={{ fontSize: 11, fontWeight: 400, color: "var(--color-secondary)", marginLeft: 6 }}>(you)</span>}
@@ -320,6 +330,7 @@ function MemberCard({ member, onClick, isCurrentUser }: { member: TeamMember; on
             {member.labRoleName ?? (member.role === "pi" ? "PI" : "Researcher")}
           </p>
         </div>
+        <ChevronRight size={14} color="var(--color-secondary)" style={{ flexShrink: 0, opacity: 0.5 }} />
       </div>
       <div className="grid grid-cols-2 gap-1.5 mb-4">
         {(Object.entries(member.taskCounts) as [TaskStatus, number][]).map(([status, count]) => (
