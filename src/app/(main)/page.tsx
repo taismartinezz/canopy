@@ -382,8 +382,6 @@ export default function DashboardPage() {
   const todayStr = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
   const timeOfDay = (() => { const h = new Date().getHours(); return h < 12 ? "morning" : h < 17 ? "afternoon" : "evening"; })();
 
-  const todayDateStr = new Date().toISOString().split("T")[0];
-
   const isLabHome = activeScope === "lab";
   const isPersonal = activeScope === "personal";
   const activeSubProject = !isLabHome && activeScope === "project"
@@ -394,8 +392,6 @@ export default function DashboardPage() {
     ? tasks
     : tasks.filter((t) => t.scope === "project" && t.subProjectId === subProjectId);
 
-  const openTasksCount = visibleTasks.filter((t) => t.status !== "done").length;
-  const upcomingEventsCount = dashEvents.filter((e) => e.date >= todayDateStr).length;
   // Match /reminders page: lab reminders only in lab scope, personal only in personal scope,
   // sub-project scope shows no cross-project reminders (scope is "project" in the DB, not fetched here).
   const visibleReminders = isLabHome
@@ -449,8 +445,6 @@ export default function DashboardPage() {
     setModalStatus(null);
   }, []);
 
-  // Design tokens for the dark dashboard wrapper
-  const accent = "#0A84FF";
   const textMuted = "var(--color-secondary)";
 
   return (
@@ -464,7 +458,7 @@ export default function DashboardPage() {
                 <>
                   Good {timeOfDay},{" "}
                   {currentUserFirstName
-                    ? <span style={{ color: accent }}>{currentUserFirstName}</span>
+                    ? <span style={{ color: "var(--color-navy)" }}>{currentUserFirstName}</span>
                     : null
                   }
                 </>
@@ -480,7 +474,7 @@ export default function DashboardPage() {
               style={{
                 display: "flex", alignItems: "center", gap: 6,
                 height: 36, padding: "0 14px",
-                backgroundColor: accent, color: "#fff",
+                backgroundColor: "var(--color-btn-primary)", color: "#fff",
                 border: "none", borderRadius: 8,
                 fontFamily: "var(--font-roboto)", fontWeight: 600, fontSize: 13,
                 cursor: "pointer",
@@ -531,29 +525,6 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Summary stats */}
-        {!loading && (
-          <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
-            <span style={{
-              display: "inline-flex", alignItems: "center", gap: 5,
-              fontSize: 12, fontWeight: 500, color: textMuted,
-              padding: "4px 10px", borderRadius: 6,
-              border: "1px solid var(--color-border)",
-            }}>
-              <span style={{ width: 6, height: 6, borderRadius: "50%", backgroundColor: accent, flexShrink: 0 }} />
-              {openTasksCount} open task{openTasksCount !== 1 ? "s" : ""}
-            </span>
-            <span style={{
-              display: "inline-flex", alignItems: "center", gap: 5,
-              fontSize: 12, fontWeight: 500, color: textMuted,
-              padding: "4px 10px", borderRadius: 6,
-              border: "1px solid var(--color-border)",
-            }}>
-              <span style={{ width: 6, height: 6, borderRadius: "50%", backgroundColor: "#30D158", flexShrink: 0 }} />
-              {upcomingEventsCount} upcoming event{upcomingEventsCount !== 1 ? "s" : ""}
-            </span>
-          </div>
-        )}
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
