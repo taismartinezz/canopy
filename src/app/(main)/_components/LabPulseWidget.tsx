@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Link from "next/link";
 import { Plus } from "lucide-react";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { CURRENT_USER_ID, getUser } from "@/lib/mock-data";
@@ -128,12 +127,9 @@ function PostColumn({
         })}
 
         {allOfType.length > 4 && !showForm && (
-          <Link
-            href={type === "opportunity" ? "/opportunities" : "/wins"}
-            style={{ fontSize: 12, color: T.accent, textDecoration: "none", display: "block", marginTop: 4 }}
-          >
-            View all {allOfType.length} →
-          </Link>
+          <p style={{ fontSize: 11, color: T.textMuted, margin: "4px 0 0" }}>
+            +{allOfType.length - 4} more
+          </p>
         )}
 
         {showForm && (

@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
-import { useRouter } from "next/navigation";
 import { Plus } from "lucide-react";
 import {
   TASKS, DASHBOARD_POSTS, SCHEDULE_EVENTS,
@@ -18,6 +17,137 @@ import { TeamActivityWidget } from "./_components/TeamActivityWidget";
 import type { OverdueReminder } from "./_components/NeedsAttentionWidget";
 import { TodayWidget } from "./_components/TodayWidget";
 import { LabPulseWidget } from "./_components/LabPulseWidget";
+
+// ── Add Reminder modal ────────────────────────────────────────────────────────
+
+const MR = {
+  card:        "#1C1C1E",
+  border:      "rgba(84,84,88,0.65)",
+  textPrimary: "#F5F5F7",
+  textMuted:   "#8E8E93",
+  accent:      "#0A84FF",
+};
+
+function AddReminderModal({
+  onClose, projectId, userId, teamMembers,
+}: {
+  onClose: () => void;
+  projectId: string;
+  userId: string;
+  teamMembers: User[];
+}) {
+  const [title, setTitle] = useState("");
+  const [date, setDate]   = useState("");
+  const [time, setTime]   = useState("");
+  const [assigneeId, setAssigneeId] = useState(userId);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) { if (e.key === "Escape") onClose(); }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  async function handleSave() {
+    if (!title.trim()) return;
+    setSaving(true);
+    const dueAt = date ? `${date}T${time || "09:00"}:00` : null;
+    if (isSupabaseConfigured && projectId && userId) {
+      await supabase.from("reminders").insert({
+        user_id: userId,
+        project_id: projectId,
+        title: title.trim(),
+        due_at: dueAt,
+        assignee_id: assigneeId !== userId ? assigneeId : null,
+        email_enabled: false,
+        sent: false,
+        completed: false,
+        scope: "lab",
+      });
+    }
+    setSaving(false);
+    onClose();
+  }
+
+  const inputStyle: React.CSSProperties = {
+    display: "block", width: "100%", boxSizing: "border-box", height: 40,
+    border: `1px solid ${MR.border}`, borderRadius: 8, padding: "0 12px",
+    fontSize: 14, color: MR.textPrimary, backgroundColor: "#2C2C2E",
+    fontFamily: "var(--font-roboto)", outline: "none",
+  };
+  const labelStyle: React.CSSProperties = {
+    display: "block", fontSize: 12, fontWeight: 600, color: MR.textMuted, marginBottom: 6,
+  };
+
+  return (
+    <div
+      style={{ position: "fixed", inset: 0, zIndex: 50, backgroundColor: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}
+      onClick={onClose}
+    >
+      <div
+        style={{ backgroundColor: MR.card, border: `1px solid ${MR.border}`, borderRadius: 12, padding: "28px 28px 24px", width: "100%", maxWidth: 420, boxShadow: "0 24px 64px rgba(0,0,0,0.5)" }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 style={{ fontFamily: "var(--font-lora)", fontWeight: 600, fontSize: 18, color: MR.textPrimary, margin: "0 0 20px" }}>
+          Add Reminder
+        </h2>
+
+        <div style={{ marginBottom: 14 }}>
+          <label style={labelStyle}>Title</label>
+          <input
+            autoFocus
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter" && title.trim()) handleSave(); }}
+            placeholder="Reminder title"
+            style={inputStyle}
+          />
+        </div>
+
+        <div style={{ display: "flex", gap: 10, marginBottom: teamMembers.length > 1 ? 14 : 20 }}>
+          <div style={{ flex: 1 }}>
+            <label style={labelStyle}>Date (optional)</label>
+            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={{ ...inputStyle, fontSize: 13 }} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <label style={labelStyle}>Time (optional)</label>
+            <input
+              type="time" value={time} onChange={(e) => setTime(e.target.value)} disabled={!date}
+              style={{ ...inputStyle, fontSize: 13, color: date ? MR.textPrimary : MR.textMuted, opacity: date ? 1 : 0.5 }}
+            />
+          </div>
+        </div>
+
+        {teamMembers.length > 1 && (
+          <div style={{ marginBottom: 20 }}>
+            <label style={labelStyle}>Assignee</label>
+            <select value={assigneeId} onChange={(e) => setAssigneeId(e.target.value)} style={{ ...inputStyle, fontSize: 13 }}>
+              {teamMembers.map((m) => (
+                <option key={m.id} value={m.id}>{m.name}{m.id === userId ? " (you)" : ""}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+          <button
+            onClick={onClose}
+            style={{ height: 36, padding: "0 14px", fontSize: 13, color: MR.textMuted, background: "none", border: `1px solid ${MR.border}`, borderRadius: 8, cursor: "pointer", fontFamily: "var(--font-roboto)" }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={!title.trim() || saving}
+            style={{ height: 36, padding: "0 16px", fontSize: 13, fontWeight: 600, color: "#fff", backgroundColor: title.trim() && !saving ? MR.accent : "rgba(84,84,88,0.5)", border: "none", borderRadius: 8, cursor: title.trim() && !saving ? "pointer" : "default", fontFamily: "var(--font-roboto)" }}
+          >
+            {saving ? "Saving…" : "Add Reminder"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ── Dashboard page ────────────────────────────────────────────────────────────
 
@@ -37,7 +167,7 @@ export default function DashboardPage() {
   const [overdueReminders, setOverdueReminders] = useState<OverdueReminder[]>([]);
   const [loading, setLoading]         = useState(isSupabaseConfigured);
   const [newMenuOpen, setNewMenuOpen] = useState(false);
-  const router = useRouter();
+  const [reminderModalOpen, setReminderModalOpen] = useState(false);
 
   useEffect(() => {
     if (isSupabaseConfigured) {
@@ -378,7 +508,7 @@ export default function DashboardPage() {
                 }}>
                   {[
                     { label: "Task", action: () => { setNewMenuOpen(false); setModalStatus("todo"); } },
-                    { label: "Reminder", action: () => { setNewMenuOpen(false); router.push("/reminders"); } },
+                    { label: "Reminder", action: () => { setNewMenuOpen(false); setReminderModalOpen(true); } },
                   ].map(({ label, action }) => (
                     <button
                       key={label}
@@ -413,25 +543,23 @@ export default function DashboardPage() {
               <span style={{ width: 6, height: 6, borderRadius: "50%", backgroundColor: accent, flexShrink: 0 }} />
               {openTasksCount} open task{openTasksCount !== 1 ? "s" : ""}
             </span>
-            {upcomingEventsCount > 0 && (
-              <span style={{
-                display: "inline-flex", alignItems: "center", gap: 5,
-                fontSize: 12, fontWeight: 500, color: textMuted,
-                padding: "4px 10px", borderRadius: 6,
-                border: "1px solid rgba(84,84,88,0.3)",
-              }}>
-                <span style={{ width: 6, height: 6, borderRadius: "50%", backgroundColor: "#30D158", flexShrink: 0 }} />
-                {upcomingEventsCount} upcoming event{upcomingEventsCount !== 1 ? "s" : ""}
-              </span>
-            )}
+            <span style={{
+              display: "inline-flex", alignItems: "center", gap: 5,
+              fontSize: 12, fontWeight: 500, color: textMuted,
+              padding: "4px 10px", borderRadius: 6,
+              border: "1px solid rgba(84,84,88,0.3)",
+            }}>
+              <span style={{ width: 6, height: 6, borderRadius: "50%", backgroundColor: "#30D158", flexShrink: 0 }} />
+              {upcomingEventsCount} upcoming event{upcomingEventsCount !== 1 ? "s" : ""}
+            </span>
           </div>
         )}
       </div>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-        {/* Row 1: Today + Team Activity side by side */}
-        <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+        {/* Row 1: Recent + Team Activity side by side, stretch to equal height */}
+        <div style={{ display: "flex", gap: 20, alignItems: "stretch" }}>
+          <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
             <TodayWidget
               tasks={visibleTasks}
               reminders={visibleReminders}
@@ -440,7 +568,7 @@ export default function DashboardPage() {
               loading={loading}
             />
           </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
             <TeamActivityWidget
               rows={visibleActivity}
               teamMembers={teamMembers}
@@ -482,6 +610,15 @@ export default function DashboardPage() {
           scope={activeSubProject ? "project" : "lab"}
           subProjectId={activeSubProject?.id ?? null}
           subProjects={subProjects}
+        />
+      )}
+
+      {reminderModalOpen && (
+        <AddReminderModal
+          onClose={() => setReminderModalOpen(false)}
+          projectId={projectId}
+          userId={userId}
+          teamMembers={teamMembers}
         />
       )}
 
