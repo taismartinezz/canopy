@@ -6,6 +6,7 @@ import { Check, ChevronDown } from "lucide-react";
 import type { Task, User } from "@/types";
 import Avatar from "@/components/ui/Avatar";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
+import { useUndoToast } from "@/context/UndoToastContext";
 import type { OverdueReminder } from "./NeedsAttentionWidget";
 
 // ── Design tokens (scoped to this widget) ─────────────────────────────────────
@@ -65,6 +66,7 @@ export function TodayWidget({
 }) {
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
   const [snoozed, setSnoozed] = useState<Set<string>>(new Set());
+  const { show: showUndo } = useUndoToast();
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -91,26 +93,38 @@ export function TodayWidget({
     // chronological: most-recent first (least-overdue at top)
     .sort((a, b) => new Date(b.dueIso).getTime() - new Date(a.dueIso).getTime());
 
-  async function markDone(item: OpenItem) {
+  function markDone(item: OpenItem) {
     setDismissed((prev) => new Set(prev).add(item.id));
-    if (!isSupabaseConfigured) return;
-    if (item.kind === "reminder") {
-      await supabase.from("reminders").update({ completed: true }).eq("id", item.id);
-    } else {
-      await supabase.from("tasks").update({ status: "done" }).eq("id", item.id);
-    }
+    showUndo(
+      `Marked "${item.title}" as done`,
+      () => setDismissed((prev) => { const s = new Set(prev); s.delete(item.id); return s; }),
+      async () => {
+        if (!isSupabaseConfigured) return;
+        if (item.kind === "reminder") {
+          await supabase.from("reminders").update({ completed: true }).eq("id", item.id);
+        } else {
+          await supabase.from("tasks").update({ status: "done" }).eq("id", item.id);
+        }
+      },
+    );
   }
 
-  async function snooze(item: OpenItem) {
+  function snooze(item: OpenItem) {
     setSnoozed((prev) => new Set(prev).add(item.id));
     const newDate = new Date();
     newDate.setDate(newDate.getDate() + 3);
-    if (!isSupabaseConfigured) return;
-    if (item.kind === "reminder") {
-      await supabase.from("reminders").update({ due_at: newDate.toISOString() }).eq("id", item.id);
-    } else {
-      await supabase.from("tasks").update({ due_date: newDate.toISOString().split("T")[0] }).eq("id", item.id);
-    }
+    showUndo(
+      `"${item.title}" snoozed 3 days`,
+      () => setSnoozed((prev) => { const s = new Set(prev); s.delete(item.id); return s; }),
+      async () => {
+        if (!isSupabaseConfigured) return;
+        if (item.kind === "reminder") {
+          await supabase.from("reminders").update({ due_at: newDate.toISOString() }).eq("id", item.id);
+        } else {
+          await supabase.from("tasks").update({ due_date: newDate.toISOString().split("T")[0] }).eq("id", item.id);
+        }
+      },
+    );
   }
 
   const cardStyle: React.CSSProperties = {
