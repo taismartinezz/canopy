@@ -64,6 +64,7 @@ export function TeamActivityWidget({
     border: `1px solid ${T.border}`,
     borderRadius: T.radius,
     overflow: "hidden",
+    height: "100%",
   };
 
   if (loading) {
@@ -94,8 +95,8 @@ export function TeamActivityWidget({
       </div>
 
       {rows.length === 0 ? (
-        <div style={{ padding: "14px 20px" }}>
-          <p style={{ fontSize: 13, color: T.textMuted, margin: 0 }}>No recent activity.</p>
+        <div style={{ padding: "28px 20px" }}>
+          <p style={{ fontSize: 13, color: T.textMuted, margin: 0 }}>No activity in the last 7 days.</p>
         </div>
       ) : (
         <div>

@@ -132,6 +132,7 @@ export function TodayWidget({
     border: `1px solid ${T.border}`,
     borderRadius: T.radius,
     overflow: "hidden",
+    height: "100%",
   };
 
   if (loading) {
@@ -231,7 +232,7 @@ export function TodayWidget({
       {all.length > 5 && (
         <div style={{ padding: "10px 20px" }}>
           <Link href="/tasks" style={{ fontSize: 12, color: T.accent, textDecoration: "none" }}>
-            View all {all.length} items →
+            View all {all.length} tasks and reminders →
           </Link>
         </div>
       )}
