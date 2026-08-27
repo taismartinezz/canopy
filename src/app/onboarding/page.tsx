@@ -322,13 +322,12 @@ function WellbeingPreview({ role }: { role: "pi" | "researcher" }) {
     <div>
       {role === "pi" ? (
         <p style={{ fontFamily: "var(--font-roboto)", fontSize: 13, color: "var(--color-secondary)", margin: "0 0 20px", lineHeight: 1.6 }}>
-          Your team completes a brief weekly check-in. You'll see aggregated scores — never individual responses.
+          Your team completes a brief weekly check-in. You'll see aggregated scores, never individual responses.
           Canopy only surfaces results when enough team members have responded, so every voice stays protected.
         </p>
       ) : (
         <p style={{ fontFamily: "var(--font-roboto)", fontSize: 13, color: "var(--color-secondary)", margin: "0 0 20px", lineHeight: 1.6 }}>
-          Each week, Canopy sends a short 3-question check-in. Your responses are private —
-          only aggregated team insights are visible to your PI.
+          Each week, Canopy sends a short 3-question check-in. Your responses are private. Only aggregated team insights are visible to your PI.
         </p>
       )}
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -366,7 +365,7 @@ function WellbeingPreview({ role }: { role: "pi" | "researcher" }) {
         ))}
       </div>
       <p style={{ fontFamily: "var(--font-roboto)", fontSize: 11, color: "var(--color-secondary)", margin: "14px 0 0", textAlign: "center" }}>
-        ↑ Try it out — this is just a preview, nothing is recorded.
+        ↑ Try it out. This is just a preview, nothing is recorded.
       </p>
     </div>
   );
@@ -1071,7 +1070,7 @@ export default function OnboardingPage() {
           <StepDots current={2} total={5} />
           <SectionTitle
             title="Join your lab"
-            subtitle={autoFilled ? "Your invite code is ready — just confirm below." : "Enter the invite code or paste the invite link your PI shared with you."}
+            subtitle={autoFilled ? "Your invite code is ready. Just confirm below." : "Enter the invite code or paste the invite link your PI shared with you."}
           />
 
           <Field label="Invite code">

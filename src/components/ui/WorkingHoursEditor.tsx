@@ -245,7 +245,7 @@ export function WorkingHoursEditor({
           fontSize: 13,
         }}>
           <span style={{ color: "var(--color-body)" }}>
-            Detected: <strong style={{ color: "var(--color-navy)" }}>{detectedTz.current}</strong> — looks right?
+            Detected: <strong style={{ color: "var(--color-navy)" }}>{detectedTz.current}</strong>. Looks right?
           </span>
           <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
             <button

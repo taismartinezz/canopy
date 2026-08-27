@@ -60,7 +60,6 @@ export function KanbanColumn({
       <div
         ref={setDropRef}
         style={{
-          flex: 1,
           borderRadius: 8,
           border: isOver ? "2px dashed var(--color-navy)" : "2px dashed transparent",
           transition: "border-color 0.15s",

@@ -21,10 +21,10 @@ import { LabPulseWidget } from "./_components/LabPulseWidget";
 // ── Add Reminder modal ────────────────────────────────────────────────────────
 
 const MR = {
-  card:        "#1C1C1E",
-  border:      "rgba(84,84,88,0.65)",
-  textPrimary: "#F5F5F7",
-  textMuted:   "#8E8E93",
+  card:        "var(--color-surface)",
+  border:      "var(--color-border)",
+  textPrimary: "var(--color-body)",
+  textMuted:   "var(--color-secondary)",
   accent:      "#0A84FF",
 };
 
@@ -72,7 +72,7 @@ function AddReminderModal({
   const inputStyle: React.CSSProperties = {
     display: "block", width: "100%", boxSizing: "border-box", height: 40,
     border: `1px solid ${MR.border}`, borderRadius: 8, padding: "0 12px",
-    fontSize: 14, color: MR.textPrimary, backgroundColor: "#2C2C2E",
+    fontSize: 14, color: MR.textPrimary, backgroundColor: "var(--color-surface-2)",
     fontFamily: "var(--font-roboto)", outline: "none",
   };
   const labelStyle: React.CSSProperties = {
@@ -451,7 +451,7 @@ export default function DashboardPage() {
 
   // Design tokens for the dark dashboard wrapper
   const accent = "#0A84FF";
-  const textMuted = "#8E8E93";
+  const textMuted = "var(--color-secondary)";
 
   return (
     <div style={{ padding: "24px 28px", maxWidth: 1400, minHeight: "100%" }}>
@@ -500,11 +500,11 @@ export default function DashboardPage() {
                 />
                 <div style={{
                   position: "absolute", top: "calc(100% + 6px)", right: 0,
-                  backgroundColor: "#1C1C1E",
-                  border: "1px solid rgba(84,84,88,0.65)",
+                  backgroundColor: "var(--color-surface)",
+                  border: "1px solid var(--color-border)",
                   borderRadius: 10, padding: "4px 0",
                   zIndex: 1000, minWidth: 150,
-                  boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
+                  boxShadow: "0 8px 32px rgba(0,0,0,0.25)",
                 }}>
                   {[
                     { label: "Task", action: () => { setNewMenuOpen(false); setModalStatus("todo"); } },
@@ -516,10 +516,10 @@ export default function DashboardPage() {
                       style={{
                         display: "block", width: "100%", textAlign: "left",
                         padding: "9px 14px", fontSize: 13,
-                        color: "#F5F5F7", background: "none", border: "none",
+                        color: "var(--color-body)", background: "none", border: "none",
                         cursor: "pointer", fontFamily: "var(--font-roboto)",
                       }}
-                      onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.06)"; }}
+                      onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "var(--color-navy-dim)"; }}
                       onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "none"; }}
                     >
                       {label}
@@ -538,7 +538,7 @@ export default function DashboardPage() {
               display: "inline-flex", alignItems: "center", gap: 5,
               fontSize: 12, fontWeight: 500, color: textMuted,
               padding: "4px 10px", borderRadius: 6,
-              border: "1px solid rgba(84,84,88,0.3)",
+              border: "1px solid var(--color-border)",
             }}>
               <span style={{ width: 6, height: 6, borderRadius: "50%", backgroundColor: accent, flexShrink: 0 }} />
               {openTasksCount} open task{openTasksCount !== 1 ? "s" : ""}
@@ -547,7 +547,7 @@ export default function DashboardPage() {
               display: "inline-flex", alignItems: "center", gap: 5,
               fontSize: 12, fontWeight: 500, color: textMuted,
               padding: "4px 10px", borderRadius: 6,
-              border: "1px solid rgba(84,84,88,0.3)",
+              border: "1px solid var(--color-border)",
             }}>
               <span style={{ width: 6, height: 6, borderRadius: "50%", backgroundColor: "#30D158", flexShrink: 0 }} />
               {upcomingEventsCount} upcoming event{upcomingEventsCount !== 1 ? "s" : ""}

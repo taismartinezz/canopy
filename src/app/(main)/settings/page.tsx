@@ -331,8 +331,18 @@ export default function SettingsPage() {
               <input readOnly value={profile?.name ?? ""} style={readonlyInputStyle} aria-label="Display name (read-only)" />
             </div>
             <div>
-              <label style={labelStyle}>Role</label>
-              <input readOnly value={myLabRoleName ?? (profile?.role === "pi" ? "Principal Investigator" : "Researcher")} style={readonlyInputStyle} aria-label="Role (read-only)" />
+              <label style={{ ...labelStyle, display: "flex", alignItems: "center", gap: 5 }}>
+                Role <Lock size={10} color="var(--color-secondary)" style={{ opacity: 0.7 }} />
+              </label>
+              <input
+                readOnly
+                value={myLabRoleName ?? (profile?.role === "pi" ? "Principal Investigator" : "Researcher")}
+                style={{ ...readonlyInputStyle, backgroundColor: "var(--color-canvas)", opacity: 0.75, cursor: "not-allowed" }}
+                aria-label="Role (read-only)"
+              />
+              <p style={{ fontSize: 11, color: "var(--color-secondary)", marginTop: 4, marginBottom: 0 }}>
+                Managed via your lab role. Change it from the Team page.
+              </p>
             </div>
           </div>
           {profile?.bio && (
@@ -596,27 +606,41 @@ export default function SettingsPage() {
                       aria-label={`Invite link ${ic.code}`}
                     />
                     <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                      {roleName && (
-                        <span style={{ fontSize: 11, color: "var(--color-secondary)", whiteSpace: "nowrap", border: "1px solid var(--color-border)", borderRadius: 4, padding: "2px 6px" }}>
-                          {roleName}
-                        </span>
-                      )}
+                      {/* Role badge — fixed width so all rows align */}
+                      <span style={{
+                        display: "inline-flex", alignItems: "center", justifyContent: "center",
+                        minWidth: 84, fontSize: 11, fontWeight: 500, whiteSpace: "nowrap",
+                        borderRadius: 5, padding: "2px 8px",
+                        backgroundColor: roleName ? "rgba(27,46,75,0.08)" : "transparent",
+                        color: roleName ? "var(--color-navy)" : "var(--color-secondary)",
+                      }}>
+                        {roleName ?? "No role"}
+                      </span>
+
+                      {/* Reveal / Hide */}
                       <button
                         onClick={() => setRevealedCode(isRevealed ? null : ic.id)}
-                        style={{ minHeight: 44, height: 40, padding: "0 10px", display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "transparent", border: "1px solid var(--color-border)", borderRadius: 8, cursor: "pointer", fontSize: 11, fontFamily: "var(--font-roboto)", color: "var(--color-secondary)", whiteSpace: "nowrap" }}
+                        style={{ height: 34, padding: "0 12px", display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)", borderRadius: 7, cursor: "pointer", fontSize: 12, fontFamily: "var(--font-roboto)", fontWeight: 500, color: "var(--color-body)", whiteSpace: "nowrap" }}
                         aria-label={isRevealed ? "Hide invite link" : "Reveal invite link"}
                       >
                         {isRevealed ? "Hide" : "Reveal"}
                       </button>
-                      <span style={{ fontSize: 11, color: ic.used_by ? "#2E7D52" : "var(--color-secondary)", whiteSpace: "nowrap" }}>
-                        {ic.used_by ? "Used" : "Active"}
+
+                      {/* Status dot + label */}
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 5, minWidth: 52, whiteSpace: "nowrap" }}>
+                        <span style={{ width: 6, height: 6, borderRadius: "50%", flexShrink: 0, backgroundColor: ic.used_by ? "var(--color-secondary)" : "#2E7D52" }} />
+                        <span style={{ fontSize: 11, fontWeight: 500, color: ic.used_by ? "var(--color-secondary)" : "#2E7D52" }}>
+                          {ic.used_by ? "Used" : "Active"}
+                        </span>
                       </span>
+
+                      {/* Copy */}
                       <button
                         onClick={() => handleCopyCode(ic.code)}
-                        style={{ minHeight: 44, height: 40, width: 40, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "transparent", border: "1px solid var(--color-border)", borderRadius: 8, cursor: "pointer" }}
+                        style={{ height: 34, width: 36, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)", borderRadius: 7, cursor: "pointer", flexShrink: 0 }}
                         aria-label={`Copy invite link ${ic.code}`}
                       >
-                        {copiedCode === ic.code ? <Check size={14} color="#2E7D52" /> : <Copy size={14} color="var(--color-secondary)" />}
+                        {copiedCode === ic.code ? <Check size={13} color="#2E7D52" /> : <Copy size={13} color="var(--color-secondary)" />}
                       </button>
                     </div>
                   </div>
@@ -631,18 +655,21 @@ export default function SettingsPage() {
             {/* Role picker + generate button */}
             <div style={{ marginTop: 16, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
               {labRoles.length > 0 && (
-                <div style={{ position: "relative" }}>
-                  <select
-                    value={newInviteRoleId}
-                    onChange={(e) => setNewInviteRoleId(e.target.value)}
-                    style={{ height: 38, border: "1px solid var(--color-border)", borderRadius: 8, padding: "0 28px 0 12px", fontSize: 13, fontFamily: "var(--font-roboto)", backgroundColor: "var(--color-canvas)", color: "var(--color-body)", outline: "none", cursor: "pointer", appearance: "none" }}
-                    aria-label="Role for new invite"
-                  >
-                    {labRoles.map((r) => (
-                      <option key={r.id} value={r.id}>{r.name}</option>
-                    ))}
-                  </select>
-                  <ChevronDown size={13} color="var(--color-secondary)" style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 12, color: "var(--color-secondary)", whiteSpace: "nowrap" }}>Role for this link:</span>
+                  <div style={{ position: "relative" }}>
+                    <select
+                      value={newInviteRoleId}
+                      onChange={(e) => setNewInviteRoleId(e.target.value)}
+                      style={{ height: 38, border: "1px solid var(--color-border)", borderRadius: 8, padding: "0 28px 0 12px", fontSize: 13, fontFamily: "var(--font-roboto)", backgroundColor: "var(--color-canvas)", color: "var(--color-body)", outline: "none", cursor: "pointer", appearance: "none" }}
+                      aria-label="Role for new invite"
+                    >
+                      {labRoles.map((r) => (
+                        <option key={r.id} value={r.id}>{r.name}</option>
+                      ))}
+                    </select>
+                    <ChevronDown size={13} color="var(--color-secondary)" style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
+                  </div>
                 </div>
               )}
               <button
