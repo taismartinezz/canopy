@@ -532,8 +532,8 @@ export default function DashboardPage() {
 
       <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
         {/* Row 1: Recent + Team Activity side by side, stretch to equal height */}
-        <div style={{ display: "flex", gap: 20, alignItems: "stretch" }}>
-          <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
+        <div style={{ display: "flex", gap: 20, alignItems: "stretch", flexWrap: "wrap" }}>
+          <div style={{ flex: 1, minWidth: 280, display: "flex", flexDirection: "column" }}>
             <TodayWidget
               tasks={visibleTasks}
               reminders={visibleReminders}
@@ -542,7 +542,7 @@ export default function DashboardPage() {
               loading={loading}
             />
           </div>
-          <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
+          <div style={{ flex: 1, minWidth: 280, display: "flex", flexDirection: "column" }}>
             <TeamActivityWidget
               rows={visibleActivity}
               teamMembers={teamMembers}

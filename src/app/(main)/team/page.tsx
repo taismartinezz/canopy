@@ -593,7 +593,7 @@ export default function TeamPage() {
   const [rollupLoading, setRollupLoading] = useState(false);
   const [overdueCount, setOverdueCount] = useState<number | null>(null);
   const [overdueTotalMembers, setOverdueTotalMembers] = useState<number | null>(null);
-  const [minRespondents, setMinRespondents] = useState(4);
+  const [minRespondents, setMinRespondents] = useState(2);
   const [adminResources, setAdminResources] = useState<LabResource[]>([]);
   const [institutionKey, setInstitutionKey] = useState<string | null>(null);
   const [savingInstitution, setSavingInstitution] = useState(false);

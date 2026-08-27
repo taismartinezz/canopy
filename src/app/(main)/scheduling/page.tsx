@@ -476,7 +476,7 @@ function CalendarTab({
   function renderYearView() {
     const year = anchor.getFullYear();
     return (
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
+      <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))" }}>
         {MONTH_NAMES_CAL.map((name, mi) => {
           const startOff = new Date(year, mi, 1).getDay();
           const dim = new Date(year, mi + 1, 0).getDate();
@@ -549,8 +549,8 @@ function CalendarTab({
           </div>
         </div>
 
-        {view === "week" && renderWeekView()}
-        {view === "day" && renderDayView()}
+        {view === "week" && <div style={{ overflowX: "auto" }}>{renderWeekView()}</div>}
+        {view === "day" && <div style={{ overflowX: "auto" }}>{renderDayView()}</div>}
         {view === "month" && renderMonthView()}
         {view === "year" && <div className="p-4">{renderYearView()}</div>}
       </Card>

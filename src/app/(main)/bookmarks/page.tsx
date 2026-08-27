@@ -322,7 +322,7 @@ function BookmarkCard({ bm, canDelete, onDelete, onEdit }: {
           display: "flex", flexDirection: "column", gap: 8,
           backgroundColor: "var(--color-surface)",
           border: "1px solid var(--color-navy)",
-          borderRadius: 10, padding: 14, minHeight: 148,
+          borderRadius: 10, padding: 14,
         }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -358,6 +358,10 @@ function BookmarkCard({ bm, canDelete, onDelete, onEdit }: {
     );
   }
 
+  const domainLabel = isInternal
+    ? (() => { try { return new URL(bm.url).pathname; } catch { return bm.url; } })()
+    : hostname(bm.url);
+
   return (
     <div
       onMouseEnter={() => setHovered(true)}
@@ -365,103 +369,88 @@ function BookmarkCard({ bm, canDelete, onDelete, onEdit }: {
       onClick={() => isInternal ? (window.location.href = bm.url) : window.open(bm.url, "_blank", "noopener,noreferrer")}
       style={{
         display: "flex",
-        flexDirection: "column",
+        alignItems: "center",
+        gap: 12,
         backgroundColor: "var(--color-surface)",
         border: "1px solid var(--color-border)",
         borderRadius: 10,
-        padding: 16,
-        minHeight: 148,
+        padding: "10px 12px",
         boxShadow: hovered ? "var(--shadow-card)" : "none",
         transition: "border-color 150ms ease, box-shadow 150ms ease",
         cursor: "pointer",
       }}
     >
-      {/* Top row: type icon + badges */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
-        <div style={{
-          width: 36, height: 36, borderRadius: 8,
-          backgroundColor: cfg.bg, display: "flex",
-          alignItems: "center", justifyContent: "center", flexShrink: 0,
-        }}>
-          {type === "link" ? (
-            <FaviconImg url={bm.url} fallbackColor={cfg.color} />
-          ) : (
-            <Icon size={16} color={cfg.color} />
-          )}
-        </div>
-        <div style={{ display: "flex", gap: 4, alignItems: "center", flexShrink: 0 }}>
-          {isInternal && (
-            <span style={{
-              display: "flex", alignItems: "center", gap: 3,
-              fontSize: 10, fontWeight: 700, color: "var(--color-navy)",
-              backgroundColor: "var(--color-navy-dim)", borderRadius: 5,
-              padding: "3px 7px",
-            }}>
-              <Home size={9} />
-              Canopy
-            </span>
-          )}
-          <span style={{
-            fontSize: 10, fontWeight: 700, color: cfg.color,
-            backgroundColor: cfg.bg, borderRadius: 5,
-            padding: "3px 8px", letterSpacing: "0.05em",
-            textTransform: "uppercase", flexShrink: 0,
-          }}>
-            {cfg.badge}
-          </span>
-        </div>
+      {/* Type icon */}
+      <div style={{
+        width: 30, height: 30, borderRadius: 7,
+        backgroundColor: cfg.bg, display: "flex",
+        alignItems: "center", justifyContent: "center", flexShrink: 0,
+      }}>
+        {type === "link" ? (
+          <FaviconImg url={bm.url} fallbackColor={cfg.color} />
+        ) : (
+          <Icon size={14} color={cfg.color} />
+        )}
       </div>
 
-      {/* Title */}
-      <p style={{
-        fontSize: 13, fontWeight: 700, color: "var(--color-body)",
-        lineHeight: 1.45,
-        display: "-webkit-box", WebkitLineClamp: 2,
-        WebkitBoxOrient: "vertical" as const, overflow: "hidden",
-        margin: "0 0 5px",
-      }}>
-        {bm.title}
-      </p>
+      {/* Main content */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <p style={{
+          fontSize: 13, fontWeight: 600, color: "var(--color-body)",
+          margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+        }}>
+          {bm.title}
+        </p>
+        <p style={{
+          fontSize: 11, color: "var(--color-secondary)", margin: "2px 0 0",
+          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+        }}>
+          {domainLabel} · {bm.adder_name ?? "Unknown"} · {relTime(bm.added_at)}
+        </p>
+      </div>
 
-      {/* Domain / path */}
-      <p style={{
-        fontSize: 11, color: "var(--color-secondary)", marginBottom: 0,
-        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-      }}>
-        {isInternal ? (() => { try { return new URL(bm.url).pathname; } catch { return bm.url; } })() : hostname(bm.url)}
-      </p>
-
-      {/* Spacer */}
-      <div style={{ flex: 1 }} />
-
-      {/* Bottom row: contributor · time + edit/delete */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 14 }}>
-        <span style={{ fontSize: 11, color: "var(--color-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0, paddingRight: 8 }}>
-          {bm.adder_name ?? "Unknown"} · {relTime(bm.added_at)}
+      {/* Badge + actions */}
+      <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+        {isInternal && (
+          <span style={{
+            display: "flex", alignItems: "center", gap: 3,
+            fontSize: 9, fontWeight: 700, color: "var(--color-navy)",
+            backgroundColor: "var(--color-navy-dim)", borderRadius: 4,
+            padding: "2px 5px",
+          }}>
+            <Home size={8} />
+            Canopy
+          </span>
+        )}
+        <span style={{
+          fontSize: 9, fontWeight: 700, color: cfg.color,
+          backgroundColor: cfg.bg, borderRadius: 4,
+          padding: "2px 6px", letterSpacing: "0.05em",
+          textTransform: "uppercase", whiteSpace: "nowrap",
+        }}>
+          {cfg.badge}
         </span>
-        <div style={{ display: "flex", gap: 2, flexShrink: 0 }}>
+        <button
+          onClick={(e) => { e.stopPropagation(); setEditing(true); }}
+          style={{ width: 26, height: 26, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 5, border: "none", background: "none", cursor: "pointer", color: "var(--color-secondary)", transition: "background-color 120ms ease, color 120ms ease" }}
+          onMouseEnter={(e) => { const el = e.currentTarget as HTMLElement; el.style.color = "var(--color-navy)"; el.style.backgroundColor = "rgba(27,46,75,0.08)"; }}
+          onMouseLeave={(e) => { const el = e.currentTarget as HTMLElement; el.style.color = "var(--color-secondary)"; el.style.backgroundColor = "transparent"; }}
+          aria-label="Edit bookmark"
+        >
+          <Pencil size={11} />
+        </button>
+        {canDelete && (
           <button
-            onClick={(e) => { e.stopPropagation(); setEditing(true); }}
-            style={{ width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 6, border: "none", background: "none", cursor: "pointer", color: "var(--color-secondary)", transition: "background-color 120ms ease, color 120ms ease" }}
-            onMouseEnter={(e) => { const el = e.currentTarget as HTMLElement; el.style.color = "var(--color-navy)"; el.style.backgroundColor = "rgba(27,46,75,0.08)"; }}
+            onClick={handleDelete}
+            disabled={deleting}
+            style={{ width: 26, height: 26, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 5, border: "none", background: "none", cursor: deleting ? "not-allowed" : "pointer", color: "var(--color-secondary)", transition: "background-color 120ms ease, color 120ms ease" }}
+            onMouseEnter={(e) => { const el = e.currentTarget as HTMLElement; el.style.color = "var(--color-error)"; el.style.backgroundColor = "rgba(192,57,43,0.08)"; }}
             onMouseLeave={(e) => { const el = e.currentTarget as HTMLElement; el.style.color = "var(--color-secondary)"; el.style.backgroundColor = "transparent"; }}
-            aria-label="Edit bookmark"
+            aria-label="Delete bookmark"
           >
-            <Pencil size={11} />
+            <Trash2 size={11} />
           </button>
-          {canDelete && (
-            <button
-              onClick={handleDelete}
-              disabled={deleting}
-              style={{ width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 6, border: "none", background: "none", cursor: deleting ? "not-allowed" : "pointer", color: "var(--color-secondary)", transition: "background-color 120ms ease, color 120ms ease" }}
-              onMouseEnter={(e) => { const el = e.currentTarget as HTMLElement; el.style.color = "var(--color-error)"; el.style.backgroundColor = "rgba(192,57,43,0.08)"; }}
-              onMouseLeave={(e) => { const el = e.currentTarget as HTMLElement; el.style.color = "var(--color-secondary)"; el.style.backgroundColor = "transparent"; }}
-              aria-label="Delete bookmark"
-            >
-              <Trash2 size={12} />
-            </button>
-          )}
-        </div>
+        )}
       </div>
     </div>
   );
@@ -803,12 +792,12 @@ export default function BookmarksPage() {
             />
           )}
 
-          {/* Card grid */}
+          {/* Card list */}
           {!loading && filtered.length > 0 && (
             <div style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))",
-              gap: 16,
+              display: "flex",
+              flexDirection: "column",
+              gap: 6,
             }}>
               {filtered.map((bm) => (
                 <BookmarkCard
