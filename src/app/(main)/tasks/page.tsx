@@ -698,11 +698,19 @@ export default function TasksPage() {
                 {filteredTasks.length === 0 && (
                   <tr>
                     <td colSpan={8} style={{ padding: "8px 0" }}>
-                      <EmptyState
-                        variant="tasks"
-                        title="No tasks match your filters"
-                        description="Try adjusting the search or filter options above."
-                      />
+                      {scopedTasks.length === 0 ? (
+                        <EmptyState
+                          variant="tasks"
+                          title="No tasks yet"
+                          description="Add your first task to get started."
+                        />
+                      ) : (
+                        <EmptyState
+                          variant="tasks"
+                          title="No tasks match your filters"
+                          description="Try adjusting the search or filter options above."
+                        />
+                      )}
                     </td>
                   </tr>
                 )}

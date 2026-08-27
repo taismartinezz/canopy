@@ -399,8 +399,11 @@ export default function DashboardPage() {
     : isPersonal
     ? overdueReminders.filter((r) => r.scope === "personal")
     : [];
-  // Always show all lab activity regardless of scope — user wants Team Activity visible everywhere.
-  const visibleActivity = dashActivity;
+  const visibleActivity = isLabHome
+    ? dashActivity
+    : activeScope === "project" && subProjectId
+    ? dashActivity.filter((r) => r.sub_project_id === subProjectId)
+    : dashActivity.filter((r) => r.user_id === userId);
 
   const moveTask = useCallback((taskId: string, status: TaskStatus) => {
     // Capture the task before the optimistic update so we have the original status
