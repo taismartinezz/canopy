@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
+import { Plus } from "lucide-react";
 import {
   TASKS, DASHBOARD_POSTS, SCHEDULE_EVENTS,
   getUser, CURRENT_USER_ID, getStoredProject,
@@ -166,13 +167,16 @@ export default function DashboardPage() {
           ]);
         }
 
-        // Fetch activity feed
+        // Fetch activity feed — last 7 days only
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
         const { data: actData, error: actError } = await supabase
           .from("activity_feed")
           .select("*")
           .eq("project_id", pid)
+          .gte("created_at", sevenDaysAgo.toISOString())
           .order("created_at", { ascending: false })
-          .limit(10);
+          .limit(20);
         if (actError) console.error("[Dashboard] activity_feed error:", actError);
         if (!actError && actData) {
           setDashActivity(actData as ActivityRow[]);
@@ -245,6 +249,8 @@ export default function DashboardPage() {
   const todayStr = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
   const timeOfDay = (() => { const h = new Date().getHours(); return h < 12 ? "morning" : h < 17 ? "afternoon" : "evening"; })();
 
+  const todayDateStr = new Date().toISOString().split("T")[0];
+
   const isLabHome = activeScope === "lab";
   const isPersonal = activeScope === "personal";
   const activeSubProject = !isLabHome && activeScope === "project"
@@ -254,6 +260,9 @@ export default function DashboardPage() {
   const visibleTasks = isLabHome
     ? tasks
     : tasks.filter((t) => t.scope === "project" && t.subProjectId === subProjectId);
+
+  const openTasksCount = visibleTasks.filter((t) => t.status !== "done").length;
+  const upcomingEventsCount = dashEvents.filter((e) => e.date >= todayDateStr).length;
   // Match /reminders page: lab reminders only in lab scope, personal only in personal scope,
   // sub-project scope shows no cross-project reminders (scope is "project" in the DB, not fetched here).
   const visibleReminders = isLabHome
@@ -313,22 +322,69 @@ export default function DashboardPage() {
 
   return (
     <div style={{ padding: "24px 28px", maxWidth: 1400, minHeight: "100%" }}>
-      {/* Greeting - plain text, no card */}
-      <div style={{ marginBottom: 24 }}>
-        <h1 style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 22, margin: 0, lineHeight: 1.2, color: "var(--color-navy)" }}>
-          {isLabHome || isPersonal ? (
-            <>
-              Good {timeOfDay},{" "}
-              {currentUserFirstName
-                ? <span style={{ color: accent }}>{currentUserFirstName}</span>
-                : null
-              }
-            </>
-          ) : displayTitle}
-        </h1>
-        <p style={{ fontSize: 13, color: textMuted, marginTop: 4 }}>
-          {todayStr}
-        </p>
+      {/* Greeting + action row */}
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16 }}>
+          <div>
+            <h1 style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 22, margin: 0, lineHeight: 1.2, color: "var(--color-navy)" }}>
+              {isLabHome || isPersonal ? (
+                <>
+                  Good {timeOfDay},{" "}
+                  {currentUserFirstName
+                    ? <span style={{ color: accent }}>{currentUserFirstName}</span>
+                    : null
+                  }
+                </>
+              ) : displayTitle}
+            </h1>
+            <p style={{ fontSize: 13, color: textMuted, marginTop: 4, marginBottom: 0 }}>
+              {todayStr}
+            </p>
+          </div>
+          <button
+            onClick={() => setModalStatus("todo")}
+            style={{
+              display: "flex", alignItems: "center", gap: 6,
+              height: 36, padding: "0 14px",
+              backgroundColor: accent, color: "#fff",
+              border: "none", borderRadius: 8,
+              fontFamily: "var(--font-roboto)", fontWeight: 600, fontSize: 13,
+              cursor: "pointer", flexShrink: 0, marginTop: 2,
+              transition: "opacity 0.15s",
+            }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.opacity = "0.85"; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.opacity = "1"; }}
+          >
+            <Plus size={14} />
+            New Task
+          </button>
+        </div>
+
+        {/* Summary stats */}
+        {!loading && (
+          <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+            <span style={{
+              display: "inline-flex", alignItems: "center", gap: 5,
+              fontSize: 12, fontWeight: 500, color: textMuted,
+              padding: "4px 10px", borderRadius: 6,
+              border: "1px solid rgba(84,84,88,0.3)",
+            }}>
+              <span style={{ width: 6, height: 6, borderRadius: "50%", backgroundColor: accent, flexShrink: 0 }} />
+              {openTasksCount} open task{openTasksCount !== 1 ? "s" : ""}
+            </span>
+            {upcomingEventsCount > 0 && (
+              <span style={{
+                display: "inline-flex", alignItems: "center", gap: 5,
+                fontSize: 12, fontWeight: 500, color: textMuted,
+                padding: "4px 10px", borderRadius: 6,
+                border: "1px solid rgba(84,84,88,0.3)",
+              }}>
+                <span style={{ width: 6, height: 6, borderRadius: "50%", backgroundColor: "#30D158", flexShrink: 0 }} />
+                {upcomingEventsCount} upcoming event{upcomingEventsCount !== 1 ? "s" : ""}
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>

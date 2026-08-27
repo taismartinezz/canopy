@@ -2,9 +2,12 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Users, BookOpen, Check, X } from "lucide-react";
+import { Users, BookOpen, Check, X, Search } from "lucide-react";
 import CanopyLogo from "@/components/ui/CanopyLogo";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
+import { searchInstitutions, type InstitutionResult } from "@/lib/institutions";
+import { WorkingHoursEditor, DEFAULT_WORKING_HOURS } from "@/components/ui/WorkingHoursEditor";
+import type { WorkingHours } from "@/types";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -305,16 +308,82 @@ function ProjectForm({
   );
 }
 
+// ── Wellbeing preview (shared) ────────────────────────────────────────────────
+
+const SAMPLE_QUESTIONS = [
+  "How supported do you feel by your team this week?",
+  "How manageable is your workload right now?",
+  "How connected do you feel to the purpose of your research?",
+];
+
+function WellbeingPreview({ role }: { role: "pi" | "researcher" }) {
+  const [sample, setSample] = useState<Record<number, number>>({});
+  return (
+    <div>
+      {role === "pi" ? (
+        <p style={{ fontFamily: "var(--font-roboto)", fontSize: 13, color: "#6B6B6B", margin: "0 0 20px", lineHeight: 1.6 }}>
+          Your team completes a brief weekly check-in. You'll see aggregated scores — never individual responses.
+          Canopy only surfaces results when enough team members have responded, so every voice stays protected.
+        </p>
+      ) : (
+        <p style={{ fontFamily: "var(--font-roboto)", fontSize: 13, color: "#6B6B6B", margin: "0 0 20px", lineHeight: 1.6 }}>
+          Each week, Canopy sends a short 3-question check-in. Your responses are private —
+          only aggregated team insights are visible to your PI.
+        </p>
+      )}
+      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        {SAMPLE_QUESTIONS.map((q, i) => (
+          <div key={i} style={{ padding: "14px 16px", backgroundColor: "rgba(27,46,75,0.03)", border: "1px solid #DDE1E7", borderRadius: 8 }}>
+            <p style={{ fontFamily: "var(--font-roboto)", fontSize: 13, color: "#2D2D2D", margin: "0 0 10px", lineHeight: 1.4 }}>{q}</p>
+            <div style={{ display: "flex", gap: 8 }}>
+              {[1,2,3,4,5].map((v) => (
+                <button
+                  key={v}
+                  onClick={() => setSample((prev) => ({ ...prev, [i]: v }))}
+                  style={{
+                    flex: 1,
+                    height: 36,
+                    borderRadius: 6,
+                    border: `1.5px solid ${sample[i] === v ? "#1B2E4B" : "#DDE1E7"}`,
+                    backgroundColor: sample[i] === v ? "#1B2E4B" : "#fff",
+                    color: sample[i] === v ? "#fff" : "#6B6B6B",
+                    fontFamily: "var(--font-roboto)",
+                    fontWeight: 700,
+                    fontSize: 13,
+                    cursor: "pointer",
+                    transition: "all 120ms ease",
+                  }}
+                >
+                  {v}
+                </button>
+              ))}
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4 }}>
+              <span style={{ fontSize: 10, color: "#6B6B6B" }}>Not at all</span>
+              <span style={{ fontSize: 10, color: "#6B6B6B" }}>Very much</span>
+            </div>
+          </div>
+        ))}
+      </div>
+      <p style={{ fontFamily: "var(--font-roboto)", fontSize: 11, color: "#6B6B6B", margin: "14px 0 0", textAlign: "center" }}>
+        ↑ Try it out — this is just a preview, nothing is recorded.
+      </p>
+    </div>
+  );
+}
+
 // ── Supabase sync (fire-and-forget) ───────────────────────────────────────────
 
 async function syncOnboardingToSupabase({
   projectName, institution, researchType,
   userName, userRole, inviteCode, enteredInviteCode, bio, department, inviteEmails,
+  timezone, workingHours,
 }: {
   projectName: string; institution: string; researchType: string;
   userName: string; userRole: "pi" | "researcher"; inviteCode?: string;
   enteredInviteCode?: string; bio?: string; department?: string;
-  inviteEmails?: { email: string; code: string }[];
+  inviteEmails?: { email: string; code: string; permissionLevel?: "pi" | "researcher" }[];
+  timezone?: string; workingHours?: Record<string, { start: string; end: string } | null>;
 }): Promise<string | null> {
   try {
     const { data: { session } } = await supabase.auth.getSession();
@@ -329,8 +398,10 @@ async function syncOnboardingToSupabase({
     let projectId: string;
     let resolvedInstitution = institution;
 
+    let labRoleId: string | null = null;
+
     if (userRole === "pi") {
-      const { data: existing, error: existingErr } = await supabase
+      const { data: existing } = await supabase
         .from("projects")
         .select("id")
         .eq("owner_id", user.id)
@@ -346,31 +417,48 @@ async function syncOnboardingToSupabase({
           .single();
         if (createErr || !created) return `Project creation failed: ${createErr?.message ?? "unknown error"}`;
         projectId = created.id as string;
+
+        // Seed built-in roles for new lab
+        await supabase.from("lab_roles").insert([
+          { project_id: projectId, name: "PI", permission_level: "pi", is_system: true },
+          { project_id: projectId, name: "Researcher", permission_level: "researcher", is_system: true },
+        ]);
       }
+
+      // Get all lab_roles to resolve permission_level → id
+      const { data: allRoles } = await supabase
+        .from("lab_roles").select("id, permission_level").eq("project_id", projectId);
+      const roleIdByLevel: Record<string, string> = {};
+      for (const r of allRoles ?? []) {
+        roleIdByLevel[(r as { id: string; permission_level: string }).permission_level] = (r as { id: string; permission_level: string }).id;
+      }
+      labRoleId = roleIdByLevel["pi"] ?? null;
 
       // Save the generic shareable code
       if (inviteCode) {
         const { error: codeErr } = await supabase.from("invite_codes").insert({
           code: inviteCode, project_id: projectId, created_by: user.id,
+          lab_role_id: roleIdByLevel["researcher"] ?? null,
         });
         if (codeErr) console.error("[Sync] generic invite_code insert error:", codeErr.message, codeErr.code);
       }
-      // Save one unique code per invited email
+      // Save one unique code per invited email (resolved by permissionLevel)
       if (inviteEmails && inviteEmails.length > 0) {
-        for (const { email, code } of inviteEmails) {
+        for (const { email, code, permissionLevel } of inviteEmails) {
+          const resolvedRoleId = roleIdByLevel[permissionLevel ?? "researcher"] ?? null;
           const { error: emailCodeErr } = await supabase.from("invite_codes").insert({
             code, project_id: projectId, created_by: user.id, invited_email: email,
+            lab_role_id: resolvedRoleId,
           });
-          // Log only code + message - not the full object, which may echo the inserted row (including email).
           if (emailCodeErr) console.error("[Sync] invite_code insert error:", emailCodeErr.message, emailCodeErr.code);
         }
       }
     } else if (enteredInviteCode) {
-      // Look up the project linked to the invite code
+      // Look up the project linked to the invite code (include lab_role_id)
       const normalizedCode = enteredInviteCode.trim().toUpperCase();
       const { data: inviteData, error: inviteErr } = await supabase
         .from("invite_codes")
-        .select("project_id, id")
+        .select("project_id, id, lab_role_id")
         .eq("code", normalizedCode)
         .maybeSingle();
 
@@ -379,17 +467,15 @@ async function syncOnboardingToSupabase({
       }
 
       projectId = inviteData.project_id as string;
+      labRoleId = (inviteData.lab_role_id as string) ?? null;
 
       // Mark code as used
       await supabase.from("invite_codes").update({
-        used_by: user.id,
-        used_at: new Date().toISOString(),
+        used_by: user.id, used_at: new Date().toISOString(),
       }).eq("code", normalizedCode);
 
       // Clear the pending invite from localStorage
-      if (typeof window !== "undefined") {
-        localStorage.removeItem("pendingInviteCode");
-      }
+      if (typeof window !== "undefined") localStorage.removeItem("pendingInviteCode");
     } else {
       return "No invite code provided. Please ask your PI for a lab invite link.";
     }
@@ -409,7 +495,6 @@ async function syncOnboardingToSupabase({
       .maybeSingle()
       .then(async (res) => {
         if (res.error?.code === "23505") {
-          // Row exists - update it instead
           return supabase.from("user_profiles").update(profilePayload).eq("id", user.id);
         }
         return res;
@@ -418,9 +503,17 @@ async function syncOnboardingToSupabase({
 
     const { error: memberErr } = await supabase
       .from("team_members")
-      .insert({ project_id: projectId, user_id: user.id, role: userRole })
+      .insert({ project_id: projectId, user_id: user.id, role: userRole, lab_role_id: labRoleId })
       .select();
     if (memberErr && memberErr.code !== "23505") return `Team membership save failed: ${memberErr.message}`;
+
+    // Save timezone + working hours if provided
+    if (timezone) {
+      await supabase.from("user_settings").upsert(
+        { user_id: user.id, timezone, working_hours: workingHours ?? null, updated_at: new Date().toISOString() },
+        { onConflict: "user_id" }
+      );
+    }
 
     return null;
   } catch (err) {
@@ -449,11 +542,29 @@ export default function OnboardingPage() {
   const [resUserName, setResUserName] = useState("");
   const [isJoining, setIsJoining] = useState(false);
 
-  // PI step 3 - invite team
+  // Timezone state (auto-detect)
+  const [piTimezone, setPiTimezone] = useState<string>(() => {
+    try { return Intl.DateTimeFormat().resolvedOptions().timeZone || "America/New_York"; } catch { return "America/New_York"; }
+  });
+  const [piWorkingHours, setPiWorkingHours] = useState<WorkingHours>(DEFAULT_WORKING_HOURS);
+  const [resTimezone, setResTimezone] = useState<string>(() => {
+    try { return Intl.DateTimeFormat().resolvedOptions().timeZone || "America/New_York"; } catch { return "America/New_York"; }
+  });
+  const [resWorkingHours, setResWorkingHours] = useState<WorkingHours>(DEFAULT_WORKING_HOURS);
+
+  // Institution search (PI step 2)
+  const [institutionQuery, setInstitutionQuery] = useState("");
+  const [institutionResults, setInstitutionResults] = useState<InstitutionResult[]>([]);
+  const [institutionOpen, setInstitutionOpen] = useState(false);
+  const institutionRef = useRef<HTMLDivElement>(null);
+  const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // PI step 4 - invite team
   const [emailInput, setEmailInput] = useState("");
   const [emailInputError, setEmailInputError] = useState("");
   const [inviteEmails, setInviteEmails] = useState<string[]>([]);
   const [emailCodes, setEmailCodes] = useState<Record<string, string>>({});
+  const [emailRoles, setEmailRoles] = useState<Record<string, "pi" | "researcher">>({});
   const [copiedEmail, setCopiedEmail] = useState<string | null>(null);
   const [generatedCode, setGeneratedCode] = useState("");
   const [copied, setCopied] = useState(false);
@@ -495,7 +606,12 @@ export default function OnboardingPage() {
 
       // Pre-fill invite code if researcher arrived via an invite link
       const pendingInvite = localStorage.getItem("pendingInviteCode");
-      if (pendingInvite) setInviteCode(pendingInvite);
+      if (pendingInvite) {
+        setInviteCode(pendingInvite);
+        // Auto-detect researcher path — skip role selection
+        setRole("researcher");
+        setStep(2);
+      }
 
       // Pre-fill name from sign-up form
       const signupName = localStorage.getItem("canopy_signup_name") ?? "";
@@ -517,8 +633,8 @@ export default function OnboardingPage() {
     if (step === 3 && role === "researcher" && resUserName && !profileName) {
       setProfileName(resUserName);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, role]);
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
@@ -528,9 +644,7 @@ export default function OnboardingPage() {
   }
 
   function handlePiStep2Continue() {
-    const code = "CANOPY-" + Math.random().toString(36).substring(2, 6).toUpperCase();
-    setGeneratedCode(code);
-    setStep(3);
+    setStep(3); // → timezone step
   }
 
   function handleResearcherStep2Continue() {
@@ -549,6 +663,7 @@ export default function OnboardingPage() {
     const code = "CANOPY-" + Math.random().toString(36).substring(2, 6).toUpperCase();
     setInviteEmails((prev) => [...prev, trimmed]);
     setEmailCodes((prev) => ({ ...prev, [trimmed]: code }));
+    setEmailRoles((prev) => ({ ...prev, [trimmed]: "researcher" }));
     setEmailInput("");
   }, [emailInput, inviteEmails]);
 
@@ -650,7 +765,11 @@ export default function OnboardingPage() {
         enteredInviteCode: role === "researcher" && inviteCode.length >= 6 ? inviteCode : undefined,
         bio: role === "researcher" ? profileBio : undefined,
         department: role === "researcher" ? profileDept : undefined,
-        inviteEmails: role === "pi" ? inviteEmails.map((email) => ({ email, code: emailCodes[email] })) : undefined,
+        inviteEmails: role === "pi"
+          ? inviteEmails.map((email) => ({ email, code: emailCodes[email], permissionLevel: emailRoles[email] ?? "researcher" }))
+          : undefined,
+        timezone: role === "pi" ? piTimezone : resTimezone,
+        workingHours: role === "pi" ? piWorkingHours : resWorkingHours,
       });
       if (syncErr) {
         setSyncError(syncErr);
@@ -703,7 +822,7 @@ export default function OnboardingPage() {
     return (
       <div style={PAGE_WRAP}>
         <div style={CARD_STYLE}>
-          <StepDots current={1} total={3} />
+          <StepDots current={1} total={5} />
 
           <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}>
             <CanopyLogo size={32} />
@@ -815,21 +934,110 @@ export default function OnboardingPage() {
       <div style={PAGE_WRAP}>
         <div style={CARD_STYLE}>
           <BackButton onClick={() => setStep(1)} />
-          <StepDots current={2} total={3} />
+          <StepDots current={2} total={5} />
           <SectionTitle
             title="Set up your lab workspace"
             subtitle="You can change these later in Lab Settings."
           />
 
-          <ProjectForm
-            projectName={piProjectName} setProjectName={setPiProjectName}
-            institution={piInstitution} setInstitution={setPiInstitution}
-            userName={piUserName} setUserName={setPiUserName}
-            showResearchType researchType={piResearchType} setResearchType={setPiResearchType}
-            roleTitle={piRoleTitle} setRoleTitle={setPiRoleTitle}
-          />
+          <Field label="Lab name">
+            <TextInput value={piProjectName} onChange={setPiProjectName} placeholder="e.g. Moral Injury & Resilience Lab" />
+          </Field>
+
+          {/* Institution search */}
+          <Field label="Institution">
+            <div ref={institutionRef} style={{ position: "relative" }}>
+              <div style={{ position: "relative" }}>
+                <Search size={14} color="#6B6B6B" style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
+                <input
+                  type="text"
+                  value={institutionQuery || piInstitution}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setInstitutionQuery(v);
+                    setPiInstitution(v);
+                    setInstitutionOpen(true);
+                    if (searchTimeout.current) clearTimeout(searchTimeout.current);
+                    searchTimeout.current = setTimeout(async () => {
+                      const results = await searchInstitutions(v);
+                      setInstitutionResults(results);
+                    }, 300);
+                  }}
+                  onFocus={() => { if (piInstitution) setInstitutionOpen(true); }}
+                  placeholder="Search your university or research center"
+                  style={{ ...INPUT_STYLE, paddingLeft: 34 }}
+                  onBlur={() => setTimeout(() => setInstitutionOpen(false), 150)}
+                />
+              </div>
+              {institutionOpen && institutionResults.length > 0 && (
+                <div style={{
+                  position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 50,
+                  backgroundColor: "#fff", border: "1px solid #DDE1E7", borderRadius: 8,
+                  boxShadow: "0 4px 16px rgba(27,46,75,0.1)", maxHeight: 200, overflowY: "auto",
+                }}>
+                  {institutionResults.map((r) => (
+                    <button
+                      key={r.key}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        setPiInstitution(r.name);
+                        setInstitutionQuery("");
+                        setInstitutionOpen(false);
+                        setInstitutionResults([]);
+                      }}
+                      style={{
+                        display: "flex", flexDirection: "column", width: "100%", padding: "10px 14px",
+                        border: "none", backgroundColor: "transparent", textAlign: "left", cursor: "pointer",
+                        borderBottom: "1px solid #DDE1E7",
+                      }}
+                      onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "#F6F8FC"; }}
+                      onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "transparent"; }}
+                    >
+                      <span style={{ fontSize: 13, color: "#2D2D2D", fontFamily: "var(--font-roboto)" }}>{r.name}</span>
+                      <span style={{ fontSize: 11, color: "#6B6B6B" }}>{r.country}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </Field>
+
+          <Field label="Research area">
+            <TextInput value={piResearchType} onChange={setPiResearchType} placeholder="e.g. Moral injury in military veterans" />
+          </Field>
+
+          <Field label="Your name">
+            <TextInput value={piUserName} onChange={setPiUserName} placeholder="Full name" />
+          </Field>
 
           <NavButton onClick={handlePiStep2Continue} disabled={!canContinue}>
+            Continue
+          </NavButton>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Step 3A: PI timezone ────────────────────────────────────────────────────
+
+  if (step === 3 && role === "pi") {
+    return (
+      <div style={PAGE_WRAP}>
+        <div style={CARD_STYLE}>
+          <BackButton onClick={() => setStep(2)} />
+          <StepDots current={3} total={5} />
+          <SectionTitle
+            title="Your schedule"
+            subtitle="Canopy uses this for meeting suggestions and your weekly digest."
+          />
+          <WorkingHoursEditor
+            timezone={piTimezone}
+            onTimezoneChange={setPiTimezone}
+            workingHours={piWorkingHours}
+            onWorkingHoursChange={setPiWorkingHours}
+            showDetectedBanner
+          />
+          <NavButton onClick={() => { const code = "CANOPY-" + Math.random().toString(36).substring(2, 6).toUpperCase(); setGeneratedCode(code); setStep(4); }}>
             Continue
           </NavButton>
         </div>
@@ -841,6 +1049,7 @@ export default function OnboardingPage() {
 
   if (step === 2 && role === "researcher") {
     const inviteValid = inviteCode.trim().length >= 6;
+    const autoFilled = inviteCode.trim().length >= 6 && typeof localStorage !== "undefined" && !!localStorage.getItem("pendingInviteCode");
 
     if (isJoining) {
       return (
@@ -859,10 +1068,10 @@ export default function OnboardingPage() {
       <div style={PAGE_WRAP}>
         <div style={CARD_STYLE}>
           <BackButton onClick={() => setStep(1)} />
-          <StepDots current={2} total={3} />
+          <StepDots current={2} total={5} />
           <SectionTitle
             title="Join your lab"
-            subtitle="Enter the invite code or paste the invite link your PI shared with you."
+            subtitle={autoFilled ? "Your invite code is ready — just confirm below." : "Enter the invite code or paste the invite link your PI shared with you."}
           />
 
           <Field label="Invite code">
@@ -873,9 +1082,11 @@ export default function OnboardingPage() {
             />
           </Field>
 
-          <p style={{ fontFamily: "var(--font-roboto)", fontSize: 12, color: "#6B6B6B", margin: "-8px 0 0" }}>
-            Don&apos;t have a code? Ask your PI to share an invite link from their Lab Settings.
-          </p>
+          {!autoFilled && (
+            <p style={{ fontFamily: "var(--font-roboto)", fontSize: 12, color: "#6B6B6B", margin: "-8px 0 0" }}>
+              Don&apos;t have a code? Ask your PI to share an invite link from their Lab Settings.
+            </p>
+          )}
 
           <NavButton onClick={handleResearcherStep2Continue} disabled={!inviteValid}>
             Continue
@@ -885,14 +1096,14 @@ export default function OnboardingPage() {
     );
   }
 
-  // ── Step 3A: PI invites team ───────────────────────────────────────────────
+  // ── Step 4A: PI invites team ───────────────────────────────────────────────
 
-  if (step === 3 && role === "pi") {
+  if (step === 4 && role === "pi") {
     return (
       <div style={PAGE_WRAP}>
         <div style={CARD_STYLE}>
-          <BackButton onClick={() => setStep(2)} />
-          <StepDots current={3} total={3} />
+          <BackButton onClick={() => setStep(3)} />
+          <StepDots current={4} total={5} />
           <SectionTitle
             title="Invite researchers to your lab"
             subtitle="They'll get access once they sign up with the same invite link."
@@ -963,6 +1174,16 @@ export default function OnboardingPage() {
                   <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {email}
                   </span>
+                  {/* Role picker for each invite */}
+                  <select
+                    value={emailRoles[email] ?? "researcher"}
+                    onChange={(e) => setEmailRoles((prev) => ({ ...prev, [email]: e.target.value as "pi" | "researcher" }))}
+                    style={{ fontSize: 11, border: "1px solid #DDE1E7", borderRadius: 5, padding: "2px 4px", backgroundColor: "#fff", fontFamily: "var(--font-roboto)", cursor: "pointer", flexShrink: 0 }}
+                    aria-label={`Role for ${email}`}
+                  >
+                    <option value="researcher">Researcher</option>
+                    <option value="pi">PI</option>
+                  </select>
                   <button
                     onClick={() => handleCopyEmailLink(email)}
                     aria-label={`Copy invite link for ${email}`}
@@ -986,6 +1207,7 @@ export default function OnboardingPage() {
                     onClick={() => {
                       setInviteEmails((prev) => prev.filter((e) => e !== email));
                       setEmailCodes((prev) => { const next = { ...prev }; delete next[email]; return next; });
+                      setEmailRoles((prev) => { const next = { ...prev }; delete next[email]; return next; });
                     }}
                     aria-label={`Remove ${email}`}
                     style={{
@@ -1062,13 +1284,12 @@ export default function OnboardingPage() {
             </button>
           </div>
 
-          <NavButton onClick={completeOnboarding} disabled={submitting}>
-            {submitting ? "Saving…" : "Go to my workspace"}
+          <NavButton onClick={() => setStep(5)}>
+            Continue
           </NavButton>
 
           <button
-            onClick={completeOnboarding}
-            disabled={submitting}
+            onClick={() => setStep(5)}
             style={{
               display: "block",
               width: "100%",
@@ -1079,18 +1300,13 @@ export default function OnboardingPage() {
               color: "#6B6B6B",
               background: "none",
               border: "none",
-              cursor: submitting ? "not-allowed" : "pointer",
+              cursor: "pointer",
               marginTop: 12,
               padding: 0,
               minHeight: 36,
-              opacity: submitting ? 0.5 : 1,
             }}
-            onMouseEnter={(e) => {
-              if (!submitting) (e.currentTarget as HTMLElement).style.textDecoration = "underline";
-            }}
-            onMouseLeave={(e) => {
-              (e.currentTarget as HTMLElement).style.textDecoration = "none";
-            }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.textDecoration = "underline"; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.textDecoration = "none"; }}
           >
             Skip for now
           </button>
@@ -1099,7 +1315,33 @@ export default function OnboardingPage() {
     );
   }
 
-  // ── Step 3B: Researcher profile ────────────────────────────────────────────
+  // ── Step 5A: PI wellbeing preview ──────────────────────────────────────────
+
+  if (step === 5 && role === "pi") {
+    return (
+      <div style={PAGE_WRAP}>
+        <div style={CARD_STYLE}>
+          <BackButton onClick={() => setStep(4)} />
+          <StepDots current={5} total={5} />
+          <SectionTitle
+            title="Team wellbeing check-ins"
+            subtitle="Here's what your team will see each week."
+          />
+          <WellbeingPreview role="pi" />
+          <NavButton onClick={completeOnboarding} disabled={submitting}>
+            {submitting ? "Setting up your workspace…" : "Go to my workspace"}
+          </NavButton>
+          {syncError && (
+            <p role="alert" style={{ fontFamily: "var(--font-roboto)", fontSize: 13, color: "#C0392B", marginTop: 10, textAlign: "center" }}>
+              {syncError}
+            </p>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Researcher step 3: profile ────────────────────────────────────────────
 
   if (step === 3 && role === "researcher") {
     const canContinue = profileName.trim().length > 0;
@@ -1108,7 +1350,7 @@ export default function OnboardingPage() {
       <div style={PAGE_WRAP}>
         <div style={CARD_STYLE}>
           <BackButton onClick={() => setStep(2)} />
-          <StepDots current={3} total={3} />
+          <StepDots current={3} total={5} />
           <SectionTitle title="Set up your profile" />
 
           <Field label="Full name">
@@ -1151,22 +1393,59 @@ export default function OnboardingPage() {
             />
           </div>
 
-          <NavButton onClick={completeOnboarding} disabled={!canContinue || submitting}>
-            {submitting ? "Saving…" : "Go to my workspace"}
+          <NavButton onClick={() => setStep(4)} disabled={!canContinue}>
+            Continue
           </NavButton>
+        </div>
+      </div>
+    );
+  }
 
+  // ── Researcher step 4: timezone ───────────────────────────────────────────
+
+  if (step === 4 && role === "researcher") {
+    return (
+      <div style={PAGE_WRAP}>
+        <div style={CARD_STYLE}>
+          <BackButton onClick={() => setStep(3)} />
+          <StepDots current={4} total={5} />
+          <SectionTitle
+            title="Your schedule"
+            subtitle="Canopy uses this for meeting suggestions and your weekly digest."
+          />
+          <WorkingHoursEditor
+            timezone={resTimezone}
+            onTimezoneChange={setResTimezone}
+            workingHours={resWorkingHours}
+            onWorkingHoursChange={setResWorkingHours}
+            showDetectedBanner
+          />
+          <NavButton onClick={() => setStep(5)}>
+            Continue
+          </NavButton>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Researcher step 5: wellbeing preview ──────────────────────────────────
+
+  if (step === 5 && role === "researcher") {
+    return (
+      <div style={PAGE_WRAP}>
+        <div style={CARD_STYLE}>
+          <BackButton onClick={() => setStep(4)} />
+          <StepDots current={5} total={5} />
+          <SectionTitle
+            title="Weekly check-ins"
+            subtitle="A quick preview of what to expect each week."
+          />
+          <WellbeingPreview role="researcher" />
+          <NavButton onClick={completeOnboarding} disabled={submitting}>
+            {submitting ? "Setting up your workspace…" : "Go to my workspace"}
+          </NavButton>
           {syncError && (
-            <p
-              role="alert"
-              style={{
-                fontFamily: "var(--font-roboto)",
-                fontSize: 13,
-                color: "#C0392B",
-                marginTop: 10,
-                marginBottom: 0,
-                textAlign: "center",
-              }}
-            >
+            <p role="alert" style={{ fontFamily: "var(--font-roboto)", fontSize: 13, color: "#C0392B", marginTop: 10, textAlign: "center" }}>
               {syncError}
             </p>
           )}

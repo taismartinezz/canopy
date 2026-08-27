@@ -391,6 +391,7 @@ export default function ProfilePage() {
   // ── Invite codes (PI only) ────────────────────────────────────────────────
   const [inviteCodes, setInviteCodes] = useState<{ id: string; code: string; used_by: string | null; created_at: string }[]>([]);
   const [generatingCode, setGeneratingCode] = useState(false);
+  const [labRoleName, setLabRoleName] = useState<string | null>(null);
   const [copiedCodeId, setCopiedCodeId] = useState<string | null>(null);
 
   // ── Activity stats ────────────────────────────────────────────────────────
@@ -416,11 +417,19 @@ export default function ProfilePage() {
 
       const { data: membership } = await supabase
         .from("team_members")
-        .select("project_id")
+        .select("project_id, lab_role_id")
         .eq("user_id", user.id)
         .maybeSingle();
 
       if (membership?.project_id) {
+        if (membership.lab_role_id) {
+          const { data: roleRow } = await supabase
+            .from("lab_roles")
+            .select("name")
+            .eq("id", membership.lab_role_id)
+            .maybeSingle();
+          if (roleRow) setLabRoleName((roleRow as { name: string }).name);
+        }
         const { data: proj } = await supabase
           .from("projects")
           .select("*")
@@ -711,7 +720,7 @@ export default function ProfilePage() {
   const memberSinceDate = profile?.created_at
     ? new Date(profile.created_at).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })
     : "";
-  const roleBadgeLabel = profile?.role === "pi" ? "Principal Investigator" : "Researcher";
+  const roleBadgeLabel = labRoleName ?? (profile?.role === "pi" ? "Principal Investigator" : "Researcher");
 
   // ── Tabs ──────────────────────────────────────────────────────────────────
   const tabs: { id: TabId; label: string }[] = [

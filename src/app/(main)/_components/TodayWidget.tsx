@@ -138,7 +138,7 @@ export function TodayWidget({
     return (
       <div style={cardStyle}>
         <div style={{ padding: "16px 20px 12px", borderBottom: `1px solid ${T.border}` }}>
-          <span style={{ fontSize: 13, fontWeight: 600, color: T.textPrimary }}>Today</span>
+          <span style={{ fontSize: 13, fontWeight: 600, color: T.textPrimary }}>Recent</span>
         </div>
         <div style={{ padding: "12px 20px", display: "flex", flexDirection: "column", gap: 12 }}>
           {[1, 2, 3].map((i) => (
@@ -157,7 +157,7 @@ export function TodayWidget({
     <div style={cardStyle}>
       {/* Header */}
       <div style={{ padding: "16px 20px 12px", borderBottom: `1px solid ${T.border}` }}>
-        <span style={{ fontSize: 13, fontWeight: 600, color: T.textPrimary, letterSpacing: "0.01em" }}>Today</span>
+        <span style={{ fontSize: 13, fontWeight: 600, color: T.textPrimary, letterSpacing: "0.01em" }}>Recent</span>
       </div>
 
       <div style={{ padding: "8px 0" }}>

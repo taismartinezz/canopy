@@ -220,7 +220,7 @@ function MemberPanel({ member, onClose }: { member: TeamMember; onClose: () => v
               <div>
                 <h2 style={{ fontFamily: "var(--font-lora)", fontWeight: 600, fontSize: 17, color: "var(--color-body)", margin: 0 }}>{member.name}</h2>
                 <p style={{ fontSize: 12, color: "var(--color-secondary)", marginTop: 3, textTransform: "capitalize" }}>
-                  {member.role === "pi" ? "Principal Investigator" : "Researcher"}
+                  {member.labRoleName ?? (member.role === "pi" ? "Principal Investigator" : "Researcher")}
                 </p>
               </div>
             </div>
@@ -282,8 +282,8 @@ function MemberCard({ member, onClick, isCurrentUser }: { member: TeamMember; on
             {member.name}
             {isCurrentUser && <span style={{ fontSize: 11, fontWeight: 400, color: "var(--color-secondary)", marginLeft: 6 }}>(you)</span>}
           </p>
-          <p style={{ fontSize: 12, color: "var(--color-secondary)", marginTop: 2, textTransform: "capitalize" }}>
-            {member.role === "pi" ? "PI" : "Researcher"}
+          <p style={{ fontSize: 12, color: "var(--color-secondary)", marginTop: 2 }}>
+            {member.labRoleName ?? (member.role === "pi" ? "PI" : "Researcher")}
           </p>
         </div>
       </div>
@@ -589,18 +589,27 @@ export default function TeamPage() {
     if (!currentUserId || !projectId) return;
 
     (async () => {
-      // 1. Team roster for this project + the project's display name
-      const [{ data: memberData }, { data: projectData }] = await Promise.all([
+      // 1. Team roster for this project + the project's display name + lab roles
+      const [{ data: memberData }, { data: projectData }, { data: labRolesData }] = await Promise.all([
         supabase
           .from("team_members")
-          .select("*, user_profiles(name, avatar_color, avatar_initials, avatar_url, institution)")
+          .select("*, user_profiles(name, avatar_color, avatar_initials, avatar_url, institution), lab_role_id")
           .eq("project_id", projectId),
         supabase
           .from("projects")
           .select("name, min_wellbeing_respondents")
           .eq("id", projectId)
           .maybeSingle(),
+        supabase
+          .from("lab_roles")
+          .select("id, name")
+          .eq("project_id", projectId),
       ]);
+
+      const labRoleMap: Record<string, string> = {};
+      for (const r of labRolesData ?? []) {
+        labRoleMap[(r as { id: string; name: string }).id] = (r as { id: string; name: string }).name;
+      }
 
       // Override the localStorage-cached name with the real value from the DB.
       if (projectData?.name) setStoredProjectName(projectData.name as string);
@@ -650,6 +659,7 @@ export default function TeamPage() {
             taskCounts: countMap[uid] ?? { todo: 0, in_progress: 0, in_review: 0, done: 0 },
             weeklyUpdate: undefined,
             weeklyUpdatedAt: undefined,
+            labRoleName: row.lab_role_id ? labRoleMap[row.lab_role_id as string] : undefined,
           };
         });
 
