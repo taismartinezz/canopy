@@ -166,7 +166,7 @@ export function TodayWidget({
             <p style={{ fontSize: 13, color: T.textMuted, margin: 0 }}>Nothing waiting on you right now.</p>
           </div>
         ) : (
-          all.map((item) => {
+          all.slice(0, 5).map((item) => {
             const assignees = item.assigneeIds
               .map((id) => teamMembers.find((u) => u.id === id))
               .filter(Boolean) as User[];
@@ -227,6 +227,14 @@ export function TodayWidget({
           })
         )}
       </div>
+
+      {all.length > 5 && (
+        <div style={{ padding: "10px 20px" }}>
+          <Link href="/tasks" style={{ fontSize: 12, color: T.accent, textDecoration: "none" }}>
+            View all {all.length} items →
+          </Link>
+        </div>
+      )}
 
       {/* Hover CSS injected once */}
       <style>{`

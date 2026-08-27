@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { formatRelativeTime } from "@/lib/mock-data";
 import type { User } from "@/types";
 import Avatar from "@/components/ui/Avatar";
@@ -97,8 +98,8 @@ export function TeamActivityWidget({
           <p style={{ fontSize: 13, color: T.textMuted, margin: 0 }}>No recent activity.</p>
         </div>
       ) : (
-        <div style={{ maxHeight: 260, overflowY: "auto" }}>
-          {rows.slice(0, 8).map((row, i) => {
+        <div>
+          {rows.slice(0, 5).map((row, i) => {
             const actor = teamMembers.find((u) => u.id === row.user_id);
             const name = actor?.name.split(" ")[0] ?? "Someone";
             const suffix = activitySuffix(row);
@@ -108,7 +109,7 @@ export function TeamActivityWidget({
                 style={{
                   display: "flex", alignItems: "flex-start", gap: 10,
                   padding: "10px 20px",
-                  borderBottom: i < Math.min(rows.length, 8) - 1 ? `1px solid ${T.border}` : undefined,
+                  borderBottom: i < Math.min(rows.length, 5) - 1 ? `1px solid ${T.border}` : undefined,
                 }}
               >
                 {actor && <Avatar user={actor} size={24} />}
@@ -126,6 +127,13 @@ export function TeamActivityWidget({
               </div>
             );
           })}
+          {rows.length > 5 && (
+            <div style={{ padding: "10px 20px" }}>
+              <Link href="/tasks" style={{ fontSize: 12, color: T.accent, textDecoration: "none" }}>
+                View all {rows.length} events →
+              </Link>
+            </div>
+          )}
         </div>
       )}
     </div>

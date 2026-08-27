@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { Plus } from "lucide-react";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { CURRENT_USER_ID, getUser } from "@/lib/mock-data";
@@ -84,7 +85,8 @@ function PostColumn({
   }
 
   const currentUser = teamMembers.find((u) => u.id === userId) ?? getUser(CURRENT_USER_ID);
-  const filtered = items.filter((p) => p.type === type).slice(0, 3);
+  const allOfType = items.filter((p) => p.type === type);
+  const filtered = allOfType.slice(0, 4);
 
   return (
     <div style={{ flex: 1, minWidth: 0, padding: "12px 16px", borderRight: borderRight ? `1px solid ${T.border}` : undefined }}>
@@ -124,6 +126,15 @@ function PostColumn({
             </div>
           );
         })}
+
+        {allOfType.length > 4 && !showForm && (
+          <Link
+            href={type === "opportunity" ? "/opportunities" : "/wins"}
+            style={{ fontSize: 12, color: T.accent, textDecoration: "none", display: "block", marginTop: 4 }}
+          >
+            View all {allOfType.length} →
+          </Link>
+        )}
 
         {showForm && (
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
