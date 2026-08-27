@@ -537,6 +537,13 @@ function JournalSidebarContent({
         </div>
       </div>
       <div className="flex-1 overflow-y-auto py-2">
+        {groupedEntries.today.length === 0 && groupedEntries.earlier.length === 0 && groupedEntries.older.length === 0 && (
+          <p style={{ fontSize: 12, color: "var(--color-secondary)", padding: "16px", margin: 0, lineHeight: 1.5 }}>
+            {search
+              ? `No entries match "${search}".`
+              : "No entries yet. Start writing to see them here."}
+          </p>
+        )}
         {groupedEntries.today.length > 0 && (
           <div>
             <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--color-secondary)", padding: "6px 16px 4px" }}>Today</p>

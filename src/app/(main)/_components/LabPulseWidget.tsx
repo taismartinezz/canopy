@@ -88,7 +88,7 @@ function PostColumn({
   const filtered = allOfType.slice(0, 4);
 
   return (
-    <div style={{ flex: 1, minWidth: 0, padding: "12px 16px", borderRight: borderRight ? `1px solid ${T.border}` : undefined }}>
+    <div style={{ flex: 1, minWidth: 220, padding: "12px 16px", borderRight: borderRight ? `1px solid ${T.border}` : undefined }}>
       {/* Column label + add button */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
         <span style={{ fontSize: 10, fontWeight: 700, color: T.accent, textTransform: "uppercase", letterSpacing: "0.08em" }}>
@@ -212,7 +212,7 @@ export function LabPulseWidget({
   return (
     <div style={cardStyle}>
       {/* Two columns */}
-      <div style={{ display: "flex" }}>
+      <div style={{ display: "flex", flexWrap: "wrap" }}>
         <PostColumn
           label="Opportunity"
           posts={posts}

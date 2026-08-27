@@ -206,8 +206,8 @@ export function TodayWidget({
                   </div>
                 )}
 
-                {/* Snooze + Done - fade in on row hover */}
-                <div className="today-row-actions" style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0, opacity: 0, transition: "opacity 0.15s" }}>
+                {/* Snooze + Done - fade in on row hover, absolutely positioned so they don't consume flex space */}
+                <div className="today-row-actions" style={{ position: "absolute", right: 16, top: "50%", transform: "translateY(-50%)", display: "flex", alignItems: "center", gap: 4, opacity: 0, transition: "opacity 0.15s", backgroundColor: "var(--color-surface)", paddingLeft: 8 }}>
                   <button
                     onClick={() => snooze(item)}
                     title="Snooze 3 days"
