@@ -12,8 +12,6 @@ import { useProject } from "@/context/ProjectContext";
 import TaskDetailPanel from "@/components/tasks/TaskDetailPanel";
 import TaskModal from "@/components/tasks/TaskModal";
 import Toast from "@/components/ui/Toast";
-import type { ActivityRow } from "./_components/TeamActivityWidget";
-import { TeamActivityWidget } from "./_components/TeamActivityWidget";
 import type { OverdueReminder } from "./_components/NeedsAttentionWidget";
 import { TodayWidget } from "./_components/TodayWidget";
 import { LabPulseWidget } from "./_components/LabPulseWidget";
@@ -162,7 +160,6 @@ export default function DashboardPage() {
   const [currentUserFirstName, setCurrentUserFirstName] = useState("");
   const [teamMembers, setTeamMembers] = useState<User[]>([]);
   const [dashEvents, setDashEvents]   = useState<CalendarEvent[]>([]);
-  const [dashActivity, setDashActivity] = useState<ActivityRow[]>([]);
   const [dashPosts, setDashPosts]     = useState<DashboardPost[]>([]);
   const [overdueReminders, setOverdueReminders] = useState<OverdueReminder[]>([]);
   const [loading, setLoading]         = useState(isSupabaseConfigured);
@@ -300,21 +297,6 @@ export default function DashboardPage() {
           ]);
         }
 
-        // Fetch activity feed — last 7 days only
-        const sevenDaysAgo = new Date();
-        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-        const { data: actData, error: actError } = await supabase
-          .from("activity_feed")
-          .select("*")
-          .eq("project_id", pid)
-          .gte("created_at", sevenDaysAgo.toISOString())
-          .order("created_at", { ascending: false })
-          .limit(20);
-        if (actError) console.error("[Dashboard] activity_feed error:", actError);
-        if (!actError && actData) {
-          setDashActivity(actData as ActivityRow[]);
-        }
-
         setLoading(false);
       });
       return;
@@ -337,36 +319,22 @@ export default function DashboardPage() {
     }
   }, []);
 
-  // Realtime subscription: push new activity_feed rows into state as they arrive
-  useEffect(() => {
-    if (!projectId) return;
-    const channel = supabase
-      .channel(`activity_feed:${projectId}`)
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "activity_feed", filter: `project_id=eq.${projectId}` },
-        (payload) => {
-          setDashActivity((prev) => [payload.new as ActivityRow, ...prev].slice(0, 10));
-        }
-      )
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [projectId]);
-
-  // Reminders fetch: scoped to the active project from context (re-runs on project switch)
+  // Reminders fetch: overdue + upcoming 7 days, re-runs on project switch
   useEffect(() => {
     if (!isSupabaseConfigured || !activeProjectId || !userId) return;
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       const uid = session?.user?.id;
       if (!uid) return;
-      const now = new Date().toISOString();
       const remProjectFilter = `,and(scope.eq.lab,project_id.eq.${activeProjectId})`;
+      const nextWeek = new Date();
+      nextWeek.setDate(nextWeek.getDate() + 7);
       const { data: remData } = await supabase
         .from("reminders")
         .select("id, title, due_at, scope, assignee_id")
         .or(`user_id.eq.${uid},assignee_id.eq.${uid}${remProjectFilter}`)
         .eq("completed", false)
-        .lt("due_at", now);
+        .not("due_at", "is", null)
+        .lt("due_at", nextWeek.toISOString());
       if (remData) {
         setOverdueReminders(remData.map((r) => ({
           id: r.id as string,
@@ -388,20 +356,6 @@ export default function DashboardPage() {
     ? (subProjects.find((sp) => sp.id === subProjectId) ?? null)
     : null;
   const displayTitle = activeSubProject?.name ?? projectName;
-  const visibleTasks = isLabHome
-    ? tasks
-    : tasks.filter((t) => t.scope === "project" && t.subProjectId === subProjectId);
-
-  // Match /reminders page: lab reminders only in lab scope, personal only in personal scope,
-  // sub-project scope shows no cross-project reminders (scope is "project" in the DB, not fetched here).
-  const visibleReminders = isLabHome
-    ? overdueReminders.filter((r) => r.scope === "lab")
-    : isPersonal
-    ? overdueReminders.filter((r) => r.scope === "personal")
-    : [];
-  const visibleActivity = activeScope === "project" && subProjectId
-    ? dashActivity.filter((r) => r.sub_project_id === subProjectId)
-    : dashActivity;
 
   const moveTask = useCallback((taskId: string, status: TaskStatus) => {
     // Capture the task before the optimistic update so we have the original status
@@ -529,25 +483,15 @@ export default function DashboardPage() {
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-        {/* Row 1: Recent + Team Activity side by side, stretch to equal height */}
-        <div style={{ display: "flex", gap: 20, alignItems: "stretch", flexWrap: "wrap" }}>
-          <div style={{ flex: 1, minWidth: 280, display: "flex", flexDirection: "column" }}>
-            <TodayWidget
-              tasks={tasks}
-              reminders={overdueReminders}
-              teamMembers={teamMembers}
-              userId={userId}
-              loading={loading}
-            />
-          </div>
-          <div style={{ flex: 1, minWidth: 280, display: "flex", flexDirection: "column" }}>
-            <TeamActivityWidget
-              rows={visibleActivity}
-              teamMembers={teamMembers}
-              loading={loading}
-            />
-          </div>
-        </div>
+        {/* Row 1: Agenda (Overdue / Today / Upcoming) */}
+        <TodayWidget
+          tasks={tasks}
+          reminders={overdueReminders}
+          events={dashEvents}
+          teamMembers={teamMembers}
+          userId={userId}
+          loading={loading}
+        />
 
         {/* Row 2: Opportunities + Wins */}
         <LabPulseWidget
