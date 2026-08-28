@@ -71,15 +71,17 @@ export function KanbanColumn({
       </div>
 
       {/* Droppable task area */}
-      <div ref={setDropRef} style={{ flex: 1, padding: "10px 10px 4px", minHeight: 60 }}>
+      <div ref={setDropRef} style={{ flex: 1, minHeight: 60 }}>
         <SortableContext items={tasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col">
             {tasks.length === 0 && (
-              <EmptyState
-                variant={status === "done" ? "done" : "column"}
-                title={status === "done" ? "No completed tasks" : "No tasks yet"}
-                compact
-              />
+              <div style={{ padding: "10px 14px 6px" }}>
+                <EmptyState
+                  variant={status === "done" ? "done" : "column"}
+                  title={status === "done" ? "No completed tasks" : "No tasks yet"}
+                  compact
+                />
+              </div>
             )}
             {tasks.map((task) => (
               <TaskCard
@@ -89,6 +91,7 @@ export function KanbanColumn({
                 onMoveStatus={(s) => onMoveTask(task.id, s)}
                 onEdit={() => onEditTask(task)}
                 onDelete={() => onDeleteTask(task.id)}
+                rowMode
                 teamMembers={teamMembers}
                 subtaskProgress={subtaskCounts[task.id]}
                 subtasks={subtaskData[task.id]}
