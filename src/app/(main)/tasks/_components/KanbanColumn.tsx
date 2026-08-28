@@ -52,8 +52,7 @@ export function KanbanColumn({
     }}>
       {/* Column header */}
       <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "11px 14px", borderBottom: "1px solid var(--color-border)", flexShrink: 0 }}>
-        <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: cfg.dot }} />
-        <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--color-body)", flex: 1 }}>
+        <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.07em", textTransform: "uppercase", color: "var(--color-secondary)", flex: 1 }}>
           {cfg.label}
         </span>
         <span style={{ fontSize: 12, fontWeight: 500, color: "var(--color-secondary)" }}>
