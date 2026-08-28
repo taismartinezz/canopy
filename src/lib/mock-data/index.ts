@@ -63,7 +63,7 @@ export const PROJECT: Project = {
   name: "Moral Injury & Resilience Study",
   institution: "",
   researchType: "trauma",
-  researchParticipation: "wellbeing_only",
+  researchParticipation: "private",
   createdAt: "2025-09-01T00:00:00Z",
   members: ["u0", "u1", "u2", "u3", "u4"],
 };

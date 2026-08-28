@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import {
   ChevronLeft, GraduationCap, BookOpen, Globe,
@@ -167,7 +168,7 @@ function PromptsModal({
 
   const categories = Array.from(new Set(JOURNAL_PROMPTS.map((p) => p.category)));
 
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in"
       style={{ backgroundColor: "rgba(27,46,75,0.35)" }}
@@ -254,7 +255,8 @@ function PromptsModal({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -336,7 +338,7 @@ const EMPTY_LINKS: LinkFields = {
   scholar: "", linkedin: "", researchgate: "", twitter: "", website: "", orcid: "",
 };
 
-type TabId = "about" | "links" | "activity" | "lab_settings";
+type TabId = "about" | "links" | "activity";
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -440,7 +442,7 @@ export default function ProfilePage() {
           setProjectName((proj.name as string) ?? "");
           setProjectInstitution((proj.institution as string) ?? "");
           setResearchType((proj.research_type as string) ?? "");
-          setResearchParticipation((proj.research_participation as string) ?? "");
+          setResearchParticipation((proj.research_participation as string) ?? "private");
         }
       }
 
@@ -727,7 +729,6 @@ export default function ProfilePage() {
     { id: "about", label: "About" },
     { id: "links", label: "Links" },
     { id: "activity", label: "Activity" },
-    ...(isPi ? [{ id: "lab_settings" as TabId, label: "Lab Settings" }] : []),
   ];
 
   // ── Link platform definitions ──────────────────────────────────────────────
@@ -1045,7 +1046,6 @@ export default function ProfilePage() {
                     marginBottom: -1, whiteSpace: "nowrap", flexShrink: 0,
                   }}
                 >
-                  {tab.id === "lab_settings" && <Settings size={14} />}
                   {tab.label}
                 </button>
               );
@@ -1320,8 +1320,8 @@ export default function ProfilePage() {
               </div>
             )}
 
-            {/* ── LAB SETTINGS (PI only) ──────────────────────────────────── */}
-            {activeTab === "lab_settings" && isPi && (
+            {/* Lab settings moved to Settings page */}
+            {false && isPi && (
               <div style={{ display: "flex", flexDirection: "column", gap: 28 }}>
                 <div>
                   <SectionLabel>Project Name</SectionLabel>

@@ -405,7 +405,7 @@ const CONTACT_TYPE_OPTIONS = ["phone", "url", "email", "in_person"] as const;
 
 function SupportResourcesAdmin({
   projectId, piRows, institutionKey, savingInstitution,
-  showAddResource, newResource, savingResource,
+  showAddResource, newResource, savingResource, resourceError,
   onSetInstitution, onOverride, onSetNewResource, onToggleAddResource, onSaveResource, onDeleteResource,
 }: {
   projectId: string;
@@ -415,6 +415,7 @@ function SupportResourcesAdmin({
   showAddResource: boolean;
   newResource: Partial<LabResource>;
   savingResource: boolean;
+  resourceError: string;
   onSetInstitution: (key: string) => void;
   onOverride: (category: string) => void;
   onSetNewResource: (r: Partial<LabResource>) => void;
@@ -552,11 +553,14 @@ function SupportResourcesAdmin({
                 {CONTACT_TYPE_OPTIONS.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
+            {resourceError && (
+              <p style={{ fontSize: 12, color: "var(--color-error)", marginTop: 4, marginBottom: 2 }}>{resourceError}</p>
+            )}
             <div className="flex gap-2 mt-1">
               <button
                 onClick={onSaveResource}
-                disabled={savingResource || !newResource.label || !newResource.contact_value || !newResource.category}
-                style={{ flex: 1, height: 36, backgroundColor: "var(--color-navy)", color: "#fff", border: "none", borderRadius: 7, fontSize: 13, fontWeight: 600, cursor: "pointer" }}
+                disabled={savingResource}
+                style={{ flex: 1, height: 36, backgroundColor: "var(--color-navy)", color: "#fff", border: "none", borderRadius: 7, fontSize: 13, fontWeight: 600, cursor: savingResource ? "default" : "pointer" }}
               >
                 {savingResource ? "Saving…" : "Save"}
               </button>
@@ -598,8 +602,9 @@ export default function TeamPage() {
   const [institutionKey, setInstitutionKey] = useState<string | null>(null);
   const [savingInstitution, setSavingInstitution] = useState(false);
   const [showAddResource, setShowAddResource] = useState(false);
-  const [newResource, setNewResource] = useState<Partial<LabResource>>({});
+  const [newResource, setNewResource] = useState<Partial<LabResource>>({ contact_type: "phone" });
   const [savingResource, setSavingResource] = useState(false);
+  const [resourceError, setResourceError] = useState("");
   const [labRoles, setLabRoles] = useState<LabRole[]>([]);
   const closeMemberPanel = useCallback(() => setSelectedMember(null), []);
   const closeMeetingModal = useCallback(() => setMeetingModalOpen(false), []);
@@ -918,6 +923,7 @@ export default function TeamPage() {
             showAddResource={showAddResource}
             newResource={newResource}
             savingResource={savingResource}
+            resourceError={resourceError}
             onSetInstitution={async (key) => {
               if (!isSupabaseConfigured) { setInstitutionKey(key); return; }
               setSavingInstitution(true);
@@ -930,9 +936,12 @@ export default function TeamPage() {
               setShowAddResource(true);
             }}
             onSetNewResource={setNewResource}
-            onToggleAddResource={() => { setShowAddResource(v => !v); setNewResource({}); }}
+            onToggleAddResource={() => { setShowAddResource(v => !v); setNewResource({ contact_type: "phone" }); setResourceError(""); }}
             onSaveResource={async () => {
-              if (!newResource.label || !newResource.contact_value || !newResource.category || !newResource.contact_type) return;
+              if (!newResource.label || !newResource.contact_value || !newResource.category) {
+                setResourceError("Label, Contact value, and Category are required.");
+                return;
+              }
               setSavingResource(true);
               const row: LabResource = {
                 id: crypto.randomUUID(),
@@ -948,11 +957,17 @@ export default function TeamPage() {
                 active: true,
               };
               if (isSupabaseConfigured) {
-                await supabase.from("support_resources").insert({ ...row, project_id: projectId });
+                const { error: insErr } = await supabase.from("support_resources").insert({ ...row, project_id: projectId });
+                if (insErr) {
+                  setResourceError("Failed to save: " + insErr.message);
+                  setSavingResource(false);
+                  return;
+                }
               }
               setAdminResources(prev => [...prev, row]);
+              setResourceError("");
               setShowAddResource(false);
-              setNewResource({});
+              setNewResource({ contact_type: "phone" });
               setSavingResource(false);
             }}
             onDeleteResource={async (id) => {

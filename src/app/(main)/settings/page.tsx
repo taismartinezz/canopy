@@ -1,13 +1,29 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
-import { Copy, Check, RefreshCw, User, Lock, Bell, Building2, Clock, Monitor, Moon, Sun, Keyboard, BellOff, Plus, Pencil, Trash2, X, ChevronDown, Compass } from "lucide-react";
+import { Copy, Check, RefreshCw, User, Lock, Bell, Building2, Clock, Monitor, Moon, Sun, Keyboard, BellOff, Plus, Pencil, Trash2, X, ChevronDown, Compass, FlaskConical } from "lucide-react";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { showToast } from "@/components/ui/Toast";
 import { useTheme } from "@/context/ThemeContext";
-import type { WorkingHours, LabRole } from "@/types";
+import type { WorkingHours, LabRole, PromptCategory } from "@/types";
 import { WorkingHoursEditor, DEFAULT_WORKING_HOURS } from "@/components/ui/WorkingHoursEditor";
+import { JOURNAL_PROMPTS, ACTIVE_PROMPT_IDS } from "@/lib/mock-data";
+
+const PROMPT_CATEGORY_LABELS: Record<PromptCategory, string> = {
+  emotional_processing: "Emotional Processing",
+  research_reflection: "Research Reflection",
+  team_support: "Team & Support",
+  boundaries_workload: "Boundaries & Workload",
+  looking_forward: "Looking Forward",
+};
+
+const RESEARCH_PARTICIPATION_OPTIONS = [
+  { value: "both_publications", label: "Participate in both publications" },
+  { value: "wellbeing_only", label: "Well-being research only" },
+  { value: "private", label: "Keep data private" },
+];
 
 const sectionStyle: React.CSSProperties = {
   backgroundColor: "var(--color-surface)",
@@ -88,6 +104,15 @@ export default function SettingsPage() {
   const [workingHours, setWorkingHours] = useState<WorkingHours>(DEFAULT_WORKING_HOURS);
   const [savingSchedule, setSavingSchedule] = useState(false);
 
+  // Lab settings (PI only)
+  const [projectName, setProjectName] = useState("");
+  const [projectInstitution, setProjectInstitution] = useState("");
+  const [researchType, setResearchType] = useState("");
+  const [researchParticipation, setResearchParticipation] = useState("private");
+  const [activePromptIds, setActivePromptIds] = useState<string[]>(ACTIVE_PROMPT_IDS);
+  const [promptModalOpen, setPromptModalOpen] = useState(false);
+  const [savingLabSettings, setSavingLabSettings] = useState(false);
+
   // DND / quiet hours
   const [dndEnabled, setDndEnabled]               = useState(false);
   const [quietHoursStart, setQuietHoursStart]     = useState("22:00");
@@ -119,6 +144,12 @@ export default function SettingsPage() {
           const { data: proj } = await supabase
             .from("projects").select("*").eq("id", membership.project_id).maybeSingle();
           setProject(proj);
+          if (proj) {
+            setProjectName((proj.name as string) ?? "");
+            setProjectInstitution((proj.institution as string) ?? "");
+            setResearchType((proj.research_type as string) ?? "");
+            setResearchParticipation((proj.research_participation as string) ?? "private");
+          }
 
           // Load working hours + timezone
           const { data: userSettings } = await supabase
@@ -214,6 +245,20 @@ export default function SettingsPage() {
     if (data) setInviteCodes((prev) => [data as (typeof inviteCodes)[0], ...prev]);
     setGeneratingCode(false);
   }, [project, newInviteRoleId]);
+
+  const handleSaveLabSettings = useCallback(async () => {
+    if (!project?.id) return;
+    setSavingLabSettings(true);
+    const { error } = await supabase.from("projects").update({
+      name: projectName,
+      institution: projectInstitution,
+      research_type: researchType,
+      research_participation: researchParticipation,
+    }).eq("id", project.id);
+    setSavingLabSettings(false);
+    if (error) { showToast("Failed to save: " + error.message); }
+    else { showToast("Lab settings saved."); }
+  }, [project, projectName, projectInstitution, researchType, researchParticipation]);
 
   const handleSendEmailInvites = useCallback(async () => {
     if (!project?.id) return;
@@ -311,6 +356,7 @@ export default function SettingsPage() {
   );
 
   return (
+    <>
     <div style={{ maxWidth: 640, margin: "0 auto", padding: isMobile ? "16px" : "32px 20px", fontFamily: "var(--font-roboto)" }}>
       <h1 style={{ fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 22, color: "var(--color-navy)", margin: "0 0 24px" }}>
         Settings
@@ -685,6 +731,68 @@ export default function SettingsPage() {
         </section>
       )}
 
+      {/* Lab Settings section (PI only) */}
+      {profile?.role === "pi" && (
+        <section style={sectionStyle} aria-labelledby="settings-lab-heading">
+          <div style={sectionHeaderStyle}>
+            <FlaskConical size={16} color="var(--color-secondary)" />
+            <h2 id="settings-lab-heading" style={{ fontFamily: "var(--font-lora)", fontWeight: 500, fontSize: 15, color: "var(--color-body)", margin: 0 }}>
+              Lab Settings
+            </h2>
+          </div>
+          <div style={{ padding: "20px", display: "flex", flexDirection: "column", gap: 18 }}>
+            <div>
+              <label style={labelStyle}>Project Name</label>
+              <input value={projectName} onChange={e => setProjectName(e.target.value)}
+                placeholder="Project name"
+                style={{ ...readonlyInputStyle, cursor: "text", backgroundColor: "var(--color-surface)" }} />
+            </div>
+            <div>
+              <label style={labelStyle}>Institution</label>
+              <input value={projectInstitution} onChange={e => setProjectInstitution(e.target.value)}
+                placeholder="Institution name"
+                style={{ ...readonlyInputStyle, cursor: "text", backgroundColor: "var(--color-surface)" }} />
+            </div>
+            <div>
+              <label style={labelStyle}>Research Type</label>
+              <input value={researchType} onChange={e => setResearchType(e.target.value)}
+                placeholder="e.g. Trauma, Oncology, Veteran PTSD"
+                style={{ ...readonlyInputStyle, cursor: "text", backgroundColor: "var(--color-surface)" }} />
+            </div>
+            <div>
+              <label style={labelStyle}>Research Participation</label>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 4 }}>
+                {RESEARCH_PARTICIPATION_OPTIONS.map(opt => (
+                  <label key={opt.value} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14, color: "var(--color-body)", cursor: "pointer" }}>
+                    <input type="radio" name="settings_research_participation" value={opt.value}
+                      checked={researchParticipation === opt.value}
+                      onChange={() => setResearchParticipation(opt.value)}
+                      style={{ accentColor: "var(--color-navy)", width: 16, height: 16, flexShrink: 0 }} />
+                    {opt.label}
+                  </label>
+                ))}
+              </div>
+              <p style={{ fontSize: 12, color: "var(--color-secondary)", marginTop: 8 }}>
+                Controls how your lab&rsquo;s anonymized data contributes to Canopy&rsquo;s research publications.
+              </p>
+            </div>
+            <div>
+              <label style={labelStyle}>Journal Prompts</label>
+              <button
+                onClick={() => setPromptModalOpen(true)}
+                style={{ height: 40, padding: "0 18px", backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 8, fontFamily: "var(--font-roboto)", fontWeight: 600, fontSize: 13, color: "var(--color-navy)", cursor: "pointer" }}
+              >
+                Manage prompts ({activePromptIds.length} active)
+              </button>
+            </div>
+            <button onClick={handleSaveLabSettings} disabled={savingLabSettings}
+              style={{ alignSelf: "flex-start", minHeight: 44, height: 40, padding: "0 22px", backgroundColor: savingLabSettings ? "var(--color-border)" : "var(--color-btn-primary)", color: "#fff", border: "none", borderRadius: 8, fontFamily: "var(--font-roboto)", fontWeight: 600, fontSize: 13, cursor: savingLabSettings ? "default" : "pointer" }}>
+              {savingLabSettings ? "Saving…" : "Save lab settings"}
+            </button>
+          </div>
+        </section>
+      )}
+
       {/* Scheduling section */}
       <section style={sectionStyle} aria-labelledby="settings-schedule-heading">
         <div style={sectionHeaderStyle}>
@@ -870,5 +978,48 @@ export default function SettingsPage() {
         </div>
       </section>
     </div>
+
+    {promptModalOpen && createPortal(
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in"
+        style={{ backgroundColor: "rgba(27,46,75,0.35)" }}
+        onClick={() => setPromptModalOpen(false)}>
+        <div style={{ backgroundColor: "var(--color-surface)", maxWidth: 560, width: "100%", borderRadius: 10, border: "1px solid var(--color-border)", boxShadow: "0 8px 32px rgba(27,46,75,0.14)", maxHeight: "85vh", display: "flex", flexDirection: "column" }}
+          onClick={e => e.stopPropagation()} role="dialog" aria-modal="true">
+          <div style={{ padding: "20px 24px 16px", borderBottom: "1px solid var(--color-border)", flexShrink: 0 }}>
+            <h2 style={{ fontFamily: "var(--font-lora)", fontWeight: 600, fontSize: 16, color: "var(--color-navy)", margin: 0 }}>Manage Journal Prompts</h2>
+            <p style={{ fontFamily: "var(--font-roboto)", fontSize: 13, color: "var(--color-secondary)", marginTop: 4 }}>Select which prompts are available to your team.</p>
+          </div>
+          <div style={{ overflowY: "auto", flex: 1, padding: "16px 24px" }}>
+            {Array.from(new Set(JOURNAL_PROMPTS.map(p => p.category))).map(cat => (
+              <div key={cat} style={{ marginBottom: 20 }}>
+                <p style={{ fontFamily: "var(--font-roboto)", fontWeight: 700, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-secondary)", marginBottom: 8 }}>
+                  {PROMPT_CATEGORY_LABELS[cat]}
+                </p>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {JOURNAL_PROMPTS.filter(p => p.category === cat).map(prompt => {
+                    const active = activePromptIds.includes(prompt.id);
+                    return (
+                      <button key={prompt.id}
+                        onClick={() => setActivePromptIds(prev => prev.includes(prompt.id) ? prev.filter(x => x !== prompt.id) : [...prev, prompt.id])}
+                        style={{ textAlign: "left", padding: "10px 14px", borderRadius: 8, cursor: "pointer", fontFamily: "var(--font-roboto)", fontSize: 13, color: "var(--color-body)", backgroundColor: active ? "rgba(27,46,75,0.04)" : "var(--color-surface)", border: active ? "1px solid var(--color-navy)" : "1px solid var(--color-border)", transition: "border-color 120ms ease" }}>
+                        {prompt.text}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+          <div style={{ padding: "16px 24px", borderTop: "1px solid var(--color-border)", display: "flex", gap: 8, flexShrink: 0 }}>
+            <button onClick={() => setPromptModalOpen(false)}
+              style={{ height: 44, padding: "0 24px", backgroundColor: "var(--color-navy)", color: "#fff", border: "none", borderRadius: 8, fontFamily: "var(--font-roboto)", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
+              Done
+            </button>
+          </div>
+        </div>
+      </div>,
+      document.body
+    )}
+    </>
   );
 }
