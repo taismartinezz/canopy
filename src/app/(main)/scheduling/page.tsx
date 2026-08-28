@@ -1322,7 +1322,26 @@ export default function SchedulingPage() {
         .select()
         .single();
       if (!error && data) {
-        setProposals((prev) => [{ ...newProposal, id: data.id as string }, ...prev]);
+        const proposalId = data.id as string;
+        setProposals((prev) => [{ ...newProposal, id: proposalId }, ...prev]);
+        // Notify invitees
+        const toNotify = proposal.inviteeIds.filter((id) => id !== currentUserId);
+        if (toNotify.length > 0) {
+          const dateStr = proposal.proposedDate
+            ? `${proposal.proposedDate}${proposal.proposedTime ? " at " + proposal.proposedTime : ""}`
+            : null;
+          const notifs = toNotify.map((uid) => ({
+            user_id: uid,
+            type: "meeting_invite",
+            title: `You were invited to "${proposal.title}"`,
+            body: dateStr,
+            related_id: proposalId,
+            read: false,
+          }));
+          supabase.from("notifications").insert(notifs).then(({ error: ne }) => {
+            if (ne) console.error("[Scheduling] meeting invite notification:", ne);
+          });
+        }
       } else {
         if (error) console.error("[Scheduling] create proposal:", error);
         setProposals((prev) => [newProposal, ...prev]);
