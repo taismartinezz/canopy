@@ -487,9 +487,9 @@ export default function ChatPage() {
     if (!msg) return;
     const now = new Date().toISOString();
     setMessages(p => p.map(m => m.id === id ? { ...m, deletedAt: now } : m));
-    if (isSupabaseConfigured) supabase.from("chat_messages").update({ deleted_at: now }).eq("id", id);
+    if (isSupabaseConfigured) supabase.from("chat_messages").update({ deleted_at: now }).eq("id", id).then(({ error }) => { if (error) console.error("[Chat] delete:", error); });
     showUndoToast("Message deleted",
-      () => { setMessages(p => p.map(m => m.id === id ? { ...m, deletedAt: null } : m)); if (isSupabaseConfigured) supabase.from("chat_messages").update({ deleted_at: null }).eq("id", id); },
+      () => { setMessages(p => p.map(m => m.id === id ? { ...m, deletedAt: null } : m)); if (isSupabaseConfigured) supabase.from("chat_messages").update({ deleted_at: null }).eq("id", id).then(({ error }) => { if (error) console.error("[Chat] undo delete:", error); }); },
       async () => { /* already applied */ },
     );
   }
@@ -497,7 +497,7 @@ export default function ChatPage() {
   // F4: Pin handler
   function handlePin(id: string, pin: boolean) {
     setMessages(p => p.map(m => m.id === id ? { ...m, isPinned: pin } : m));
-    if (isSupabaseConfigured) supabase.from("chat_messages").update({ is_pinned: pin }).eq("id", id);
+    if (isSupabaseConfigured) supabase.from("chat_messages").update({ is_pinned: pin }).eq("id", id).then(({ error }) => { if (error) console.error("[Chat] pin:", error); });
   }
 
   async function handleReact(msgId: string, emoji: string) {
