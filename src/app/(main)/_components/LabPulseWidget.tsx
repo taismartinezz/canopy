@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Plus, Sparkles, Trophy } from "lucide-react";
+import { Plus } from "lucide-react";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { CURRENT_USER_ID, getUser } from "@/lib/mock-data";
 import type { DashboardPost, User } from "@/types";
@@ -25,8 +25,6 @@ function relTime(iso: string): string {
 
 function PostColumn({
   label,
-  accent,
-  Icon,
   posts,
   type,
   projectId,
@@ -35,8 +33,6 @@ function PostColumn({
   emptyPrompt,
 }: {
   label: string;
-  accent: string;
-  Icon: React.ElementType;
   posts: DashboardPost[];
   type: "opportunity" | "lab_win";
   projectId: string;
@@ -89,26 +85,16 @@ function PostColumn({
       overflow: "hidden",
       boxShadow: "0 1px 3px rgba(0,0,0,0.05), 0 1px 2px rgba(0,0,0,0.03)",
     }}>
-      {/* Accent stripe */}
-      <div style={{ height: 3, backgroundColor: accent }} />
-
       {/* Header */}
-      <div style={{ padding: "12px 14px 10px", display: "flex", alignItems: "center", gap: 6 }}>
-        <Icon size={12} style={{ color: accent, flexShrink: 0 }} />
+      <div style={{ padding: "12px 14px 10px", display: "flex", alignItems: "center", gap: 6, borderBottom: "1px solid var(--color-border)" }}>
         <span style={{
-          fontSize: 10, fontWeight: 700, color: accent,
+          fontSize: 10, fontWeight: 700, color: "var(--color-navy)",
           textTransform: "uppercase", letterSpacing: "0.09em", flex: 1,
         }}>
           {label}
         </span>
         {total > 0 && (
-          <span style={{
-            fontSize: 10, fontWeight: 700, color: "#fff",
-            backgroundColor: accent,
-            borderRadius: 20, padding: "2px 8px", lineHeight: "16px",
-          }}>
-            {total}
-          </span>
+          <span style={{ fontSize: 11, color: "var(--color-secondary)" }}>{total}</span>
         )}
         <button
           onClick={() => setShowForm((s) => !s)}
@@ -120,7 +106,7 @@ function PostColumn({
             background: "none", cursor: "pointer", color: "var(--color-secondary)",
             transition: "border-color 120ms, color 120ms",
           }}
-          onMouseEnter={(e) => { const el = e.currentTarget as HTMLElement; el.style.borderColor = accent; el.style.color = accent; }}
+          onMouseEnter={(e) => { const el = e.currentTarget as HTMLElement; el.style.borderColor = "var(--color-navy)"; el.style.color = "var(--color-navy)"; }}
           onMouseLeave={(e) => { const el = e.currentTarget as HTMLElement; el.style.borderColor = "var(--color-border)"; el.style.color = "var(--color-secondary)"; }}
         >
           <Plus size={11} />
@@ -225,10 +211,9 @@ export function LabPulseWidget({
   if (loading) {
     return (
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-        {["var(--color-navy)", "#30D158"].map((accent, i) => (
+        {[0, 1].map((i) => (
           <div key={i} style={{ flex: 1, minWidth: 200, backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 10, overflow: "hidden", boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
-            <div style={{ height: 3, backgroundColor: accent, opacity: 0.3 }} />
-            <div style={{ padding: "12px 14px 10px" }}>
+            <div style={{ padding: "12px 14px 10px", borderBottom: "1px solid var(--color-border)" }}>
               <div style={{ width: 70, height: 9, borderRadius: 4, backgroundColor: "var(--color-border)", opacity: 0.5 }} className="animate-pulse" />
             </div>
             {[1, 2].map((j) => (
@@ -249,8 +234,6 @@ export function LabPulseWidget({
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
         <PostColumn
           label="Opportunities"
-          accent="var(--color-navy)"
-          Icon={Sparkles}
           posts={posts}
           type="opportunity"
           projectId={projectId}
@@ -260,8 +243,6 @@ export function LabPulseWidget({
         />
         <PostColumn
           label="Wins"
-          accent="#30D158"
-          Icon={Trophy}
           posts={posts}
           type="lab_win"
           projectId={projectId}

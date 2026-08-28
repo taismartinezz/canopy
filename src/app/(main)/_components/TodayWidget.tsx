@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Check, CalendarDays } from "lucide-react";
+import { Check } from "lucide-react";
 import type { Task, CalendarEvent, User } from "@/types";
 import Avatar from "@/components/ui/Avatar";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
@@ -32,9 +32,9 @@ const KIND_CFG = {
 // ── Section config ─────────────────────────────────────────────────────────────
 
 const SECTION_CFG = {
-  overdue:  { label: "Overdue",  accent: "#FF3B30" },
-  today:    { label: "Today",    accent: "var(--color-navy)" },
-  upcoming: { label: "Upcoming", accent: "#FF9500" },
+  overdue:  { label: "Overdue",  headerColor: "#FF3B30" },
+  today:    { label: "Today",    headerColor: "var(--color-navy)" },
+  upcoming: { label: "Upcoming", headerColor: "var(--color-navy)" },
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -100,21 +100,20 @@ function categorize(
 // ── Single item row (mirrors TaskCard interior) ────────────────────────────────
 
 function ItemRow({
-  item, teamMembers, onDone, isFirst, accentColor,
+  item, teamMembers, onDone, isFirst, sectionKey,
 }: {
   item: AgendaItem;
   teamMembers: User[];
   onDone?: (item: AgendaItem) => void;
   isFirst: boolean;
-  accentColor: string;
+  sectionKey: "overdue" | "today" | "upcoming";
 }) {
   const kCfg = KIND_CFG[item.kind];
   const assignees = item.assigneeIds
     .map((id) => teamMembers.find((u) => u.id === id))
     .filter(Boolean) as User[];
-  const sectionLabel = accentColor === "#FF3B30" ? "overdue" : accentColor === "#FF9500" ? "upcoming" : "today";
-  const dateLabel = sectionLabel === "overdue" ? overdueLabel(item.dateIso)
-    : sectionLabel === "upcoming" ? upcomingLabel(item.dateIso)
+  const dateLabel = sectionKey === "overdue" ? overdueLabel(item.dateIso)
+    : sectionKey === "upcoming" ? upcomingLabel(item.dateIso)
     : "";
 
   return (
@@ -197,7 +196,6 @@ function AgendaCard({
 }) {
   const cfg = SECTION_CFG[sectionKey];
   const isToday = sectionKey === "today";
-  const isOverdue = sectionKey === "overdue";
 
   return (
     <div className="agenda-card" style={{
@@ -208,24 +206,16 @@ function AgendaCard({
       overflow: "hidden",
       boxShadow: "0 1px 3px rgba(0,0,0,0.05), 0 1px 2px rgba(0,0,0,0.03)",
     }}>
-      {/* Accent stripe */}
-      <div style={{ height: 3, backgroundColor: cfg.accent }} />
-
       {/* Header */}
-      <div style={{ padding: "12px 14px 10px", display: "flex", alignItems: "center", gap: 6 }}>
+      <div style={{ padding: "12px 14px 10px", display: "flex", alignItems: "center", gap: 6, borderBottom: "1px solid var(--color-border)" }}>
         <span style={{
-          fontSize: 10, fontWeight: 700, color: cfg.accent,
+          fontSize: 10, fontWeight: 700, color: cfg.headerColor,
           textTransform: "uppercase", letterSpacing: "0.09em", flex: 1,
         }}>
           {cfg.label}
         </span>
         {items.length > 0 && (
-          <span style={{
-            fontSize: 10, fontWeight: 700, color: "#fff",
-            backgroundColor: isOverdue ? "#FF3B30" : cfg.accent,
-            borderRadius: 20, padding: "2px 8px", lineHeight: "16px",
-            boxShadow: isOverdue ? "0 1px 4px rgba(255,59,48,0.35)" : undefined,
-          }}>
+          <span style={{ fontSize: 11, color: "var(--color-secondary)" }}>
             {items.length}
           </span>
         )}
@@ -233,14 +223,7 @@ function AgendaCard({
 
       {/* Items or empty state */}
       {items.length === 0 ? (
-        <div style={{
-          padding: isToday ? "24px 14px" : "12px 14px 16px",
-          textAlign: isToday ? "center" : "left",
-          display: "flex", flexDirection: "column", alignItems: isToday ? "center" : "flex-start", gap: 6,
-        }}>
-          {isToday && (
-            <CalendarDays size={22} style={{ color: "var(--color-border)", marginBottom: 2 }} />
-          )}
+        <div style={{ padding: "14px", display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 4 }}>
           <p style={{ fontSize: 12, color: "var(--color-secondary)", margin: 0, lineHeight: 1.5 }}>
             {isToday ? "You're all clear today." : sectionKey === "overdue" ? "Nothing overdue." : "Nothing in the next 7 days."}
           </p>
@@ -254,7 +237,7 @@ function AgendaCard({
               teamMembers={teamMembers}
               onDone={onDone}
               isFirst={i === 0}
-              accentColor={cfg.accent}
+              sectionKey={sectionKey}
             />
           ))}
           {items.length > 5 && (
@@ -312,10 +295,9 @@ export function TodayWidget({
   if (loading) {
     return (
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-        {["#FF3B30", "var(--color-navy)", "#FF9500"].map((accent, i) => (
+        {[0, 1, 2].map((i) => (
           <div key={i} style={{ flex: 1, minWidth: 200, backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 10, overflow: "hidden", boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
-            <div style={{ height: 3, backgroundColor: accent, opacity: 0.3 }} />
-            <div style={{ padding: "12px 14px 10px" }}>
+            <div style={{ padding: "12px 14px 10px", borderBottom: "1px solid var(--color-border)" }}>
               <div style={{ width: 60, height: 9, borderRadius: 4, backgroundColor: "var(--color-border)", opacity: 0.5 }} className="animate-pulse" />
             </div>
             {[1, 2].map((j) => (
