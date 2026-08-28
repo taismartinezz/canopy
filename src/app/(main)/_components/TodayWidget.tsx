@@ -32,7 +32,7 @@ const KIND_CFG = {
 // ── Section config ─────────────────────────────────────────────────────────────
 
 const SECTION_CFG = {
-  overdue:  { label: "Overdue",  headerColor: "#FF3B30" },
+  overdue:  { label: "Overdue",  headerColor: "var(--color-navy)" },
   today:    { label: "Today",    headerColor: "var(--color-navy)" },
   upcoming: { label: "Upcoming", headerColor: "var(--color-navy)" },
 };
