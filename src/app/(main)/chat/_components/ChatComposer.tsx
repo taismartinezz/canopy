@@ -383,7 +383,7 @@ export function ChatComposer({
         {mentionQuery !== null && mentionCandidates.length > 0 && (
           <div style={{ position: "absolute", bottom: "calc(100% + 4px)", left: 0, right: 0, zIndex: 100, backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 8, boxShadow: "0 4px 16px rgba(0,0,0,0.12)", overflow: "hidden" }}>
             {mentionCandidates.map((m, i) => (
-              <button key={m.id} onClick={() => insertMention(m)}
+              <button key={m.id} onMouseDown={e => { e.preventDefault(); insertMention(m); }}
                 style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "7px 12px", border: "none", background: i === mentionIndex ? "rgba(14,165,233,0.08)" : "transparent", cursor: "pointer", textAlign: "left" }}
                 onMouseEnter={e => (e.currentTarget.style.backgroundColor = "rgba(14,165,233,0.08)")}
                 onMouseLeave={e => (e.currentTarget.style.backgroundColor = i === mentionIndex ? "rgba(14,165,233,0.08)" : "transparent")}
@@ -430,18 +430,6 @@ export function ChatComposer({
               <Code2 size={13} />
             </TB>
             {DIVIDER}
-            {/* Grammar fix */}
-            {draft.trim() && grammarState !== "preview" && (
-              <button
-                type="button"
-                onClick={handleFixGrammar}
-                disabled={grammarState === "loading"}
-                title="Fix grammar (Anthropic)"
-                style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: "var(--color-secondary)", border: "1px solid var(--color-border)", borderRadius: 5, padding: "3px 8px", backgroundColor: "transparent", cursor: grammarState === "loading" ? "default" : "pointer", fontFamily: "var(--font-roboto)", height: 22, flexShrink: 0 }}
-              >
-                {grammarState === "loading" ? <><Loader2 size={10} className="animate-spin" /> Fixing...</> : <>✦ Fix grammar</>}
-              </button>
-            )}
           </div>
 
           {/* Textarea row */}
@@ -456,6 +444,18 @@ export function ChatComposer({
               onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = "rgba(0,0,0,0.06)"; (e.currentTarget as HTMLButtonElement).style.color = "var(--color-body)"; }}
               onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = "transparent"; (e.currentTarget as HTMLButtonElement).style.color = "var(--color-secondary)"; }}
             >+</button>
+            {/* Grammar fix - moved here so it doesn't overflow the toolbar */}
+            {draft.trim() && grammarState !== "preview" && (
+              <button
+                type="button"
+                onClick={handleFixGrammar}
+                disabled={grammarState === "loading"}
+                title="Fix grammar (Anthropic)"
+                style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: "var(--color-secondary)", border: "1px solid var(--color-border)", borderRadius: 5, padding: "3px 8px", backgroundColor: "transparent", cursor: grammarState === "loading" ? "default" : "pointer", fontFamily: "var(--font-roboto)", height: 22, flexShrink: 0, whiteSpace: "nowrap" }}
+              >
+                {grammarState === "loading" ? <><Loader2 size={10} className="animate-spin" /> Fixing...</> : <>✦ Fix grammar</>}
+              </button>
+            )}
 
             <textarea
               ref={inputRef}

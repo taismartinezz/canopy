@@ -53,9 +53,61 @@ export default function ChatDock() {
   const [loadingMsgs, setLoadingMsgs] = useState(false);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
+  const [capturedMentionIds, setCapturedMentionIds] = useState<string[]>([]);
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+  const [mentionIndex, setMentionIndex] = useState(0);
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  const mentionCandidates = mentionQuery === null ? [] :
+    teamMembers.filter(m => m.name.toLowerCase().startsWith(mentionQuery.toLowerCase())).slice(0, 5);
+
+  function insertMention(member: User) {
+    const el = inputRef.current;
+    if (!el) return;
+    const cursor = el.selectionStart ?? draft.length;
+    const before = draft.slice(0, cursor).replace(/@\w*$/, `@${member.name} `);
+    const after = draft.slice(cursor);
+    setDraft(before + after);
+    setCapturedMentionIds(prev => prev.includes(member.id) ? prev : [...prev, member.id]);
+    setMentionQuery(null);
+    setTimeout(() => { el.focus(); el.setSelectionRange(before.length, before.length); }, 10);
+  }
+
+  function handleReact(msgId: string, emoji: string) {
+    const msg = messages.find(m => m.id === msgId);
+    const alreadyReacted = msg?.reactions.find(r => r.emoji === emoji)?.hasReacted;
+    setMessages(p => p.map(m => {
+      if (m.id !== msgId) return m;
+      const ex = m.reactions.find(r => r.emoji === emoji);
+      if (alreadyReacted) return { ...m, reactions: m.reactions.map(r => r.emoji === emoji ? { ...r, count: r.count - 1, hasReacted: false } : r).filter(r => r.count > 0) };
+      if (ex) return { ...m, reactions: m.reactions.map(r => r.emoji === emoji ? { ...r, count: r.count + 1, hasReacted: true } : r) };
+      return { ...m, reactions: [...m.reactions, { emoji, count: 1, hasReacted: true }] };
+    }));
+    if (!isSupabaseConfigured) return;
+    if (alreadyReacted) {
+      supabase.from("message_reactions").delete().eq("message_id", msgId).eq("user_id", currentUserId).eq("emoji", emoji).then(() => {});
+    } else {
+      supabase.from("message_reactions").upsert({ message_id: msgId, user_id: currentUserId, emoji }).then(() => {});
+    }
+  }
+
+  function handleEdit(id: string, content: string) {
+    setMessages(p => p.map(m => m.id === id ? { ...m, content } : m));
+    if (isSupabaseConfigured) supabase.from("chat_messages").update({ content }).eq("id", id).then(({ error }) => { if (error) console.error("[ChatDock] edit:", error); });
+  }
+
+  function handleDelete(id: string) {
+    const now = new Date().toISOString();
+    setMessages(p => p.map(m => m.id === id ? { ...m, deletedAt: now } : m));
+    if (isSupabaseConfigured) supabase.from("chat_messages").update({ deleted_at: now }).eq("id", id).then(({ error }) => { if (error) console.error("[ChatDock] delete:", error); });
+  }
+
+  function handlePin(id: string, pin: boolean) {
+    setMessages(p => p.map(m => m.id === id ? { ...m, isPinned: pin } : m));
+    if (isSupabaseConfigured) supabase.from("chat_messages").update({ is_pinned: pin }).eq("id", id).then(({ error }) => { if (error) console.error("[ChatDock] pin:", error); });
+  }
 
   // Hide on full chat page
   const hidden = pathname.startsWith("/chat");
@@ -249,14 +301,15 @@ export default function ChatDock() {
     const createdAt = new Date().toISOString();
 
     if (!isSupabaseConfigured) {
-      setMessages(p => [...p, { id, channel: key, senderId: currentUserId, senderName: currentUserName, content: text, createdAt, threadParentId: null, deletedAt: null, threadCount: 0, reactions: [], mentionedUserIds: [], isPinned: false, attachments: [] }]);
-      setDraft(""); setSending(false);
+      setMessages(p => [...p, { id, channel: key, senderId: currentUserId, senderName: currentUserName, content: text, createdAt, threadParentId: null, deletedAt: null, threadCount: 0, reactions: [], mentionedUserIds: capturedMentionIds, isPinned: false, attachments: [] }]);
+      setDraft(""); setCapturedMentionIds([]); setSending(false);
       return;
     }
 
-    await supabase.from("chat_messages").insert({ id, channel: key, sender_id: currentUserId, content: text, created_at: createdAt, thread_parent_id: null, mentioned_user_ids: [] });
-    setMessages(p => [...p, { id, channel: key, senderId: currentUserId, senderName: currentUserName, content: text, createdAt, threadParentId: null, deletedAt: null, threadCount: 0, reactions: [], mentionedUserIds: [], isPinned: false, attachments: [] }]);
+    await supabase.from("chat_messages").insert({ id, channel: key, sender_id: currentUserId, content: text, created_at: createdAt, thread_parent_id: null, mentioned_user_ids: capturedMentionIds });
+    setMessages(p => [...p, { id, channel: key, senderId: currentUserId, senderName: currentUserName, content: text, createdAt, threadParentId: null, deletedAt: null, threadCount: 0, reactions: [], mentionedUserIds: capturedMentionIds, isPinned: false, attachments: [] }]);
     setDraft("");
+    setCapturedMentionIds([]);
     setSending(false);
     inputRef.current?.focus();
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -268,9 +321,9 @@ export default function ChatDock() {
     <div style={{ position: "fixed", bottom: 24, right: 24, zIndex: 1000, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 0 }}>
       {/* Expanded dock panel */}
       {dockOpen && (
-        <div style={{ width: 340, height: activeConv ? 460 : 320, backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "12px 12px 0 0", boxShadow: "0 -4px 24px rgba(0,0,0,0.18)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+        <div style={{ width: 340, height: activeConv ? 460 : 320, backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "12px 12px 0 0", boxShadow: "0 -4px 24px rgba(0,0,0,0.18)", display: "flex", flexDirection: "column", overflow: "visible" }}>
           {/* Header */}
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", borderBottom: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", flexShrink: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", borderBottom: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", flexShrink: 0, borderRadius: "12px 12px 0 0", overflow: "hidden" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               {activeConv && (
                 <button onClick={() => { setActiveConv(null); setMessages([]); }} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-secondary)", display: "flex", padding: 4, borderRadius: 6 }}
@@ -350,31 +403,59 @@ export default function ChatDock() {
                     msg={msg}
                     prevMsg={i > 0 ? messages[i - 1] : null}
                     currentUserId={currentUserId}
-                    onEdit={() => {}}
-                    onDelete={() => {}}
-                    onReact={() => {}}
+                    onEdit={handleEdit}
+                    onDelete={handleDelete}
+                    onReact={handleReact}
                     onOpenThread={() => {}}
-                    onPin={() => {}}
+                    onPin={handlePin}
                     teamMembers={teamMembers}
                   />
                 ))}
                 <div ref={bottomRef} />
               </div>
               {/* Composer */}
-              <div style={{ borderTop: "1px solid var(--color-border)", padding: "8px 12px", flexShrink: 0, display: "flex", gap: 8, alignItems: "flex-end" }}>
-                <textarea
-                  ref={inputRef}
-                  value={draft}
-                  onChange={e => setDraft(e.target.value)}
-                  onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
-                  placeholder={`Message ${activeConvInfo?.label ?? ""}...`}
-                  rows={1}
-                  style={{ flex: 1, resize: "none", border: "1px solid var(--color-border)", borderRadius: 8, outline: "none", padding: "6px 10px", background: "var(--color-canvas)", color: "var(--color-body)", fontSize: 13, lineHeight: 1.5, fontFamily: "var(--font-roboto)", maxHeight: 80, overflowY: "auto" }}
-                />
-                <button onClick={sendMessage} disabled={!draft.trim() || sending} aria-label="Send"
-                  style={{ width: 32, height: 32, borderRadius: 7, border: "none", backgroundColor: draft.trim() ? "var(--color-btn-primary)" : "var(--color-border)", color: draft.trim() ? "#fff" : "var(--color-secondary)", cursor: draft.trim() ? "pointer" : "default", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                  <Send size={14} />
-                </button>
+              <div style={{ borderTop: "1px solid var(--color-border)", padding: "8px 12px", flexShrink: 0, position: "relative" }}>
+                {mentionQuery !== null && mentionCandidates.length > 0 && (
+                  <div style={{ position: "absolute", bottom: "calc(100% + 2px)", left: 12, right: 12, zIndex: 200, backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 8, boxShadow: "0 4px 16px rgba(0,0,0,0.12)", overflow: "hidden" }}>
+                    {mentionCandidates.map((m, i) => (
+                      <button key={m.id} onMouseDown={e => { e.preventDefault(); insertMention(m); }}
+                        style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "7px 12px", border: "none", background: i === mentionIndex ? "rgba(14,165,233,0.08)" : "transparent", cursor: "pointer", textAlign: "left" }}
+                      >
+                        <Avatar user={m} size={20} />
+                        <span style={{ fontSize: 13, color: "var(--color-body)" }}>{m.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
+                  <textarea
+                    ref={inputRef}
+                    value={draft}
+                    onChange={e => {
+                      setDraft(e.target.value);
+                      const cursor = e.target.selectionStart ?? e.target.value.length;
+                      const atMatch = e.target.value.slice(0, cursor).match(/@(\w*)$/);
+                      if (atMatch) { setMentionQuery(atMatch[1]); setMentionIndex(0); }
+                      else setMentionQuery(null);
+                    }}
+                    onKeyDown={e => {
+                      if (mentionQuery !== null && mentionCandidates.length > 0) {
+                        if (e.key === "ArrowDown") { e.preventDefault(); setMentionIndex(i => Math.min(i + 1, mentionCandidates.length - 1)); return; }
+                        if (e.key === "ArrowUp") { e.preventDefault(); setMentionIndex(i => Math.max(i - 1, 0)); return; }
+                        if (e.key === "Enter" || e.key === "Tab") { e.preventDefault(); insertMention(mentionCandidates[mentionIndex]); return; }
+                        if (e.key === "Escape") { setMentionQuery(null); return; }
+                      }
+                      if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+                    }}
+                    placeholder={`Message ${activeConvInfo?.label ?? ""}...`}
+                    rows={1}
+                    style={{ flex: 1, resize: "none", border: "1px solid var(--color-border)", borderRadius: 8, outline: "none", padding: "6px 10px", background: "var(--color-canvas)", color: "var(--color-body)", fontSize: 13, lineHeight: 1.5, fontFamily: "var(--font-roboto)", maxHeight: 80, overflowY: "auto" }}
+                  />
+                  <button onClick={sendMessage} disabled={!draft.trim() || sending} aria-label="Send"
+                    style={{ width: 32, height: 32, borderRadius: 7, border: "none", backgroundColor: draft.trim() ? "var(--color-btn-primary)" : "var(--color-border)", color: draft.trim() ? "#fff" : "var(--color-secondary)", cursor: draft.trim() ? "pointer" : "default", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <Send size={14} />
+                  </button>
+                </div>
               </div>
             </>
           )}
