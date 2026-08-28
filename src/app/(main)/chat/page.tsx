@@ -585,7 +585,7 @@ export default function ChatPage() {
 
   const chatSections: ScopeSection[] = !isProjectView
     ? [{
-        id: "lab", label: "Lab", color: "#0ea5e9", icon: <Hash size={17} />, isActive: activeChannel === "lab",
+        id: "lab", label: "Lab", color: "var(--color-navy)", icon: <Hash size={17} />, isActive: activeChannel === "lab",
         onClick: () => { setActiveChannel("lab"); setMessages([]); setThreadMsg(null); },
         count: unreadCounts[resolveChannelKey(projectId ?? "", currentUserId, "lab")] || undefined,
       }]
