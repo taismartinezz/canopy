@@ -14,7 +14,7 @@ const T = {
   border:      "var(--color-border)",
   textPrimary: "var(--color-body)",
   textMuted:   "var(--color-secondary)",
-  accent:      "#0A84FF",
+  accent:      "var(--color-navy)",
   radius:      11,
 };
 
@@ -91,8 +91,8 @@ function PostColumn({
     <div style={{ flex: 1, minWidth: 220, padding: "12px 16px", borderRight: borderRight ? `1px solid ${T.border}` : undefined }}>
       {/* Column label + add button */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-        <span style={{ fontSize: 10, fontWeight: 700, color: T.accent, textTransform: "uppercase", letterSpacing: "0.08em" }}>
-          {label}
+        <span style={{ fontSize: 10, fontWeight: 700, color: T.accent, textTransform: "uppercase", letterSpacing: "0.09em" }}>
+          {label === "Lab Win" ? "Wins" : label + "s"}
         </span>
         <button
           onClick={() => setShowForm((s) => !s)}
@@ -159,7 +159,7 @@ function PostColumn({
               </button>
               <button
                 onClick={handlePost}
-                style={{ fontSize: 11, fontWeight: 700, color: "#fff", backgroundColor: T.accent, border: "none", borderRadius: 5, padding: "4px 10px", cursor: "pointer" }}
+                style={{ fontSize: 11, fontWeight: 700, color: "#fff", backgroundColor: "var(--color-btn-primary)", border: "none", borderRadius: 5, padding: "4px 10px", cursor: "pointer" }}
               >
                 Post
               </button>
