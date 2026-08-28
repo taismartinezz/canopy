@@ -1,22 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Plus } from "lucide-react";
+import { Plus, Sparkles, Trophy } from "lucide-react";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { CURRENT_USER_ID, getUser } from "@/lib/mock-data";
 import type { DashboardPost, User } from "@/types";
 import Avatar from "@/components/ui/Avatar";
-
-// ── Design tokens ─────────────────────────────────────────────────────────────
-
-const T = {
-  card:        "var(--color-surface)",
-  border:      "var(--color-border)",
-  textPrimary: "var(--color-body)",
-  textMuted:   "var(--color-secondary)",
-  accent:      "var(--color-navy)",
-  radius:      11,
-};
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -32,24 +21,28 @@ function relTime(iso: string): string {
   return months === 1 ? "1mo ago" : `${months}mo ago`;
 }
 
-// ── Column ────────────────────────────────────────────────────────────────────
+// ── Column card ────────────────────────────────────────────────────────────────
 
 function PostColumn({
   label,
+  accent,
+  Icon,
   posts,
   type,
   projectId,
   userId,
   teamMembers,
-  borderRight,
+  emptyPrompt,
 }: {
   label: string;
+  accent: string;
+  Icon: React.ElementType;
   posts: DashboardPost[];
   type: "opportunity" | "lab_win";
   projectId: string;
   userId: string;
   teamMembers: User[];
-  borderRight?: boolean;
+  emptyPrompt: string;
 }) {
   const [items, setItems] = useState<DashboardPost[]>(posts);
   const [showForm, setShowForm] = useState(false);
@@ -84,89 +77,132 @@ function PostColumn({
   }
 
   const currentUser = teamMembers.find((u) => u.id === userId) ?? getUser(CURRENT_USER_ID);
-  const allOfType = items.filter((p) => p.type === type);
-  const filtered = allOfType.slice(0, 4);
+  const filtered = items.filter((p) => p.type === type).slice(0, 4);
+  const total    = items.filter((p) => p.type === type).length;
 
   return (
-    <div style={{ flex: 1, minWidth: 220, padding: "12px 16px", borderRight: borderRight ? `1px solid ${T.border}` : undefined }}>
-      {/* Column label + add button */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-        <span style={{ fontSize: 10, fontWeight: 700, color: T.accent, textTransform: "uppercase", letterSpacing: "0.09em" }}>
-          {label === "Lab Win" ? "Wins" : label + "s"}
+    <div className="lab-card" style={{
+      flex: 1, minWidth: 200,
+      backgroundColor: "var(--color-surface)",
+      border: "1px solid var(--color-border)",
+      borderRadius: 10,
+      overflow: "hidden",
+      boxShadow: "0 1px 3px rgba(0,0,0,0.05), 0 1px 2px rgba(0,0,0,0.03)",
+    }}>
+      {/* Accent stripe */}
+      <div style={{ height: 3, backgroundColor: accent }} />
+
+      {/* Header */}
+      <div style={{ padding: "12px 14px 10px", display: "flex", alignItems: "center", gap: 6 }}>
+        <Icon size={12} style={{ color: accent, flexShrink: 0 }} />
+        <span style={{
+          fontSize: 10, fontWeight: 700, color: accent,
+          textTransform: "uppercase", letterSpacing: "0.09em", flex: 1,
+        }}>
+          {label}
         </span>
+        {total > 0 && (
+          <span style={{
+            fontSize: 10, fontWeight: 700, color: "#fff",
+            backgroundColor: accent,
+            borderRadius: 20, padding: "2px 8px", lineHeight: "16px",
+          }}>
+            {total}
+          </span>
+        )}
         <button
           onClick={() => setShowForm((s) => !s)}
-          style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 11, color: T.textMuted, background: "none", border: "none", cursor: "pointer", padding: 0 }}
+          aria-label={`Add ${label.toLowerCase()}`}
+          style={{
+            display: "flex", alignItems: "center", justifyContent: "center",
+            width: 22, height: 22, borderRadius: 5,
+            border: "1px solid var(--color-border)",
+            background: "none", cursor: "pointer", color: "var(--color-secondary)",
+            transition: "border-color 120ms, color 120ms",
+          }}
+          onMouseEnter={(e) => { const el = e.currentTarget as HTMLElement; el.style.borderColor = accent; el.style.color = accent; }}
+          onMouseLeave={(e) => { const el = e.currentTarget as HTMLElement; el.style.borderColor = "var(--color-border)"; el.style.color = "var(--color-secondary)"; }}
         >
-          <Plus size={12} />
+          <Plus size={11} />
         </button>
       </div>
 
-      {/* Posts */}
-      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        {filtered.length === 0 && !showForm && (
-          <p style={{ fontSize: 12, color: T.textMuted, margin: 0, lineHeight: 1.5 }}>
-            {type === "opportunity" ? "Spot something worth pursuing? Share it." : "Got a win? Big or small, add it here."}
+      {/* Items or empty */}
+      {filtered.length === 0 && !showForm ? (
+        <div style={{ padding: "12px 14px 16px" }}>
+          <p style={{ fontSize: 12, color: "var(--color-secondary)", margin: 0, lineHeight: 1.5 }}>
+            {emptyPrompt}
           </p>
-        )}
-        {filtered.map((post) => {
-          const author = teamMembers.find((u) => u.id === post.authorId) ?? getUser(post.authorId);
-          return (
-            <div key={post.id} style={{ display: "flex", gap: 8 }}>
-              {author && <Avatar user={author} size={20} />}
-              <div style={{ minWidth: 0 }}>
-                <p style={{ fontSize: 12, color: T.textPrimary, margin: 0, lineHeight: 1.45 }}>
+        </div>
+      ) : (
+        <>
+          {filtered.map((post, i) => {
+            const author = teamMembers.find((u) => u.id === post.authorId) ?? getUser(post.authorId);
+            return (
+              <div key={post.id} style={{
+                padding: "10px 12px",
+                borderTop: "1px solid var(--color-border)",
+              }}>
+                <p style={{
+                  fontSize: 13, fontWeight: 500, color: "var(--color-body)",
+                  lineHeight: 1.35, marginBottom: 8,
+                  overflow: "hidden", display: "-webkit-box",
+                  WebkitLineClamp: 3, WebkitBoxOrient: "vertical",
+                }}>
                   {post.content}
                 </p>
-                <p style={{ fontSize: 11, color: T.textMuted, margin: "2px 0 0" }}>
-                  shared by {author?.name.split(" ")[0] ?? "Someone"} · {relTime(post.createdAt)}
-                </p>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 4 }}>
+                  <span style={{ fontSize: 11, color: "var(--color-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {author?.name.split(" ")[0] ?? "Someone"} · {relTime(post.createdAt)}
+                  </span>
+                  {author && <Avatar user={author} size={20} />}
+                </div>
               </div>
+            );
+          })}
+          {total > 4 && !showForm && (
+            <div style={{ padding: "8px 12px", borderTop: "1px solid var(--color-border)" }}>
+              <span style={{ fontSize: 11, color: "var(--color-secondary)" }}>+{total - 4} more</span>
             </div>
-          );
-        })}
+          )}
+        </>
+      )}
 
-        {allOfType.length > 4 && !showForm && (
-          <p style={{ fontSize: 11, color: T.textMuted, margin: "4px 0 0" }}>
-            +{allOfType.length - 4} more
-          </p>
-        )}
-
-        {showForm && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            <div style={{ display: "flex", gap: 6 }}>
-              {currentUser && <Avatar user={currentUser} size={20} />}
-              <textarea
-                autoFocus
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-                placeholder={type === "opportunity" ? "Share an opportunity…" : "Share a lab win…"}
-                rows={2}
-                style={{
-                  flex: 1, fontSize: 12, color: T.textPrimary,
-                  border: `1px solid ${T.border}`, borderRadius: 6, padding: "6px 8px",
-                  resize: "vertical", backgroundColor: "var(--color-surface-2)",
-                  fontFamily: "inherit", outline: "none",
-                }}
-              />
-            </div>
-            <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
-              <button
-                onClick={() => { setShowForm(false); setContent(""); }}
-                style={{ fontSize: 11, color: T.textMuted, background: "none", border: "none", cursor: "pointer" }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handlePost}
-                style={{ fontSize: 11, fontWeight: 700, color: "#fff", backgroundColor: "var(--color-btn-primary)", border: "none", borderRadius: 5, padding: "4px 10px", cursor: "pointer" }}
-              >
-                Post
-              </button>
-            </div>
+      {/* Compose form */}
+      {showForm && (
+        <div style={{ padding: "10px 12px", borderTop: "1px solid var(--color-border)" }}>
+          <div style={{ display: "flex", gap: 8 }}>
+            {currentUser && <Avatar user={currentUser} size={22} />}
+            <textarea
+              autoFocus
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              placeholder={type === "opportunity" ? "Share an opportunity..." : "Share a lab win..."}
+              rows={2}
+              style={{
+                flex: 1, fontSize: 12, color: "var(--color-body)",
+                border: "1px solid var(--color-border)", borderRadius: 6, padding: "6px 8px",
+                resize: "vertical", backgroundColor: "var(--color-surface-2)",
+                fontFamily: "inherit", outline: "none",
+              }}
+            />
           </div>
-        )}
-      </div>
+          <div style={{ display: "flex", gap: 6, justifyContent: "flex-end", marginTop: 6 }}>
+            <button
+              onClick={() => { setShowForm(false); setContent(""); }}
+              style={{ fontSize: 11, color: "var(--color-secondary)", background: "none", border: "none", cursor: "pointer" }}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handlePost}
+              style={{ fontSize: 11, fontWeight: 700, color: "#fff", backgroundColor: "var(--color-btn-primary)", border: "none", borderRadius: 5, padding: "4px 10px", cursor: "pointer" }}
+            >
+              Post
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -186,51 +222,58 @@ export function LabPulseWidget({
   teamMembers: User[];
   loading?: boolean;
 }) {
-  const cardStyle: React.CSSProperties = {
-    backgroundColor: T.card,
-    border: `1px solid ${T.border}`,
-    borderRadius: T.radius,
-    overflow: "hidden",
-  };
-
   if (loading) {
     return (
-      <div style={cardStyle}>
-        <div style={{ display: "flex" }}>
-          {[0, 1].map((i) => (
-            <div key={i} style={{ flex: 1, padding: "12px 16px", borderRight: i === 0 ? `1px solid ${T.border}` : undefined }}>
-              <div style={{ width: 70, height: 10, borderRadius: 4, backgroundColor: T.border, opacity: 0.5, marginBottom: 10 }} />
-              <div style={{ width: "80%", height: 12, borderRadius: 4, backgroundColor: T.border, opacity: 0.4, marginBottom: 6 }} />
-              <div style={{ width: "60%", height: 12, borderRadius: 4, backgroundColor: T.border, opacity: 0.3 }} />
+      <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+        {["var(--color-navy)", "#30D158"].map((accent, i) => (
+          <div key={i} style={{ flex: 1, minWidth: 200, backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 10, overflow: "hidden", boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
+            <div style={{ height: 3, backgroundColor: accent, opacity: 0.3 }} />
+            <div style={{ padding: "12px 14px 10px" }}>
+              <div style={{ width: 70, height: 9, borderRadius: 4, backgroundColor: "var(--color-border)", opacity: 0.5 }} className="animate-pulse" />
             </div>
-          ))}
-        </div>
+            {[1, 2].map((j) => (
+              <div key={j} style={{ padding: "10px 12px", borderTop: "1px solid var(--color-border)" }}>
+                <div style={{ width: "90%", height: 12, borderRadius: 4, backgroundColor: "var(--color-border)", opacity: 0.4, marginBottom: 6 }} className="animate-pulse" />
+                <div style={{ width: "60%", height: 12, borderRadius: 4, backgroundColor: "var(--color-border)", opacity: 0.3, marginBottom: 8 }} className="animate-pulse" />
+                <div style={{ width: "40%", height: 9, borderRadius: 4, backgroundColor: "var(--color-border)", opacity: 0.25 }} className="animate-pulse" />
+              </div>
+            ))}
+          </div>
+        ))}
       </div>
     );
   }
 
   return (
-    <div style={cardStyle}>
-      {/* Two columns */}
-      <div style={{ display: "flex", flexWrap: "wrap" }}>
+    <>
+      <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
         <PostColumn
-          label="Opportunity"
+          label="Opportunities"
+          accent="var(--color-navy)"
+          Icon={Sparkles}
           posts={posts}
           type="opportunity"
           projectId={projectId}
           userId={userId}
           teamMembers={teamMembers}
-          borderRight
+          emptyPrompt="Spot something worth pursuing? Share it."
         />
         <PostColumn
-          label="Lab Win"
+          label="Wins"
+          accent="#30D158"
+          Icon={Trophy}
           posts={posts}
           type="lab_win"
           projectId={projectId}
           userId={userId}
           teamMembers={teamMembers}
+          emptyPrompt="Got a win? Big or small, add it here."
         />
       </div>
-    </div>
+      <style>{`
+        .lab-card { transition: box-shadow 180ms ease, border-color 180ms ease; }
+        .lab-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.09), 0 1px 4px rgba(0,0,0,0.05) !important; border-color: rgba(0,0,0,0.12) !important; }
+      `}</style>
+    </>
   );
 }
