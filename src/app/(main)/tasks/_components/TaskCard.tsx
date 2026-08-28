@@ -24,6 +24,7 @@ export function TaskCard({
   onEdit,
   onDelete,
   isDragging = false,
+  rowMode = false,
   teamMembers = [],
   subtaskProgress,
   subtasks,
@@ -36,6 +37,7 @@ export function TaskCard({
   onEdit: () => void;
   onDelete: () => void;
   isDragging?: boolean;
+  rowMode?: boolean;
   teamMembers?: User[];
   subtaskProgress?: { total: number; done: number };
   subtasks?: Task[];
@@ -79,7 +81,7 @@ export function TaskCard({
   return (
     <div
       ref={setNodeRef}
-      style={{ ...style, overflow: "hidden", borderRadius: 8, cursor: isDragging ? "grabbing" : "grab" }}
+      style={{ ...style, overflow: "hidden", borderRadius: rowMode ? 0 : 8, cursor: isDragging ? "grabbing" : "grab" }}
       {...attributes}
       {...listeners}
       className="group relative"
@@ -88,7 +90,12 @@ export function TaskCard({
       <div
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
-        style={{
+        style={rowMode ? {
+          backgroundColor: hovered && !isDragging ? "rgba(27,46,75,0.025)" : "transparent",
+          borderBottom: "1px solid var(--color-border)",
+          padding: "10px 14px",
+          transition: "background-color 0.12s",
+        } : {
           backgroundColor: "var(--color-surface)",
           border: "1px solid var(--color-border)",
           borderRadius: 8,
