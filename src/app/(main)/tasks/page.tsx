@@ -628,7 +628,7 @@ export default function TasksPage() {
             />
           </div>
         )}
-        <div className="flex-1 overflow-auto p-6">
+        <div className="flex-1 overflow-auto" style={{ padding: "20px 24px" }}>
         {loading && (
           <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
             {[1, 2, 3, 4].map((col) => (
@@ -710,7 +710,7 @@ export default function TasksPage() {
             </DragOverlay>
           </DndContext>
         ) : !loading ? (
-          <div style={{ backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 10, overflow: "auto" }}>
+          <div style={{ backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 10, overflow: "auto", boxShadow: "0 1px 3px rgba(0,0,0,0.05), 0 1px 2px rgba(0,0,0,0.03)" }}>
             <table className="border-collapse" style={{ width: "100%", minWidth: 600 }}>
               <thead>
                 <tr style={{ borderBottom: "1px solid var(--color-border)" }}>
