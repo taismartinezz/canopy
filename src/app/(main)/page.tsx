@@ -402,19 +402,6 @@ export default function DashboardPage() {
 
   const textMuted = "var(--color-secondary)";
 
-  // Stats for strip
-  const todayMidnight = new Date(); todayMidnight.setHours(0, 0, 0, 0);
-  const myTasks = tasks.filter((t) => t.assigneeIds.includes(userId));
-  const openCount    = myTasks.filter((t) => t.status !== "done").length;
-  const overdueCount = myTasks.filter((t) => t.status !== "done" && t.dueDate && new Date(t.dueDate + "T23:59:59") < todayMidnight).length;
-  const doneCount    = myTasks.filter((t) => t.status === "done").length;
-
-  const stats = [
-    { label: "open", value: openCount, color: "var(--color-navy)" },
-    { label: "overdue", value: overdueCount, color: overdueCount > 0 ? "#FF3B30" : "var(--color-secondary)" },
-    { label: "done", value: doneCount, color: "#30D158" },
-  ];
-
   return (
     <div style={{ padding: "24px 28px", maxWidth: 1400, minHeight: "100%" }}>
       {/* Greeting + action row */}
@@ -432,32 +419,9 @@ export default function DashboardPage() {
                 </>
               ) : displayTitle}
             </h1>
-            <p style={{ fontSize: 13, color: textMuted, marginTop: 4, marginBottom: 8 }}>
+            <p style={{ fontSize: 13, color: textMuted, marginTop: 4, marginBottom: 0 }}>
               {todayStr}
             </p>
-            {/* Stats strip */}
-            <div style={{
-              display: "flex", alignItems: "center", gap: 0,
-              backgroundColor: "var(--color-surface)",
-              border: "1px solid var(--color-border)",
-              borderRadius: 8, overflow: "hidden",
-              width: "fit-content",
-            }}>
-              {stats.map((s, i) => (
-                <div key={s.label} style={{
-                  padding: "6px 14px",
-                  borderRight: i < stats.length - 1 ? "1px solid var(--color-border)" : undefined,
-                  display: "flex", flexDirection: "column", alignItems: "center", gap: 1,
-                }}>
-                  <span style={{ fontSize: 15, fontWeight: 700, color: s.color, lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>
-                    {s.value}
-                  </span>
-                  <span style={{ fontSize: 10, color: "var(--color-secondary)", letterSpacing: "0.05em", textTransform: "uppercase" }}>
-                    {s.label}
-                  </span>
-                </div>
-              ))}
-            </div>
           </div>
           <div style={{ position: "relative", flexShrink: 0, marginTop: 2 }}>
             <button
