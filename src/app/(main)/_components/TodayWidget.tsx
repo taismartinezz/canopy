@@ -24,9 +24,9 @@ type AgendaItem = {
 // ── Kind chip config ───────────────────────────────────────────────────────────
 
 const KIND_CFG = {
-  task:     { label: "Task",     color: "#0A84FF", bg: "rgba(10,132,255,0.10)" },
-  reminder: { label: "Reminder", color: "#FF9F0A", bg: "rgba(255,159,10,0.12)" },
-  event:    { label: "Event",    color: "#30D158", bg: "rgba(48,209,88,0.10)"  },
+  task:     { label: "Task",     color: "var(--color-navy)",     bg: "rgba(27,46,75,0.09)" },
+  reminder: { label: "Reminder", color: "var(--color-body)",     bg: "rgba(0,0,0,0.06)"   },
+  event:    { label: "Event",    color: "var(--color-secondary)", bg: "rgba(0,0,0,0.05)"  },
 };
 
 // ── Section config ─────────────────────────────────────────────────────────────

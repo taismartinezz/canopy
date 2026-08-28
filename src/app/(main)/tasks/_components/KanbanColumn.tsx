@@ -19,6 +19,8 @@ export function KanbanColumn({
   onArchiveDone,
   teamMembers = [],
   subtaskCounts = {},
+  subtaskData = {},
+  onToggleSubtask,
   showLabBadge = false,
 }: {
   status: TaskStatus;
@@ -31,6 +33,8 @@ export function KanbanColumn({
   onArchiveDone?: () => void;
   teamMembers?: User[];
   subtaskCounts?: Record<string, { total: number; done: number }>;
+  subtaskData?: Record<string, Task[]>;
+  onToggleSubtask?: (taskId: string, subtaskId: string, done: boolean) => void;
   showLabBadge?: boolean;
 }) {
   const cfg = STATUS_CONFIG[status];
@@ -86,6 +90,8 @@ export function KanbanColumn({
                 onDelete={() => onDeleteTask(task.id)}
                 teamMembers={teamMembers}
                 subtaskProgress={subtaskCounts[task.id]}
+                subtasks={subtaskData[task.id]}
+                onToggleSubtask={onToggleSubtask ? (subId, done) => onToggleSubtask(task.id, subId, done) : undefined}
                 showLabBadge={showLabBadge}
               />
             ))}

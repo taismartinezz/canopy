@@ -50,6 +50,7 @@ export default function TasksPage() {
   const [currentUserId, setCurrentUserId] = useState<string>("");
   const [projectId, setProjectId] = useState<string>("");
   const [subtaskCounts, setSubtaskCounts] = useState<Record<string, { total: number; done: number }>>({});
+  const [subtaskData, setSubtaskData] = useState<Record<string, Task[]>>({});
   const [taskNavStack, setTaskNavStack] = useState<Task[]>([]);
   const [boardWidth, setBoardWidth] = useState(1440);
 
@@ -66,12 +67,26 @@ export default function TasksPage() {
       const sp = getStoredProject();
       setProjectId(sp.id);
       setTeamMembers(USERS);
+      let allTasks: Task[];
       try {
         const saved = sessionStorage.getItem("canopy_demo_tasks");
-        setTasks(saved ? (JSON.parse(saved) as Task[]) : MOCK_TASKS);
+        allTasks = saved ? (JSON.parse(saved) as Task[]) : MOCK_TASKS;
       } catch {
-        setTasks(MOCK_TASKS);
+        allTasks = MOCK_TASKS;
       }
+      setTasks(allTasks.filter((t) => !t.parentId));
+      // Build demo subtask data from tasks that have a parentId
+      const demoSubtaskData: Record<string, Task[]> = {};
+      const demoSubtaskCounts: Record<string, { total: number; done: number }> = {};
+      for (const t of allTasks) {
+        if (!t.parentId) continue;
+        if (!demoSubtaskData[t.parentId]) { demoSubtaskData[t.parentId] = []; demoSubtaskCounts[t.parentId] = { total: 0, done: 0 }; }
+        demoSubtaskData[t.parentId].push(t);
+        demoSubtaskCounts[t.parentId].total++;
+        if (t.status === "done") demoSubtaskCounts[t.parentId].done++;
+      }
+      setSubtaskData(demoSubtaskData);
+      setSubtaskCounts(demoSubtaskCounts);
       setLoading(false);
       return;
     }
@@ -129,22 +144,38 @@ export default function TasksPage() {
       if (cancelled) return;
       if (error) console.error("[Tasks] fetch error:", error);
       if (!error && data) {
-        // Fetch subtask counts for progress bars
+        // Fetch subtask rows for inline expand + counts
         const { data: scData } = await supabase
           .from("tasks")
-          .select("parent_id, status")
+          .select("id, parent_id, title, status, priority, due_date, task_assignees(user_id)")
           .eq("project_id", pid)
           .not("parent_id", "is", null)
-          .or("archived.is.null,archived.eq.false");
+          .or("archived.is.null,archived.eq.false")
+          .order("display_order", { ascending: true });
         if (!cancelled && scData) {
           const counts: Record<string, { total: number; done: number }> = {};
-          for (const r of scData) {
+          const subs: Record<string, Task[]> = {};
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          for (const r of scData as any[]) {
             const parentId = r.parent_id as string;
-            if (!counts[parentId]) counts[parentId] = { total: 0, done: 0 };
+            if (!counts[parentId]) { counts[parentId] = { total: 0, done: 0 }; subs[parentId] = []; }
             counts[parentId].total++;
             if (r.status === "done") counts[parentId].done++;
+            subs[parentId].push({
+              id: r.id as string,
+              projectId: pid,
+              parentId,
+              title: r.title as string,
+              status: r.status as TaskStatus,
+              priority: r.priority as Task["priority"],
+              assigneeIds: ((r.task_assignees as { user_id: string }[]) ?? []).map((ta) => ta.user_id),
+              dueDate: r.due_date as string | undefined,
+              createdAt: "", updatedAt: "",
+              comments: [], files: [], links: [],
+            });
           }
           setSubtaskCounts(counts);
+          setSubtaskData(subs);
         }
         setTasks(data.map((row) => ({
           id: row.id as string,
@@ -395,6 +426,22 @@ export default function TasksPage() {
     });
   }, []);
 
+  const handleToggleSubtask = useCallback((taskId: string, subtaskId: string, done: boolean) => {
+    const newStatus: TaskStatus = done ? "done" : "todo";
+    setSubtaskData((prev) => ({
+      ...prev,
+      [taskId]: (prev[taskId] ?? []).map((s) => s.id === subtaskId ? { ...s, status: newStatus } : s),
+    }));
+    setSubtaskCounts((prev) => {
+      const curr = prev[taskId] ?? { total: 0, done: 0 };
+      return { ...prev, [taskId]: { total: curr.total, done: done ? curr.done + 1 : Math.max(0, curr.done - 1) } };
+    });
+    if (isSupabaseConfigured) {
+      supabase.from("tasks").update({ status: newStatus }).eq("id", subtaskId)
+        .then(({ error }) => { if (error) console.error("[Tasks] subtask toggle error:", error); });
+    }
+  }, []);
+
   const handleUpdateTaskAssignees = useCallback(async (taskId: string, ids: string[]) => {
     setTasks((prev) => prev.map((t) => t.id === taskId ? { ...t, assigneeIds: ids } : t));
     if (!isSupabaseConfigured) return;
@@ -636,6 +683,8 @@ export default function TasksPage() {
                       onArchiveDone={archiveDoneTasks}
                       teamMembers={teamMembers}
                       subtaskCounts={subtaskCounts}
+                      subtaskData={subtaskData}
+                      onToggleSubtask={handleToggleSubtask}
                       showLabBadge={false}
                     />
                   </div>
@@ -692,6 +741,8 @@ export default function TasksPage() {
                     onUpdateDueDate={(d) => handleUpdateTaskDueDate(task.id, d)}
                     teamMembers={teamMembers}
                     subtaskProgress={subtaskCounts[task.id]}
+                    subtasks={subtaskData[task.id]}
+                    onToggleSubtask={(subId, done) => handleToggleSubtask(task.id, subId, done)}
                     showLabBadge={false}
                   />
                 ))}
