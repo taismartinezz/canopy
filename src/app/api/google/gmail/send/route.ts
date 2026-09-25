@@ -41,11 +41,10 @@ function buildMimeMessage(to: string, subject: string, body: string, isHtml: boo
     body,
   ].join("\r\n");
 
-  return Buffer.from(raw)
-    .toString("base64")
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/, "");
+  // btoa is globally available in Node 16+ and all browsers; avoids needing Buffer/@types/node
+  const bytes = new TextEncoder().encode(raw);
+  const binary = Array.from(bytes).map((b) => String.fromCharCode(b)).join("");
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
 export async function POST(request: Request) {
