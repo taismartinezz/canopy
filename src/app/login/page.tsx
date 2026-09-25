@@ -303,7 +303,27 @@ export default function LoginPage() {
       localStorage.removeItem("canopy_user");
       localStorage.removeItem("canopy_project");
       localStorage.removeItem("canopy_authed");
-      await supabase.auth.signInWithOAuth({ provider });
+
+      const redirectTo = `${window.location.origin}/auth/callback`;
+
+      if (provider === "google") {
+        await supabase.auth.signInWithOAuth({
+          provider: "google",
+          options: {
+            redirectTo,
+            scopes: [
+              "email",
+              "profile",
+              "https://www.googleapis.com/auth/calendar",
+              "https://www.googleapis.com/auth/calendar.events",
+              "https://www.googleapis.com/auth/gmail.send",
+            ].join(" "),
+            queryParams: { access_type: "offline", prompt: "consent" },
+          },
+        });
+      } else {
+        await supabase.auth.signInWithOAuth({ provider, options: { redirectTo } });
+      }
       return;
     }
     localStorage.setItem("canopy_authed", "true");
@@ -414,7 +434,7 @@ export default function LoginPage() {
             icon={<GoogleIcon />}
             label="Continue with Google"
             ariaLabel="Sign in with Google"
-            onClick={() => router.push("/coming-soon")}
+            onClick={() => handleOAuth("google")}
           />
 
           <AuthButton
