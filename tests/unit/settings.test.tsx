@@ -79,7 +79,7 @@ async function renderSettings() {
   render(<SettingsPage />)
   // Wait for loading to finish
   await waitFor(() => {
-    expect(screen.queryByRole('heading', { name: /settings/i })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { level: 1, name: /^settings$/i })).toBeInTheDocument()
   }, { timeout: 3000 })
 }
 
@@ -93,7 +93,7 @@ describe('Settings page — Issue #15', () => {
   it('renders without crashing and shows page heading', async () => {
     mockRole = 'pi'
     await renderSettings()
-    expect(screen.getByRole('heading', { name: /settings/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1, name: /^settings$/i })).toBeInTheDocument()
   })
 
   it('shows profile section', async () => {
