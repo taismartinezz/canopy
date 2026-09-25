@@ -3,7 +3,6 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
-import { createClient } from "@supabase/supabase-js";
 
 // After Google OAuth, Supabase redirects here with ?code=... (PKCE flow).
 // We exchange the code for a session, store Google tokens for Calendar/Gmail,
@@ -34,14 +33,10 @@ export default function AuthCallbackPage() {
 
       // Persist Google tokens so Calendar/Gmail API routes can use them
       if (session.provider_token && isSupabaseConfigured) {
-        const db = createClient(
-          process.env.NEXT_PUBLIC_SUPABASE_URL!,
-          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-        );
         const expiresAt = session.expires_at
           ? new Date(session.expires_at * 1000).toISOString()
           : null;
-        await db.from("user_profiles").update({
+        await supabase.from("user_profiles").update({
           google_access_token: session.provider_token,
           google_refresh_token: session.provider_refresh_token ?? null,
           google_token_expiry: expiresAt,
