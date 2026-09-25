@@ -306,24 +306,7 @@ export default function LoginPage() {
 
       const redirectTo = `${window.location.origin}/auth/callback`;
 
-      if (provider === "google") {
-        await supabase.auth.signInWithOAuth({
-          provider: "google",
-          options: {
-            redirectTo,
-            scopes: [
-              "email",
-              "profile",
-              "https://www.googleapis.com/auth/calendar",
-              "https://www.googleapis.com/auth/calendar.events",
-              "https://www.googleapis.com/auth/gmail.send",
-            ].join(" "),
-            queryParams: { access_type: "offline", prompt: "consent" },
-          },
-        });
-      } else {
-        await supabase.auth.signInWithOAuth({ provider, options: { redirectTo } });
-      }
+      await supabase.auth.signInWithOAuth({ provider, options: { redirectTo } });
       return;
     }
     localStorage.setItem("canopy_authed", "true");
