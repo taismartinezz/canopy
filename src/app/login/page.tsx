@@ -346,9 +346,30 @@ export default function LoginPage() {
       localStorage.removeItem("canopy_user");
       localStorage.removeItem("canopy_project");
       localStorage.removeItem("canopy_authed");
-      // redirectTo uses the current origin so it works on localhost, Vercel previews, and production
       const redirectTo = `${window.location.origin}/auth/callback`;
-      await supabase.auth.signInWithOAuth({ provider, options: { redirectTo } });
+      const { error } = await supabase.auth.signInWithOAuth({ provider, options: { redirectTo } });
+      if (error) {
+        // Provider disabled, network error, or misconfiguration - surface it immediately
+        console.error("[Auth] signInWithOAuth error:", error);
+        const isProviderError =
+          error.message.toLowerCase().includes("provider") ||
+          error.message.toLowerCase().includes("not enabled") ||
+          error.message.toLowerCase().includes("unsupported");
+        setOAuthError(
+          isProviderError
+            ? "That sign-in method isn't available right now. Use email or try another provider."
+            : `Sign-in failed: ${error.message}`
+        );
+        setOAuthLoading(null);
+        return;
+      }
+      // signInWithOAuth redirects the browser on success, so code after here only
+      // runs if the redirect stalls (popup blocked, slow network, etc.).
+      // Reset the stuck button after 5 s so the user isn't left with "Connecting…".
+      setTimeout(() => {
+        setOAuthLoading((cur) => (cur === provider ? null : cur));
+        setOAuthError((cur) => cur ?? "Redirect didn't happen. Please try again or use email.");
+      }, 5000);
       return;
     }
     localStorage.setItem("canopy_authed", "true");
