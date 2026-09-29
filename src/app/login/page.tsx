@@ -52,6 +52,8 @@ function AuthButton({
   onClick,
   muted = false,
   dashed = false,
+  loading = false,
+  disabled = false,
 }: {
   icon: React.ReactNode;
   label: string;
@@ -59,15 +61,20 @@ function AuthButton({
   onClick: () => void;
   muted?: boolean;
   dashed?: boolean;
+  loading?: boolean;
+  disabled?: boolean;
 }) {
   const [hovered, setHovered] = useState(false);
+  const isDisabled = disabled || loading;
 
   return (
     <button
       type="button"
-      onClick={onClick}
+      onClick={isDisabled ? undefined : onClick}
       aria-label={ariaLabel}
-      onMouseEnter={() => setHovered(true)}
+      aria-busy={loading}
+      disabled={isDisabled}
+      onMouseEnter={() => { if (!isDisabled) setHovered(true); }}
       onMouseLeave={() => setHovered(false)}
       style={{
         display: "flex",
@@ -76,20 +83,21 @@ function AuthButton({
         height: 48,
         minHeight: 48,
         backgroundColor: "var(--color-surface)",
-        border: `1px ${dashed ? "dashed" : "solid"} ${hovered ? "var(--color-navy-dim)" : "var(--color-border)"}`,
+        border: `1px ${dashed ? "dashed" : "solid"} ${hovered && !isDisabled ? "var(--color-navy-dim)" : "var(--color-border)"}`,
         borderRadius: 8,
-        cursor: "pointer",
+        cursor: isDisabled ? "not-allowed" : "pointer",
         fontFamily: "var(--font-roboto)",
         fontWeight: 600,
         fontSize: 14,
-        color: muted ? "var(--color-secondary)" : "var(--color-body)",
-        boxShadow: hovered ? "0 2px 8px rgba(27,46,75,0.08)" : "none",
-        transition: "border-color 150ms ease, box-shadow 150ms ease",
+        color: isDisabled ? "var(--color-secondary)" : muted ? "var(--color-secondary)" : "var(--color-body)",
+        opacity: disabled && !loading ? 0.5 : 1,
+        boxShadow: hovered && !isDisabled ? "0 2px 8px rgba(27,46,75,0.08)" : "none",
+        transition: "border-color 150ms ease, box-shadow 150ms ease, opacity 150ms ease",
         position: "relative",
         padding: 0,
       }}
     >
-      {/* Icon - pinned 24px from left edge */}
+      {/* Icon or spinner - pinned 24px from left edge */}
       <span
         style={{
           position: "absolute",
@@ -100,10 +108,19 @@ function AuthButton({
           pointerEvents: "none",
         }}
       >
-        {icon}
+        {loading ? (
+          <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+            <circle cx="9" cy="9" r="7" fill="none" stroke="var(--color-border)" strokeWidth="2" />
+            <path d="M9 2a7 7 0 0 1 7 7" fill="none" stroke="var(--color-secondary)" strokeWidth="2" strokeLinecap="round">
+              <animateTransform attributeName="transform" type="rotate" from="0 9 9" to="360 9 9" dur="0.8s" repeatCount="indefinite" />
+            </path>
+          </svg>
+        ) : icon}
       </span>
       {/* Label - centered in the full button width */}
-      <span style={{ flex: 1, textAlign: "center" }}>{label}</span>
+      <span style={{ flex: 1, textAlign: "center" }}>
+        {loading ? `Connecting…` : label}
+      </span>
     </button>
   );
 }
@@ -182,17 +199,41 @@ export default function LoginPage() {
   const [forgotSent, setForgotSent] = useState(false);
   const [forgotLoading, setForgotLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [oAuthLoading, setOAuthLoading] = useState<string | null>(null);
+  const [oAuthError, setOAuthError] = useState<string | null>(null);
   const hasFetched = useRef(false);
+
+  // Enabled OAuth providers (comma-separated, e.g. "google,github"). If unset, all three show.
+  const enabledProviders: Set<string> = new Set(
+    (process.env.NEXT_PUBLIC_AUTH_PROVIDERS ?? "google,microsoft,github")
+      .toLowerCase().split(",").map(s => s.trim()).filter(Boolean)
+  );
 
   // Already authed? Route to correct destination.
   useEffect(() => {
     if (hasFetched.current) return;
     hasFetched.current = true;
 
+    // Surface OAuth errors forwarded from /auth/callback
+    const params = new URLSearchParams(window.location.search);
+    const errorCode = params.get("error");
+    const errorDesc = params.get("error_description") ?? "";
+    if (errorCode) {
+      const providerDisabled =
+        errorDesc.includes("provider is not enabled") ||
+        errorDesc.includes("Unsupported provider") ||
+        errorCode === "provider_disabled";
+      setOAuthError(
+        providerDisabled
+          ? "That sign-in method isn't available right now. Use email or try another provider."
+          : "Sign-in failed. Please try again or use email."
+      );
+    }
+
     // Capture lab and project invite codes from URL before any redirect
-    const inviteParam = new URLSearchParams(window.location.search).get("invite");
+    const inviteParam = params.get("invite");
     if (inviteParam) localStorage.setItem("pendingInviteCode", inviteParam);
-    const projectInviteParam = new URLSearchParams(window.location.search).get("project_invite");
+    const projectInviteParam = params.get("project_invite");
     if (projectInviteParam) localStorage.setItem("pendingProjectInviteToken", projectInviteParam);
 
     if (!isSupabaseConfigured) {
@@ -299,13 +340,14 @@ export default function LoginPage() {
   }, [forgotEmail]);
 
   const handleOAuth = useCallback(async (provider: "github" | "google" | "azure") => {
+    setOAuthLoading(provider);
+    setOAuthError(null);
     if (isSupabaseConfigured) {
       localStorage.removeItem("canopy_user");
       localStorage.removeItem("canopy_project");
       localStorage.removeItem("canopy_authed");
-
+      // redirectTo uses the current origin so it works on localhost, Vercel previews, and production
       const redirectTo = `${window.location.origin}/auth/callback`;
-
       await supabase.auth.signInWithOAuth({ provider, options: { redirectTo } });
       return;
     }
@@ -411,28 +453,60 @@ export default function LoginPage() {
           {mode === "signin" ? "Sign in" : "Create your account"}
         </p>
 
-        {/* Auth buttons */}
+        {/* OAuth error banner */}
+        {oAuthError && (
+          <div
+            role="alert"
+            style={{
+              marginBottom: 12,
+              padding: "10px 14px",
+              backgroundColor: "rgba(185,28,28,0.06)",
+              border: "1px solid rgba(185,28,28,0.18)",
+              borderRadius: 8,
+              fontFamily: "var(--font-roboto)",
+              fontSize: 13,
+              color: "var(--color-error)",
+              lineHeight: 1.5,
+            }}
+          >
+            {oAuthError}
+          </div>
+        )}
+
+        {/* Auth buttons -- only renders providers listed in NEXT_PUBLIC_AUTH_PROVIDERS */}
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          <AuthButton
-            icon={<GoogleIcon />}
-            label="Continue with Google"
-            ariaLabel="Sign in with Google"
-            onClick={() => handleOAuth("google")}
-          />
+          {enabledProviders.has("google") && (
+            <AuthButton
+              icon={<GoogleIcon />}
+              label="Continue with Google"
+              ariaLabel="Sign in with Google"
+              loading={oAuthLoading === "google"}
+              disabled={oAuthLoading !== null && oAuthLoading !== "google"}
+              onClick={() => handleOAuth("google")}
+            />
+          )}
 
-          <AuthButton
-            icon={<MicrosoftIcon />}
-            label="Continue with Microsoft"
-            ariaLabel="Sign in with Microsoft"
-            onClick={() => router.push("/coming-soon")}
-          />
+          {enabledProviders.has("microsoft") && (
+            <AuthButton
+              icon={<MicrosoftIcon />}
+              label="Continue with Microsoft"
+              ariaLabel="Sign in with Microsoft"
+              loading={oAuthLoading === "azure"}
+              disabled={oAuthLoading !== null && oAuthLoading !== "azure"}
+              onClick={() => handleOAuth("azure")}
+            />
+          )}
 
-          <AuthButton
-            icon={<GitHubIcon />}
-            label="Continue with GitHub"
-            ariaLabel="Sign in with GitHub"
-            onClick={() => router.push("/coming-soon")}
-          />
+          {enabledProviders.has("github") && (
+            <AuthButton
+              icon={<GitHubIcon />}
+              label="Continue with GitHub"
+              ariaLabel="Sign in with GitHub"
+              loading={oAuthLoading === "github"}
+              disabled={oAuthLoading !== null && oAuthLoading !== "github"}
+              onClick={() => handleOAuth("github")}
+            />
+          )}
         </div>
 
         {/* Or divider */}
