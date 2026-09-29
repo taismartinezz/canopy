@@ -14,17 +14,28 @@ export default function AuthCallbackPage() {
   useEffect(() => {
     const url = new URL(window.location.href);
     const code = url.searchParams.get("code");
-    const error = url.searchParams.get("error");
+    const oauthError = url.searchParams.get("error");
+    const oauthErrorDesc = url.searchParams.get("error_description") ?? "";
 
-    if (error || !code) {
-      router.replace("/login?error=oauth_failed");
+    // Supabase / Google sends ?error=... when the provider is disabled or the user cancels.
+    // Forward the description so the login page can show a specific message.
+    if (oauthError || !code) {
+      const params = new URLSearchParams({ error: oauthError ?? "oauth_failed" });
+      if (oauthErrorDesc) params.set("error_description", oauthErrorDesc);
+      router.replace(`/login?${params.toString()}`);
       return;
     }
+
+    // Safe `next` param -- only accept relative paths to prevent open redirects
+    const rawNext = url.searchParams.get("next") ?? "/";
+    const safeNext = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/";
 
     (async () => {
       const { data, error: exchErr } = await supabase.auth.exchangeCodeForSession(code);
       if (exchErr || !data.session) {
-        router.replace("/login?error=session_failed");
+        const params = new URLSearchParams({ error: "session_failed" });
+        if (exchErr?.message) params.set("error_description", exchErr.message);
+        router.replace(`/login?${params.toString()}`);
         return;
       }
 
@@ -43,7 +54,11 @@ export default function AuthCallbackPage() {
         }).eq("id", user.id);
       }
 
-      // Route based on lab membership (same logic as login page)
+      // Honor `next` if provided; otherwise route by lab membership
+      if (safeNext !== "/") {
+        router.replace(safeNext);
+        return;
+      }
       if (!isSupabaseConfigured) {
         router.replace("/");
         return;
