@@ -1168,7 +1168,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
           {/* Desktop: breadcrumb - "Lab" or "Lab / Project" */}
           <div className="hidden md:flex items-center gap-1.5 min-w-0">
-            {project?.name && (
+            {project?.name && activeScope !== "personal" && (
               <Link href="/" style={{ fontSize: 12, color: "var(--color-secondary)", whiteSpace: "nowrap", textDecoration: "none" }}
                 className="transition-colors hover:text-[var(--color-body)] hover:underline">
                 {project.name}

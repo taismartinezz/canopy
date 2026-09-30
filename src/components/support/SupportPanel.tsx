@@ -1056,6 +1056,7 @@ function BScreen({ resources, institutionKey, loading, pi, members, isCurrentUse
           If you&rsquo;d rather talk to someone on the project
         </p>
         <div className="flex flex-col gap-2">
+          {!isCurrentUserPi && (
           <button
             onClick={() => onPickRecipient("pi")}
             style={{
@@ -1069,6 +1070,7 @@ function BScreen({ resources, institutionKey, loading, pi, members, isCurrentUse
           >
             Message my PI
           </button>
+          )}
           {members.length > 0 && (
             <button
               onClick={() => onPickRecipient("all")}

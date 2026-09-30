@@ -2,18 +2,36 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Users, BookOpen, Check, X, Search } from "lucide-react";
+import { Users, BookOpen, Check, X, Search, ChevronDown } from "lucide-react";
 import CanopyLogo from "@/components/ui/CanopyLogo";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { searchInstitutions, type InstitutionResult } from "@/lib/institutions";
 import { WorkingHoursEditor, DEFAULT_WORKING_HOURS } from "@/components/ui/WorkingHoursEditor";
-import type { WorkingHours } from "@/types";
+import type { WorkingHours, PromptCategory } from "@/types";
+import { JOURNAL_PROMPTS, ACTIVE_PROMPT_IDS } from "@/lib/mock-data";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 type Role = "pi" | "researcher";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
+
+const PROMPT_CATEGORY_LABELS: Record<PromptCategory, string> = {
+  emotional_processing: "Emotional Processing",
+  research_reflection: "Research Reflection",
+  team_support: "Team & Support",
+  boundaries_workload: "Boundaries & Workload",
+  looking_forward: "Looking Forward",
+};
+
+const RESEARCH_PARTICIPATION_OPTIONS = [
+  { value: "both_publications", label: "Participate in both publications", description: "Share anonymized task and journal patterns for well-being and team collaboration research." },
+  { value: "wellbeing_only", label: "Well-being research only", description: "Share data only for the researcher well-being study." },
+  { value: "private", label: "Keep data private", description: "Your lab's data is never included in any publication." },
+];
+
+const PI_STEPS = 7;
+const RESEARCHER_STEPS = 5;
 
 
 // ── Shared styles ─────────────────────────────────────────────────────────────
@@ -377,12 +395,14 @@ async function syncOnboardingToSupabase({
   projectName, institution, researchType,
   userName, userRole, inviteCode, enteredInviteCode, bio, department, inviteEmails,
   timezone, workingHours,
+  researchParticipation, activePromptIds, customPrompts,
 }: {
   projectName: string; institution: string; researchType: string;
   userName: string; userRole: "pi" | "researcher"; inviteCode?: string;
   enteredInviteCode?: string; bio?: string; department?: string;
   inviteEmails?: { email: string; code: string; permissionLevel?: "pi" | "researcher" }[];
   timezone?: string; workingHours?: Record<string, { start: string; end: string } | null>;
+  researchParticipation?: string; activePromptIds?: string[]; customPrompts?: { id: string; text: string }[];
 }): Promise<string | null> {
   try {
     const { data: { session } } = await supabase.auth.getSession();
@@ -411,7 +431,12 @@ async function syncOnboardingToSupabase({
       } else {
         const { data: created, error: createErr } = await supabase
           .from("projects")
-          .insert({ name: projectName, institution, research_type: researchType, owner_id: user.id })
+          .insert({
+            name: projectName, institution, research_type: researchType, owner_id: user.id,
+            research_participation: researchParticipation ?? "private",
+            active_prompt_ids: activePromptIds ?? ACTIVE_PROMPT_IDS,
+            custom_prompts: customPrompts ?? [],
+          })
           .select("id")
           .single();
         if (createErr || !created) return `Project creation failed: ${createErr?.message ?? "unknown error"}`;
@@ -558,7 +583,10 @@ export default function OnboardingPage() {
   const institutionRef = useRef<HTMLDivElement>(null);
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // PI step 4 - invite team
+  // PI step 4 - research participation
+  const [piResearchParticipation, setPiResearchParticipation] = useState("private");
+
+  // PI step 5 - invite team
   const [emailInput, setEmailInput] = useState("");
   const [emailInputError, setEmailInputError] = useState("");
   const [inviteEmails, setInviteEmails] = useState<string[]>([]);
@@ -568,6 +596,12 @@ export default function OnboardingPage() {
   const [generatedCode, setGeneratedCode] = useState("");
   const [copied, setCopied] = useState(false);
   const [revealLink, setRevealLink] = useState(false);
+  const [piShowAdvancedInvites, setPiShowAdvancedInvites] = useState(false);
+
+  // PI step 6 - journal prompts
+  const [piActivePromptIds, setPiActivePromptIds] = useState<string[]>(ACTIVE_PROMPT_IDS);
+  const [piCustomPrompts, setPiCustomPrompts] = useState<{ id: string; text: string }[]>([]);
+  const [piPromptInput, setPiPromptInput] = useState("");
 
   // Researcher step 3 - profile
   const [profileName, setProfileName] = useState("");
@@ -769,6 +803,9 @@ export default function OnboardingPage() {
           : undefined,
         timezone: role === "pi" ? piTimezone : resTimezone,
         workingHours: role === "pi" ? piWorkingHours : resWorkingHours,
+        researchParticipation: role === "pi" ? piResearchParticipation : undefined,
+        activePromptIds: role === "pi" ? piActivePromptIds : undefined,
+        customPrompts: role === "pi" ? piCustomPrompts : undefined,
       });
       if (syncErr) {
         setSyncError(syncErr);
@@ -821,7 +858,7 @@ export default function OnboardingPage() {
     return (
       <div style={PAGE_WRAP}>
         <div style={CARD_STYLE}>
-          <StepDots current={1} total={5} />
+          <StepDots current={1} total={role === "pi" ? PI_STEPS : RESEARCHER_STEPS} />
 
           <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}>
             <CanopyLogo size={32} />
@@ -933,7 +970,7 @@ export default function OnboardingPage() {
       <div style={PAGE_WRAP}>
         <div style={CARD_STYLE}>
           <BackButton onClick={() => setStep(1)} />
-          <StepDots current={2} total={5} />
+          <StepDots current={2} total={PI_STEPS} />
           <SectionTitle
             title="Set up your lab workspace"
             subtitle="You can change these later in Lab Settings."
@@ -1024,7 +1061,7 @@ export default function OnboardingPage() {
       <div style={PAGE_WRAP}>
         <div style={CARD_STYLE}>
           <BackButton onClick={() => setStep(2)} />
-          <StepDots current={3} total={5} />
+          <StepDots current={3} total={PI_STEPS} />
           <SectionTitle
             title="Your schedule"
             subtitle="Canopy uses this for meeting suggestions and your weekly digest."
@@ -1036,7 +1073,62 @@ export default function OnboardingPage() {
             onWorkingHoursChange={setPiWorkingHours}
             showDetectedBanner
           />
-          <NavButton onClick={() => { const code = "CANOPY-" + Math.random().toString(36).substring(2, 6).toUpperCase(); setGeneratedCode(code); setStep(4); }}>
+          <NavButton onClick={() => setStep(4)}>
+            Continue
+          </NavButton>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Step 4A: PI research participation ─────────────────────────────────────
+
+  if (step === 4 && role === "pi") {
+    return (
+      <div style={PAGE_WRAP}>
+        <div style={CARD_STYLE}>
+          <BackButton onClick={() => setStep(3)} />
+          <StepDots current={4} total={PI_STEPS} />
+          <SectionTitle
+            title="Research participation"
+            subtitle="Canopy runs two research studies on researcher well-being and lab team dynamics. You decide how your lab's data is used."
+          />
+          <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 8 }}>
+            {RESEARCH_PARTICIPATION_OPTIONS.map(opt => (
+              <label
+                key={opt.value}
+                style={{
+                  display: "flex", alignItems: "flex-start", gap: 14, padding: "14px 16px",
+                  borderRadius: 8, cursor: "pointer",
+                  border: `${piResearchParticipation === opt.value ? 2 : 1}px solid ${piResearchParticipation === opt.value ? "var(--color-navy)" : "var(--color-border)"}`,
+                  backgroundColor: piResearchParticipation === opt.value ? "rgba(27,46,75,0.03)" : "var(--color-surface)",
+                  transition: "border-color 120ms ease",
+                }}
+                onClick={() => setPiResearchParticipation(opt.value)}
+              >
+                <input
+                  type="radio"
+                  name="onboarding_research_participation"
+                  value={opt.value}
+                  checked={piResearchParticipation === opt.value}
+                  onChange={() => setPiResearchParticipation(opt.value)}
+                  style={{ marginTop: 2, accentColor: "var(--color-navy)", width: 16, height: 16, flexShrink: 0, cursor: "pointer" }}
+                />
+                <div>
+                  <span style={{ fontSize: 14, fontWeight: 600, color: "var(--color-body)", fontFamily: "var(--font-roboto)", display: "block" }}>{opt.label}</span>
+                  <span style={{ fontSize: 12, color: "var(--color-secondary)", fontFamily: "var(--font-roboto)", lineHeight: 1.5, display: "block", marginTop: 2 }}>{opt.description}</span>
+                </div>
+              </label>
+            ))}
+          </div>
+          <p style={{ fontSize: 11, color: "var(--color-secondary)", margin: "4px 0 0", lineHeight: 1.5 }}>
+            All data is anonymized before analysis. You can change this at any time in Lab Settings.
+          </p>
+          <NavButton onClick={() => {
+            const code = "CANOPY-" + Math.random().toString(36).substring(2, 6).toUpperCase();
+            setGeneratedCode(code);
+            setStep(5);
+          }}>
             Continue
           </NavButton>
         </div>
@@ -1067,7 +1159,7 @@ export default function OnboardingPage() {
       <div style={PAGE_WRAP}>
         <div style={CARD_STYLE}>
           <BackButton onClick={() => setStep(1)} />
-          <StepDots current={2} total={5} />
+          <StepDots current={2} total={RESEARCHER_STEPS} />
           <SectionTitle
             title="Join your lab"
             subtitle={autoFilled ? "Your invite code is ready. Just confirm below." : "Enter the invite code or paste the invite link your PI shared with you."}
@@ -1095,17 +1187,17 @@ export default function OnboardingPage() {
     );
   }
 
-  // ── Step 4A: PI invites team ───────────────────────────────────────────────
+  // ── Step 5A: PI invites team ───────────────────────────────────────────────
 
-  if (step === 4 && role === "pi") {
+  if (step === 5 && role === "pi") {
     return (
       <div style={PAGE_WRAP}>
         <div style={CARD_STYLE}>
-          <BackButton onClick={() => setStep(3)} />
-          <StepDots current={4} total={5} />
+          <BackButton onClick={() => setStep(4)} />
+          <StepDots current={5} total={PI_STEPS} />
           <SectionTitle
             title="Invite researchers to your lab"
-            subtitle="They'll get access once they sign up with the same invite link."
+            subtitle="Add email addresses below. Each person gets a unique invite link tied to their address."
           />
 
           {/* Email add row */}
@@ -1229,81 +1321,54 @@ export default function OnboardingPage() {
             </div>
           )}
 
-          {/* Copy invite link */}
-          <button
-            onClick={handleCopyLink}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 8,
-              width: "100%",
-              minHeight: 44,
-              fontFamily: "var(--font-roboto)",
-              fontWeight: 600,
-              fontSize: 13,
-              color: copied ? "#2E7D52" : "var(--color-navy)",
-              background: "none",
-              border: "1px solid var(--color-border)",
-              borderRadius: 8,
-              padding: "10px 16px",
-              cursor: "pointer",
-              marginTop: 8,
-              transition: "color 150ms ease, border-color 150ms ease",
-            }}
-            onMouseEnter={(e) => {
-              if (!copied) (e.currentTarget as HTMLElement).style.borderColor = "var(--color-secondary)";
-            }}
-            onMouseLeave={(e) => {
-              (e.currentTarget as HTMLElement).style.borderColor = "var(--color-border)";
-            }}
-          >
-            {copied ? "✓ Copied!" : "Copy invite link"}
-          </button>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, marginTop: 6 }}>
-            <p
-              style={{
-                fontFamily: "var(--font-roboto)",
-                fontSize: 11,
-                color: "var(--color-secondary)",
-                margin: 0,
-                letterSpacing: revealLink ? 0 : "0.05em",
-              }}
-            >
-              {revealLink
-                ? (typeof window !== "undefined" ? `${window.location.origin}/login?invite=${generatedCode}` : `/login?invite=${generatedCode}`)
-                : `canopy.app/login?invite=••••••••`}
-            </p>
+          {/* Advanced: generic invite link */}
+          <div style={{ borderTop: "1px solid var(--color-border)", paddingTop: 14, marginTop: 8 }}>
             <button
-              type="button"
-              onClick={() => setRevealLink((v) => !v)}
-              style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "var(--font-roboto)", fontSize: 11, color: "var(--color-navy)", textDecoration: "underline", padding: 0 }}
+              onClick={() => setPiShowAdvancedInvites(v => !v)}
+              style={{ display: "flex", alignItems: "center", gap: 6, backgroundColor: "transparent", border: "none", cursor: "pointer", padding: 0, fontSize: 12, fontWeight: 600, color: "var(--color-secondary)", fontFamily: "var(--font-roboto)" }}
             >
-              {revealLink ? "Hide" : "Reveal"}
+              <ChevronDown size={13} style={{ transform: piShowAdvancedInvites ? "rotate(180deg)" : "none", transition: "transform 150ms" }} />
+              Advanced
             </button>
+            {piShowAdvancedInvites && (
+              <div style={{ marginTop: 10 }}>
+                <p style={{ fontSize: 12, color: "var(--color-secondary)", marginTop: 0, marginBottom: 10 }}>
+                  This generic link lets anyone who has it join your lab. Use with caution.
+                </p>
+                <button
+                  onClick={handleCopyLink}
+                  style={{
+                    display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                    width: "100%", minHeight: 40, fontFamily: "var(--font-roboto)", fontWeight: 600, fontSize: 13,
+                    color: copied ? "#2E7D52" : "var(--color-navy)", background: "none",
+                    border: "1px solid var(--color-border)", borderRadius: 8, padding: "10px 16px", cursor: "pointer",
+                    transition: "color 150ms ease, border-color 150ms ease",
+                  }}
+                >
+                  {copied ? "Copied!" : "Copy generic invite link"}
+                </button>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, marginTop: 4 }}>
+                  <p style={{ fontFamily: "var(--font-roboto)", fontSize: 11, color: "var(--color-secondary)", margin: 0, letterSpacing: revealLink ? 0 : "0.05em" }}>
+                    {revealLink
+                      ? (typeof window !== "undefined" ? `${window.location.origin}/login?invite=${generatedCode}` : `/login?invite=${generatedCode}`)
+                      : `canopy.app/login?invite=••••••••`}
+                  </p>
+                  <button type="button" onClick={() => setRevealLink(v => !v)}
+                    style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "var(--font-roboto)", fontSize: 11, color: "var(--color-navy)", textDecoration: "underline", padding: 0 }}>
+                    {revealLink ? "Hide" : "Reveal"}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
-          <NavButton onClick={() => setStep(5)}>
+          <NavButton onClick={() => setStep(6)}>
             Continue
           </NavButton>
 
           <button
-            onClick={() => setStep(5)}
-            style={{
-              display: "block",
-              width: "100%",
-              textAlign: "center",
-              fontFamily: "var(--font-roboto)",
-              fontWeight: 400,
-              fontSize: 13,
-              color: "var(--color-secondary)",
-              background: "none",
-              border: "none",
-              cursor: "pointer",
-              marginTop: 12,
-              padding: 0,
-              minHeight: 36,
-            }}
+            onClick={() => setStep(6)}
+            style={{ display: "block", width: "100%", textAlign: "center", fontFamily: "var(--font-roboto)", fontWeight: 400, fontSize: 13, color: "var(--color-secondary)", background: "none", border: "none", cursor: "pointer", marginTop: 12, padding: 0, minHeight: 36 }}
             onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.textDecoration = "underline"; }}
             onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.textDecoration = "none"; }}
           >
@@ -1314,14 +1379,102 @@ export default function OnboardingPage() {
     );
   }
 
-  // ── Step 5A: PI wellbeing preview ──────────────────────────────────────────
+  // ── Step 6A: PI journal prompts ─────────────────────────────────────────────
 
-  if (step === 5 && role === "pi") {
+  if (step === 6 && role === "pi") {
+    return (
+      <div style={PAGE_WRAP}>
+        <div style={{ ...CARD_STYLE, maxHeight: "90dvh", display: "flex", flexDirection: "column" }}>
+          <div style={{ flexShrink: 0 }}>
+            <BackButton onClick={() => setStep(5)} />
+            <StepDots current={6} total={PI_STEPS} />
+            <SectionTitle
+              title="Journal prompts"
+              subtitle="Choose which prompts appear for your team's weekly journals. You can change this in Lab Settings at any time."
+            />
+          </div>
+          <div style={{ overflowY: "auto", flex: 1 }}>
+            {Array.from(new Set(JOURNAL_PROMPTS.map(p => p.category))).map(cat => (
+              <div key={cat} style={{ marginBottom: 18 }}>
+                <p style={{ fontFamily: "var(--font-roboto)", fontWeight: 700, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-secondary)", marginBottom: 8 }}>
+                  {PROMPT_CATEGORY_LABELS[cat]}
+                </p>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {JOURNAL_PROMPTS.filter(p => p.category === cat).map(prompt => {
+                    const active = piActivePromptIds.includes(prompt.id);
+                    return (
+                      <button key={prompt.id}
+                        onClick={() => setPiActivePromptIds(prev => prev.includes(prompt.id) ? prev.filter(x => x !== prompt.id) : [...prev, prompt.id])}
+                        style={{ textAlign: "left", padding: "10px 14px", borderRadius: 8, cursor: "pointer", fontFamily: "var(--font-roboto)", fontSize: 13, color: "var(--color-body)", backgroundColor: active ? "rgba(27,46,75,0.04)" : "var(--color-surface)", border: active ? "1px solid var(--color-navy)" : "1px solid var(--color-border)", transition: "border-color 120ms ease" }}>
+                        {prompt.text}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+            {/* Custom prompts */}
+            <div style={{ borderTop: "1px solid var(--color-border)", paddingTop: 14, marginBottom: 4 }}>
+              <p style={{ fontFamily: "var(--font-roboto)", fontWeight: 700, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-secondary)", marginBottom: 8 }}>
+                Custom Prompts
+              </p>
+              {piCustomPrompts.length > 0 && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 10 }}>
+                  {piCustomPrompts.map(cp => (
+                    <div key={cp.id} style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "10px 14px", borderRadius: 8, backgroundColor: "rgba(27,46,75,0.04)", border: "1px solid var(--color-navy)" }}>
+                      <span style={{ flex: 1, fontSize: 13, color: "var(--color-body)", fontFamily: "var(--font-roboto)" }}>{cp.text}</span>
+                      <button onClick={() => setPiCustomPrompts(prev => prev.filter(p => p.id !== cp.id))}
+                        style={{ flexShrink: 0, height: 24, width: 24, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "transparent", border: "none", cursor: "pointer" }}
+                        aria-label="Remove custom prompt">
+                        <X size={13} color="var(--color-secondary)" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div style={{ display: "flex", gap: 8 }}>
+                <input value={piPromptInput} onChange={e => setPiPromptInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && piPromptInput.trim()) {
+                      setPiCustomPrompts(prev => [...prev, { id: `cp-${Date.now()}`, text: piPromptInput.trim() }]);
+                      setPiPromptInput("");
+                    }
+                  }}
+                  placeholder="Add a custom prompt and press Enter or Add"
+                  style={{ ...INPUT_STYLE, flex: 1, height: 40 }}
+                  onFocus={(e) => { e.currentTarget.style.borderColor = "var(--color-navy)"; }}
+                  onBlur={(e) => { e.currentTarget.style.borderColor = "var(--color-border)"; }}
+                />
+                <button
+                  onClick={() => {
+                    if (!piPromptInput.trim()) return;
+                    setPiCustomPrompts(prev => [...prev, { id: `cp-${Date.now()}`, text: piPromptInput.trim() }]);
+                    setPiPromptInput("");
+                  }}
+                  style={{ height: 40, padding: "0 14px", backgroundColor: "var(--color-navy)", color: "#fff", border: "none", borderRadius: 8, fontFamily: "var(--font-roboto)", fontWeight: 600, fontSize: 13, cursor: "pointer", flexShrink: 0 }}>
+                  Add
+                </button>
+              </div>
+            </div>
+          </div>
+          <div style={{ flexShrink: 0 }}>
+            <NavButton onClick={() => setStep(7)}>
+              Continue
+            </NavButton>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Step 7A: PI wellbeing preview ──────────────────────────────────────────
+
+  if (step === 7 && role === "pi") {
     return (
       <div style={PAGE_WRAP}>
         <div style={CARD_STYLE}>
-          <BackButton onClick={() => setStep(4)} />
-          <StepDots current={5} total={5} />
+          <BackButton onClick={() => setStep(6)} />
+          <StepDots current={7} total={PI_STEPS} />
           <SectionTitle
             title="Team wellbeing check-ins"
             subtitle="Here's what your team will see each week."
@@ -1349,7 +1502,7 @@ export default function OnboardingPage() {
       <div style={PAGE_WRAP}>
         <div style={CARD_STYLE}>
           <BackButton onClick={() => setStep(2)} />
-          <StepDots current={3} total={5} />
+          <StepDots current={3} total={RESEARCHER_STEPS} />
           <SectionTitle title="Set up your profile" />
 
           <Field label="Full name">
@@ -1407,7 +1560,7 @@ export default function OnboardingPage() {
       <div style={PAGE_WRAP}>
         <div style={CARD_STYLE}>
           <BackButton onClick={() => setStep(3)} />
-          <StepDots current={4} total={5} />
+          <StepDots current={4} total={RESEARCHER_STEPS} />
           <SectionTitle
             title="Your schedule"
             subtitle="Canopy uses this for meeting suggestions and your weekly digest."
@@ -1434,7 +1587,7 @@ export default function OnboardingPage() {
       <div style={PAGE_WRAP}>
         <div style={CARD_STYLE}>
           <BackButton onClick={() => setStep(4)} />
-          <StepDots current={5} total={5} />
+          <StepDots current={5} total={RESEARCHER_STEPS} />
           <SectionTitle
             title="Weekly check-ins"
             subtitle="A quick preview of what to expect each week."
