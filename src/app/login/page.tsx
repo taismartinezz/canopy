@@ -6,6 +6,12 @@ import Link from "next/link";
 import { Eye, EyeOff } from "lucide-react";
 import CanopyLogo from "@/components/ui/CanopyLogo";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
+import { loadGoogleIdentity, createNonce, type GoogleCredentialResponse } from "@/lib/googleIdentity";
+import { getPostAuthDestination } from "@/lib/postAuthRedirect";
+
+// When set, Google sign-in uses Google's own button + an ID token, so the consent
+// screen names our domain instead of the Supabase project URL.
+const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? "";
 
 // ── Provider icons ────────────────────────────────────────────────────────────
 
@@ -376,6 +382,67 @@ export default function LoginPage() {
     router.push(localStorage.getItem("canopy_project") ? "/" : "/onboarding");
   }, [router]);
 
+  // ── Google Identity Services button (ID-token flow) ─────────────────────────
+  const googleButtonRef = useRef<HTMLDivElement>(null);
+  const [googleButtonReady, setGoogleButtonReady] = useState(false);
+  const useGoogleIdToken =
+    !!GOOGLE_CLIENT_ID && isSupabaseConfigured && enabledProviders.has("google");
+
+  useEffect(() => {
+    if (checking || !useGoogleIdToken) return;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const [gis, [rawNonce, hashedNonce]] = await Promise.all([loadGoogleIdentity(), createNonce()]);
+        if (cancelled || !googleButtonRef.current) return;
+
+        gis.initialize({
+          client_id: GOOGLE_CLIENT_ID,
+          nonce: hashedNonce,
+          ux_mode: "popup",
+          use_fedcm_for_prompt: true,
+          callback: async ({ credential }: GoogleCredentialResponse) => {
+            setOAuthLoading("google");
+            setOAuthError(null);
+            localStorage.removeItem("canopy_user");
+            localStorage.removeItem("canopy_project");
+            localStorage.removeItem("canopy_authed");
+            const { data, error } = await supabase.auth.signInWithIdToken({
+              provider: "google",
+              token: credential,
+              nonce: rawNonce,
+            });
+            if (error || !data.user) {
+              console.error("[Auth] signInWithIdToken error:", error);
+              setOAuthError("Sign-in failed. Please try again or use email.");
+              setOAuthLoading(null);
+              return;
+            }
+            router.replace(await getPostAuthDestination(data.user.id));
+          },
+        });
+
+        const width = Math.min(400, Math.max(200, googleButtonRef.current.offsetWidth || 400));
+        gis.renderButton(googleButtonRef.current, {
+          type: "standard",
+          theme: "outline",
+          size: "large",
+          text: "continue_with",
+          shape: "rectangular",
+          logo_alignment: "center",
+          width,
+        });
+        setGoogleButtonReady(true);
+      } catch (err) {
+        // Script blocked or offline: keep the redirect-based button as a fallback.
+        console.warn("[Auth] Google Identity Services unavailable, using redirect flow:", err);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [checking, useGoogleIdToken, router]);
+
   if (checking) return null;
 
   return (
@@ -496,7 +563,21 @@ export default function LoginPage() {
 
         {/* Auth buttons -- only renders providers listed in NEXT_PUBLIC_AUTH_PROVIDERS */}
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          {enabledProviders.has("google") && (
+          {useGoogleIdToken && (
+            <div
+              ref={googleButtonRef}
+              data-testid="google-signin-button"
+              style={{
+                display: googleButtonReady ? "flex" : "none",
+                justifyContent: "center",
+                minHeight: 44,
+                opacity: oAuthLoading === "google" ? 0.6 : 1,
+                pointerEvents: oAuthLoading !== null ? "none" : "auto",
+              }}
+            />
+          )}
+
+          {enabledProviders.has("google") && !googleButtonReady && (
             <AuthButton
               icon={<GoogleIcon />}
               label="Continue with Google"
