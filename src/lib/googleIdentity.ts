@@ -81,3 +81,21 @@ export async function createNonce(): Promise<[string, string]> {
     .join("");
   return [raw, hashed];
 }
+
+/**
+ * Render the GIS button inside `container` (used as an invisible overlay on top of
+ * our own "Continue with Google" button so the visible label never changes).
+ * GIS caps the width at 400 px.
+ */
+export function renderGisButton(gis: GoogleAccountsId, container: HTMLElement, width: number): void {
+  // Clear any previous render (GIS errors if you call renderButton twice on same element)
+  container.innerHTML = "";
+  gis.renderButton(container, {
+    type: "standard",
+    theme: "outline",
+    size: "large",
+    text: "continue_with",
+    shape: "rectangular",
+    width: Math.min(400, Math.max(200, Math.round(width))),
+  });
+}
