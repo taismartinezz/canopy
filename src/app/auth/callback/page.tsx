@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
+import { getPostAuthDestination } from "@/lib/postAuthRedirect";
 
 // After Google OAuth, Supabase redirects here with ?code=... (PKCE flow).
 // We exchange the code for a session, store Google tokens for Calendar/Gmail,
@@ -59,19 +60,7 @@ export default function AuthCallbackPage() {
         router.replace(safeNext);
         return;
       }
-      if (!isSupabaseConfigured) {
-        router.replace("/");
-        return;
-      }
-      const { data: member } = await supabase
-        .from("team_members").select("id").eq("user_id", user.id).maybeSingle();
-      if (member) {
-        router.replace("/");
-      } else {
-        const { data: profile } = await supabase
-          .from("user_profiles").select("id").eq("id", user.id).maybeSingle();
-        router.replace(profile ? "/" : "/onboarding");
-      }
+      router.replace(await getPostAuthDestination(user.id));
     })();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
