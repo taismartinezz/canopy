@@ -10,6 +10,7 @@ import { useTheme } from "@/context/ThemeContext";
 import type { WorkingHours, LabRole, PromptCategory } from "@/types";
 import { WorkingHoursEditor, DEFAULT_WORKING_HOURS } from "@/components/ui/WorkingHoursEditor";
 import { JOURNAL_PROMPTS, ACTIVE_PROMPT_IDS } from "@/lib/mock-data";
+import { useProject } from "@/context/ProjectContext";
 
 const PROMPT_CATEGORY_LABELS: Record<PromptCategory, string> = {
   emotional_processing: "Emotional Processing",
@@ -69,9 +70,10 @@ const readonlyInputStyle: React.CSSProperties = {
 export default function SettingsPage() {
   const router = useRouter();
   const { theme, setTheme } = useTheme();
+  const { activeScope } = useProject();
   const [profile, setProfile] = useState<any>(null);
   const [project, setProject] = useState<any>(null);
-  const [inviteCodes, setInviteCodes] = useState<{ id: string; code: string; used_by: string | null; lab_role_id: string | null }[]>([]);
+  const [inviteCodes, setInviteCodes] = useState<{ id: string; code: string; used_by: string | null; lab_role_id: string | null; invited_email: string | null }[]>([]);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [revealedCode, setRevealedCode] = useState<string | null>(null);
   const [generatingCode, setGeneratingCode] = useState(false);
@@ -85,9 +87,9 @@ export default function SettingsPage() {
   const [emailInviteInput, setEmailInviteInput] = useState("");
   const [emailInviteRoleId, setEmailInviteRoleId] = useState<string>("");
   const [emailInviteError, setEmailInviteError] = useState("");
-  const [emailInviteResults, setEmailInviteResults] = useState<{ email: string; code: string }[]>([]);
   const [sendingEmailInvites, setSendingEmailInvites] = useState(false);
   const [copiedEmailCode, setCopiedEmailCode] = useState<string | null>(null);
+  const [showAdvancedInvites, setShowAdvancedInvites] = useState(false);
   const [addingRole, setAddingRole] = useState(false);
   const [newRoleName, setNewRoleName] = useState("");
   const [renamingRoleId, setRenamingRoleId] = useState<string | null>(null);
@@ -110,6 +112,8 @@ export default function SettingsPage() {
   const [researchType, setResearchType] = useState("");
   const [researchParticipation, setResearchParticipation] = useState("private");
   const [activePromptIds, setActivePromptIds] = useState<string[]>(ACTIVE_PROMPT_IDS);
+  const [customPrompts, setCustomPrompts] = useState<{ id: string; text: string }[]>([]);
+  const [customPromptInput, setCustomPromptInput] = useState("");
   const [promptModalOpen, setPromptModalOpen] = useState(false);
   const [savingLabSettings, setSavingLabSettings] = useState(false);
 
@@ -154,6 +158,8 @@ export default function SettingsPage() {
             setProjectInstitution((proj.institution as string) ?? "");
             setResearchType((proj.research_type as string) ?? "");
             setResearchParticipation((proj.research_participation as string) ?? "private");
+            if (proj.active_prompt_ids) setActivePromptIds(proj.active_prompt_ids as string[]);
+            if (proj.custom_prompts) setCustomPrompts(proj.custom_prompts as { id: string; text: string }[]);
           }
 
           // Load working hours + timezone
@@ -187,10 +193,9 @@ export default function SettingsPage() {
             const [{ data: codes }, { data: roles }] = await Promise.all([
               supabase
                 .from("invite_codes")
-                .select("id, code, used_by, lab_role_id")
-                .eq("created_by", user.id)
-                .order("created_at", { ascending: false })
-                .limit(5),
+                .select("id, code, used_by, lab_role_id, invited_email")
+                .eq("project_id", membership.project_id)
+                .order("created_at", { ascending: false }),
               supabase
                 .from("lab_roles")
                 .select("id, name, permission_level, is_system, created_at")
@@ -259,11 +264,13 @@ export default function SettingsPage() {
       institution: projectInstitution,
       research_type: researchType,
       research_participation: researchParticipation,
+      active_prompt_ids: activePromptIds,
+      custom_prompts: customPrompts,
     }).eq("id", project.id);
     setSavingLabSettings(false);
     if (error) { showToast("Failed to save: " + error.message); }
     else { showToast("Lab settings saved."); }
-  }, [project, projectName, projectInstitution, researchType, researchParticipation]);
+  }, [project, projectName, projectInstitution, researchType, researchParticipation, activePromptIds, customPrompts]);
 
   const handleSendEmailInvites = useCallback(async () => {
     if (!project?.id) return;
@@ -284,17 +291,17 @@ export default function SettingsPage() {
     const user = session?.user ?? null;
     if (!user) { setSendingEmailInvites(false); return; }
 
-    const results: { email: string; code: string }[] = [];
+    const newCodes: (typeof inviteCodes)[0][] = [];
     for (const email of valid) {
       const code = "CANOPY-" + Math.random().toString(36).substring(2, 6).toUpperCase();
-      const { error } = await supabase.from("invite_codes").insert({
+      const { data: inserted, error } = await supabase.from("invite_codes").insert({
         code, project_id: project.id, created_by: user.id,
         invited_email: email,
         lab_role_id: emailInviteRoleId || null,
-      });
-      if (!error) results.push({ email, code });
+      }).select("id, code, used_by, lab_role_id, invited_email").single();
+      if (!error && inserted) newCodes.push(inserted as (typeof inviteCodes)[0]);
     }
-    setEmailInviteResults((prev) => [...prev, ...results]);
+    if (newCodes.length > 0) setInviteCodes((prev) => [...newCodes, ...prev]);
     setEmailInviteInput("");
     setSendingEmailInvites(false);
   }, [project, emailInviteInput, emailInviteRoleId]);
@@ -304,6 +311,12 @@ export default function SettingsPage() {
     await navigator.clipboard.writeText(link).catch(() => {});
     setCopiedEmailCode(code);
     setTimeout(() => setCopiedEmailCode((prev) => (prev === code ? null : prev)), 2000);
+  }, []);
+
+  const handleRevokeInvite = useCallback(async (id: string) => {
+    await supabase.from("invite_codes").delete().eq("id", id);
+    setInviteCodes((prev) => prev.filter((ic) => ic.id !== id));
+    showToast("Invite revoked.");
   }, []);
 
   const handlePasswordReset = useCallback(async () => {
@@ -426,7 +439,7 @@ export default function SettingsPage() {
                 aria-label="Role (read-only)"
               />
               <p style={{ fontSize: 11, color: "var(--color-secondary)", marginTop: 4, marginBottom: 0 }}>
-                Managed via your lab role. Change it from the Team page.
+                {profile?.role === "pi" ? "You are the Principal Investigator for this lab." : "Contact your PI to change your lab role."}
               </p>
             </div>
           </div>
@@ -469,8 +482,8 @@ export default function SettingsPage() {
         </div>
       </section>
 
-      {/* Lab & Invite - PI only */}
-      {profile?.role === "pi" && (
+      {/* Lab & Invite - PI only, hidden in Personal workspace */}
+      {profile?.role === "pi" && activeScope !== "personal" && (
         <section style={sectionStyle} aria-labelledby="settings-invite-heading">
           <div style={sectionHeaderStyle}>
             <Building2 size={16} color="var(--color-secondary)" />
@@ -599,11 +612,11 @@ export default function SettingsPage() {
               </div>
             )}
 
-            {/* Email invite flow */}
+            {/* Email invite form */}
             <div style={{ marginBottom: 24 }}>
-              <p style={{ ...labelStyle, marginBottom: 10 }}>Invite by email</p>
+              <p style={{ ...labelStyle, marginBottom: 6 }}>Invite by email</p>
               <p style={{ fontSize: 12, color: "var(--color-secondary)", marginBottom: 12, marginTop: 0 }}>
-                Enter one or more email addresses. Each gets a unique invite link.
+                Enter one or more email addresses. Each person gets a unique invite link tied to their address.
               </p>
               <textarea
                 value={emailInviteInput}
@@ -643,135 +656,142 @@ export default function SettingsPage() {
                   disabled={sendingEmailInvites || !emailInviteInput.trim()}
                   style={{ minHeight: 36, height: 36, padding: "0 16px", display: "flex", alignItems: "center", gap: 6, backgroundColor: "var(--color-btn-primary)", color: "#fff", border: "none", borderRadius: 8, fontFamily: "var(--font-roboto)", fontWeight: 600, fontSize: 13, cursor: sendingEmailInvites || !emailInviteInput.trim() ? "default" : "pointer", opacity: sendingEmailInvites || !emailInviteInput.trim() ? 0.6 : 1 }}
                 >
-                  {sendingEmailInvites ? "Generating…" : "Generate invite links"}
+                  {sendingEmailInvites ? "Sending…" : "Send invites"}
                 </button>
               </div>
+            </div>
 
-              {/* Results */}
-              {emailInviteResults.length > 0 && (
-                <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 6 }}>
-                  {emailInviteResults.map(({ email, code }) => {
-                    const roleName = emailInviteRoleId ? labRoles.find((r) => r.id === emailInviteRoleId)?.name : null;
+            {/* Pending invites list */}
+            {inviteCodes.filter(ic => ic.invited_email).length > 0 && (
+              <div style={{ marginBottom: 24 }}>
+                <p style={{ ...labelStyle, marginBottom: 10 }}>Pending invites</p>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {inviteCodes.filter(ic => ic.invited_email).map((ic) => {
+                    const roleName = ic.lab_role_id ? labRoles.find((r) => r.id === ic.lab_role_id)?.name : null;
                     return (
-                      <div key={code} style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                        <span style={{ fontSize: 13, color: "var(--color-body)", minWidth: 0, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{email}</span>
+                      <div key={ic.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", borderRadius: 8, backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)", flexWrap: "wrap" }}>
+                        <span style={{ fontSize: 13, color: "var(--color-body)", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ic.invited_email}</span>
                         {roleName && (
                           <span style={{ fontSize: 11, color: "var(--color-secondary)", border: "1px solid var(--color-border)", borderRadius: 4, padding: "2px 6px", flexShrink: 0 }}>{roleName}</span>
                         )}
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
+                          <span style={{ width: 6, height: 6, borderRadius: "50%", backgroundColor: ic.used_by ? "var(--color-secondary)" : "#2E7D52" }} />
+                          <span style={{ fontSize: 11, color: ic.used_by ? "var(--color-secondary)" : "#2E7D52" }}>{ic.used_by ? "Accepted" : "Pending"}</span>
+                        </span>
                         <button
-                          onClick={() => handleCopyEmailCode(code)}
-                          style={{ height: 30, padding: "0 10px", display: "flex", alignItems: "center", gap: 5, backgroundColor: "transparent", border: "1px solid var(--color-border)", borderRadius: 6, cursor: "pointer", fontSize: 11, fontWeight: 600, color: copiedEmailCode === code ? "#2E7D52" : "var(--color-navy)", flexShrink: 0, fontFamily: "var(--font-roboto)", whiteSpace: "nowrap" }}
+                          onClick={() => handleCopyEmailCode(ic.code)}
+                          style={{ height: 30, padding: "0 10px", display: "flex", alignItems: "center", gap: 5, backgroundColor: "transparent", border: "1px solid var(--color-border)", borderRadius: 6, cursor: "pointer", fontSize: 11, fontWeight: 600, color: copiedEmailCode === ic.code ? "#2E7D52" : "var(--color-navy)", flexShrink: 0, fontFamily: "var(--font-roboto)", whiteSpace: "nowrap" }}
                         >
-                          {copiedEmailCode === code ? <Check size={12} color="#2E7D52" /> : <Copy size={12} />}
-                          {copiedEmailCode === code ? "Copied!" : "Copy link"}
+                          {copiedEmailCode === ic.code ? <Check size={12} color="#2E7D52" /> : <Copy size={12} />}
+                          {copiedEmailCode === ic.code ? "Copied" : "Copy link"}
                         </button>
+                        {!ic.used_by && (
+                          <button
+                            onClick={() => handleRevokeInvite(ic.id)}
+                            style={{ height: 30, width: 30, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "transparent", border: "1px solid var(--color-border)", borderRadius: 6, cursor: "pointer", flexShrink: 0 }}
+                            aria-label={`Revoke invite for ${ic.invited_email}`}
+                          >
+                            <X size={12} color="var(--color-secondary)" />
+                          </button>
+                        )}
                       </div>
                     );
                   })}
                 </div>
-              )}
-            </div>
+              </div>
+            )}
 
-            {/* Invite codes */}
-            <p style={{ fontSize: 13, color: "var(--color-secondary)", marginBottom: 16 }}>
-              Or share a general invite link (any role, anyone with the link can join):
-            </p>
-
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {inviteCodes.map((ic) => {
-                const fullLink = `${typeof window !== "undefined" ? window.location.origin : ""}/login?invite=${ic.code}`;
-                const isRevealed = revealedCode === ic.id;
-                const roleName = ic.lab_role_id ? labRoles.find((r) => r.id === ic.lab_role_id)?.name : null;
-                return (
-                  <div key={ic.id} style={{ display: "flex", flexDirection: isMobile ? "column" : "row", alignItems: isMobile ? "stretch" : "center", gap: 8 }}>
-                    <input
-                      readOnly
-                      value={isRevealed ? fullLink : `${typeof window !== "undefined" ? window.location.origin : "canopy.app"}/login?invite=••••••••`}
-                      style={{ ...readonlyInputStyle, flex: 1, fontFamily: "monospace", fontSize: 12 }}
-                      aria-label={`Invite link ${ic.code}`}
-                    />
-                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                      {/* Role badge — fixed width so all rows align */}
-                      <span style={{
-                        display: "inline-flex", alignItems: "center", justifyContent: "center",
-                        minWidth: 84, fontSize: 11, fontWeight: 500, whiteSpace: "nowrap",
-                        borderRadius: 5, padding: "2px 8px",
-                        backgroundColor: roleName ? "rgba(27,46,75,0.08)" : "transparent",
-                        color: roleName ? "var(--color-navy)" : "var(--color-secondary)",
-                      }}>
-                        {roleName ?? "No role"}
-                      </span>
-
-                      {/* Reveal / Hide */}
-                      <button
-                        onClick={() => setRevealedCode(isRevealed ? null : ic.id)}
-                        style={{ height: 34, padding: "0 12px", display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)", borderRadius: 7, cursor: "pointer", fontSize: 12, fontFamily: "var(--font-roboto)", fontWeight: 500, color: "var(--color-body)", whiteSpace: "nowrap" }}
-                        aria-label={isRevealed ? "Hide invite link" : "Reveal invite link"}
-                      >
-                        {isRevealed ? "Hide" : "Reveal"}
-                      </button>
-
-                      {/* Status dot + label */}
-                      <span style={{ display: "inline-flex", alignItems: "center", gap: 5, minWidth: 52, whiteSpace: "nowrap" }}>
-                        <span style={{ width: 6, height: 6, borderRadius: "50%", flexShrink: 0, backgroundColor: ic.used_by ? "var(--color-secondary)" : "#2E7D52" }} />
-                        <span style={{ fontSize: 11, fontWeight: 500, color: ic.used_by ? "var(--color-secondary)" : "#2E7D52" }}>
-                          {ic.used_by ? "Used" : "Active"}
-                        </span>
-                      </span>
-
-                      {/* Copy */}
-                      <button
-                        onClick={() => handleCopyCode(ic.code)}
-                        style={{ height: 34, width: 36, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)", borderRadius: 7, cursor: "pointer", flexShrink: 0 }}
-                        aria-label={`Copy invite link ${ic.code}`}
-                      >
-                        {copiedCode === ic.code ? <Check size={13} color="#2E7D52" /> : <Copy size={13} color="var(--color-secondary)" />}
-                      </button>
-                    </div>
+            {/* Advanced: generic invite codes */}
+            <div style={{ borderTop: "1px solid var(--color-border)", paddingTop: 16 }}>
+              <button
+                onClick={() => setShowAdvancedInvites(v => !v)}
+                style={{ display: "flex", alignItems: "center", gap: 6, backgroundColor: "transparent", border: "none", cursor: "pointer", padding: 0, fontSize: 12, fontWeight: 600, color: "var(--color-secondary)", fontFamily: "var(--font-roboto)" }}
+              >
+                <ChevronDown size={13} style={{ transform: showAdvancedInvites ? "rotate(180deg)" : "none", transition: "transform 150ms" }} />
+                Advanced
+              </button>
+              {showAdvancedInvites && (
+                <div style={{ marginTop: 12 }}>
+                  <p style={{ fontSize: 12, color: "var(--color-secondary)", marginTop: 0, marginBottom: 12 }}>
+                    Generic links let anyone who has the URL join your lab without email verification. Use with caution.
+                  </p>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    {inviteCodes.filter(ic => !ic.invited_email).map((ic) => {
+                      const fullLink = `${typeof window !== "undefined" ? window.location.origin : ""}/login?invite=${ic.code}`;
+                      const isRevealed = revealedCode === ic.id;
+                      const roleName = ic.lab_role_id ? labRoles.find((r) => r.id === ic.lab_role_id)?.name : null;
+                      return (
+                        <div key={ic.id} style={{ display: "flex", flexDirection: isMobile ? "column" : "row", alignItems: isMobile ? "stretch" : "center", gap: 8 }}>
+                          <input
+                            readOnly
+                            value={isRevealed ? fullLink : `${typeof window !== "undefined" ? window.location.origin : "canopy.app"}/login?invite=••••••••`}
+                            style={{ ...readonlyInputStyle, flex: 1, fontFamily: "monospace", fontSize: 12 }}
+                            aria-label={`Generic invite link ${ic.code}`}
+                          />
+                          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                            <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", minWidth: 84, fontSize: 11, fontWeight: 500, whiteSpace: "nowrap", borderRadius: 5, padding: "2px 8px", backgroundColor: roleName ? "rgba(27,46,75,0.08)" : "transparent", color: roleName ? "var(--color-navy)" : "var(--color-secondary)" }}>
+                              {roleName ?? "No role"}
+                            </span>
+                            <button onClick={() => setRevealedCode(isRevealed ? null : ic.id)}
+                              style={{ height: 34, padding: "0 12px", display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)", borderRadius: 7, cursor: "pointer", fontSize: 12, fontFamily: "var(--font-roboto)", fontWeight: 500, color: "var(--color-body)", whiteSpace: "nowrap" }}
+                              aria-label={isRevealed ? "Hide invite link" : "Reveal invite link"}>
+                              {isRevealed ? "Hide" : "Reveal"}
+                            </button>
+                            <span style={{ display: "inline-flex", alignItems: "center", gap: 5, minWidth: 52, whiteSpace: "nowrap" }}>
+                              <span style={{ width: 6, height: 6, borderRadius: "50%", flexShrink: 0, backgroundColor: ic.used_by ? "var(--color-secondary)" : "#2E7D52" }} />
+                              <span style={{ fontSize: 11, fontWeight: 500, color: ic.used_by ? "var(--color-secondary)" : "#2E7D52" }}>{ic.used_by ? "Used" : "Active"}</span>
+                            </span>
+                            <button onClick={() => handleCopyCode(ic.code)}
+                              style={{ height: 34, width: 36, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "var(--color-canvas)", border: "1px solid var(--color-border)", borderRadius: 7, cursor: "pointer", flexShrink: 0 }}
+                              aria-label={`Copy invite link ${ic.code}`}>
+                              {copiedCode === ic.code ? <Check size={13} color="#2E7D52" /> : <Copy size={13} color="var(--color-secondary)" />}
+                            </button>
+                            {!ic.used_by && (
+                              <button onClick={() => handleRevokeInvite(ic.id)}
+                                style={{ height: 34, width: 34, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "transparent", border: "1px solid var(--color-border)", borderRadius: 7, cursor: "pointer", flexShrink: 0 }}
+                                aria-label={`Revoke invite ${ic.code}`}>
+                                <X size={12} color="var(--color-secondary)" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {inviteCodes.filter(ic => !ic.invited_email).length === 0 && (
+                      <p style={{ fontSize: 13, color: "var(--color-secondary)" }}>No generic invite codes yet.</p>
+                    )}
                   </div>
-                );
-              })}
-
-              {inviteCodes.length === 0 && (
-                <p style={{ fontSize: 13, color: "var(--color-secondary)" }}>No invite codes yet. Generate one below.</p>
-              )}
-            </div>
-
-            {/* Role picker + generate button */}
-            <div style={{ marginTop: 16, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-              {labRoles.length > 0 && (
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <span style={{ fontSize: 12, color: "var(--color-secondary)", whiteSpace: "nowrap" }}>Role for this link:</span>
-                  <div style={{ position: "relative" }}>
-                    <select
-                      value={newInviteRoleId}
-                      onChange={(e) => setNewInviteRoleId(e.target.value)}
-                      style={{ height: 38, border: "1px solid var(--color-border)", borderRadius: 8, padding: "0 28px 0 12px", fontSize: 13, fontFamily: "var(--font-roboto)", backgroundColor: "var(--color-canvas)", color: "var(--color-body)", outline: "none", cursor: "pointer", appearance: "none" }}
-                      aria-label="Role for new invite"
-                    >
-                      {labRoles.map((r) => (
-                        <option key={r.id} value={r.id}>{r.name}</option>
-                      ))}
-                    </select>
-                    <ChevronDown size={13} color="var(--color-secondary)" style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
+                  <div style={{ marginTop: 16, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                    {labRoles.length > 0 && (
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ fontSize: 12, color: "var(--color-secondary)", whiteSpace: "nowrap" }}>Role:</span>
+                        <div style={{ position: "relative" }}>
+                          <select value={newInviteRoleId} onChange={(e) => setNewInviteRoleId(e.target.value)}
+                            style={{ height: 38, border: "1px solid var(--color-border)", borderRadius: 8, padding: "0 28px 0 12px", fontSize: 13, fontFamily: "var(--font-roboto)", backgroundColor: "var(--color-canvas)", color: "var(--color-body)", outline: "none", cursor: "pointer", appearance: "none" }}
+                            aria-label="Role for new generic invite">
+                            {labRoles.map((r) => (
+                              <option key={r.id} value={r.id}>{r.name}</option>
+                            ))}
+                          </select>
+                          <ChevronDown size={13} color="var(--color-secondary)" style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
+                        </div>
+                      </div>
+                    )}
+                    <button onClick={handleGenerateCode} disabled={generatingCode}
+                      style={{ minHeight: 44, height: 38, padding: "0 16px", display: "flex", alignItems: "center", gap: 6, backgroundColor: "var(--color-btn-primary)", color: "#fff", border: "none", borderRadius: 8, fontFamily: "var(--font-roboto)", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
+                      <RefreshCw size={13} />
+                      {generatingCode ? "Generating…" : "Generate generic invite"}
+                    </button>
                   </div>
                 </div>
               )}
-              <button
-                onClick={handleGenerateCode}
-                disabled={generatingCode}
-                style={{ minHeight: 44, height: 38, padding: "0 16px", display: "flex", alignItems: "center", gap: 6, backgroundColor: "var(--color-btn-primary)", color: "#fff", border: "none", borderRadius: 8, fontFamily: "var(--font-roboto)", fontWeight: 600, fontSize: 13, cursor: "pointer" }}
-              >
-                <RefreshCw size={13} />
-                {generatingCode ? "Generating…" : "Generate new invite code"}
-              </button>
             </div>
           </div>
         </section>
       )}
 
-      {/* Lab Settings section (PI only) */}
-      {profile?.role === "pi" && (
+      {/* Lab Settings section (PI only, hidden in Personal workspace) */}
+      {profile?.role === "pi" && activeScope !== "personal" && (
         <section style={sectionStyle} aria-labelledby="settings-lab-heading">
           <div style={sectionHeaderStyle}>
             <FlaskConical size={16} color="var(--color-secondary)" />
@@ -812,7 +832,7 @@ export default function SettingsPage() {
                 ))}
               </div>
               <p style={{ fontSize: 12, color: "var(--color-secondary)", marginTop: 8 }}>
-                Controls how your lab&rsquo;s anonymized data contributes to Canopy&rsquo;s research publications.
+                Controls how your lab&rsquo;s anonymized data contributes to Canopy&rsquo;s research. <strong>Both publications</strong> shares aggregated task and journal patterns for two studies: one on researcher well-being, one on team collaboration. <strong>Well-being only</strong> limits sharing to the well-being study. <strong>Keep data private</strong> means your lab&rsquo;s data is never included in any publication. All data is anonymized before analysis and can never be traced back to individuals. You can change this at any time.
               </p>
             </div>
             <div>
@@ -1098,6 +1118,58 @@ export default function SettingsPage() {
                 </div>
               </div>
             ))}
+
+            {/* Custom prompts */}
+            <div style={{ borderTop: "1px solid var(--color-border)", paddingTop: 16 }}>
+              <p style={{ fontFamily: "var(--font-roboto)", fontWeight: 700, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-secondary)", marginBottom: 8 }}>
+                Custom Prompts
+              </p>
+              {customPrompts.length > 0 && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 10 }}>
+                  {customPrompts.map((cp) => (
+                    <div key={cp.id} style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "10px 14px", borderRadius: 8, backgroundColor: "rgba(27,46,75,0.04)", border: "1px solid var(--color-navy)" }}>
+                      <span style={{ flex: 1, fontSize: 13, color: "var(--color-body)", fontFamily: "var(--font-roboto)" }}>{cp.text}</span>
+                      <button
+                        onClick={() => setCustomPrompts(prev => prev.filter(p => p.id !== cp.id))}
+                        style={{ flexShrink: 0, height: 24, width: 24, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "transparent", border: "none", cursor: "pointer", borderRadius: 4 }}
+                        aria-label="Remove custom prompt"
+                      >
+                        <X size={13} color="var(--color-secondary)" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div style={{ display: "flex", gap: 8 }}>
+                <input
+                  value={customPromptInput}
+                  onChange={(e) => setCustomPromptInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && customPromptInput.trim()) {
+                      setCustomPrompts(prev => [...prev, { id: `cp-${Date.now()}`, text: customPromptInput.trim() }]);
+                      setCustomPromptInput("");
+                    }
+                  }}
+                  placeholder="Type a custom prompt and press Enter or Add"
+                  style={{ flex: 1, height: 38, border: "1px solid var(--color-border)", borderRadius: 8, padding: "0 12px", fontSize: 13, fontFamily: "var(--font-roboto)", backgroundColor: "var(--color-canvas)", color: "var(--color-body)", outline: "none", boxSizing: "border-box" }}
+                  onFocus={(e) => { e.currentTarget.style.borderColor = "var(--color-navy)"; }}
+                  onBlur={(e) => { e.currentTarget.style.borderColor = "var(--color-border)"; }}
+                />
+                <button
+                  onClick={() => {
+                    if (!customPromptInput.trim()) return;
+                    setCustomPrompts(prev => [...prev, { id: `cp-${Date.now()}`, text: customPromptInput.trim() }]);
+                    setCustomPromptInput("");
+                  }}
+                  style={{ height: 38, padding: "0 14px", backgroundColor: "var(--color-btn-primary)", color: "#fff", border: "none", borderRadius: 8, fontFamily: "var(--font-roboto)", fontWeight: 600, fontSize: 13, cursor: "pointer" }}
+                >
+                  Add
+                </button>
+              </div>
+              <p style={{ fontSize: 11, color: "var(--color-secondary)", marginTop: 6 }}>
+                Custom prompts appear alongside presets for all team members.
+              </p>
+            </div>
           </div>
           <div style={{ padding: "16px 24px", borderTop: "1px solid var(--color-border)", display: "flex", gap: 8, flexShrink: 0 }}>
             <button onClick={() => setPromptModalOpen(false)}
