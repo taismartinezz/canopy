@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Eye, EyeOff } from "lucide-react";
 import CanopyLogo from "@/components/ui/CanopyLogo";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
+import { generateNonce, hashNonce, loadGisScript, initGis, renderGisButton } from "@/lib/googleIdentity";
 
 // ── Provider icons ────────────────────────────────────────────────────────────
 
@@ -54,6 +55,7 @@ function AuthButton({
   dashed = false,
   loading = false,
   disabled = false,
+  forceHovered = false,
 }: {
   icon: React.ReactNode;
   label: string;
@@ -63,9 +65,11 @@ function AuthButton({
   dashed?: boolean;
   loading?: boolean;
   disabled?: boolean;
+  forceHovered?: boolean;
 }) {
   const [hovered, setHovered] = useState(false);
   const isDisabled = disabled || loading;
+  const showHover = (hovered || forceHovered) && !isDisabled;
 
   return (
     <button
@@ -83,7 +87,7 @@ function AuthButton({
         height: 48,
         minHeight: 48,
         backgroundColor: "var(--color-surface)",
-        border: `1px ${dashed ? "dashed" : "solid"} ${hovered && !isDisabled ? "var(--color-navy-dim)" : "var(--color-border)"}`,
+        border: `1px ${dashed ? "dashed" : "solid"} ${showHover ? "var(--color-navy-dim)" : "var(--color-border)"}`,
         borderRadius: 8,
         cursor: isDisabled ? "not-allowed" : "pointer",
         fontFamily: "var(--font-roboto)",
@@ -91,7 +95,7 @@ function AuthButton({
         fontSize: 14,
         color: isDisabled ? "var(--color-secondary)" : muted ? "var(--color-secondary)" : "var(--color-body)",
         opacity: disabled && !loading ? 0.5 : 1,
-        boxShadow: hovered && !isDisabled ? "0 2px 8px rgba(27,46,75,0.08)" : "none",
+        boxShadow: showHover ? "0 2px 8px rgba(27,46,75,0.08)" : "none",
         transition: "border-color 150ms ease, box-shadow 150ms ease, opacity 150ms ease",
         position: "relative",
         padding: 0,
@@ -202,6 +206,17 @@ export default function LoginPage() {
   const [oAuthLoading, setOAuthLoading] = useState<string | null>(null);
   const [oAuthError, setOAuthError] = useState<string | null>(null);
   const hasFetched = useRef(false);
+
+  // GIS invisible-overlay state
+  const googleClientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? "";
+  const [gisReady, setGisReady] = useState(false);
+  const [googleButtonHovered, setGoogleButtonHovered] = useState(false);
+  const googleWrapperRef = useRef<HTMLDivElement>(null);
+  const gisContainerRef = useRef<HTMLDivElement>(null);
+  const gisCallbackRef = useRef<(idToken: string) => void>(() => {});
+  // rawNonce is stable per mount; hashedNonce is derived async
+  const rawNonce = useMemo(() => generateNonce(), []);
+  const [hashedNonce, setHashedNonce] = useState<string | null>(null);
 
   // Enabled OAuth providers (comma-separated, e.g. "google,github"). If unset, all three show.
   const enabledProviders: Set<string> = new Set(
@@ -376,6 +391,73 @@ export default function LoginPage() {
     router.push(localStorage.getItem("canopy_project") ? "/" : "/onboarding");
   }, [router]);
 
+  // Hash the nonce once on mount
+  useEffect(() => {
+    hashNonce(rawNonce).then(setHashedNonce).catch(() => {});
+  }, [rawNonce]);
+
+  // Keep the GIS callback ref current so the one-time GIS init doesn't hold a stale closure
+  const handleGisToken = useCallback(async (idToken: string) => {
+    if (!isSupabaseConfigured) return;
+    setOAuthLoading("google");
+    setOAuthError(null);
+    try {
+      const { error } = await supabase.auth.signInWithIdToken({
+        provider: "google",
+        token: idToken,
+        nonce: rawNonce,
+      });
+      if (error) {
+        setOAuthError(`Sign-in failed: ${error.message}`);
+        setOAuthLoading(null);
+      }
+      // On success Supabase sets the session; the existing getSession effect routes the user.
+    } catch (err: unknown) {
+      setOAuthError(err instanceof Error ? err.message : "Sign-in failed. Please try again.");
+      setOAuthLoading(null);
+    }
+  }, [rawNonce]);
+
+  useEffect(() => {
+    gisCallbackRef.current = handleGisToken;
+  }, [handleGisToken]);
+
+  // Load GIS script and initialize once the hashed nonce is ready
+  useEffect(() => {
+    if (!googleClientId || !hashedNonce || !isSupabaseConfigured) return;
+    let cancelled = false;
+    loadGisScript()
+      .then(() => {
+        if (cancelled) return;
+        initGis(googleClientId, hashedNonce, (token) => gisCallbackRef.current(token));
+        setGisReady(true);
+      })
+      .catch(() => {
+        // GIS failed to load -- fall back to redirect flow silently
+      });
+    return () => { cancelled = true; };
+  }, [googleClientId, hashedNonce]);
+
+  // Render the GIS button inside the overlay container whenever gisReady or container mounts
+  useEffect(() => {
+    if (!gisReady || !gisContainerRef.current || !googleWrapperRef.current) return;
+    const width = googleWrapperRef.current.offsetWidth || 400;
+    renderGisButton(gisContainerRef.current, width);
+  }, [gisReady]);
+
+  // Re-render the GIS button on wrapper width changes
+  useEffect(() => {
+    if (!gisReady || !googleWrapperRef.current || !gisContainerRef.current) return;
+    const observer = new ResizeObserver((entries) => {
+      const width = entries[0]?.contentRect.width;
+      if (width && gisContainerRef.current) {
+        renderGisButton(gisContainerRef.current, width);
+      }
+    });
+    observer.observe(googleWrapperRef.current);
+    return () => observer.disconnect();
+  }, [gisReady]);
+
   if (checking) return null;
 
   return (
@@ -497,14 +579,40 @@ export default function LoginPage() {
         {/* Auth buttons -- only renders providers listed in NEXT_PUBLIC_AUTH_PROVIDERS */}
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           {enabledProviders.has("google") && (
-            <AuthButton
-              icon={<GoogleIcon />}
-              label="Continue with Google"
-              ariaLabel="Sign in with Google"
-              loading={oAuthLoading === "google"}
-              disabled={oAuthLoading !== null && oAuthLoading !== "google"}
-              onClick={() => handleOAuth("google")}
-            />
+            // Wrapper: our button is visible; GIS iframe sits on top at near-zero opacity.
+            // The iframe intercepts clicks for the ID-token flow.
+            // Keyboard fallback: AuthButton remains focusable and Enter/Space use redirect flow.
+            <div
+              ref={googleWrapperRef}
+              style={{ position: "relative" }}
+              onMouseEnter={() => setGoogleButtonHovered(true)}
+              onMouseLeave={() => setGoogleButtonHovered(false)}
+            >
+              <AuthButton
+                icon={<GoogleIcon />}
+                label="Continue with Google"
+                ariaLabel="Sign in with Google"
+                loading={oAuthLoading === "google"}
+                disabled={oAuthLoading !== null && oAuthLoading !== "google"}
+                forceHovered={googleButtonHovered && oAuthLoading === null}
+                onClick={() => handleOAuth("google")}
+              />
+              {/* GIS overlay -- only rendered once GIS is ready */}
+              {gisReady && oAuthLoading !== "google" && (
+                <div
+                  ref={gisContainerRef}
+                  aria-hidden="true"
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    overflow: "hidden",
+                    opacity: 0.01,
+                    zIndex: 1,
+                    pointerEvents: oAuthLoading !== null ? "none" : "auto",
+                  }}
+                />
+              )}
+            </div>
           )}
 
           {enabledProviders.has("microsoft") && (
