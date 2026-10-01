@@ -400,7 +400,7 @@ async function syncOnboardingToSupabase({
   projectName: string; institution: string; researchType: string;
   userName: string; userRole: "pi" | "researcher"; inviteCode?: string;
   enteredInviteCode?: string; bio?: string; department?: string;
-  inviteEmails?: { email: string; code: string; permissionLevel?: "pi" | "researcher" }[];
+  inviteEmails?: { email: string; code: string; roleName?: string }[];
   timezone?: string; workingHours?: Record<string, { start: string; end: string } | null>;
   researchParticipation?: string; activePromptIds?: string[]; customPrompts?: { id: string; text: string }[];
 }): Promise<string | null> {
@@ -444,19 +444,28 @@ async function syncOnboardingToSupabase({
 
         // Seed built-in roles for new lab
         await supabase.from("lab_roles").insert([
-          { project_id: projectId, name: "PI", permission_level: "pi", is_system: true },
-          { project_id: projectId, name: "Researcher", permission_level: "researcher", is_system: true },
+          { project_id: projectId, name: "PI",                     permission_level: "pi",         is_system: true },
+          { project_id: projectId, name: "Co-PI",                  permission_level: "pi",         is_system: true },
+          { project_id: projectId, name: "Postdoc",                permission_level: "researcher", is_system: true },
+          { project_id: projectId, name: "PhD Student",            permission_level: "researcher", is_system: true },
+          { project_id: projectId, name: "Master's Student",       permission_level: "researcher", is_system: true },
+          { project_id: projectId, name: "Undergraduate Researcher", permission_level: "researcher", is_system: true },
+          { project_id: projectId, name: "Lab Manager",            permission_level: "researcher", is_system: true },
+          { project_id: projectId, name: "Researcher",             permission_level: "researcher", is_system: true },
         ]);
       }
 
-      // Get all lab_roles to resolve permission_level → id
+      // Get all lab_roles to resolve permission_level/name → id
       const { data: allRoles } = await supabase
-        .from("lab_roles").select("id, permission_level").eq("project_id", projectId);
+        .from("lab_roles").select("id, name, permission_level").eq("project_id", projectId);
       const roleIdByLevel: Record<string, string> = {};
+      const roleIdByName: Record<string, string> = {};
       for (const r of allRoles ?? []) {
-        roleIdByLevel[(r as { id: string; permission_level: string }).permission_level] = (r as { id: string; permission_level: string }).id;
+        const row = r as { id: string; name: string; permission_level: string };
+        if (!roleIdByLevel[row.permission_level]) roleIdByLevel[row.permission_level] = row.id;
+        roleIdByName[row.name] = row.id;
       }
-      labRoleId = roleIdByLevel["pi"] ?? null;
+      labRoleId = roleIdByName["PI"] ?? roleIdByLevel["pi"] ?? null;
 
       // Save the generic shareable code
       if (inviteCode) {
@@ -466,10 +475,10 @@ async function syncOnboardingToSupabase({
         });
         if (codeErr) console.error("[Sync] generic invite_code insert error:", codeErr.message, codeErr.code);
       }
-      // Save one unique code per invited email (resolved by permissionLevel)
+      // Save one unique code per invited email (resolved by roleName)
       if (inviteEmails && inviteEmails.length > 0) {
-        for (const { email, code, permissionLevel } of inviteEmails) {
-          const resolvedRoleId = roleIdByLevel[permissionLevel ?? "researcher"] ?? null;
+        for (const { email, code, roleName } of inviteEmails) {
+          const resolvedRoleId = (roleName ? roleIdByName[roleName] : null) ?? roleIdByLevel["researcher"] ?? null;
           const { error: emailCodeErr } = await supabase.from("invite_codes").insert({
             code, project_id: projectId, created_by: user.id, invited_email: email,
             lab_role_id: resolvedRoleId,
@@ -591,7 +600,7 @@ export default function OnboardingPage() {
   const [emailInputError, setEmailInputError] = useState("");
   const [inviteEmails, setInviteEmails] = useState<string[]>([]);
   const [emailCodes, setEmailCodes] = useState<Record<string, string>>({});
-  const [emailRoles, setEmailRoles] = useState<Record<string, "pi" | "researcher">>({});
+  const [emailRoles, setEmailRoles] = useState<Record<string, string>>({});
   const [copiedEmail, setCopiedEmail] = useState<string | null>(null);
   const [generatedCode, setGeneratedCode] = useState("");
   const [copied, setCopied] = useState(false);
@@ -799,7 +808,7 @@ export default function OnboardingPage() {
         bio: role === "researcher" ? profileBio : undefined,
         department: role === "researcher" ? profileDept : undefined,
         inviteEmails: role === "pi"
-          ? inviteEmails.map((email) => ({ email, code: emailCodes[email], permissionLevel: emailRoles[email] ?? "researcher" }))
+          ? inviteEmails.map((email) => ({ email, code: emailCodes[email], roleName: emailRoles[email] ?? "Researcher" }))
           : undefined,
         timezone: role === "pi" ? piTimezone : resTimezone,
         workingHours: role === "pi" ? piWorkingHours : resWorkingHours,
@@ -1267,13 +1276,19 @@ export default function OnboardingPage() {
                   </span>
                   {/* Role picker for each invite */}
                   <select
-                    value={emailRoles[email] ?? "researcher"}
-                    onChange={(e) => setEmailRoles((prev) => ({ ...prev, [email]: e.target.value as "pi" | "researcher" }))}
+                    value={emailRoles[email] ?? "Researcher"}
+                    onChange={(e) => setEmailRoles((prev) => ({ ...prev, [email]: e.target.value }))}
                     style={{ fontSize: 11, border: "1px solid var(--color-border)", borderRadius: 5, padding: "2px 4px", backgroundColor: "var(--color-surface)", fontFamily: "var(--font-roboto)", cursor: "pointer", flexShrink: 0 }}
                     aria-label={`Role for ${email}`}
                   >
-                    <option value="researcher">Researcher</option>
-                    <option value="pi">PI</option>
+                    <option value="PI">PI</option>
+                    <option value="Co-PI">Co-PI</option>
+                    <option value="Postdoc">Postdoc</option>
+                    <option value="PhD Student">PhD Student</option>
+                    <option value="Master's Student">Master&apos;s Student</option>
+                    <option value="Undergraduate Researcher">Undergrad Researcher</option>
+                    <option value="Lab Manager">Lab Manager</option>
+                    <option value="Researcher">Researcher</option>
                   </select>
                   <button
                     onClick={() => handleCopyEmailLink(email)}
@@ -1351,7 +1366,7 @@ export default function OnboardingPage() {
                   <p style={{ fontFamily: "var(--font-roboto)", fontSize: 11, color: "var(--color-secondary)", margin: 0, letterSpacing: revealLink ? 0 : "0.05em" }}>
                     {revealLink
                       ? (typeof window !== "undefined" ? `${window.location.origin}/login?invite=${generatedCode}` : `/login?invite=${generatedCode}`)
-                      : `canopy.app/login?invite=••••••••`}
+                      : `${process.env.NEXT_PUBLIC_APP_URL ?? (typeof window !== "undefined" ? window.location.origin : "canopyteams.tech")}/login?invite=••••••••`}
                   </p>
                   <button type="button" onClick={() => setRevealLink(v => !v)}
                     style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "var(--font-roboto)", fontSize: 11, color: "var(--color-navy)", textDecoration: "underline", padding: 0 }}>

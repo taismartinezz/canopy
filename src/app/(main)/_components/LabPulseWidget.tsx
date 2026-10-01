@@ -28,6 +28,7 @@ function PostColumn({
   posts,
   type,
   projectId,
+  projectName,
   userId,
   teamMembers,
   emptyPrompt,
@@ -36,6 +37,7 @@ function PostColumn({
   posts: DashboardPost[];
   type: "opportunity" | "lab_win";
   projectId: string;
+  projectName: string;
   userId: string;
   teamMembers: User[];
   emptyPrompt: string;
@@ -62,6 +64,22 @@ function PostColumn({
           createdAt: data.created_at as string,
           type,
         }, ...prev]);
+
+        // Send lab win emails to other team members (fire-and-forget)
+        if (type === "lab_win") {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session?.access_token) {
+            const posterName = currentUser?.name ?? "A teammate";
+            const recipients = teamMembers.filter((m) => m.id !== userId);
+            recipients.forEach((m) => {
+              fetch("/api/email/send", {
+                method: "POST",
+                headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+                body: JSON.stringify({ type: "lab_win", recipientId: m.id, senderId: userId, payload: { content: content.trim(), posterName, projectName } }),
+              }).catch(() => {});
+            });
+          }
+        }
       }
     } else {
       setItems((prev) => [{
@@ -198,12 +216,14 @@ function PostColumn({
 export function LabPulseWidget({
   posts,
   projectId,
+  projectName = "",
   userId,
   teamMembers,
   loading,
 }: {
   posts: DashboardPost[];
   projectId: string;
+  projectName?: string;
   userId: string;
   teamMembers: User[];
   loading?: boolean;
@@ -237,6 +257,7 @@ export function LabPulseWidget({
           posts={posts}
           type="opportunity"
           projectId={projectId}
+          projectName={projectName}
           userId={userId}
           teamMembers={teamMembers}
           emptyPrompt="Spot something worth pursuing? Share it."
@@ -246,6 +267,7 @@ export function LabPulseWidget({
           posts={posts}
           type="lab_win"
           projectId={projectId}
+          projectName={projectName}
           userId={userId}
           teamMembers={teamMembers}
           emptyPrompt="Got a win? Big or small, add it here."
