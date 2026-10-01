@@ -13,6 +13,9 @@ import {
   AlertCircle, Bell,
 } from "lucide-react";
 import { isSupabaseConfigured } from "@/lib/supabase";
+import {
+  importJournalKey, encryptJournalContent, decryptJournalContent, isEncryptedContent,
+} from "@/lib/journal-crypto";
 import ScopeSidebar, { type ScopeSection } from "@/components/ui/ScopeSidebar";
 import PageHeader from "@/components/ui/PageHeader";
 import SupportPanel from "@/components/support/SupportPanel";
@@ -640,6 +643,7 @@ export default function JournalPage() {
   const [entries, setEntries]               = useState<JournalEntry[]>([]);
   const [loadingEntries, setLoadingEntries] = useState(true);
   const [authUserId, setAuthUserId]         = useState("local");
+  const [cryptoKey, setCryptoKey]           = useState<CryptoKey | null>(null);
   const [selectedEntryId, setSelectedEntryId] = useState<string | "new">("new");
   // New entry state
   const [defaultResponse, setDefaultResponse] = useState("");
@@ -780,9 +784,19 @@ export default function JournalPage() {
     const { data: { session } } = await supabase.auth.getSession();
     const resolvedUserId = session?.user?.id ?? authUserId;
 
+    // Encrypt content before storing if key is available
+    let storedContent: unknown = content;
+    if (cryptoKey) {
+      try {
+        storedContent = await encryptJournalContent(cryptoKey, content);
+      } catch (e) {
+        console.warn("[Journal] encryption failed, saving plaintext:", e);
+      }
+    }
+
     const { data, error } = await supabase
       .from("journal_entries")
-      .insert({ user_id: resolvedUserId, content, ...(projectId ? { project_id: projectId } : {}) })
+      .insert({ user_id: resolvedUserId, content: storedContent, ...(projectId ? { project_id: projectId } : {}) })
       .select()
       .single();
 
@@ -826,37 +840,66 @@ export default function JournalPage() {
   }, [entryListOpen]);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       const user = session?.user ?? null;
       if (!user) { setLoadingEntries(false); return; }
       setAuthUserId(user.id);
-      supabase
+
+      // Fetch per-user encryption key from server
+      let encKey: CryptoKey | null = null;
+      try {
+        const keyRes = await fetch("/api/journal/key", {
+          headers: { Authorization: `Bearer ${session?.access_token ?? ""}` },
+        });
+        if (keyRes.ok) {
+          const keyData = await keyRes.json() as { key?: string; disabled?: boolean };
+          if (keyData.key) encKey = await importJournalKey(keyData.key);
+        }
+      } catch (e) {
+        console.warn("[Journal] could not fetch encryption key:", e);
+      }
+      if (encKey) setCryptoKey(encKey);
+
+      const { data, error } = await supabase
         .from("journal_entries")
         .select("*")
         .eq("user_id", user.id)
-        .order("created_at", { ascending: false })
-        .then(({ data, error }) => {
-          if (error) console.error("[Journal] query error:", error);
-          if (!error && data) setEntries(data.map((row) => {
-            const c = (row.content ?? {}) as {
-              date?: string;
-              prompts?: JournalEntry["prompts"];
-              checkin?: JournalEntry["checkin"];
-              isDraft?: boolean;
-            };
-            return {
-              id: row.id as string,
-              userId: row.user_id as string,
-              date: c.date ?? (row.created_at as string).split("T")[0],
-              prompts: c.prompts ?? [],
-              checkin: c.checkin ?? [],
-              isDraft: c.isDraft ?? false,
-              createdAt: row.created_at as string,
-              updatedAt: row.updated_at as string,
-            };
-          }));
-          setLoadingEntries(false);
-        });
+        .order("created_at", { ascending: false });
+
+      if (error) console.error("[Journal] query error:", error);
+      if (!error && data) {
+        const parsed: JournalEntry[] = [];
+        for (const row of data) {
+          let c: {
+            date?: string;
+            prompts?: JournalEntry["prompts"];
+            checkin?: JournalEntry["checkin"];
+            isDraft?: boolean;
+          };
+          try {
+            const raw = row.content ?? {};
+            if (isEncryptedContent(raw) && encKey) {
+              c = (await decryptJournalContent(encKey, raw)) as typeof c;
+            } else {
+              c = raw as typeof c;
+            }
+          } catch {
+            c = {};
+          }
+          parsed.push({
+            id: row.id as string,
+            userId: row.user_id as string,
+            date: c.date ?? (row.created_at as string).split("T")[0],
+            prompts: c.prompts ?? [],
+            checkin: c.checkin ?? [],
+            isDraft: c.isDraft ?? false,
+            createdAt: row.created_at as string,
+            updatedAt: row.updated_at as string,
+          });
+        }
+        setEntries(parsed);
+      }
+      setLoadingEntries(false);
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

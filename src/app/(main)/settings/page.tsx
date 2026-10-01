@@ -73,7 +73,7 @@ export default function SettingsPage() {
   const { activeScope } = useProject();
   const [profile, setProfile] = useState<any>(null);
   const [project, setProject] = useState<any>(null);
-  const [inviteCodes, setInviteCodes] = useState<{ id: string; code: string; used_by: string | null; lab_role_id: string | null; invited_email: string | null }[]>([]);
+  const [inviteCodes, setInviteCodes] = useState<{ id: string; code: string; used_by: string | null; lab_role_id: string | null; invited_email: string | null; email_sent_at: string | null }[]>([]);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [revealedCode, setRevealedCode] = useState<string | null>(null);
   const [generatingCode, setGeneratingCode] = useState(false);
@@ -158,7 +158,9 @@ export default function SettingsPage() {
             setProjectInstitution((proj.institution as string) ?? "");
             setResearchType((proj.research_type as string) ?? "");
             setResearchParticipation((proj.research_participation as string) ?? "private");
-            if (proj.active_prompt_ids) setActivePromptIds(proj.active_prompt_ids as string[]);
+            const loadedIds = proj.active_prompt_ids as string[] | null;
+            if (loadedIds && loadedIds.length > 0) setActivePromptIds(loadedIds);
+            // else: keep ACTIVE_PROMPT_IDS default until backfill runs
             if (proj.custom_prompts) setCustomPrompts(proj.custom_prompts as { id: string; text: string }[]);
           }
 
@@ -171,6 +173,9 @@ export default function SettingsPage() {
             setDndEnabled((userSettings.dnd_enabled as boolean) ?? false);
             setQuietHoursStart((userSettings.quiet_hours_start as string) ?? "22:00");
             setQuietHoursEnd((userSettings.quiet_hours_end as string) ?? "08:00");
+            if (userSettings.notif_task_assigned != null) setNotifTaskAssigned(userSettings.notif_task_assigned as boolean);
+            if (userSettings.notif_lab_win != null) setNotifLabWin(userSettings.notif_lab_win as boolean);
+            if (userSettings.notif_digest != null) setNotifDigest(userSettings.notif_digest as boolean);
           }
 
           // Fetch current user's lab role name for the Profile section
@@ -193,7 +198,7 @@ export default function SettingsPage() {
             const [{ data: codes }, { data: roles }] = await Promise.all([
               supabase
                 .from("invite_codes")
-                .select("id, code, used_by, lab_role_id, invited_email")
+                .select("id, code, used_by, lab_role_id, invited_email, email_sent_at")
                 .eq("project_id", membership.project_id)
                 .order("created_at", { ascending: false }),
               supabase
@@ -298,10 +303,28 @@ export default function SettingsPage() {
         code, project_id: project.id, created_by: user.id,
         invited_email: email,
         lab_role_id: emailInviteRoleId || null,
-      }).select("id, code, used_by, lab_role_id, invited_email").single();
+      }).select("id, code, used_by, lab_role_id, invited_email, email_sent_at").single();
       if (!error && inserted) newCodes.push(inserted as (typeof inviteCodes)[0]);
     }
-    if (newCodes.length > 0) setInviteCodes((prev) => [...newCodes, ...prev]);
+    if (newCodes.length > 0) {
+      setInviteCodes((prev) => [...newCodes, ...prev]);
+      // Fire invite emails (best-effort, fire-and-forget)
+      const token = session?.access_token;
+      fetch("/api/invite/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ inviteIds: newCodes.map(c => c.id) }),
+      }).then(async (r) => {
+        const data = await r.json().catch(() => ({})) as { ok: boolean; results?: { id: string; ok: boolean }[] };
+        if (data.ok || data.results?.some(r => r.ok)) {
+          showToast("Invites sent!");
+          // Update email_sent_at in local state
+          const sentIds = new Set((data.results ?? []).filter(r => r.ok).map(r => r.id));
+          const sentAt = new Date().toISOString();
+          setInviteCodes(prev => prev.map(ic => sentIds.has(ic.id) ? { ...ic, email_sent_at: sentAt } : ic));
+        }
+      }).catch((err) => console.error("[invite/send]", err));
+    }
     setEmailInviteInput("");
     setSendingEmailInvites(false);
   }, [project, emailInviteInput, emailInviteRoleId]);
@@ -360,6 +383,19 @@ export default function SettingsPage() {
     if (error) { showToast("Failed to save. " + error.message); }
     else { showToast("Focus settings saved."); }
   }, [dndEnabled, quietHoursStart, quietHoursEnd]);
+
+  const handleSaveNotifications = useCallback(async () => {
+    if (!isSupabaseConfigured) { showToast("Demo mode - settings not persisted."); return; }
+    const { data: { session } } = await supabase.auth.getSession();
+    const userId = session?.user?.id;
+    if (!userId) return;
+    const { error } = await supabase.from("user_settings").upsert(
+      { user_id: userId, notif_task_assigned: notifTaskAssigned, notif_lab_win: notifLabWin, notif_digest: notifDigest, updated_at: new Date().toISOString() },
+      { onConflict: "user_id" }
+    );
+    if (error) showToast("Failed to save: " + error.message);
+    else showToast("Notification preferences saved.");
+  }, [notifTaskAssigned, notifLabWin, notifDigest]);
 
   const handleConnectGoogleCalendar = useCallback(async () => {
     if (!isSupabaseConfigured) { showToast("Demo mode -- Google Calendar not available."); return; }
@@ -724,7 +760,7 @@ export default function SettingsPage() {
                         <div key={ic.id} style={{ display: "flex", flexDirection: isMobile ? "column" : "row", alignItems: isMobile ? "stretch" : "center", gap: 8 }}>
                           <input
                             readOnly
-                            value={isRevealed ? fullLink : `${typeof window !== "undefined" ? window.location.origin : "canopy.app"}/login?invite=••••••••`}
+                            value={isRevealed ? fullLink : `${process.env.NEXT_PUBLIC_APP_URL ?? (typeof window !== "undefined" ? window.location.origin : "canopyteams.tech")}/login?invite=••••••••`}
                             style={{ ...readonlyInputStyle, flex: 1, fontFamily: "monospace", fontSize: 12 }}
                             aria-label={`Generic invite link ${ic.code}`}
                           />
@@ -832,7 +868,7 @@ export default function SettingsPage() {
                 ))}
               </div>
               <p style={{ fontSize: 12, color: "var(--color-secondary)", marginTop: 8 }}>
-                Controls how your lab&rsquo;s anonymized data contributes to Canopy&rsquo;s research. <strong>Both publications</strong> shares aggregated task and journal patterns for two studies: one on researcher well-being, one on team collaboration. <strong>Well-being only</strong> limits sharing to the well-being study. <strong>Keep data private</strong> means your lab&rsquo;s data is never included in any publication. All data is anonymized before analysis and can never be traced back to individuals. You can change this at any time.
+                Controls how your lab&rsquo;s anonymized data contributes to Canopy&rsquo;s research. <strong>Both publications</strong> shares aggregated task and journal patterns for two studies: one on researcher well-being, one on team collaboration. <strong>Well-being only</strong> limits sharing to the well-being study. <strong>Keep data private</strong>{" "}means your lab&rsquo;s data is never included in any publication. All data is anonymized before analysis and can never be traced back to individuals. You can change this at any time.
               </p>
             </div>
             <div>
@@ -991,11 +1027,10 @@ export default function SettingsPage() {
               </div>
             </label>
           ))}
-          <p style={{ fontSize: 11, color: "var(--color-secondary)", marginTop: 4 }}>
-            Email delivery is active - emails are sent when the{" "}
-            <code style={{ fontFamily: "monospace", fontSize: 10, backgroundColor: "var(--color-canvas)", padding: "1px 4px", borderRadius: 3 }}>RESEND_API_KEY</code>{" "}
-            environment variable is configured.
-          </p>
+          <button onClick={handleSaveNotifications}
+            style={{ alignSelf: "flex-start", marginTop: 4, minHeight: 44, height: 38, padding: "0 20px", backgroundColor: "var(--color-btn-primary)", color: "#fff", border: "none", borderRadius: 8, fontFamily: "var(--font-roboto)", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
+            Save notification preferences
+          </button>
         </div>
       </section>
 
@@ -1171,11 +1206,12 @@ export default function SettingsPage() {
               </p>
             </div>
           </div>
-          <div style={{ padding: "16px 24px", borderTop: "1px solid var(--color-border)", display: "flex", gap: 8, flexShrink: 0 }}>
-            <button onClick={() => setPromptModalOpen(false)}
+          <div style={{ padding: "16px 24px", borderTop: "1px solid var(--color-border)", display: "flex", gap: 10, alignItems: "center", flexShrink: 0 }}>
+            <button onClick={() => { setPromptModalOpen(false); handleSaveLabSettings(); }}
               style={{ height: 44, padding: "0 24px", backgroundColor: "var(--color-navy)", color: "#fff", border: "none", borderRadius: 8, fontFamily: "var(--font-roboto)", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
               Done
             </button>
+            <span style={{ fontSize: 12, color: "var(--color-secondary)" }}>Saves along with other Lab Settings</span>
           </div>
         </div>
       </div>,

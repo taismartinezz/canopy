@@ -504,6 +504,7 @@ export default function DashboardPage() {
         <LabPulseWidget
           posts={dashPosts}
           projectId={projectId}
+          projectName={projectName}
           userId={userId}
           teamMembers={teamMembers}
           loading={loading}

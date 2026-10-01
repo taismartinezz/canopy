@@ -190,6 +190,19 @@ export default function TaskModal({
         }));
         const { error: notifError } = await supabase.from("notifications").insert(notifs);
         if (notifError) console.error("[TaskModal] notification insert error:", notifError);
+
+        // Send task assignment emails (fire-and-forget)
+        if (session?.access_token) {
+          const { data: senderProf } = await supabase.from("user_profiles").select("name").eq("id", userId).maybeSingle();
+          const assignerName = (senderProf?.name as string | null) ?? "A teammate";
+          toNotify.forEach((aid) => {
+            fetch("/api/email/send", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+              body: JSON.stringify({ type: "task_assigned", recipientId: aid, senderId: userId, payload: { taskTitle: title.trim(), assignerName } }),
+            }).catch(() => {});
+          });
+        }
       }
 
       // Log activity - task created
@@ -249,6 +262,19 @@ export default function TaskModal({
         }));
         const { error: notifError } = await supabase.from("notifications").insert(notifs);
         if (notifError) console.error("[TaskModal] notification insert error:", notifError);
+
+        // Send task assignment emails (fire-and-forget)
+        if (session?.access_token) {
+          const { data: senderProf } = await supabase.from("user_profiles").select("name").eq("id", userId).maybeSingle();
+          const assignerName = (senderProf?.name as string | null) ?? "A teammate";
+          newlyAdded.forEach((aid) => {
+            fetch("/api/email/send", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+              body: JSON.stringify({ type: "task_assigned", recipientId: aid, senderId: userId, payload: { taskTitle: title.trim(), assignerName } }),
+            }).catch(() => {});
+          });
+        }
       }
 
       const saved: Task = {
