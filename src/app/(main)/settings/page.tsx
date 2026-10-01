@@ -159,8 +159,12 @@ export default function SettingsPage() {
             setResearchType((proj.research_type as string) ?? "");
             setResearchParticipation((proj.research_participation as string) ?? "private");
             const loadedIds = proj.active_prompt_ids as string[] | null;
-            if (loadedIds && loadedIds.length > 0) setActivePromptIds(loadedIds);
-            // else: keep ACTIVE_PROMPT_IDS default until backfill runs
+            if (loadedIds === null) {
+              // NULL = not yet set; keep the 3 defaults until migration backfills the row
+            } else {
+              // Empty array = PI explicitly chose "none selected" — respect that
+              setActivePromptIds(loadedIds);
+            }
             if (proj.custom_prompts) setCustomPrompts(proj.custom_prompts as { id: string; text: string }[]);
           }
 
@@ -308,22 +312,24 @@ export default function SettingsPage() {
     }
     if (newCodes.length > 0) {
       setInviteCodes((prev) => [...newCodes, ...prev]);
-      // Fire invite emails (best-effort, fire-and-forget)
       const token = session?.access_token;
-      fetch("/api/invite/send", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ inviteIds: newCodes.map(c => c.id) }),
-      }).then(async (r) => {
-        const data = await r.json().catch(() => ({})) as { ok: boolean; results?: { id: string; ok: boolean }[] };
-        if (data.ok || data.results?.some(r => r.ok)) {
-          showToast("Invites sent!");
-          // Update email_sent_at in local state
-          const sentIds = new Set((data.results ?? []).filter(r => r.ok).map(r => r.id));
-          const sentAt = new Date().toISOString();
-          setInviteCodes(prev => prev.map(ic => sentIds.has(ic.id) ? { ...ic, email_sent_at: sentAt } : ic));
-        }
-      }).catch((err) => console.error("[invite/send]", err));
+      if (token) {
+        fetch("/api/invite/send", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ inviteIds: newCodes.map(c => c.id) }),
+        }).then(async (r) => {
+          const data = await r.json().catch(() => ({})) as { ok: boolean; results?: { id: string; ok: boolean }[] };
+          if (data.ok || data.results?.some(res => res.ok)) {
+            showToast("Invites sent!");
+            const sentIds = new Set((data.results ?? []).filter(res => res.ok).map(res => res.id));
+            const sentAt = new Date().toISOString();
+            setInviteCodes(prev => prev.map(ic => sentIds.has(ic.id) ? { ...ic, email_sent_at: sentAt } : ic));
+          } else {
+            showToast("Invites created but email delivery failed.", "error");
+          }
+        }).catch(() => showToast("Invites created but email delivery failed.", "error"));
+      }
     }
     setEmailInviteInput("");
     setSendingEmailInvites(false);

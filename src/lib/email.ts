@@ -11,6 +11,16 @@ export interface EmailPayload {
   text: string;
 }
 
+// Escape characters that could break out of an HTML attribute or text node.
+export function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 export async function sendEmail(payload: EmailPayload): Promise<{ ok: boolean; error?: string }> {
   if (!RESEND_KEY) {
     console.info("[email] RESEND_API_KEY not set — logging instead of sending");
@@ -41,6 +51,7 @@ export async function sendEmail(payload: EmailPayload): Promise<{ ok: boolean; e
 // ── Template helpers ───────────────────────────────────────────────────────────
 
 function baseHtml(body: string): string {
+  const prefsUrl = `${APP_URL}/settings#notifications`;
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -61,7 +72,7 @@ function baseHtml(body: string): string {
         <tr><td style="padding:16px 28px;border-top:1px solid #e2e8f0;background:#f8fafc;">
           <p style="margin:0;font-size:11px;color:#94a3b8;line-height:1.5;">
             You received this email from Canopy, the lab management app.<br />
-            <a href="${APP_URL}/settings#notifications" style="color:#1B2E4B;">Manage email preferences</a>
+            <a href="${escapeHtml(prefsUrl)}" style="color:#1B2E4B;">Manage email preferences</a>
           </p>
         </td></tr>
       </table>
@@ -72,7 +83,7 @@ function baseHtml(body: string): string {
 }
 
 function btn(text: string, url: string): string {
-  return `<a href="${url}" style="display:inline-block;background:#1B2E4B;color:#fff;text-decoration:none;padding:12px 24px;border-radius:8px;font-size:14px;font-weight:600;margin:20px 0;">${text}</a>`;
+  return `<a href="${escapeHtml(url)}" style="display:inline-block;background:#1B2E4B;color:#fff;text-decoration:none;padding:12px 24px;border-radius:8px;font-size:14px;font-weight:600;margin:20px 0;">${escapeHtml(text)}</a>`;
 }
 
 function p(text: string): string {
@@ -82,19 +93,21 @@ function p(text: string): string {
 // ── Invite email ───────────────────────────────────────────────────────────────
 
 export function buildInviteEmail(opts: {
-  to: string; labName: string; inviterName: string; role: string; inviteUrl: string;
+  to: string; labName: string; inviterName: string; role: string; inviteCode: string;
 }): EmailPayload {
-  const { to, labName, inviterName, role, inviteUrl } = opts;
+  const { to, labName, inviterName, role, inviteCode } = opts;
+  // Build URL from APP_URL + encoded code only — never interpolate caller-supplied URLs
+  const inviteUrl = `${APP_URL}/login?invite=${encodeURIComponent(inviteCode)}`;
   const html = baseHtml(`
     ${p(`Hi there,`)}
-    ${p(`<strong>${inviterName}</strong> has invited you to join <strong>${labName}</strong> on Canopy as a <strong>${role}</strong>.`)}
+    ${p(`<strong>${escapeHtml(inviterName)}</strong> has invited you to join <strong>${escapeHtml(labName)}</strong> on Canopy as a <strong>${escapeHtml(role)}</strong>.`)}
     ${p(`Canopy is a lab management tool that helps research teams stay organized, check in on well-being, and collaborate on tasks.`)}
     ${btn("Accept invitation", inviteUrl)}
-    ${p(`Or copy this link: <a href="${inviteUrl}" style="color:#1B2E4B;word-break:break-all;">${inviteUrl}</a>`)}
+    ${p(`Or copy this link: <a href="${escapeHtml(inviteUrl)}" style="color:#1B2E4B;word-break:break-all;">${escapeHtml(inviteUrl)}</a>`)}
     ${p(`This invite is personal to you and can only be used once.`)}
   `);
   const text = `${inviterName} invited you to join ${labName} on Canopy as a ${role}.\n\nAccept here: ${inviteUrl}\n\nThis invite is personal to you and can only be used once.\n\nManage preferences: ${APP_URL}/settings#notifications`;
-  return { to, subject: `You're invited to join ${labName} on Canopy`, html, text };
+  return { to, subject: `You're invited to join ${escapeHtml(labName)} on Canopy`, html, text };
 }
 
 // ── Task assignment email ──────────────────────────────────────────────────────
@@ -105,9 +118,9 @@ export function buildTaskAssignedEmail(opts: {
   const { to, recipientName, taskTitle, assignerName, projectName } = opts;
   const url = `${APP_URL}/tasks`;
   const html = baseHtml(`
-    ${p(`Hi ${recipientName},`)}
-    ${p(`<strong>${assignerName}</strong> assigned you a task in <strong>${projectName}</strong>:`)}
-    <p style="margin:0 0 20px;font-size:15px;font-weight:600;color:#1B2E4B;">&ldquo;${taskTitle}&rdquo;</p>
+    ${p(`Hi ${escapeHtml(recipientName)},`)}
+    ${p(`<strong>${escapeHtml(assignerName)}</strong> assigned you a task in <strong>${escapeHtml(projectName)}</strong>:`)}
+    <p style="margin:0 0 20px;font-size:15px;font-weight:600;color:#1B2E4B;">&ldquo;${escapeHtml(taskTitle)}&rdquo;</p>
     ${btn("View task", url)}
   `);
   const text = `Hi ${recipientName},\n\n${assignerName} assigned you "${taskTitle}" in ${projectName}.\n\nView: ${url}\n\nManage preferences: ${APP_URL}/settings#notifications`;
@@ -122,9 +135,9 @@ export function buildLabWinEmail(opts: {
   const { to, recipientName, posterName, content, projectName } = opts;
   const url = `${APP_URL}/`;
   const html = baseHtml(`
-    ${p(`Hi ${recipientName},`)}
-    ${p(`<strong>${posterName}</strong> posted a lab win in <strong>${projectName}</strong>:`)}
-    <blockquote style="margin:0 0 20px;padding:12px 16px;border-left:3px solid #1B2E4B;background:#f8fafc;border-radius:0 6px 6px 0;font-size:14px;color:#1e293b;">${content}</blockquote>
+    ${p(`Hi ${escapeHtml(recipientName)},`)}
+    ${p(`<strong>${escapeHtml(posterName)}</strong> posted a lab win in <strong>${escapeHtml(projectName)}</strong>:`)}
+    <blockquote style="margin:0 0 20px;padding:12px 16px;border-left:3px solid #1B2E4B;background:#f8fafc;border-radius:0 6px 6px 0;font-size:14px;color:#1e293b;">${escapeHtml(content)}</blockquote>
     ${btn("See it in Canopy", url)}
   `);
   const text = `Hi ${recipientName},\n\n${posterName} posted a lab win in ${projectName}:\n\n"${content}"\n\nView: ${url}\n\nManage preferences: ${APP_URL}/settings#notifications`;
@@ -140,11 +153,11 @@ export function buildDigestEmail(opts: {
   const { to, recipientName, projectName, tasksCompleted, labWins, newTasks } = opts;
   const url = `${APP_URL}/`;
   const winLines = labWins.length
-    ? `<ul style="margin:0 0 20px;padding:0 0 0 20px;">${labWins.map(w => `<li style="font-size:14px;color:#1e293b;line-height:1.6;">${w}</li>`).join("")}</ul>`
+    ? `<ul style="margin:0 0 20px;padding:0 0 0 20px;">${labWins.map(w => `<li style="font-size:14px;color:#1e293b;line-height:1.6;">${escapeHtml(w)}</li>`).join("")}</ul>`
     : `<p style="margin:0 0 20px;font-size:14px;color:#94a3b8;">No lab wins posted this week.</p>`;
   const html = baseHtml(`
-    ${p(`Hi ${recipientName},`)}
-    ${p(`Here's your weekly digest for <strong>${projectName}</strong>:`)}
+    ${p(`Hi ${escapeHtml(recipientName)},`)}
+    ${p(`Here&rsquo;s your weekly digest for <strong>${escapeHtml(projectName)}</strong>:`)}
     <table role="presentation" style="width:100%;margin:0 0 20px;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;">
       <tr style="background:#f8fafc;">
         <td style="padding:12px 16px;font-size:13px;font-weight:600;color:#1B2E4B;">Tasks completed</td>

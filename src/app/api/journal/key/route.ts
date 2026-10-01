@@ -53,5 +53,8 @@ export async function GET(request: Request) {
   const rawKey = await globalThis.crypto.subtle.exportKey("raw", derivedKey);
   const base64Key = Buffer.from(rawKey).toString("base64");
 
-  return Response.json({ key: base64Key });
+  return Response.json(
+    { key: base64Key },
+    { headers: { "Cache-Control": "no-store, no-cache, must-revalidate" } },
+  );
 }
