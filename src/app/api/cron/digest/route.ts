@@ -5,14 +5,15 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
 const serviceKey  = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
 const CRON_SECRET = process.env.CRON_SECRET ?? "";
 
-// GET /api/cron/digest — weekly digest, called by Vercel Cron
-// Protected by Authorization: Bearer <CRON_SECRET>
+// GET /api/cron/digest — weekly digest, fired by Vercel Cron every Monday at 14:00 UTC
+// Protected by Authorization: Bearer <CRON_SECRET>. Fails closed when CRON_SECRET is unset.
 export async function GET(request: Request) {
-  if (CRON_SECRET) {
-    const auth = request.headers.get("Authorization") ?? "";
-    if (auth !== `Bearer ${CRON_SECRET}`) {
-      return Response.json({ error: "Unauthorized" }, { status: 401 });
-    }
+  if (!CRON_SECRET) {
+    return Response.json({ error: "Unauthorized: CRON_SECRET not configured" }, { status: 401 });
+  }
+  const auth = request.headers.get("Authorization") ?? "";
+  if (auth !== `Bearer ${CRON_SECRET}`) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   if (!supabaseUrl || !serviceKey) {
@@ -89,6 +90,9 @@ export async function GET(request: Request) {
 
     const result = await sendEmail(payload);
     results.push({ userId: uid, ok: result.ok, error: result.error });
+
+    // Pace sends: Resend free tier allows ~2 emails/s; 200ms gap keeps us safe
+    await new Promise(resolve => setTimeout(resolve, 200));
   }
 
   const sent = results.filter(r => r.ok).length;

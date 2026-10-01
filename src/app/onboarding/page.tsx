@@ -822,6 +822,28 @@ export default function OnboardingPage() {
         return;
       }
 
+      // Fire invite emails for PI onboarding (fire-and-forget — emails are best-effort)
+      if (role === "pi" && inviteEmails.length > 0) {
+        const { data: { session: piSession } } = await supabase.auth.getSession();
+        if (piSession?.access_token) {
+          // Fetch the invite_codes we just created to get their IDs
+          const { data: createdCodes } = await supabase
+            .from("invite_codes")
+            .select("id, invited_email")
+            .eq("created_by", piSession.user.id)
+            .not("invited_email", "is", null)
+            .in("invited_email", inviteEmails)
+            .is("used_by", null);
+          if (createdCodes && createdCodes.length > 0) {
+            fetch("/api/invite/send", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", Authorization: `Bearer ${piSession.access_token}` },
+              body: JSON.stringify({ inviteIds: createdCodes.map((c) => c.id) }),
+            }).catch(() => {});
+          }
+        }
+      }
+
       // After account is created, resolve any pending project invite.
       // External invitees get sub_project_members access only - no team_members row added here.
       const pendingToken = localStorage.getItem("pendingProjectInviteToken");

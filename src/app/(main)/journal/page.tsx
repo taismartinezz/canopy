@@ -784,19 +784,34 @@ export default function JournalPage() {
     const { data: { session } } = await supabase.auth.getSession();
     const resolvedUserId = session?.user?.id ?? authUserId;
 
-    // Encrypt content before storing if key is available
+    // Encrypt content before storing. If encryption is expected but fails, block the save.
     let storedContent: unknown = content;
     if (cryptoKey) {
       try {
         storedContent = await encryptJournalContent(cryptoKey, content);
       } catch (e) {
-        console.warn("[Journal] encryption failed, saving plaintext:", e);
+        console.error("[Journal] encryption failed:", e);
+        setSaveMsg({ text: "Couldn't secure your entry — please try again.", color: "var(--color-error)" });
+        setTimeout(() => setSaveMsg(null), 5000);
+        return;
       }
+    } else if (isSupabaseConfigured) {
+      // Key fetch failed or is pending; don't silently save plaintext if Supabase is live
+      setSaveMsg({ text: "Encryption key unavailable — please reload and try again.", color: "var(--color-error)" });
+      setTimeout(() => setSaveMsg(null), 5000);
+      return;
     }
 
+    // checkin_scores is stored as plaintext JSON (only questionId + score, no free-text).
+    // The get_wellbeing_rollup RPC reads this column instead of the encrypted content blob.
     const { data, error } = await supabase
       .from("journal_entries")
-      .insert({ user_id: resolvedUserId, content: storedContent, ...(projectId ? { project_id: projectId } : {}) })
+      .insert({
+        user_id: resolvedUserId,
+        content: storedContent,
+        checkin_scores: checkinResponses.length > 0 ? checkinResponses : null,
+        ...(projectId ? { project_id: projectId } : {}),
+      })
       .select()
       .single();
 
@@ -876,21 +891,29 @@ export default function JournalPage() {
             checkin?: JournalEntry["checkin"];
             isDraft?: boolean;
           };
+          let decryptError = false;
           try {
             const raw = row.content ?? {};
             if (isEncryptedContent(raw) && encKey) {
               c = (await decryptJournalContent(encKey, raw)) as typeof c;
+            } else if (isEncryptedContent(raw) && !encKey) {
+              // Key not available — show placeholder, don't silently drop
+              c = {};
+              decryptError = true;
             } else {
               c = raw as typeof c;
             }
           } catch {
             c = {};
+            decryptError = true;
           }
           parsed.push({
             id: row.id as string,
             userId: row.user_id as string,
             date: c.date ?? (row.created_at as string).split("T")[0],
-            prompts: c.prompts ?? [],
+            prompts: decryptError
+              ? [{ promptId: "_err", promptText: "Decryption failed", response: "This entry could not be decrypted. Your encryption key may be unavailable." }]
+              : (c.prompts ?? []),
             checkin: c.checkin ?? [],
             isDraft: c.isDraft ?? false,
             createdAt: row.created_at as string,

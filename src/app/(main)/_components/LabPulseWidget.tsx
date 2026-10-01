@@ -69,13 +69,12 @@ function PostColumn({
         if (type === "lab_win") {
           const { data: { session } } = await supabase.auth.getSession();
           if (session?.access_token) {
-            const posterName = currentUser?.name ?? "A teammate";
             const recipients = teamMembers.filter((m) => m.id !== userId);
             recipients.forEach((m) => {
               fetch("/api/email/send", {
                 method: "POST",
                 headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
-                body: JSON.stringify({ type: "lab_win", recipientId: m.id, senderId: userId, payload: { content: content.trim(), posterName, projectName } }),
+                body: JSON.stringify({ type: "lab_win", labWinId: data.id, recipientId: m.id }),
               }).catch(() => {});
             });
           }
