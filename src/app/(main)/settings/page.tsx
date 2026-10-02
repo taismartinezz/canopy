@@ -220,8 +220,10 @@ export default function SettingsPage() {
                 isSystem: r.is_system,
                 createdAt: r.created_at,
               })));
-              // Default invite role to first researcher role
-              const defaultRole = roles.find((r: { permission_level: string }) => r.permission_level === "researcher");
+              // Default invite role to "Researcher" by name, fallback to first researcher-level role
+              const defaultRole =
+                roles.find((r: { name: string }) => r.name === "Researcher") ??
+                roles.find((r: { permission_level: string }) => r.permission_level === "researcher");
               if (defaultRole) {
                 setNewInviteRoleId(defaultRole.id);
                 setEmailInviteRoleId(defaultRole.id);
@@ -317,14 +319,16 @@ export default function SettingsPage() {
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
           body: JSON.stringify({ inviteIds: newCodes.map(c => c.id) }),
         }).then(async (r) => {
-          const data = await r.json().catch(() => ({})) as { ok: boolean; results?: { id: string; ok: boolean }[] };
-          if (data.ok || data.results?.some(res => res.ok)) {
+          const data = await r.json().catch(() => ({})) as { ok: boolean; error?: string; results?: { id: string; ok: boolean }[] };
+          if (!r.ok) {
+            showToast(data.error ?? "Invites created but email delivery failed.", "error");
+          } else if (data.ok || data.results?.some(res => res.ok)) {
             showToast("Invites sent!");
             const sentIds = new Set((data.results ?? []).filter(res => res.ok).map(res => res.id));
             const sentAt = new Date().toISOString();
             setInviteCodes(prev => prev.map(ic => sentIds.has(ic.id) ? { ...ic, email_sent_at: sentAt } : ic));
           } else {
-            showToast("Invites created but email delivery failed.", "error");
+            showToast(data.error ?? "Invites created but email delivery failed.", "error");
           }
         }).catch(() => showToast("Invites created but email delivery failed.", "error"));
       }
