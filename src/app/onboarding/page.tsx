@@ -487,20 +487,25 @@ async function syncOnboardingToSupabase({
         }
       }
     } else if (enteredInviteCode) {
-      // Look up the project linked to the invite code (include lab_role_id)
+      // Look up the project linked to the invite code via SECURITY DEFINER RPC
+      // (direct table SELECT is restricted to lab members; researchers use this RPC
+      // before they are members, so the RLS bypass is intentional here)
       const normalizedCode = enteredInviteCode.trim().toUpperCase();
+      type InviteLookup = { project_id: string; invited_email: string | null; used_by: string | null; used_at: string | null; lab_role_id: string | null };
       const { data: inviteData, error: inviteErr } = await supabase
-        .from("invite_codes")
-        .select("project_id, id, lab_role_id")
-        .eq("code", normalizedCode)
-        .maybeSingle();
+        .rpc("claim_invite_code_lookup", { p_code: normalizedCode })
+        .maybeSingle() as { data: InviteLookup | null; error: { message: string } | null };
 
-      if (!inviteData?.project_id) {
+      if (inviteErr || !inviteData?.project_id) {
         return `Invalid invite code. Please check the code and try again.${inviteErr ? ` (${inviteErr.message})` : ""}`;
       }
 
-      projectId = inviteData.project_id as string;
-      labRoleId = (inviteData.lab_role_id as string) ?? null;
+      if (inviteData.used_by) {
+        return "This invite link has already been used. Ask your PI to send a new one from Lab Settings.";
+      }
+
+      projectId = inviteData.project_id;
+      labRoleId = inviteData.lab_role_id;
 
       // Mark code as used
       await supabase.from("invite_codes").update({
