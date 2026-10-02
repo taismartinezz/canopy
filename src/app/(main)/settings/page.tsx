@@ -158,11 +158,9 @@ export default function SettingsPage() {
             setProjectInstitution((proj.institution as string) ?? "");
             setResearchType((proj.research_type as string) ?? "");
             setResearchParticipation((proj.research_participation as string) ?? "private");
-            const loadedIds = proj.active_prompt_ids as string[] | null;
-            if (loadedIds === null) {
-              // NULL = not yet set; keep the 3 defaults until migration backfills the row
-            } else {
-              // Empty array = PI explicitly chose "none selected" — respect that
+            const loadedIds = proj.active_prompt_ids as string[] | null | undefined;
+            if (Array.isArray(loadedIds)) {
+              // NULL/undefined = not yet set; keep defaults. [] = PI chose none.
               setActivePromptIds(loadedIds);
             }
             if (proj.custom_prompts) setCustomPrompts(proj.custom_prompts as { id: string; text: string }[]);
@@ -883,7 +881,7 @@ export default function SettingsPage() {
                 onClick={() => setPromptModalOpen(true)}
                 style={{ height: 40, padding: "0 18px", backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 8, fontFamily: "var(--font-roboto)", fontWeight: 600, fontSize: 13, color: "var(--color-navy)", cursor: "pointer" }}
               >
-                Manage prompts ({activePromptIds.length} active)
+                Manage prompts ({(activePromptIds ?? []).length} active)
               </button>
             </div>
             <button onClick={handleSaveLabSettings} disabled={savingLabSettings}
@@ -1147,7 +1145,7 @@ export default function SettingsPage() {
                 </p>
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                   {JOURNAL_PROMPTS.filter(p => p.category === cat).map(prompt => {
-                    const active = activePromptIds.includes(prompt.id);
+                    const active = (activePromptIds ?? []).includes(prompt.id);
                     return (
                       <button key={prompt.id}
                         onClick={() => setActivePromptIds(prev => prev.includes(prompt.id) ? prev.filter(x => x !== prompt.id) : [...prev, prompt.id])}

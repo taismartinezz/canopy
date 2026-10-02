@@ -26,9 +26,10 @@ describe("email templates — XSS injection", () => {
       role: href,
       inviteCode: "SAFE-CODE",
     });
-    expect(payload.html).not.toContain("<script>");
-    expect(payload.html).not.toContain("javascript:");
+    expect(payload.html).not.toContain("<script");
+    expect(payload.html).not.toContain('href="javascript:');
     expect(payload.html).toContain("&lt;script&gt;");
+    expect(payload.html).toContain("&quot;");
   });
 
   it("buildTaskAssignedEmail escapes taskTitle, assignerName, projectName", () => {
@@ -39,8 +40,9 @@ describe("email templates — XSS injection", () => {
       assignerName: href,
       projectName: xss,
     });
-    expect(payload.html).not.toContain("<script>");
-    expect(payload.html).not.toContain("javascript:");
+    expect(payload.html).not.toContain("<script");
+    expect(payload.html).not.toContain('href="javascript:');
+    expect(payload.html).toContain("&lt;script&gt;");
   });
 
   it("buildLabWinEmail escapes content, posterName, projectName", () => {
@@ -51,8 +53,8 @@ describe("email templates — XSS injection", () => {
       content: href,
       projectName: xss,
     });
-    expect(payload.html).not.toContain("<script>");
-    expect(payload.html).not.toContain("javascript:");
+    expect(payload.html).not.toContain("<script");
+    expect(payload.html).not.toContain('href="javascript:');
     expect(payload.html).toContain("&lt;a href=");
   });
 

@@ -125,4 +125,12 @@ describe('Settings page — Issue #15', () => {
     await renderSettings()
     expect(screen.queryByRole('heading', { name: /lab.*invite/i })).not.toBeInTheDocument()
   })
+
+  it('does not crash when project has no active_prompt_ids field', async () => {
+    // The projects mock returns data without active_prompt_ids (undefined),
+    // which exercises the defensive Array.isArray check in settings/page.tsx.
+    mockRole = 'pi'
+    await renderSettings()
+    expect(screen.getByRole('heading', { level: 1, name: /^settings$/i })).toBeInTheDocument()
+  })
 })
