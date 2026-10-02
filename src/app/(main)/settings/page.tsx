@@ -582,9 +582,6 @@ export default function SettingsPage() {
                             <span style={{ marginLeft: 8, fontSize: 11, color: "var(--color-secondary)", textTransform: "capitalize" }}>
                               ({role.permissionLevel})
                             </span>
-                            {role.isSystem && (
-                              <span style={{ marginLeft: 6, fontSize: 10, color: "var(--color-secondary)", border: "1px solid var(--color-border)", borderRadius: 3, padding: "0 4px" }}>built-in</span>
-                            )}
                           </span>
                           {!role.isSystem && (
                             <>
