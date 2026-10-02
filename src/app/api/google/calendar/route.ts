@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { requireAuth } from "@/lib/api-auth";
 
 // GET /api/google/calendar?userId=<uid>&timeMin=<ISO>&timeMax=<ISO>
 //
@@ -42,12 +43,14 @@ async function refreshAccessToken(refreshToken: string): Promise<{ access_token:
 }
 
 export async function GET(request: Request) {
+  // Verify caller identity from JWT — never trust userId from query params
+  const userId = await requireAuth(request);
+  if (!userId) return Response.json({ error: "Unauthorized" }, { status: 401 });
+
   const { searchParams } = new URL(request.url);
-  const userId  = searchParams.get("userId");
   const timeMin = searchParams.get("timeMin") ?? new Date().toISOString();
   const timeMax = searchParams.get("timeMax") ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
 
-  if (!userId) return Response.json({ error: "userId required" }, { status: 400 });
   if (!supabaseUrl || !serviceKey) return Response.json({ error: "Server not configured" }, { status: 500 });
 
   const db = createClient(supabaseUrl, serviceKey);
