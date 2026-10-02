@@ -43,7 +43,7 @@ async function setupMocks(page: Page, role: 'pi' | 'researcher') {
     email: MOCK_EMAIL, bio: '',
   }
   const membershipData = { project_id: 'project-abc', user_id: MOCK_USER_ID, role }
-  const projectData = { id: 'project-abc', name: 'Test Project', institution: 'Test Uni' }
+  const projectData = { id: 'project-abc', name: 'Test Project', institution: 'Test Uni', active_prompt_ids: ['jp2', 'jp7', 'jp11'] }
   const inviteCodes = role === 'pi'
     ? [{ id: 'code-1', code: 'CANOPY-ABCD', used_by: null }]
     : []
