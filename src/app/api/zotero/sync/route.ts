@@ -3,6 +3,8 @@
 
 export const runtime = "nodejs";
 
+import { requireAuth } from "@/lib/api-auth";
+
 // Canopy uses five highlight colors. Zotero uses a broader palette - map to nearest.
 const ZOTERO_COLOR_MAP: Record<string, string> = {
   "#ffd400": "#FBBF24", // yellow → yellow
@@ -60,6 +62,9 @@ export interface ZoteroAnnotation {
 }
 
 export async function POST(request: Request) {
+  const callerId = await requireAuth(request);
+  if (!callerId) return Response.json({ error: "Unauthorized" }, { status: 401 });
+
   const { apiKey, zoteroUserId, groupId, collectionKey } = (await request.json()) as {
     apiKey?: string;
     zoteroUserId?: string;

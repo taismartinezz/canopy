@@ -53,10 +53,12 @@ export async function GET(request: Request) {
     if (profErr) console.error("[digest] user_profiles error for", uid, profErr.message);
     const recipientName = (prof?.name as string) ?? "there";
 
-    // Find the most recently joined project via team_members (authoritative source)
+    // Find the most recently joined project via team_members (authoritative source).
+    // Policy: users in multiple labs receive one digest for their most-recently-joined
+    // project. This is a deliberate simplification; per-lab digests would require a
+    // separate notif_digest preference per membership row.
     const memberships = await getMemberships(db, uid);
     if (memberships.length === 0) { results.push({ userId: uid, ok: false, error: "no project" }); continue; }
-    // Send digest for the most recently joined project; members of multiple labs get one email
     const projectId = memberships[memberships.length - 1].projectId;
 
     const { data: proj } = await db.from("projects").select("name").eq("id", projectId).maybeSingle();

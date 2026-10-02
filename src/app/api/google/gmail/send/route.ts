@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { requireAuth } from "@/lib/api-auth";
 
 // POST /api/google/gmail/send
 //
@@ -48,18 +49,21 @@ function buildMimeMessage(to: string, subject: string, body: string, isHtml: boo
 }
 
 export async function POST(request: Request) {
+  // Verify caller identity from JWT — never trust userId from the request body
+  const userId = await requireAuth(request);
+  if (!userId) return Response.json({ error: "Unauthorized" }, { status: 401 });
+
   const body = await request.json() as {
-    userId: string;
     to: string;
     subject: string;
     body: string;
     isHtml?: boolean;
   };
 
-  const { userId, to, subject, body: emailBody, isHtml = false } = body;
+  const { to, subject, body: emailBody, isHtml = false } = body;
 
-  if (!userId || !to || !subject || !emailBody) {
-    return Response.json({ error: "userId, to, subject, and body are required" }, { status: 400 });
+  if (!to || !subject || !emailBody) {
+    return Response.json({ error: "to, subject, and body are required" }, { status: 400 });
   }
   if (!supabaseUrl || !serviceKey) {
     return Response.json({ error: "Server not configured" }, { status: 500 });
