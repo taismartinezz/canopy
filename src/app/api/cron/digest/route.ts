@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { sendEmail, buildDigestEmail } from "@/lib/email";
+import { getMemberships } from "@/lib/membership";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
 const serviceKey  = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
@@ -43,12 +44,20 @@ export async function GET(request: Request) {
     const { data: { user: authUser } } = await db.auth.admin.getUserById(uid);
     if (!authUser?.email) { results.push({ userId: uid, ok: false, error: "no email" }); continue; }
 
-    // Resolve profile + project
-    const { data: prof } = await db.from("user_profiles").select("name, project_id").eq("id", uid).maybeSingle();
-    if (!prof?.project_id) { results.push({ userId: uid, ok: false, error: "no project" }); continue; }
+    // Resolve profile name
+    const { data: prof, error: profErr } = await db
+      .from("user_profiles")
+      .select("name")
+      .eq("id", uid)
+      .maybeSingle();
+    if (profErr) console.error("[digest] user_profiles error for", uid, profErr.message);
+    const recipientName = (prof?.name as string) ?? "there";
 
-    const recipientName = (prof.name as string) ?? "there";
-    const projectId     = prof.project_id as string;
+    // Find the most recently joined project via team_members (authoritative source)
+    const memberships = await getMemberships(db, uid);
+    if (memberships.length === 0) { results.push({ userId: uid, ok: false, error: "no project" }); continue; }
+    // Send digest for the most recently joined project; members of multiple labs get one email
+    const projectId = memberships[memberships.length - 1].projectId;
 
     const { data: proj } = await db.from("projects").select("name").eq("id", projectId).maybeSingle();
     const projectName = (proj?.name as string) ?? "your lab";

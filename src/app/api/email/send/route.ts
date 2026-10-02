@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { sendEmail, buildTaskAssignedEmail, buildLabWinEmail } from "@/lib/email";
+import { getMemberships } from "@/lib/membership";
 
 const supabaseUrl  = process.env.NEXT_PUBLIC_SUPABASE_URL  ?? "";
 const serviceKey   = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
@@ -84,7 +85,7 @@ export async function POST(request: Request) {
   const recipientEmail = authUser.email;
 
   // Resolve recipient display name
-  const { data: recipientProf } = await db.from("user_profiles").select("name, project_id").eq("id", body.recipientId).maybeSingle();
+  const { data: recipientProf } = await db.from("user_profiles").select("name").eq("id", body.recipientId).maybeSingle();
   const recipientName = (recipientProf?.name as string) ?? "there";
 
   // Check notification preferences
@@ -131,10 +132,11 @@ export async function POST(request: Request) {
       return Response.json({ ok: true, skipped: "recipient not assigned to task" });
     }
 
-    // Verify: caller must be in the same project (for user JWT callers)
+    // Verify: caller must be a team_member of the task's project (for user JWT callers)
     if (callerId !== "internal") {
-      const { data: callerProf } = await db.from("user_profiles").select("project_id").eq("id", callerId).maybeSingle();
-      if ((callerProf?.project_id as string | null) !== taskProjectId) {
+      const callerMemberships = await getMemberships(db, callerId);
+      const inProject = callerMemberships.some((m) => m.projectId === taskProjectId);
+      if (!inProject) {
         return Response.json({ error: "Forbidden" }, { status: 403 });
       }
     }
@@ -175,10 +177,11 @@ export async function POST(request: Request) {
       return Response.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    // Verify: recipient must be in the same project
+    // Verify: recipient must be a team_member of the win's project
     const winProjectId = win.project_id as string;
-    const recipientProjectId = recipientProf?.project_id as string | null;
-    if (recipientProjectId !== winProjectId) {
+    const recipientMemberships = await getMemberships(db, body.recipientId);
+    const recipientInProject = recipientMemberships.some((m) => m.projectId === winProjectId);
+    if (!recipientInProject) {
       return Response.json({ ok: true, skipped: "recipient not in same project" });
     }
 
