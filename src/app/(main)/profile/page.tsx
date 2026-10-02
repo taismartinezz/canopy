@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import {
   ChevronLeft, GraduationCap, BookOpen, Globe,
-  Link as LinkIcon, Settings, Lock, X, Copy, Plus, Check,
+  Link as LinkIcon, Settings, Lock, X, Copy, Plus, Check, Pencil,
 } from "lucide-react";
 
 function LinkedinIcon() {
@@ -919,17 +919,29 @@ export default function ProfilePage() {
                     }}
                   />
                 ) : (
-                  <h1
+                  <div
+                    className="group"
                     onClick={() => { setNameInput(displayName); setEditingName(true); }}
-                    title="Click to edit"
-                    style={{
-                      fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 24,
-                      color: displayName ? "var(--color-navy)" : "var(--color-secondary)", margin: 0, cursor: "text",
-                      wordBreak: "break-word",
-                    }}
+                    title="Click to edit name"
+                    style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}
                   >
-                    {displayName || "Set up your profile"}
-                  </h1>
+                    <h1
+                      style={{
+                        fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 24,
+                        color: displayName ? "var(--color-navy)" : "var(--color-secondary)", margin: 0,
+                        wordBreak: "break-word",
+                      }}
+                    >
+                      {displayName || "Set up your profile"}
+                    </h1>
+                    <span
+                      className="opacity-0 group-hover:opacity-60 transition-opacity"
+                      aria-hidden="true"
+                      style={{ flexShrink: 0, paddingTop: 4 }}
+                    >
+                      <Pencil size={14} color="var(--color-secondary)" />
+                    </span>
+                  </div>
                 )}
               </div>
 

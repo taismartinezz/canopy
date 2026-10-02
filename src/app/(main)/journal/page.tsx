@@ -644,6 +644,7 @@ export default function JournalPage() {
   const [loadingEntries, setLoadingEntries] = useState(true);
   const [authUserId, setAuthUserId]         = useState("local");
   const [cryptoKey, setCryptoKey]           = useState<CryptoKey | null>(null);
+  const [encryptionDisabled, setEncryptionDisabled] = useState(false);
   const [selectedEntryId, setSelectedEntryId] = useState<string | "new">("new");
   // New entry state
   const [defaultResponse, setDefaultResponse] = useState("");
@@ -708,6 +709,26 @@ export default function JournalPage() {
 
   const isViewingEntry = selectedEntryId !== "new";
   const viewedEntry    = isViewingEntry ? entries.find((e) => e.id === selectedEntryId) : null;
+
+  // Restore draft from localStorage on first mount
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY);
+      if (!raw) return;
+      const draft = JSON.parse(raw) as {
+        defaultResponse?: string;
+        addedPrompts?: AddedPrompt[];
+        checkinResponses?: CheckinResponse[];
+      };
+      if (draft.defaultResponse) setDefaultResponse(draft.defaultResponse);
+      if (Array.isArray(draft.addedPrompts)) setAddedPrompts(draft.addedPrompts);
+      if (Array.isArray(draft.checkinResponses)) setCheckinResponses(draft.checkinResponses);
+    } catch {
+      // corrupt draft — ignore
+    }
+  // runs once on mount
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function hasDraft() {
     if (typeof window === "undefined") return false;
@@ -799,8 +820,8 @@ export default function JournalPage() {
         setTimeout(() => setSaveMsg(null), 5000);
         return;
       }
-    } else if (isSupabaseConfigured) {
-      // Key fetch failed or is pending; don't silently save plaintext if Supabase is live
+    } else if (isSupabaseConfigured && !encryptionDisabled) {
+      // Key fetch failed (not explicitly disabled) — block save to avoid silently storing plaintext
       setSaveMsg({ text: "Encryption key unavailable — please reload and try again.", color: "var(--color-error)" });
       setTimeout(() => setSaveMsg(null), 5000);
       return;
@@ -872,7 +893,8 @@ export default function JournalPage() {
         });
         if (keyRes.ok) {
           const keyData = await keyRes.json() as { key?: string; disabled?: boolean };
-          if (keyData.key) encKey = await importJournalKey(keyData.key);
+          if (keyData.disabled) setEncryptionDisabled(true);
+          else if (keyData.key) encKey = await importJournalKey(keyData.key);
         }
       } catch (e) {
         console.warn("[Journal] could not fetch encryption key:", e);
