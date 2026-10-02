@@ -711,7 +711,7 @@ export default function JournalPage() {
 
   function hasDraft() {
     if (typeof window === "undefined") return false;
-    return !!localStorage.getItem(DRAFT_KEY);
+    try { return !!localStorage.getItem(DRAFT_KEY); } catch { return false; }
   }
 
   function handleSelectEntry(id: string | "new") {
@@ -738,15 +738,19 @@ export default function JournalPage() {
     setCheckinExpanded(false);
     setSelectedEntryId("new");
     setSaveMsg(null);
-    localStorage.removeItem(DRAFT_KEY);
+    try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
     setDiscardModalOpen(false);
   }
 
   function handleSaveDraft() {
     const draft = { defaultResponse, addedPrompts, checkinResponses, timestamp: Date.now() };
-    localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
-    setSaveMsg({ text: "Draft saved.", color: "var(--color-secondary)" });
-    setTimeout(() => setSaveMsg(null), 2000);
+    try {
+      localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+      setSaveMsg({ text: "Draft saved.", color: "var(--color-secondary)" });
+    } catch {
+      setSaveMsg({ text: "Draft couldn't be saved (storage full or blocked).", color: "var(--color-error, #dc2626)" });
+    }
+    setTimeout(() => setSaveMsg(null), 3000);
   }
 
   function addPrompt(text: string) {
@@ -839,7 +843,7 @@ export default function JournalPage() {
 
     setEntries((prev) => [newEntry, ...prev]);
     setAddedPrompts((prev) => prev.filter((p) => p.response.trim()));
-    localStorage.removeItem(DRAFT_KEY);
+    try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
 
     setSaveMsg({ text: "✓ Entry saved.", color: "var(--color-success)" });
     setTimeout(() => {

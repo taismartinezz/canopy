@@ -960,7 +960,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   async function handleSignOut() {
     await supabase.auth.signOut();
     // Remove only auth/session keys; preserve user preferences (theme, sidebar widths)
-    ["canopy_authed", "canopy_project", "pendingInviteCode", "pendingProjectInviteToken"].forEach(k => {
+    ["canopy_authed", "canopy_project", "canopy_user", "pendingInviteCode", "pendingProjectInviteToken"].forEach(k => {
       try { localStorage.removeItem(k); } catch { /* ignore */ }
     });
     router.replace("/login");

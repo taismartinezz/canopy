@@ -1045,8 +1045,9 @@ export default function SchedulingPage() {
     if (!isSupabaseConfigured) {
       try {
         const stored = localStorage.getItem("canopy_user");
-        if (stored) { const u = JSON.parse(stored); setCurrentUserId(u.id ?? "demo"); }
-      } catch { /* ignore */ }
+        if (stored) { const u = JSON.parse(stored) as { id?: string }; setCurrentUserId(u.id ?? "demo"); }
+        else setCurrentUserId("demo");
+      } catch { setCurrentUserId("demo"); }
       return;
     }
     supabase.auth.getSession().then(({ data: { session } }) => {

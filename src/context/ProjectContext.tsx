@@ -134,8 +134,12 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
           setSubProjects(sps);
 
           // Restore persisted selection - validate it's still a valid sub-project
-          const stored      = localStorage.getItem(STORAGE_KEY);
-          const storedScope = (localStorage.getItem(SCOPE_STORAGE_KEY) ?? "lab") as ActiveScope;
+          let stored: string | null = null;
+          let storedScope: ActiveScope = "lab";
+          try {
+            stored      = localStorage.getItem(STORAGE_KEY);
+            storedScope = (localStorage.getItem(SCOPE_STORAGE_KEY) ?? "lab") as ActiveScope;
+          } catch { /* storage blocked (private mode, quota exceeded) — use defaults */ }
 
           if (storedScope === "personal") {
             setActiveScopeState("personal");
@@ -158,16 +162,15 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
 
   const setActiveSubProject = useCallback((id: string | null) => {
     setSubProjectId(id);
-    if (id === null) {
-      localStorage.removeItem(STORAGE_KEY);
-    } else {
-      localStorage.setItem(STORAGE_KEY, id);
-    }
+    try {
+      if (id === null) localStorage.removeItem(STORAGE_KEY);
+      else localStorage.setItem(STORAGE_KEY, id);
+    } catch { /* ignore */ }
   }, []);
 
   const setActiveScope = useCallback((scope: ActiveScope) => {
     setActiveScopeState(scope);
-    localStorage.setItem(SCOPE_STORAGE_KEY, scope);
+    try { localStorage.setItem(SCOPE_STORAGE_KEY, scope); } catch { /* ignore */ }
   }, []);
 
   const addSubProject = useCallback((sp: SubProject) => {
