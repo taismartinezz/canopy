@@ -71,7 +71,9 @@ global.fetch = vi.fn().mockResolvedValue({
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function setupInsertSuccess() {
-  mockSingle.mockResolvedValueOnce({
+  // mockResolvedValue (not Once) so every call returns valid data — the savingRef
+  // guard should prevent a second call, but the mock shouldn't mask the bug with a TypeError.
+  mockSingle.mockResolvedValue({
     data: { id: 'entry-1', created_at: '2026-10-03T10:00:00Z', updated_at: '2026-10-03T10:00:00Z' },
     error: null,
   })
@@ -79,7 +81,7 @@ function setupInsertSuccess() {
 }
 
 function setupInsertError(message = 'DB error') {
-  mockSingle.mockResolvedValueOnce({ data: null, error: { message, code: '42P01' } })
+  mockSingle.mockResolvedValue({ data: null, error: { message, code: '42P01' } })
   mockInsert.mockReturnValue({ select: vi.fn().mockReturnThis(), single: mockSingle })
 }
 
