@@ -666,6 +666,7 @@ export default function JournalPage() {
   const [search, setSearch]                 = useState("");
   const [entryListOpen, setEntryListOpen]   = useState(false);
   const [saveMsg, setSaveMsg]               = useState<{ text: string; color: string } | null>(null);
+  const [saving, setSaving]                 = useState(false);
   const [discardModalOpen, setDiscardModalOpen] = useState(false);
   const [overdueCount, setOverdueCount]         = useState(0);
   const [nudgeDismissed, setNudgeDismissed]     = useState(false);
@@ -787,12 +788,16 @@ export default function JournalPage() {
   }
 
   async function handleSaveEntry() {
+    if (saving) return;
+
     const hasResponse = defaultResponse.trim() || addedPrompts.some((p) => p.response.trim());
     if (!hasResponse) {
       setSaveMsg({ text: "Write at least one reflection to save.", color: "var(--color-error)" });
       setTimeout(() => setSaveMsg(null), 3000);
       return;
     }
+
+    setSaving(true);
 
     const allPrompts = [
       { promptId: "default", promptText: DEFAULT_PROMPT, response: defaultResponse },
@@ -818,12 +823,14 @@ export default function JournalPage() {
         console.error("[Journal] encryption failed:", e);
         setSaveMsg({ text: "Couldn't secure your entry — please try again.", color: "var(--color-error)" });
         setTimeout(() => setSaveMsg(null), 5000);
+        setSaving(false);
         return;
       }
     } else if (isSupabaseConfigured && !encryptionDisabled) {
       // Key fetch failed (not explicitly disabled) — block save to avoid silently storing plaintext
       setSaveMsg({ text: "Encryption key unavailable — please reload and try again.", color: "var(--color-error)" });
       setTimeout(() => setSaveMsg(null), 5000);
+      setSaving(false);
       return;
     }
 
@@ -848,6 +855,7 @@ export default function JournalPage() {
         : "Failed to save. Please try again.";
       setSaveMsg({ text: msg, color: "var(--color-error)" });
       setTimeout(() => setSaveMsg(null), 5000);
+      setSaving(false);
       return;
     }
 
@@ -862,15 +870,18 @@ export default function JournalPage() {
       updatedAt: data.updated_at as string,
     };
 
+    // Reset editor immediately so there's no window for a duplicate save
     setEntries((prev) => [newEntry, ...prev]);
-    setAddedPrompts((prev) => prev.filter((p) => p.response.trim()));
+    setDefaultResponse("");
+    setAddedPrompts([]);
+    setCheckinResponses([]);
+    setCheckinExpanded(false);
+    setSelectedEntryId(newEntry.id);
     try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
+    setSaving(false);
 
     setSaveMsg({ text: "✓ Entry saved.", color: "var(--color-success)" });
-    setTimeout(() => {
-      setSaveMsg(null);
-      setSelectedEntryId(newEntry.id);
-    }, 3000);
+    setTimeout(() => setSaveMsg(null), 3000);
   }
 
   useEffect(() => {
@@ -1244,15 +1255,17 @@ export default function JournalPage() {
               )}
               <button
                 onClick={handleSaveDraft}
-                style={{ fontSize: 12, fontWeight: 700, color: "var(--color-navy)", border: "1px solid var(--color-navy)", borderRadius: 7, padding: "8px 14px", backgroundColor: "transparent", cursor: "pointer", minHeight: 44 }}
+                disabled={saving}
+                style={{ fontSize: 12, fontWeight: 700, color: "var(--color-navy)", border: "1px solid var(--color-navy)", borderRadius: 7, padding: "8px 14px", backgroundColor: "transparent", cursor: saving ? "default" : "pointer", opacity: saving ? 0.5 : 1, minHeight: 44 }}
               >
                 Save draft
               </button>
               <button
                 onClick={handleSaveEntry}
-                style={{ fontSize: 12, fontWeight: 700, color: "#fff", backgroundColor: "var(--color-navy)", border: "none", borderRadius: 7, padding: "8px 14px", cursor: "pointer", minHeight: 44 }}
+                disabled={saving}
+                style={{ fontSize: 12, fontWeight: 700, color: "#fff", backgroundColor: "var(--color-navy)", border: "none", borderRadius: 7, padding: "8px 14px", cursor: saving ? "default" : "pointer", opacity: saving ? 0.7 : 1, minHeight: 44 }}
               >
-                Save entry
+                {saving ? "Saving…" : "Save entry"}
               </button>
             </div>
           </div>
