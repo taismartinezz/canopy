@@ -667,6 +667,9 @@ export default function JournalPage() {
   const [entryListOpen, setEntryListOpen]   = useState(false);
   const [saveMsg, setSaveMsg]               = useState<{ text: string; color: string } | null>(null);
   const [saving, setSaving]                 = useState(false);
+  // useRef so the in-flight check is synchronous — React state updates are batched
+  // and the old value is still visible when a second click fires before re-render.
+  const savingRef                           = useRef(false);
   const [discardModalOpen, setDiscardModalOpen] = useState(false);
   const [overdueCount, setOverdueCount]         = useState(0);
   const [nudgeDismissed, setNudgeDismissed]     = useState(false);
@@ -788,100 +791,105 @@ export default function JournalPage() {
   }
 
   async function handleSaveEntry() {
-    if (saving) return;
-
-    const hasResponse = defaultResponse.trim() || addedPrompts.some((p) => p.response.trim());
-    if (!hasResponse) {
-      setSaveMsg({ text: "Write at least one reflection to save.", color: "var(--color-error)" });
-      setTimeout(() => setSaveMsg(null), 3000);
-      return;
-    }
-
+    // savingRef is checked synchronously before any await, so rapid double-clicks
+    // are caught even before React has re-rendered with the updated `saving` state.
+    if (savingRef.current) return;
+    savingRef.current = true;
     setSaving(true);
 
-    const allPrompts = [
-      { promptId: "default", promptText: DEFAULT_PROMPT, response: defaultResponse },
-      ...addedPrompts.map((p) => ({ promptId: p.id, promptText: p.text, response: p.response })),
-    ].filter((p) => p.response.trim());
-
-    const content = {
-      date: todayISO,
-      prompts: allPrompts,
-      checkin: checkinResponses,
-      isDraft: false,
-    };
-
-    const { data: { session } } = await supabase.auth.getSession();
-    const resolvedUserId = session?.user?.id ?? authUserId;
-
-    // Encrypt content before storing. If encryption is expected but fails, block the save.
-    let storedContent: unknown = content;
-    if (cryptoKey) {
-      try {
-        storedContent = await encryptJournalContent(cryptoKey, content);
-      } catch (e) {
-        console.error("[Journal] encryption failed:", e);
-        setSaveMsg({ text: "Couldn't secure your entry — please try again.", color: "var(--color-error)" });
-        setTimeout(() => setSaveMsg(null), 5000);
-        setSaving(false);
+    try {
+      const hasResponse = defaultResponse.trim() || addedPrompts.some((p) => p.response.trim());
+      if (!hasResponse) {
+        setSaveMsg({ text: "Write at least one reflection to save.", color: "var(--color-error)" });
+        setTimeout(() => setSaveMsg(null), 3000);
         return;
       }
-    } else if (isSupabaseConfigured && !encryptionDisabled) {
-      // Key fetch failed (not explicitly disabled) — block save to avoid silently storing plaintext
-      setSaveMsg({ text: "Encryption key unavailable — please reload and try again.", color: "var(--color-error)" });
-      setTimeout(() => setSaveMsg(null), 5000);
+
+      const allPrompts = [
+        { promptId: "default", promptText: DEFAULT_PROMPT, response: defaultResponse },
+        ...addedPrompts.map((p) => ({ promptId: p.id, promptText: p.text, response: p.response })),
+      ].filter((p) => p.response.trim());
+
+      const content = {
+        date: todayISO,
+        prompts: allPrompts,
+        checkin: checkinResponses,
+        isDraft: false,
+      };
+
+      const sessionResult = await supabase.auth.getSession();
+      const resolvedUserId = sessionResult?.data?.session?.user?.id ?? authUserId;
+
+      // Encrypt content before storing. If encryption is expected but fails, block the save.
+      let storedContent: unknown = content;
+      if (cryptoKey) {
+        try {
+          storedContent = await encryptJournalContent(cryptoKey, content);
+        } catch (e) {
+          console.error("[Journal] encryption failed:", e);
+          setSaveMsg({ text: "Couldn't secure your entry — please try again.", color: "var(--color-error)" });
+          setTimeout(() => setSaveMsg(null), 5000);
+          return;
+        }
+      } else if (isSupabaseConfigured && !encryptionDisabled) {
+        // Key fetch failed (not explicitly disabled) — block save to avoid silently storing plaintext
+        setSaveMsg({ text: "Encryption key unavailable — please reload and try again.", color: "var(--color-error)" });
+        setTimeout(() => setSaveMsg(null), 5000);
+        return;
+      }
+
+      // checkin_scores is stored as plaintext JSON (only questionId + score, no free-text).
+      // The get_wellbeing_rollup RPC reads this column instead of the encrypted content blob.
+      const result = await supabase
+        .from("journal_entries")
+        .insert({
+          user_id: resolvedUserId,
+          content: storedContent,
+          checkin_scores: checkinResponses.length > 0 ? checkinResponses : null,
+          ...(projectId ? { project_id: projectId } : {}),
+        })
+        .select()
+        .single();
+
+      const { data, error } = result ?? { data: null, error: { message: "No response from database", code: "0" } };
+
+      if (error || !data) {
+        console.error("[Journal] insert error:", error);
+        const isSchemaError = error?.code === "PGRST204" || error?.message?.includes("schema cache");
+        const msg = isSchemaError
+          ? "Save failed: database schema is out of date. Please contact your administrator."
+          : "Failed to save. Please try again.";
+        setSaveMsg({ text: msg, color: "var(--color-error)" });
+        setTimeout(() => setSaveMsg(null), 5000);
+        return;
+      }
+
+      const newEntry: JournalEntry = {
+        id: data.id as string,
+        userId: resolvedUserId,
+        date: todayISO,
+        prompts: content.prompts,
+        checkin: content.checkin,
+        isDraft: false,
+        createdAt: data.created_at as string,
+        updatedAt: data.updated_at as string,
+      };
+
+      // Reset editor immediately — no content left in state for a retry to re-submit
+      setEntries((prev) => [newEntry, ...prev]);
+      setDefaultResponse("");
+      setAddedPrompts([]);
+      setCheckinResponses([]);
+      setCheckinExpanded(false);
+      setSelectedEntryId(newEntry.id);
+      try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
+
+      setSaveMsg({ text: "✓ Entry saved.", color: "var(--color-success)" });
+      setTimeout(() => setSaveMsg(null), 3000);
+    } finally {
+      savingRef.current = false;
       setSaving(false);
-      return;
     }
-
-    // checkin_scores is stored as plaintext JSON (only questionId + score, no free-text).
-    // The get_wellbeing_rollup RPC reads this column instead of the encrypted content blob.
-    const { data, error } = await supabase
-      .from("journal_entries")
-      .insert({
-        user_id: resolvedUserId,
-        content: storedContent,
-        checkin_scores: checkinResponses.length > 0 ? checkinResponses : null,
-        ...(projectId ? { project_id: projectId } : {}),
-      })
-      .select()
-      .single();
-
-    if (error) {
-      console.error("[Journal] insert error:", error);
-      const isSchemaError = error.code === "PGRST204" || error.message?.includes("schema cache");
-      const msg = isSchemaError
-        ? "Save failed: database schema is out of date. Please contact your administrator."
-        : "Failed to save. Please try again.";
-      setSaveMsg({ text: msg, color: "var(--color-error)" });
-      setTimeout(() => setSaveMsg(null), 5000);
-      setSaving(false);
-      return;
-    }
-
-    const newEntry: JournalEntry = {
-      id: data.id as string,
-      userId: resolvedUserId,
-      date: todayISO,
-      prompts: content.prompts,
-      checkin: content.checkin,
-      isDraft: false,
-      createdAt: data.created_at as string,
-      updatedAt: data.updated_at as string,
-    };
-
-    // Reset editor immediately so there's no window for a duplicate save
-    setEntries((prev) => [newEntry, ...prev]);
-    setDefaultResponse("");
-    setAddedPrompts([]);
-    setCheckinResponses([]);
-    setCheckinExpanded(false);
-    setSelectedEntryId(newEntry.id);
-    try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
-    setSaving(false);
-
-    setSaveMsg({ text: "✓ Entry saved.", color: "var(--color-success)" });
-    setTimeout(() => setSaveMsg(null), 3000);
   }
 
   useEffect(() => {
