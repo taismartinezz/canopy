@@ -610,7 +610,10 @@ export default function ProfilePage() {
           .eq("id", user.id)
           .select("*")
           .maybeSingle();
-        if (updated) setProfile(updated);
+        if (updated) {
+          setProfile(updated);
+          window.dispatchEvent(new CustomEvent("canopy:profile-updated", { detail: updated }));
+        }
       }
     }
     setEditingName(false);
@@ -910,7 +913,11 @@ export default function ProfilePage() {
                     autoFocus
                     value={nameInput}
                     onChange={(e) => setNameInput(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === "Escape") setEditingName(false); }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") { e.preventDefault(); handleSaveName(); }
+                      else if (e.key === "Escape") setEditingName(false);
+                    }}
+                    onBlur={handleSaveName}
                     style={{
                       fontFamily: "var(--font-lora)", fontWeight: 700, fontSize: 24,
                       color: "var(--color-navy)", border: "none", borderBottom: "2px solid var(--color-navy)",

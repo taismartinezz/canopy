@@ -721,9 +721,24 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
       // ── Supabase path ─────────────────────────────────────────────────────
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        const user = session?.user ?? null;
-        if (!user) { router.replace("/login"); return; }
+        // Use getUser() (server-verified) not getSession() (localStorage only).
+        // On failure, attempt one refresh before redirecting.
+        let user: import("@supabase/supabase-js").User | null = null;
+        {
+          const { data: { user: verified } } = await supabase.auth.getUser();
+          if (verified) {
+            user = verified;
+          } else {
+            const { data: refreshed } = await supabase.auth.refreshSession();
+            if (refreshed?.user) {
+              user = refreshed.user;
+            } else {
+              router.replace("/login?reason=session_expired");
+              return;
+            }
+          }
+        }
+        if (!user) { router.replace("/login?reason=session_expired"); return; }
 
         const { data: prof } = await supabase
           .from("user_profiles")
@@ -823,10 +838,17 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       if (event === "SIGNED_OUT") router.replace("/login");
     });
 
+    function onProfileUpdated(e: Event) {
+      const detail = (e as CustomEvent).detail;
+      if (detail) setProfile(detail);
+    }
+    window.addEventListener("canopy:profile-updated", onProfileUpdated);
+
     return () => {
       subscription.unsubscribe();
       notifChannel?.unsubscribe();
       remindersChannel?.unsubscribe();
+      window.removeEventListener("canopy:profile-updated", onProfileUpdated);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -959,10 +981,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   async function handleSignOut() {
     await supabase.auth.signOut();
-    // Remove only auth/session keys; preserve user preferences (theme, sidebar widths)
-    ["canopy_authed", "canopy_project", "canopy_user", "pendingInviteCode", "pendingProjectInviteToken"].forEach(k => {
+    // Remove auth/session keys; preserve user preferences (theme, sidebar widths)
+    ["canopy_authed", "canopy_project", "canopy_user", "pendingInviteCode", "pendingProjectInviteToken",
+     "canopy_chat_last_read"].forEach(k => {
       try { localStorage.removeItem(k); } catch { /* ignore */ }
     });
+    // Clear all per-channel read-position keys
+    try {
+      Object.keys(localStorage).filter(k => k.startsWith("chat_channel:")).forEach(k => localStorage.removeItem(k));
+    } catch { /* ignore */ }
     router.replace("/login");
   }
 
