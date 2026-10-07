@@ -231,6 +231,12 @@ export default function LoginPage() {
 
     // Surface OAuth errors forwarded from /auth/callback
     const params = new URLSearchParams(window.location.search);
+
+    // Session-expired redirect from AppShell
+    if (params.get("reason") === "session_expired") {
+      setOAuthError("Your session expired. Please sign in again.");
+    }
+
     const errorCode = params.get("error");
     const errorDesc = params.get("error_description") ?? "";
     if (errorCode) {
