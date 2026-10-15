@@ -20,11 +20,13 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setThemeState] = useState<Theme>("system");
   const [resolvedTheme, setResolvedTheme] = useState<"light" | "dark">("light");
 
-  // Read stored preference on mount
+  // Read stored preference on mount; default to light for new visitors
   useEffect(() => {
     const stored = (typeof localStorage !== "undefined" ? localStorage.getItem("canopy-theme") : null) as Theme | null;
     if (stored === "light" || stored === "dark" || stored === "system") {
       setThemeState(stored);
+    } else {
+      setThemeState("light");
     }
   }, []);
 
