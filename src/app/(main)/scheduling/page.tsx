@@ -133,6 +133,7 @@ interface CalEvent {
   type: "lab" | "personal" | "meeting";
   isScheduleEvent: boolean;
   ownerId: string;
+  source?: "google";
 }
 
 interface LayoutEvent extends CalEvent {
@@ -202,7 +203,7 @@ function minToTimeStr(min: number): string {
 }
 
 function CalendarTab({
-  events, proposals, currentUserId, projectId, onAddEvent, onDeleteEvent,
+  events, proposals, currentUserId, projectId, onAddEvent, onDeleteEvent, googleConnected,
 }: {
   events: ScheduleEvent[];
   proposals: MeetingProposal[];
@@ -210,6 +211,7 @@ function CalendarTab({
   projectId: string;
   onAddEvent: (e: Omit<ScheduleEvent, "id">) => void;
   onDeleteEvent: (id: string) => void;
+  googleConnected: boolean;
 }) {
   const today = new Date();
   const todayStr = makeDateStr(today);
@@ -226,8 +228,80 @@ function CalendarTab({
   const [showTP, setShowTP] = useState(false);
   const [tpPos, setTpPos] = useState<{ top: number; left: number } | null>(null);
   const timeBtnRef = useRef<HTMLButtonElement>(null);
+  const [googleCalEvents, setGoogleCalEvents] = useState<CalEvent[]>([]);
 
-  const calEvents = useMemo(() => toCalEvents(events, proposals), [events, proposals]);
+  // Fetch Google Calendar events for a 3-month window around the current anchor
+  useEffect(() => {
+    if (!googleConnected || !isSupabaseConfigured) return;
+    let cancelled = false;
+
+    async function fetchGoogleEvents() {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) return;
+
+      const timeMin = new Date(anchor);
+      timeMin.setDate(1);
+      timeMin.setMonth(timeMin.getMonth() - 1);
+      const timeMax = new Date(anchor);
+      timeMax.setDate(1);
+      timeMax.setMonth(timeMax.getMonth() + 2);
+
+      const res = await fetch(
+        `/api/google/calendar?timeMin=${timeMin.toISOString()}&timeMax=${timeMax.toISOString()}`,
+        { headers: { Authorization: `Bearer ${session.access_token}` } }
+      );
+      if (!res.ok || cancelled) return;
+
+      const { events: gEvents } = await res.json() as { events: Array<{
+        id: string;
+        summary?: string;
+        start: { dateTime?: string; date?: string };
+        end?: { dateTime?: string; date?: string };
+      }> };
+
+      const mapped: CalEvent[] = (gEvents ?? []).flatMap((e) => {
+        const startRaw = e.start.dateTime ?? e.start.date;
+        if (!startRaw) return [];
+        const startDate = new Date(startRaw);
+        const date = makeDateStr(e.start.dateTime ? startDate : new Date(startRaw + "T00:00:00"));
+        let startMin: number | null = null;
+        let endMin: number | null = null;
+        if (e.start.dateTime) {
+          startMin = startDate.getHours() * 60 + startDate.getMinutes();
+          const endRaw = e.end?.dateTime;
+          if (endRaw) {
+            const endDate = new Date(endRaw);
+            endMin = endDate.getHours() * 60 + endDate.getMinutes();
+          } else {
+            endMin = startMin + 60;
+          }
+        }
+        return [{
+          id: `g-${e.id}`,
+          title: e.summary ?? "(No title)",
+          date,
+          startMin,
+          endMin,
+          color: "#0D7377",
+          bgColor: "rgba(13,115,119,0.08)",
+          type: "personal" as const,
+          isScheduleEvent: false,
+          ownerId: currentUserId,
+          source: "google" as const,
+        }];
+      });
+
+      if (!cancelled) setGoogleCalEvents(mapped);
+    }
+
+    fetchGoogleEvents();
+    return () => { cancelled = true; };
+  }, [googleConnected, anchor, currentUserId]);
+
+  const calEvents = useMemo(
+    () => [...toCalEvents(events, proposals), ...googleCalEvents],
+    [events, proposals, googleCalEvents]
+  );
 
   function navigate(dir: 1 | -1) {
     const d = new Date(anchor);
@@ -548,6 +622,17 @@ function CalendarTab({
             })}
           </div>
         </div>
+
+        {googleConnected && (
+          <div className="flex items-center gap-4 px-5 py-2" style={{ borderBottom: "1px solid var(--color-border)", flexWrap: "wrap" }}>
+            <span className="flex items-center gap-1.5" style={{ fontSize: 11, color: "var(--color-secondary)" }}>
+              <span style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: "var(--color-navy)", display: "inline-block" }} /> Canopy
+            </span>
+            <span className="flex items-center gap-1.5" style={{ fontSize: 11, color: "var(--color-secondary)" }}>
+              <span style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: "#0D7377", display: "inline-block" }} /> Google Calendar
+            </span>
+          </div>
+        )}
 
         {view === "week" && <div style={{ overflowX: "auto" }}>{renderWeekView()}</div>}
         {view === "day" && <div style={{ overflowX: "auto" }}>{renderDayView()}</div>}
@@ -1141,6 +1226,13 @@ export default function SchedulingPage() {
         );
       }
 
+      const { data: myProfile } = await supabase
+        .from("user_profiles")
+        .select("google_access_token")
+        .eq("id", currentUserId)
+        .maybeSingle();
+      setGoogleConnected(!!(myProfile as Record<string, unknown> | null)?.google_access_token);
+
       setLoading(false);
     }
 
@@ -1453,6 +1545,7 @@ export default function SchedulingPage() {
                   projectId={projectId ?? ""}
                   onAddEvent={handleAddEvent}
                   onDeleteEvent={handleDeleteEvent}
+                  googleConnected={googleConnected}
                 />
               )}
               {tab === "availability" && (
