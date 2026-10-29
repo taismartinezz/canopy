@@ -51,6 +51,11 @@ const STEPS: TourStep[] = [
     title: "Team",
     body: "See what everyone is working on, share your weekly update, and check availability for meetings.",
   },
+  {
+    selector: 'a[href="/settings"]',
+    title: "Settings",
+    body: "Personalize your experience. Switch between light and dark mode, manage integrations, and update your profile from here.",
+  },
 ];
 
 const PAD = 8;    // spotlight padding around the target element

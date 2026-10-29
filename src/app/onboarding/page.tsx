@@ -974,7 +974,7 @@ export default function OnboardingPage() {
             {calendarConnecting ? "Redirecting to Google…" : "Connect Google Calendar"}
           </NavButton>
           <button
-            onClick={() => router.push("/profile")}
+            onClick={() => router.push("/")}
             style={{
               width: "100%",
               marginTop: 14,

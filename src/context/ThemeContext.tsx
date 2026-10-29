@@ -17,18 +17,12 @@ const ThemeContext = createContext<ThemeContextValue>({
 });
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>("system");
+  const [theme, setThemeState] = useState<Theme>(() => {
+    if (typeof localStorage === "undefined") return "light";
+    const stored = localStorage.getItem("canopy-theme") as Theme | null;
+    return stored === "light" || stored === "dark" || stored === "system" ? stored : "light";
+  });
   const [resolvedTheme, setResolvedTheme] = useState<"light" | "dark">("light");
-
-  // Read stored preference on mount; default to light for new visitors
-  useEffect(() => {
-    const stored = (typeof localStorage !== "undefined" ? localStorage.getItem("canopy-theme") : null) as Theme | null;
-    if (stored === "light" || stored === "dark" || stored === "system") {
-      setThemeState(stored);
-    } else {
-      setThemeState("light");
-    }
-  }, []);
 
   // Apply theme to <html> and resolve the effective theme
   useEffect(() => {
