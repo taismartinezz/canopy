@@ -723,8 +723,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       try {
         // Use getUser() (server-verified) not getSession() (localStorage only).
         // On failure, attempt one refresh before redirecting.
+        // Only show "session expired" if there was a local session to begin with.
         let user: import("@supabase/supabase-js").User | null = null;
         {
+          const { data: { session: localSession } } = await supabase.auth.getSession();
           const { data: { user: verified } } = await supabase.auth.getUser();
           if (verified) {
             user = verified;
@@ -733,12 +735,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             if (refreshed?.user) {
               user = refreshed.user;
             } else {
-              router.replace("/login?reason=session_expired");
+              router.replace(localSession ? "/login?reason=session_expired" : "/login");
               return;
             }
           }
         }
-        if (!user) { router.replace("/login?reason=session_expired"); return; }
+        if (!user) { router.replace("/login"); return; }
 
         const { data: prof } = await supabase
           .from("user_profiles")

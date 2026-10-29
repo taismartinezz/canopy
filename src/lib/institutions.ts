@@ -1,5 +1,7 @@
-// Institution search — Hipolabs Universities API with bundled fallback
-// API docs: http://universities.hipolabs.com/search?name=<query>
+// Institution search — ROR (Research Organization Registry) as primary, Hipolabs as fallback
+// ROR covers 100k+ orgs globally (universities, hospitals, research institutes, NGOs, etc.)
+// ROR API: https://api.ror.org/organizations?query=<query>
+// Hipolabs API: http://universities.hipolabs.com/search?name=<query>
 
 export interface InstitutionResult {
   name: string;
@@ -75,13 +77,38 @@ export function toInstitutionKey(name: string): string {
     .replace(/^_|_$/g, "");
 }
 
-let apiAvailable = true; // optimistic; set false on failure
+let rorAvailable = true;
+let hipolabsAvailable = true;
 
 export async function searchInstitutions(query: string): Promise<InstitutionResult[]> {
   if (!query.trim()) return [];
   const q = query.trim().toLowerCase();
 
-  if (apiAvailable) {
+  // Primary: ROR API (global research organizations)
+  if (rorAvailable) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 4000);
+      const res = await fetch(
+        `https://api.ror.org/organizations?query=${encodeURIComponent(query)}&page=1`,
+        { signal: controller.signal }
+      );
+      clearTimeout(timeout);
+      if (res.ok) {
+        const data = await res.json() as { items: { name: string; country: { country_name: string } }[] };
+        return (data.items ?? []).slice(0, 12).map((d) => ({
+          name: d.name,
+          country: d.country?.country_name ?? "",
+          key: toInstitutionKey(d.name),
+        }));
+      }
+    } catch {
+      rorAvailable = false;
+    }
+  }
+
+  // Secondary: Hipolabs (universities only)
+  if (hipolabsAvailable) {
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 4000);
@@ -99,7 +126,7 @@ export async function searchInstitutions(query: string): Promise<InstitutionResu
         }));
       }
     } catch {
-      apiAvailable = false; // fall back for the rest of this session
+      hipolabsAvailable = false;
     }
   }
 

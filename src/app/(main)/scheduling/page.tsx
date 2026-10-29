@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import {
   Calendar, Users, Send, Clock, Check, X, Plus,
-  Lock, Trash2, ChevronLeft, ChevronRight, AlertCircle,
+  Lock, Trash2, Pencil, ChevronLeft, ChevronRight, AlertCircle,
 } from "lucide-react";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { useProject } from "@/context/ProjectContext";
@@ -133,6 +133,7 @@ interface CalEvent {
   type: "lab" | "personal" | "meeting";
   isScheduleEvent: boolean;
   ownerId: string;
+  source?: "google";
 }
 
 interface LayoutEvent extends CalEvent {
@@ -202,14 +203,16 @@ function minToTimeStr(min: number): string {
 }
 
 function CalendarTab({
-  events, proposals, currentUserId, projectId, onAddEvent, onDeleteEvent,
+  events, proposals, currentUserId, projectId, onAddEvent, onEditEvent, onDeleteEvent, googleConnected,
 }: {
   events: ScheduleEvent[];
   proposals: MeetingProposal[];
   currentUserId: string;
   projectId: string;
   onAddEvent: (e: Omit<ScheduleEvent, "id">) => void;
+  onEditEvent: (id: string, patch: Partial<Omit<ScheduleEvent, "id">>) => void;
   onDeleteEvent: (id: string) => void;
+  googleConnected: boolean;
 }) {
   const today = new Date();
   const todayStr = makeDateStr(today);
@@ -222,12 +225,85 @@ function CalendarTab({
   const [formTime, setFormTime] = useState("");
   const [formScope, setFormScope] = useState<"lab" | "personal">("lab");
   const [formError, setFormError] = useState("");
+  const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [detailEvent, setDetailEvent] = useState<CalEvent | null>(null);
   const [showTP, setShowTP] = useState(false);
   const [tpPos, setTpPos] = useState<{ top: number; left: number } | null>(null);
   const timeBtnRef = useRef<HTMLButtonElement>(null);
+  const [googleCalEvents, setGoogleCalEvents] = useState<CalEvent[]>([]);
 
-  const calEvents = useMemo(() => toCalEvents(events, proposals), [events, proposals]);
+  // Fetch Google Calendar events for a 3-month window around the current anchor
+  useEffect(() => {
+    if (!googleConnected || !isSupabaseConfigured) return;
+    let cancelled = false;
+
+    async function fetchGoogleEvents() {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) return;
+
+      const timeMin = new Date(anchor);
+      timeMin.setDate(1);
+      timeMin.setMonth(timeMin.getMonth() - 1);
+      const timeMax = new Date(anchor);
+      timeMax.setDate(1);
+      timeMax.setMonth(timeMax.getMonth() + 2);
+
+      const res = await fetch(
+        `/api/google/calendar?timeMin=${timeMin.toISOString()}&timeMax=${timeMax.toISOString()}`,
+        { headers: { Authorization: `Bearer ${session.access_token}` } }
+      );
+      if (!res.ok || cancelled) return;
+
+      const { events: gEvents } = await res.json() as { events: Array<{
+        id: string;
+        summary?: string;
+        start: { dateTime?: string; date?: string };
+        end?: { dateTime?: string; date?: string };
+      }> };
+
+      const mapped: CalEvent[] = (gEvents ?? []).flatMap((e) => {
+        const startRaw = e.start.dateTime ?? e.start.date;
+        if (!startRaw) return [];
+        const startDate = new Date(startRaw);
+        const date = makeDateStr(e.start.dateTime ? startDate : new Date(startRaw + "T00:00:00"));
+        let startMin: number | null = null;
+        let endMin: number | null = null;
+        if (e.start.dateTime) {
+          startMin = startDate.getHours() * 60 + startDate.getMinutes();
+          const endRaw = e.end?.dateTime;
+          if (endRaw) {
+            const endDate = new Date(endRaw);
+            endMin = endDate.getHours() * 60 + endDate.getMinutes();
+          } else {
+            endMin = startMin + 60;
+          }
+        }
+        return [{
+          id: `g-${e.id}`,
+          title: e.summary ?? "(No title)",
+          date,
+          startMin,
+          endMin,
+          color: "#0D7377",
+          bgColor: "rgba(13,115,119,0.08)",
+          type: "personal" as const,
+          isScheduleEvent: false,
+          ownerId: currentUserId,
+          source: "google" as const,
+        }];
+      });
+
+      if (!cancelled) setGoogleCalEvents(mapped);
+    }
+
+    fetchGoogleEvents();
+    return () => { cancelled = true; };
+  }, [googleConnected, anchor, currentUserId]);
+
+  const calEvents = useMemo(
+    () => [...toCalEvents(events, proposals), ...googleCalEvents],
+    [events, proposals, googleCalEvents]
+  );
 
   function navigate(dir: 1 | -1) {
     const d = new Date(anchor);
@@ -257,13 +333,28 @@ function CalendarTab({
     setFormDate(date);
     setFormTime(startMin != null ? minToTimeStr(startMin) : "");
     setFormTitle(""); setFormScope("lab"); setFormError("");
+    setEditingEventId(null);
+    setShowForm(true); setDetailEvent(null);
+  }
+
+  function openEdit(ev: CalEvent) {
+    setFormTitle(ev.title);
+    setFormDate(ev.date);
+    setFormTime(ev.startMin != null ? minToTimeStr(ev.startMin) : "");
+    setFormScope(ev.type === "personal" ? "personal" : "lab");
+    setFormError("");
+    setEditingEventId(ev.id);
     setShowForm(true); setDetailEvent(null);
   }
 
   function handleAdd() {
     if (!formTitle.trim()) { setFormError("Enter a title."); return; }
-    onAddEvent({ projectId, title: formTitle.trim(), date: formDate, time: formTime || undefined, scope: formScope, createdBy: currentUserId });
-    setShowForm(false);
+    if (editingEventId) {
+      onEditEvent(editingEventId, { title: formTitle.trim(), date: formDate, time: formTime || undefined, scope: formScope });
+    } else {
+      onAddEvent({ projectId, title: formTitle.trim(), date: formDate, time: formTime || undefined, scope: formScope, createdBy: currentUserId });
+    }
+    setShowForm(false); setEditingEventId(null);
   }
 
   const inputStyle: React.CSSProperties = {
@@ -549,6 +640,17 @@ function CalendarTab({
           </div>
         </div>
 
+        {googleConnected && (
+          <div className="flex items-center gap-4 px-5 py-2" style={{ borderBottom: "1px solid var(--color-border)", flexWrap: "wrap" }}>
+            <span className="flex items-center gap-1.5" style={{ fontSize: 11, color: "var(--color-secondary)" }}>
+              <span style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: "var(--color-navy)", display: "inline-block" }} /> Canopy
+            </span>
+            <span className="flex items-center gap-1.5" style={{ fontSize: 11, color: "var(--color-secondary)" }}>
+              <span style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: "#0D7377", display: "inline-block" }} /> Google Calendar
+            </span>
+          </div>
+        )}
+
         {view === "week" && <div style={{ overflowX: "auto" }}>{renderWeekView()}</div>}
         {view === "day" && <div style={{ overflowX: "auto" }}>{renderDayView()}</div>}
         {view === "month" && renderMonthView()}
@@ -559,7 +661,7 @@ function CalendarTab({
       {showForm && (
         <Card>
           <SectionHeader
-            title={formDate ? `New event · ${new Date(formDate + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}` : "New event"}
+            title={editingEventId ? `Edit event · ${new Date(formDate + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}` : formDate ? `New event · ${new Date(formDate + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}` : "New event"}
             action={<button onClick={() => setShowForm(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-secondary)", padding: 4 }}><X size={14} /></button>}
           />
           <div className="px-5 py-4 space-y-3">
@@ -580,8 +682,8 @@ function CalendarTab({
             {showTP && tpPos && <TimePicker value={formTime || "09:00"} accentColor="var(--color-navy)" pos={tpPos} onChange={t => setFormTime(t)} onClear={() => { setFormTime(""); setShowTP(false); }} onClose={() => setShowTP(false)} />}
             {formError && <p style={{ fontSize: 11, color: "var(--color-error)", margin: 0 }}>{formError}</p>}
             <div className="flex gap-2">
-              <button onClick={handleAdd} style={{ height: 32, paddingInline: 16, backgroundColor: "var(--color-navy)", color: "#fff", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Add</button>
-              <button onClick={() => setShowForm(false)} style={{ height: 32, paddingInline: 12, background: "none", border: "none", fontSize: 12, color: "var(--color-secondary)", cursor: "pointer" }}>Cancel</button>
+              <button onClick={handleAdd} style={{ height: 32, paddingInline: 16, backgroundColor: "var(--color-navy)", color: "#fff", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>{editingEventId ? "Save changes" : "Add"}</button>
+              <button onClick={() => { setShowForm(false); setEditingEventId(null); }} style={{ height: 32, paddingInline: 12, background: "none", border: "none", fontSize: 12, color: "var(--color-secondary)", cursor: "pointer" }}>Cancel</button>
             </div>
           </div>
         </Card>
@@ -604,9 +706,14 @@ function CalendarTab({
               {detailEvent.type === "meeting" && detailEvent.endMin != null && ` · ${formatDuration(detailEvent.endMin - detailEvent.startMin!)}`}
             </p>
             {detailEvent.isScheduleEvent && detailEvent.ownerId === currentUserId && (
-              <button onClick={() => { onDeleteEvent(detailEvent.id); setDetailEvent(null); }} className="flex items-center gap-1.5" style={{ marginLeft: 15, fontSize: 12, color: "var(--color-error)", background: "none", border: "none", cursor: "pointer" }}>
-                <Trash2 size={12} /> Delete event
-              </button>
+              <div className="flex items-center gap-3" style={{ marginLeft: 15, marginTop: 4 }}>
+                <button onClick={() => openEdit(detailEvent)} className="flex items-center gap-1.5" style={{ fontSize: 12, color: "var(--color-navy)", background: "none", border: "none", cursor: "pointer" }}>
+                  <Pencil size={12} /> Edit
+                </button>
+                <button onClick={() => { onDeleteEvent(detailEvent.id); setDetailEvent(null); }} className="flex items-center gap-1.5" style={{ fontSize: 12, color: "var(--color-error)", background: "none", border: "none", cursor: "pointer" }}>
+                  <Trash2 size={12} /> Delete
+                </button>
+              </div>
             )}
           </div>
         </Card>
@@ -1141,6 +1248,13 @@ export default function SchedulingPage() {
         );
       }
 
+      const { data: myProfile } = await supabase
+        .from("user_profiles")
+        .select("google_access_token")
+        .eq("id", currentUserId)
+        .maybeSingle();
+      setGoogleConnected(!!(myProfile as Record<string, unknown> | null)?.google_access_token);
+
       setLoading(false);
     }
 
@@ -1392,6 +1506,19 @@ export default function SchedulingPage() {
     }
   }
 
+  function handleEditEvent(id: string, patch: Partial<Omit<ScheduleEvent, "id">>) {
+    setEvents((prev) => prev.map((e) => e.id === id ? { ...e, ...patch } : e));
+    if (isSupabaseConfigured) {
+      const update: Record<string, unknown> = {};
+      if (patch.title !== undefined) update.title = patch.title;
+      if (patch.date !== undefined) update.date = patch.date;
+      if (patch.time !== undefined) update.time = patch.time ?? null;
+      if (patch.scope !== undefined) update.scope = patch.scope;
+      supabase.from("schedule_events").update(update).eq("id", id)
+        .then(({ error }) => { if (error) console.error("[Scheduling] edit event:", error); });
+    }
+  }
+
   const pendingCount = proposals.filter(
     (p) =>
       p.proposerId !== currentUserId &&
@@ -1452,7 +1579,9 @@ export default function SchedulingPage() {
                   currentUserId={currentUserId}
                   projectId={projectId ?? ""}
                   onAddEvent={handleAddEvent}
+                  onEditEvent={handleEditEvent}
                   onDeleteEvent={handleDeleteEvent}
+                  googleConnected={googleConnected}
                 />
               )}
               {tab === "availability" && (

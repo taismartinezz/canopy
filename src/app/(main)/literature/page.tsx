@@ -242,7 +242,7 @@ const labelStyle: React.CSSProperties = {
 };
 
 function AddItemModal({
-  onSave, onClose, projectId, currentUserId, subProjectId, subProjects,
+  onSave, onClose, projectId, currentUserId, subProjectId, subProjects, teamMembers,
 }: {
   onSave: (item: LiteratureItem) => void;
   onClose: () => void;
@@ -250,6 +250,7 @@ function AddItemModal({
   currentUserId: string;
   subProjectId: string | null;
   subProjects?: SubProject[];
+  teamMembers?: User[];
 }) {
   const [type, setType]       = useState<LiteratureType>("article");
   const [title, setTitle]     = useState("");
@@ -262,10 +263,12 @@ function AddItemModal({
   const [modalSubProjectId, setModalSubProjectId] = useState<string | null>(subProjectId);
   const [personalSubProjectId, setPersonalSubProjectId] = useState<string | null>(null);
   const [status, setStatus]   = useState<ReadStatus>("unread");
+  const [assigneeId, setAssigneeId] = useState<string>("");
   const [error, setError]     = useState("");
   const [saving, setSaving]   = useState(false);
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const pdfInputRef = useRef<HTMLInputElement>(null);
+  const assignableMembers = (teamMembers ?? []).filter((m) => m.id !== currentUserId);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) { if (e.key === "Escape") onClose(); }
@@ -354,11 +357,19 @@ function AddItemModal({
       }
     }
 
+    // Optional assignment
+    if (assigneeId && isSupabaseConfigured) {
+      await supabase.from("lit_assigned_readings").insert({
+        id: crypto.randomUUID(), item_id: finalItem.id, project_id: projectId,
+        assigned_by: currentUserId, assignee_id: assigneeId, reading_status: "not_started",
+      });
+    }
+
     onSave(finalItem);
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in" style={{ backgroundColor: "rgba(27,46,75,0.35)" }} onClick={onClose}>
+    <div className="fixed inset-0 z-[1050] flex items-center justify-center p-4 animate-fade-in" style={{ backgroundColor: "rgba(27,46,75,0.35)" }} onClick={onClose}>
       <div style={{ backgroundColor: "var(--color-surface)", maxWidth: 520, width: "100%", borderRadius: 10, padding: 28, boxShadow: "0 8px 40px rgba(27,46,75,0.18)", maxHeight: "90dvh", overflowY: "auto" }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -481,6 +492,17 @@ function AddItemModal({
             )}
           </div>
         </div>
+
+        {assignableMembers.length > 0 && (
+          <div style={{ marginTop: 14 }}>
+            <label style={{ fontSize: 11, fontWeight: 700, color: "var(--color-secondary)", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 6 }}>Assign to (optional)</label>
+            <select value={assigneeId} onChange={(e) => setAssigneeId(e.target.value)}
+              style={{ width: "100%", height: 38, border: "1px solid var(--color-border)", borderRadius: 7, padding: "0 10px", fontSize: 13, fontFamily: "var(--font-roboto)", backgroundColor: "var(--color-canvas)", color: "var(--color-body)", outline: "none" }}>
+              <option value="">No assignment</option>
+              {assignableMembers.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+            </select>
+          </div>
+        )}
 
         <div className="flex justify-end gap-2 mt-6">
           <button onClick={onClose} style={{ fontSize: 13, fontWeight: 600, color: "var(--color-body)", border: "1px solid var(--color-border)", borderRadius: 7, padding: "8px 16px", backgroundColor: "transparent", cursor: "pointer", minHeight: 44, fontFamily: "var(--font-roboto)" }}>Cancel</button>
@@ -1191,9 +1213,13 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
     const groupId = groupIdOverride ?? selectedGroupId;
     setCollectionsLoading(true); setCollectionsError("");
     try {
+      const { data: { session: colSession } } = await supabase.auth.getSession();
       const res = await fetch("/api/zotero/collections", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(colSession?.access_token ? { Authorization: `Bearer ${colSession.access_token}` } : {}),
+        },
         body: JSON.stringify({
           apiKey: apiKey.trim(),
           zoteroUserId: zoteroUserId.trim(),
@@ -1221,9 +1247,13 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
     if (importing) { setApiError("Wait for the current import to finish before syncing again."); return; }
     setSyncing(true); setApiError(""); setPdfAttachments({}); setPdfKeyMap({});
     try {
+      const { data: { session: syncSession } } = await supabase.auth.getSession();
       const res = await fetch("/api/zotero/sync", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(syncSession?.access_token ? { Authorization: `Bearer ${syncSession.access_token}` } : {}),
+        },
         body: JSON.stringify({
           apiKey: apiKey.trim(),
           zoteroUserId: zoteroUserId.trim(),
@@ -1547,8 +1577,9 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
 
         {tab === "api" && (
           <div>
-            <p style={{ fontSize: 12, color: "var(--color-secondary)", marginBottom: 14 }}>
-              Go to <strong>zotero.org → Settings → Feeds/API</strong> to create a personal API key, then enter it below.
+            <p style={{ fontSize: 12, color: "var(--color-secondary)", marginBottom: 14, lineHeight: 1.6 }}>
+              <strong>User ID:</strong> sign in at zotero.org, go to <strong>Settings → Feeds/API</strong> — your numeric ID appears at the top of that page.<br />
+              <strong>API Key:</strong> on that same page (or <strong>Settings → Security → Applications</strong> in newer versions), click <em>Create new private key</em>, give it library read access, and copy the key when it appears.
             </p>
             <div className="space-y-3 mb-4">
               <div>
@@ -2688,6 +2719,8 @@ function DetailPanelContent({
   const [recsLoading, setRecsLoading]   = useState(false);
   const [recsError, setRecsError]       = useState("");
   const [recsFetched, setRecsFetched]   = useState(false);
+  const [relatedPickerOpen, setRelatedPickerOpen] = useState(false);
+  const [relatedPickerQuery, setRelatedPickerQuery] = useState("");
   const [showPDFViewer, setShowPDFViewer]           = useState(false);
   const [pdfViewerInitialPage, setPdfViewerInitialPage] = useState(1);
   const [pdfViewerExternalUrl, setPdfViewerExternalUrl] = useState<string | null>(null);
@@ -3475,9 +3508,49 @@ function DetailPanelContent({
                   })}
                 </div>
               )}
-            <button style={{ fontSize: 12, fontWeight: 600, color: "var(--color-navy)", backgroundColor: "transparent", border: "1px solid var(--color-border)", borderRadius: 7, padding: "6px 14px", cursor: "pointer", minHeight: 44 }}>
+            <button onClick={() => { setRelatedPickerOpen(true); setRelatedPickerQuery(""); }} style={{ fontSize: 12, fontWeight: 600, color: "var(--color-navy)", backgroundColor: "transparent", border: "1px solid var(--color-border)", borderRadius: 7, padding: "6px 14px", cursor: "pointer", minHeight: 44 }}>
               + Link a related item
             </button>
+            {relatedPickerOpen && (
+              <div style={{ marginTop: 8, border: "1px solid var(--color-border)", borderRadius: 8, backgroundColor: "var(--color-surface)", padding: 12 }}>
+                <input
+                  autoFocus
+                  value={relatedPickerQuery}
+                  onChange={(e) => setRelatedPickerQuery(e.target.value)}
+                  placeholder="Search by title or author…"
+                  style={{ width: "100%", height: 34, border: "1px solid var(--color-border)", borderRadius: 6, padding: "0 10px", fontSize: 12, fontFamily: "var(--font-roboto)", backgroundColor: "var(--color-canvas)", color: "var(--color-body)", outline: "none", boxSizing: "border-box", marginBottom: 8 }}
+                  onFocus={(e) => { e.currentTarget.style.borderColor = "var(--color-navy)"; }}
+                  onBlur={(e) => { e.currentTarget.style.borderColor = "var(--color-border)"; }}
+                />
+                <div style={{ maxHeight: 200, overflowY: "auto" }}>
+                  {allItems
+                    .filter((i) => i.id !== item.id && !item.relatedIds.includes(i.id) && (
+                      !relatedPickerQuery.trim() ||
+                      i.title.toLowerCase().includes(relatedPickerQuery.toLowerCase()) ||
+                      toAuthorsArray(i.authors).some((a) => a.toLowerCase().includes(relatedPickerQuery.toLowerCase()))
+                    ))
+                    .slice(0, 20)
+                    .map((candidate) => (
+                      <button key={candidate.id} onClick={() => {
+                        const updated = [...item.relatedIds, candidate.id];
+                        onUpdateItem(item.id, { relatedIds: updated });
+                        setRelatedPickerOpen(false);
+                      }} style={{ width: "100%", textAlign: "left", padding: "8px 10px", background: "none", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 12, color: "var(--color-body)", display: "block" }}
+                        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "var(--color-canvas)"; }}
+                        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "transparent"; }}
+                      >
+                        <span style={{ display: "block", fontWeight: 500 }}>{candidate.title.length > 65 ? candidate.title.slice(0, 65) + "…" : candidate.title}</span>
+                        <span style={{ fontSize: 11, color: "var(--color-secondary)" }}>{toAuthorsArray(candidate.authors).slice(0, 2).join(", ")}{candidate.year ? ` · ${candidate.year}` : ""}</span>
+                      </button>
+                    ))
+                  }
+                  {allItems.filter((i) => i.id !== item.id && !item.relatedIds.includes(i.id)).length === 0 && (
+                    <p style={{ fontSize: 12, color: "var(--color-secondary)", padding: "8px 10px" }}>No other items in this library.</p>
+                  )}
+                </div>
+                <button onClick={() => setRelatedPickerOpen(false)} style={{ marginTop: 8, fontSize: 11, color: "var(--color-secondary)", background: "none", border: "none", cursor: "pointer" }}>Cancel</button>
+              </div>
+            )}
 
             {/* AI Suggestions */}
             <div className="mt-5">
@@ -3511,6 +3584,15 @@ function DetailPanelContent({
                   </div>
                   <div className="flex flex-col gap-1 shrink-0">
                     <button onClick={async () => {
+                      // Check for existing item with same DOI or title to avoid duplicate inserts
+                      const existingByDoi = rec.doi ? allItems.find((i) => i.doi && i.doi.toLowerCase() === rec.doi!.toLowerCase()) : null;
+                      const existingByTitle = allItems.find((i) => i.title.toLowerCase() === rec.title.toLowerCase());
+                      const alreadyInLibrary = existingByDoi ?? existingByTitle;
+                      if (alreadyInLibrary) {
+                        setRecsError(`"${alreadyInLibrary.title.slice(0, 40)}…" is already in your library.`);
+                        setRecs((prev) => prev.map((r) => r.id === rec.id ? { ...r, dismissed: true } : r));
+                        return;
+                      }
                       const newItem: LiteratureItem = {
                         id: crypto.randomUUID(), projectId, scope: item.scope,
                         type: "article", title: rec.title, authors: rec.authors,
@@ -3837,7 +3919,7 @@ function mapLitRow(row: Record<string, any>): LiteratureItem {
     addedAt: (row.created_at ?? row.added_at) as string,
     deletedAt: (row.deleted_at as string | null) ?? null,
     collections: [],
-    relatedIds: [],
+    relatedIds: Array.isArray(row.related_ids) ? (row.related_ids as string[]) : [],
     zoteroKey: (row.zotero_key as string | null) ?? undefined,
   };
 }
@@ -3875,6 +3957,7 @@ export default function LiteraturePage() {
   const [typeFilter, setTypeFilter]     = useState<LiteratureType | "all">("all");
   const [yearFilter, setYearFilter]     = useState<number | "all">("all");
   const [yearSort, setYearSort]         = useState<"desc" | "asc">("desc");
+  const [sortBy, setSortBy]             = useState<"year" | "rating">("year");
   const [showReadingProgress, setShowReadingProgress] = useState(false);
   const [selectMode, setSelectMode]     = useState(false);
   const [selectedIds, setSelectedIds]   = useState<Set<string>>(new Set());
@@ -3998,7 +4081,7 @@ export default function LiteraturePage() {
   function updateItem(id: string, updates: Partial<LiteratureItem>) {
     setItems((prev) => prev.map((item) => item.id === id ? { ...item, ...updates } : item));
     if (!isSupabaseConfigured) return;
-    const colMap: Record<string, string> = { tags: "tags", removedTags: "removed_tags", status: "status", rating: "rating", files: "files", doi: "doi", url: "url", volume: "volume", pages: "pages" };
+    const colMap: Record<string, string> = { tags: "tags", removedTags: "removed_tags", status: "status", rating: "rating", files: "files", doi: "doi", url: "url", volume: "volume", pages: "pages", relatedIds: "related_ids" };
     // notes is handled exclusively by handleSaveNotes (async, with proper error feedback)
     const nullableCols = new Set(["doi", "url"]);
     const payload: Record<string, unknown> = {};
@@ -4147,7 +4230,10 @@ export default function LiteraturePage() {
       if (activeCollection !== "lc0" && !item.collections.includes(activeCollection)) return false;
       return true;
     })
-    .sort((a, b) => yearSort === "desc" ? b.year - a.year : a.year - b.year);
+    .sort((a, b) => {
+      if (sortBy === "rating") return b.rating - a.rating;
+      return yearSort === "desc" ? b.year - a.year : a.year - b.year;
+    });
 
   const allTags = [...new Set(scopedItems.flatMap((i) => i.tags))].sort();
   const showingDetailMobile = isMobile && selectedItem !== null;
@@ -4391,13 +4477,20 @@ export default function LiteraturePage() {
                   <option value="all">All Years</option>
                   {availableYears.map((y) => <option key={y} value={y}>{y}</option>)}
                 </select>
-                <button
-                  onClick={() => setYearSort((s) => s === "desc" ? "asc" : "desc")}
-                  title={yearSort === "desc" ? "Oldest first" : "Newest first"}
-                  style={{ height: 36, width: 36, border: "1px solid var(--color-border)", borderRadius: 7, fontSize: 13, backgroundColor: "var(--color-canvas)", color: "var(--color-secondary)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
-                >
-                  {yearSort === "desc" ? "↓" : "↑"}
-                </button>
+                <select value={sortBy} onChange={(e) => setSortBy(e.target.value as "year" | "rating")}
+                  style={{ height: 36, paddingLeft: 8, paddingRight: 8, border: "1px solid var(--color-border)", borderRadius: 7, fontSize: 12, fontFamily: "var(--font-roboto)", backgroundColor: sortBy !== "year" ? "rgba(27,46,75,0.06)" : "var(--color-canvas)", color: "var(--color-body)", outline: "none", cursor: "pointer" }}>
+                  <option value="year">By year</option>
+                  <option value="rating">By rating</option>
+                </select>
+                {sortBy === "year" && (
+                  <button
+                    onClick={() => setYearSort((s) => s === "desc" ? "asc" : "desc")}
+                    title={yearSort === "desc" ? "Oldest first" : "Newest first"}
+                    style={{ height: 36, width: 36, border: "1px solid var(--color-border)", borderRadius: 7, fontSize: 13, backgroundColor: "var(--color-canvas)", color: "var(--color-secondary)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
+                  >
+                    {yearSort === "desc" ? "↓" : "↑"}
+                  </button>
+                )}
               </div>
               <button onClick={() => setSelectMode(true)} className="flex items-center gap-1 shrink-0"
                 style={{ fontSize: 12, fontWeight: 600, color: "var(--color-secondary)", border: "1px solid var(--color-border)", borderRadius: 7, padding: "6px 10px", backgroundColor: "transparent", cursor: "pointer", minHeight: 36, fontFamily: "var(--font-roboto)" }}>
@@ -4521,7 +4614,7 @@ export default function LiteraturePage() {
         </>
       )}
 
-      {addItemOpen && <AddItemModal onSave={addItem} onClose={() => setAddItemOpen(false)} projectId={projectId} currentUserId={currentUserId} subProjectId={subProjectId ?? null} subProjects={subProjects} />}
+      {addItemOpen && <AddItemModal onSave={addItem} onClose={() => setAddItemOpen(false)} projectId={projectId} currentUserId={currentUserId} subProjectId={subProjectId ?? null} subProjects={subProjects} teamMembers={teamMembers} />}
       {zoteroImportOpen && <ZoteroImportModal existingItems={items} onImport={importItems} onUpdateItem={updateItem} onClose={() => setZoteroImportOpen(false)} projectId={projectId} currentUserId={currentUserId} subProjectId={subProjectId ?? null} subProjects={subProjects} />}
       {doiLookupOpen && <DOILookupModal onSave={addItemFromDOI} onMerge={updateItem} onClose={() => setDoiLookupOpen(false)} projectId={projectId} currentUserId={currentUserId} subProjectId={subProjectId ?? null} subProjects={subProjects} existingItems={items} />}
       </div>

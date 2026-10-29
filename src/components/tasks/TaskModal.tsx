@@ -292,8 +292,8 @@ export default function TaskModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in"
-      style={{ backgroundColor: "rgba(27,46,75,0.35)" }}
+      className="fixed inset-0 flex items-center justify-center p-4 animate-fade-in"
+      style={{ zIndex: 1050, backgroundColor: "rgba(27,46,75,0.35)" }}
       onClick={onClose}
     >
       <div
