@@ -242,7 +242,7 @@ const labelStyle: React.CSSProperties = {
 };
 
 function AddItemModal({
-  onSave, onClose, projectId, currentUserId, subProjectId, subProjects,
+  onSave, onClose, projectId, currentUserId, subProjectId, subProjects, teamMembers,
 }: {
   onSave: (item: LiteratureItem) => void;
   onClose: () => void;
@@ -250,6 +250,7 @@ function AddItemModal({
   currentUserId: string;
   subProjectId: string | null;
   subProjects?: SubProject[];
+  teamMembers?: User[];
 }) {
   const [type, setType]       = useState<LiteratureType>("article");
   const [title, setTitle]     = useState("");
@@ -262,10 +263,12 @@ function AddItemModal({
   const [modalSubProjectId, setModalSubProjectId] = useState<string | null>(subProjectId);
   const [personalSubProjectId, setPersonalSubProjectId] = useState<string | null>(null);
   const [status, setStatus]   = useState<ReadStatus>("unread");
+  const [assigneeId, setAssigneeId] = useState<string>("");
   const [error, setError]     = useState("");
   const [saving, setSaving]   = useState(false);
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const pdfInputRef = useRef<HTMLInputElement>(null);
+  const assignableMembers = (teamMembers ?? []).filter((m) => m.id !== currentUserId);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) { if (e.key === "Escape") onClose(); }
@@ -354,11 +357,19 @@ function AddItemModal({
       }
     }
 
+    // Optional assignment
+    if (assigneeId && isSupabaseConfigured) {
+      await supabase.from("lit_assigned_readings").insert({
+        id: crypto.randomUUID(), item_id: finalItem.id, project_id: projectId,
+        assigned_by: currentUserId, assignee_id: assigneeId, reading_status: "not_started",
+      });
+    }
+
     onSave(finalItem);
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in" style={{ backgroundColor: "rgba(27,46,75,0.35)" }} onClick={onClose}>
+    <div className="fixed inset-0 z-[1050] flex items-center justify-center p-4 animate-fade-in" style={{ backgroundColor: "rgba(27,46,75,0.35)" }} onClick={onClose}>
       <div style={{ backgroundColor: "var(--color-surface)", maxWidth: 520, width: "100%", borderRadius: 10, padding: 28, boxShadow: "0 8px 40px rgba(27,46,75,0.18)", maxHeight: "90dvh", overflowY: "auto" }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -481,6 +492,17 @@ function AddItemModal({
             )}
           </div>
         </div>
+
+        {assignableMembers.length > 0 && (
+          <div style={{ marginTop: 14 }}>
+            <label style={{ fontSize: 11, fontWeight: 700, color: "var(--color-secondary)", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 6 }}>Assign to (optional)</label>
+            <select value={assigneeId} onChange={(e) => setAssigneeId(e.target.value)}
+              style={{ width: "100%", height: 38, border: "1px solid var(--color-border)", borderRadius: 7, padding: "0 10px", fontSize: 13, fontFamily: "var(--font-roboto)", backgroundColor: "var(--color-canvas)", color: "var(--color-body)", outline: "none" }}>
+              <option value="">No assignment</option>
+              {assignableMembers.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+            </select>
+          </div>
+        )}
 
         <div className="flex justify-end gap-2 mt-6">
           <button onClick={onClose} style={{ fontSize: 13, fontWeight: 600, color: "var(--color-body)", border: "1px solid var(--color-border)", borderRadius: 7, padding: "8px 16px", backgroundColor: "transparent", cursor: "pointer", minHeight: 44, fontFamily: "var(--font-roboto)" }}>Cancel</button>
@@ -4592,7 +4614,7 @@ export default function LiteraturePage() {
         </>
       )}
 
-      {addItemOpen && <AddItemModal onSave={addItem} onClose={() => setAddItemOpen(false)} projectId={projectId} currentUserId={currentUserId} subProjectId={subProjectId ?? null} subProjects={subProjects} />}
+      {addItemOpen && <AddItemModal onSave={addItem} onClose={() => setAddItemOpen(false)} projectId={projectId} currentUserId={currentUserId} subProjectId={subProjectId ?? null} subProjects={subProjects} teamMembers={teamMembers} />}
       {zoteroImportOpen && <ZoteroImportModal existingItems={items} onImport={importItems} onUpdateItem={updateItem} onClose={() => setZoteroImportOpen(false)} projectId={projectId} currentUserId={currentUserId} subProjectId={subProjectId ?? null} subProjects={subProjects} />}
       {doiLookupOpen && <DOILookupModal onSave={addItemFromDOI} onMerge={updateItem} onClose={() => setDoiLookupOpen(false)} projectId={projectId} currentUserId={currentUserId} subProjectId={subProjectId ?? null} subProjects={subProjects} existingItems={items} />}
       </div>
