@@ -1191,9 +1191,13 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
     const groupId = groupIdOverride ?? selectedGroupId;
     setCollectionsLoading(true); setCollectionsError("");
     try {
+      const { data: { session: colSession } } = await supabase.auth.getSession();
       const res = await fetch("/api/zotero/collections", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(colSession?.access_token ? { Authorization: `Bearer ${colSession.access_token}` } : {}),
+        },
         body: JSON.stringify({
           apiKey: apiKey.trim(),
           zoteroUserId: zoteroUserId.trim(),
@@ -1221,9 +1225,13 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
     if (importing) { setApiError("Wait for the current import to finish before syncing again."); return; }
     setSyncing(true); setApiError(""); setPdfAttachments({}); setPdfKeyMap({});
     try {
+      const { data: { session: syncSession } } = await supabase.auth.getSession();
       const res = await fetch("/api/zotero/sync", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(syncSession?.access_token ? { Authorization: `Bearer ${syncSession.access_token}` } : {}),
+        },
         body: JSON.stringify({
           apiKey: apiKey.trim(),
           zoteroUserId: zoteroUserId.trim(),
@@ -1547,8 +1555,9 @@ function ZoteroImportModal({ existingItems, onImport, onUpdateItem, onClose, pro
 
         {tab === "api" && (
           <div>
-            <p style={{ fontSize: 12, color: "var(--color-secondary)", marginBottom: 14 }}>
-              Go to <strong>zotero.org → Settings → Feeds/API</strong> to create a personal API key, then enter it below.
+            <p style={{ fontSize: 12, color: "var(--color-secondary)", marginBottom: 14, lineHeight: 1.6 }}>
+              <strong>User ID:</strong> sign in at zotero.org, go to <strong>Settings → Feeds/API</strong> — your numeric ID appears at the top of that page.<br />
+              <strong>API Key:</strong> on that same page (or <strong>Settings → Security → Applications</strong> in newer versions), click <em>Create new private key</em>, give it library read access, and copy the key when it appears.
             </p>
             <div className="space-y-3 mb-4">
               <div>
