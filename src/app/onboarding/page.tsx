@@ -6,8 +6,7 @@ import { Users, BookOpen, Check, X, Search, ChevronDown, Calendar } from "lucide
 import CanopyLogo from "@/components/ui/CanopyLogo";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { searchInstitutions, type InstitutionResult } from "@/lib/institutions";
-import { WorkingHoursEditor, DEFAULT_WORKING_HOURS } from "@/components/ui/WorkingHoursEditor";
-import type { WorkingHours, PromptCategory } from "@/types";
+import type { PromptCategory } from "@/types";
 import { JOURNAL_PROMPTS, ACTIVE_PROMPT_IDS } from "@/lib/mock-data";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -30,8 +29,8 @@ const RESEARCH_PARTICIPATION_OPTIONS = [
   { value: "private", label: "Keep data private", description: "Your lab's data is never included in any publication." },
 ];
 
-const PI_STEPS = 7;
-const RESEARCHER_STEPS = 5;
+const PI_STEPS = 6;
+const RESEARCHER_STEPS = 4;
 
 
 // ── Shared styles ─────────────────────────────────────────────────────────────
@@ -599,16 +598,6 @@ export default function OnboardingPage() {
   const [resUserName, setResUserName] = useState("");
   const [isJoining, setIsJoining] = useState(false);
 
-  // Timezone state (auto-detect)
-  const [piTimezone, setPiTimezone] = useState<string>(() => {
-    try { return Intl.DateTimeFormat().resolvedOptions().timeZone || "America/New_York"; } catch { return "America/New_York"; }
-  });
-  const [piWorkingHours, setPiWorkingHours] = useState<WorkingHours>(DEFAULT_WORKING_HOURS);
-  const [resTimezone, setResTimezone] = useState<string>(() => {
-    try { return Intl.DateTimeFormat().resolvedOptions().timeZone || "America/New_York"; } catch { return "America/New_York"; }
-  });
-  const [resWorkingHours, setResWorkingHours] = useState<WorkingHours>(DEFAULT_WORKING_HOURS);
-
   // Institution search (PI step 2)
   const [institutionQuery, setInstitutionQuery] = useState("");
   const [institutionResults, setInstitutionResults] = useState<InstitutionResult[]>([]);
@@ -718,7 +707,7 @@ export default function OnboardingPage() {
   }
 
   function handlePiStep2Continue() {
-    setStep(3); // → timezone step
+    setStep(3);
   }
 
   function handleResearcherStep2Continue() {
@@ -842,8 +831,6 @@ export default function OnboardingPage() {
         inviteEmails: role === "pi"
           ? inviteEmails.map((email) => ({ email, code: emailCodes[email], roleName: emailRoles[email] ?? "Researcher" }))
           : undefined,
-        timezone: role === "pi" ? piTimezone : resTimezone,
-        workingHours: role === "pi" ? piWorkingHours : resWorkingHours,
         researchParticipation: role === "pi" ? piResearchParticipation : undefined,
         activePromptIds: role === "pi" ? piActivePromptIds : undefined,
         customPrompts: role === "pi" ? piCustomPrompts : undefined,
@@ -1211,7 +1198,8 @@ export default function OnboardingPage() {
     );
   }
 
-  // ── Step 3A: PI timezone ────────────────────────────────────────────────────
+
+  // ── Step 3A: PI research participation ─────────────────────────────────────
 
   if (step === 3 && role === "pi") {
     return (
@@ -1219,34 +1207,6 @@ export default function OnboardingPage() {
         <div style={cardStyle(isLarge)}>
           <BackButton onClick={() => setStep(2)} />
           <StepDots current={3} total={PI_STEPS} />
-          <SectionTitle
-            large={isLarge}
-            title="Your schedule"
-            subtitle="Canopy uses this for meeting suggestions and your weekly digest."
-          />
-          <WorkingHoursEditor
-            timezone={piTimezone}
-            onTimezoneChange={setPiTimezone}
-            workingHours={piWorkingHours}
-            onWorkingHoursChange={setPiWorkingHours}
-            showDetectedBanner
-          />
-          <NavButton large={isLarge} onClick={() => setStep(4)}>
-            Continue
-          </NavButton>
-        </div>
-      </div>
-    );
-  }
-
-  // ── Step 4A: PI research participation ─────────────────────────────────────
-
-  if (step === 4 && role === "pi") {
-    return (
-      <div style={PAGE_WRAP}>
-        <div style={cardStyle(isLarge)}>
-          <BackButton onClick={() => setStep(3)} />
-          <StepDots current={4} total={PI_STEPS} />
           <SectionTitle
             large={isLarge}
             title="Research participation"
@@ -1286,7 +1246,7 @@ export default function OnboardingPage() {
           <NavButton large={isLarge} onClick={() => {
             const code = "CANOPY-" + Math.random().toString(36).substring(2, 6).toUpperCase();
             setGeneratedCode(code);
-            setStep(5);
+            setStep(4);
           }}>
             Continue
           </NavButton>
@@ -1348,14 +1308,14 @@ export default function OnboardingPage() {
     );
   }
 
-  // ── Step 5A: PI invites team ───────────────────────────────────────────────
+  // ── Step 4A: PI invites team ───────────────────────────────────────────────
 
-  if (step === 5 && role === "pi") {
+  if (step === 4 && role === "pi") {
     return (
       <div style={PAGE_WRAP}>
         <div style={cardStyle(isLarge)}>
-          <BackButton onClick={() => setStep(4)} />
-          <StepDots current={5} total={PI_STEPS} />
+          <BackButton onClick={() => setStep(3)} />
+          <StepDots current={4} total={PI_STEPS} />
           <SectionTitle
             large={isLarge}
             title="Invite researchers to your lab"
@@ -1530,12 +1490,12 @@ export default function OnboardingPage() {
             )}
           </div>
 
-          <NavButton large={isLarge} onClick={() => setStep(6)}>
+          <NavButton large={isLarge} onClick={() => setStep(5)}>
             Continue
           </NavButton>
 
           <button
-            onClick={() => setStep(6)}
+            onClick={() => setStep(5)}
             style={{ display: "block", width: "100%", textAlign: "center", fontFamily: "var(--font-roboto)", fontWeight: 400, fontSize: 13, color: "var(--color-secondary)", background: "none", border: "none", cursor: "pointer", marginTop: 12, padding: 0, minHeight: 36 }}
             onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.textDecoration = "underline"; }}
             onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.textDecoration = "none"; }}
@@ -1547,15 +1507,15 @@ export default function OnboardingPage() {
     );
   }
 
-  // ── Step 6A: PI journal prompts ─────────────────────────────────────────────
+  // ── Step 5A: PI journal prompts ─────────────────────────────────────────────
 
-  if (step === 6 && role === "pi") {
+  if (step === 5 && role === "pi") {
     return (
       <div style={PAGE_WRAP}>
         <div style={{ ...cardStyle(isLarge), maxHeight: "90dvh", display: "flex", flexDirection: "column" }}>
           <div style={{ flexShrink: 0 }}>
-            <BackButton onClick={() => setStep(5)} />
-            <StepDots current={6} total={PI_STEPS} />
+            <BackButton onClick={() => setStep(4)} />
+            <StepDots current={5} total={PI_STEPS} />
             <SectionTitle
               large={isLarge}
               title="Journal prompts"
@@ -1627,7 +1587,7 @@ export default function OnboardingPage() {
             </div>
           </div>
           <div style={{ flexShrink: 0 }}>
-            <NavButton large={isLarge} onClick={() => setStep(7)}>
+            <NavButton large={isLarge} onClick={() => setStep(6)}>
               Continue
             </NavButton>
           </div>
@@ -1636,14 +1596,14 @@ export default function OnboardingPage() {
     );
   }
 
-  // ── Step 7A: PI wellbeing preview ──────────────────────────────────────────
+  // ── Step 6A: PI wellbeing preview ──────────────────────────────────────────
 
-  if (step === 7 && role === "pi") {
+  if (step === 6 && role === "pi") {
     return (
       <div style={PAGE_WRAP}>
         <div style={cardStyle(isLarge)}>
-          <BackButton onClick={() => setStep(6)} />
-          <StepDots current={7} total={PI_STEPS} />
+          <BackButton onClick={() => setStep(5)} />
+          <StepDots current={6} total={PI_STEPS} />
           <SectionTitle
             large={isLarge}
             title="Team wellbeing check-ins"
@@ -1724,7 +1684,7 @@ export default function OnboardingPage() {
     );
   }
 
-  // ── Researcher step 4: timezone ───────────────────────────────────────────
+  // ── Researcher step 4: wellbeing preview ──────────────────────────────────
 
   if (step === 4 && role === "researcher") {
     return (
@@ -1732,34 +1692,6 @@ export default function OnboardingPage() {
         <div style={cardStyle(isLarge)}>
           <BackButton onClick={() => setStep(3)} />
           <StepDots current={4} total={RESEARCHER_STEPS} />
-          <SectionTitle
-            large={isLarge}
-            title="Your schedule"
-            subtitle="Canopy uses this for meeting suggestions and your weekly digest."
-          />
-          <WorkingHoursEditor
-            timezone={resTimezone}
-            onTimezoneChange={setResTimezone}
-            workingHours={resWorkingHours}
-            onWorkingHoursChange={setResWorkingHours}
-            showDetectedBanner
-          />
-          <NavButton large={isLarge} onClick={() => setStep(5)}>
-            Continue
-          </NavButton>
-        </div>
-      </div>
-    );
-  }
-
-  // ── Researcher step 5: wellbeing preview ──────────────────────────────────
-
-  if (step === 5 && role === "researcher") {
-    return (
-      <div style={PAGE_WRAP}>
-        <div style={cardStyle(isLarge)}>
-          <BackButton onClick={() => setStep(4)} />
-          <StepDots current={5} total={RESEARCHER_STEPS} />
           <SectionTitle
             large={isLarge}
             title="Weekly check-ins"
