@@ -398,8 +398,8 @@ function WellbeingPreview({ role }: { role: "pi" | "researcher" }) {
           </div>
         ))}
       </div>
-      <p style={{ fontFamily: "var(--font-roboto)", fontSize: 11, color: "var(--color-secondary)", margin: "14px 0 0", textAlign: "center" }}>
-        ↑ Try it out. This is just a preview, nothing is recorded.
+      <p style={{ fontFamily: "var(--font-roboto)", fontSize: 12, color: "var(--color-secondary)", margin: "14px 0 0", textAlign: "center", fontStyle: "italic" }}>
+        Try it out — this is just an example, nothing is recorded.
       </p>
     </div>
   );
@@ -1607,7 +1607,7 @@ export default function OnboardingPage() {
           <SectionTitle
             large={isLarge}
             title="Team wellbeing check-ins"
-            subtitle="Here's what your team will see each week."
+            subtitle="This is an example of what your team will see each week. Responses are private."
           />
           <WellbeingPreview role="pi" />
           <NavButton large={isLarge} onClick={completeOnboarding} disabled={submitting}>
@@ -1695,7 +1695,7 @@ export default function OnboardingPage() {
           <SectionTitle
             large={isLarge}
             title="Weekly check-ins"
-            subtitle="A quick preview of what to expect each week."
+            subtitle="This is just an example of what yours will look like. Your answers will stay private."
           />
           <WellbeingPreview role="researcher" />
           <NavButton large={isLarge} onClick={completeOnboarding} disabled={submitting}>
