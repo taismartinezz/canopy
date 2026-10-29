@@ -51,7 +51,7 @@ export function TaskCard({
   const [hovered, setHovered] = useState(false);
   const menuBtnRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: task.id });
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging: isSortableDragging } = useSortable({ id: task.id });
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -71,7 +71,8 @@ export function TaskCard({
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
     transition,
-    opacity: isDragging ? 0.5 : 1,
+    opacity: isSortableDragging ? 0 : 1,
+    pointerEvents: isSortableDragging ? "none" : undefined,
   };
 
   const overdue = isOverdue(task.dueDate, task.status);

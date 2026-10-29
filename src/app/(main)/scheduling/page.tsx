@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import {
   Calendar, Users, Send, Clock, Check, X, Plus,
-  Lock, Trash2, ChevronLeft, ChevronRight, AlertCircle,
+  Lock, Trash2, Pencil, ChevronLeft, ChevronRight, AlertCircle,
 } from "lucide-react";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { useProject } from "@/context/ProjectContext";
@@ -203,13 +203,14 @@ function minToTimeStr(min: number): string {
 }
 
 function CalendarTab({
-  events, proposals, currentUserId, projectId, onAddEvent, onDeleteEvent, googleConnected,
+  events, proposals, currentUserId, projectId, onAddEvent, onEditEvent, onDeleteEvent, googleConnected,
 }: {
   events: ScheduleEvent[];
   proposals: MeetingProposal[];
   currentUserId: string;
   projectId: string;
   onAddEvent: (e: Omit<ScheduleEvent, "id">) => void;
+  onEditEvent: (id: string, patch: Partial<Omit<ScheduleEvent, "id">>) => void;
   onDeleteEvent: (id: string) => void;
   googleConnected: boolean;
 }) {
@@ -224,6 +225,7 @@ function CalendarTab({
   const [formTime, setFormTime] = useState("");
   const [formScope, setFormScope] = useState<"lab" | "personal">("lab");
   const [formError, setFormError] = useState("");
+  const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [detailEvent, setDetailEvent] = useState<CalEvent | null>(null);
   const [showTP, setShowTP] = useState(false);
   const [tpPos, setTpPos] = useState<{ top: number; left: number } | null>(null);
@@ -331,13 +333,28 @@ function CalendarTab({
     setFormDate(date);
     setFormTime(startMin != null ? minToTimeStr(startMin) : "");
     setFormTitle(""); setFormScope("lab"); setFormError("");
+    setEditingEventId(null);
+    setShowForm(true); setDetailEvent(null);
+  }
+
+  function openEdit(ev: CalEvent) {
+    setFormTitle(ev.title);
+    setFormDate(ev.date);
+    setFormTime(ev.startMin != null ? minToTimeStr(ev.startMin) : "");
+    setFormScope(ev.type === "personal" ? "personal" : "lab");
+    setFormError("");
+    setEditingEventId(ev.id);
     setShowForm(true); setDetailEvent(null);
   }
 
   function handleAdd() {
     if (!formTitle.trim()) { setFormError("Enter a title."); return; }
-    onAddEvent({ projectId, title: formTitle.trim(), date: formDate, time: formTime || undefined, scope: formScope, createdBy: currentUserId });
-    setShowForm(false);
+    if (editingEventId) {
+      onEditEvent(editingEventId, { title: formTitle.trim(), date: formDate, time: formTime || undefined, scope: formScope });
+    } else {
+      onAddEvent({ projectId, title: formTitle.trim(), date: formDate, time: formTime || undefined, scope: formScope, createdBy: currentUserId });
+    }
+    setShowForm(false); setEditingEventId(null);
   }
 
   const inputStyle: React.CSSProperties = {
@@ -644,7 +661,7 @@ function CalendarTab({
       {showForm && (
         <Card>
           <SectionHeader
-            title={formDate ? `New event · ${new Date(formDate + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}` : "New event"}
+            title={editingEventId ? `Edit event · ${new Date(formDate + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}` : formDate ? `New event · ${new Date(formDate + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}` : "New event"}
             action={<button onClick={() => setShowForm(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-secondary)", padding: 4 }}><X size={14} /></button>}
           />
           <div className="px-5 py-4 space-y-3">
@@ -665,8 +682,8 @@ function CalendarTab({
             {showTP && tpPos && <TimePicker value={formTime || "09:00"} accentColor="var(--color-navy)" pos={tpPos} onChange={t => setFormTime(t)} onClear={() => { setFormTime(""); setShowTP(false); }} onClose={() => setShowTP(false)} />}
             {formError && <p style={{ fontSize: 11, color: "var(--color-error)", margin: 0 }}>{formError}</p>}
             <div className="flex gap-2">
-              <button onClick={handleAdd} style={{ height: 32, paddingInline: 16, backgroundColor: "var(--color-navy)", color: "#fff", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Add</button>
-              <button onClick={() => setShowForm(false)} style={{ height: 32, paddingInline: 12, background: "none", border: "none", fontSize: 12, color: "var(--color-secondary)", cursor: "pointer" }}>Cancel</button>
+              <button onClick={handleAdd} style={{ height: 32, paddingInline: 16, backgroundColor: "var(--color-navy)", color: "#fff", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>{editingEventId ? "Save changes" : "Add"}</button>
+              <button onClick={() => { setShowForm(false); setEditingEventId(null); }} style={{ height: 32, paddingInline: 12, background: "none", border: "none", fontSize: 12, color: "var(--color-secondary)", cursor: "pointer" }}>Cancel</button>
             </div>
           </div>
         </Card>
@@ -689,9 +706,14 @@ function CalendarTab({
               {detailEvent.type === "meeting" && detailEvent.endMin != null && ` · ${formatDuration(detailEvent.endMin - detailEvent.startMin!)}`}
             </p>
             {detailEvent.isScheduleEvent && detailEvent.ownerId === currentUserId && (
-              <button onClick={() => { onDeleteEvent(detailEvent.id); setDetailEvent(null); }} className="flex items-center gap-1.5" style={{ marginLeft: 15, fontSize: 12, color: "var(--color-error)", background: "none", border: "none", cursor: "pointer" }}>
-                <Trash2 size={12} /> Delete event
-              </button>
+              <div className="flex items-center gap-3" style={{ marginLeft: 15, marginTop: 4 }}>
+                <button onClick={() => openEdit(detailEvent)} className="flex items-center gap-1.5" style={{ fontSize: 12, color: "var(--color-navy)", background: "none", border: "none", cursor: "pointer" }}>
+                  <Pencil size={12} /> Edit
+                </button>
+                <button onClick={() => { onDeleteEvent(detailEvent.id); setDetailEvent(null); }} className="flex items-center gap-1.5" style={{ fontSize: 12, color: "var(--color-error)", background: "none", border: "none", cursor: "pointer" }}>
+                  <Trash2 size={12} /> Delete
+                </button>
+              </div>
             )}
           </div>
         </Card>
@@ -1484,6 +1506,19 @@ export default function SchedulingPage() {
     }
   }
 
+  function handleEditEvent(id: string, patch: Partial<Omit<ScheduleEvent, "id">>) {
+    setEvents((prev) => prev.map((e) => e.id === id ? { ...e, ...patch } : e));
+    if (isSupabaseConfigured) {
+      const update: Record<string, unknown> = {};
+      if (patch.title !== undefined) update.title = patch.title;
+      if (patch.date !== undefined) update.date = patch.date;
+      if (patch.time !== undefined) update.time = patch.time ?? null;
+      if (patch.scope !== undefined) update.scope = patch.scope;
+      supabase.from("schedule_events").update(update).eq("id", id)
+        .then(({ error }) => { if (error) console.error("[Scheduling] edit event:", error); });
+    }
+  }
+
   const pendingCount = proposals.filter(
     (p) =>
       p.proposerId !== currentUserId &&
@@ -1544,6 +1579,7 @@ export default function SchedulingPage() {
                   currentUserId={currentUserId}
                   projectId={projectId ?? ""}
                   onAddEvent={handleAddEvent}
+                  onEditEvent={handleEditEvent}
                   onDeleteEvent={handleDeleteEvent}
                   googleConnected={googleConnected}
                 />
